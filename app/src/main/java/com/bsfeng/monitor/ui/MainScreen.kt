@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -101,33 +102,137 @@ fun MainScreen(
 
 @Composable
 fun EventCard(event: com.bsfeng.monitor.data.EventEntity) {
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clickable { expanded = !expanded }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // 第一行：时间
+            Text(
+                text = formatTime(event.timestampMs),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(2.dp))
+            // 第二行：友好摘要（大字）
+            Text(
+                text = event.summary.ifBlank { EventType.getChineseName(event.eventType) },
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp
+            )
+            Spacer(Modifier.height(2.dp))
+            // 第三行：事件类型 + 时长
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(EventType.getChineseName(event.eventType), fontWeight = FontWeight.Medium, fontSize = 14.sp)
                 Text(
-                    formatTime(event.timestampMs),
-                    fontSize = 12.sp,
+                    EventType.getChineseName(event.eventType),
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            if (event.extraJson != "{}" && event.extraJson.isNotBlank()) {
+                // 从 extraJson 提取时长
+                val durationText = extractDuration(event.extraJson)
+                if (durationText != null) {
+                    Text(
+                        " · $durationText",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.weight(1f))
                 Text(
-                    event.extraJson.take(80),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    if (expanded) "▲ 收起详情" else "▼ 展开详情",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
+            }
+            // 展开的技术详情
+            if (expanded && event.extraJson != "{}" && event.extraJson.isNotBlank()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                val lines = formatExtraJson(event.extraJson)
+                lines.forEach { line ->
+                    Text(
+                        text = line,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * 从 extraJson 中提取可读的时长文本
+ */
+private fun extractDuration(extraJson: String): String? {
+    if (extraJson.isBlank() || extraJson == "{}") return null
+    return try {
+        val obj = org.json.JSONObject(extraJson)
+        val ms = obj.optLong("foreground_duration_ms", -1L)
+        if (ms <= 0) return null
+        val seconds = ms / 1000
+        val minutes = seconds / 60
+        val hours = minutes / 60
+        when {
+            hours > 0 -> "${hours}小时${minutes % 60}分钟"
+            minutes > 0 -> "${minutes}分钟${seconds % 60}秒"
+            seconds >= 1 -> "${seconds}秒"
+            else -> null
+        }
+    } catch (_: Exception) { null }
+}
+
+/**
+ * 将 extraJson 拆成多行可读文本（包名、类名等）
+ */
+private fun formatExtraJson(extraJson: String): List<String> {
+    if (extraJson.isBlank() || extraJson == "{}") return emptyList()
+    return try {
+        val obj = org.json.JSONObject(extraJson)
+        val lines = mutableListOf<String>()
+        // 定义友好字段名映射
+        val fieldNames = mapOf(
+            "package_name" to "包名",
+            "app_name" to "应用名称",
+            "from_package" to "从(包名)",
+            "from_activity" to "从(页面)",
+            "to_activity" to "到(页面)",
+            "to_class" to "到(类名)",
+            "activity_class" to "页面类名",
+            "activity_name" to "页面名称",
+            "page_title" to "页面标题",
+            "from_page_title" to "上一级页面标题",
+            "screen_type" to "屏幕类型",
+            "screen_title" to "屏幕标题",
+            "foreground_duration_ms" to "停留时长(ms)",
+            "from_app_name" to "从(应用)",
+            "button_text" to "按钮文字",
+            "view_type" to "视图类型",
+            "selected_text" to "选中文字",
+            "scroll_view_type" to "滚动视图类型",
+            "network_type" to "网络类型",
+            "is_moving" to "是否移动",
+            "is_near" to "是否贴近",
+            "lux" to "亮度(lux)",
+            "enabled" to "是否启用",
+            "is_idle" to "是否待机"
+        )
+        for (key in obj.keys()) {
+            val value = obj.optString(key, "")
+            if (value.isNotBlank() && value != "null") {
+                val label = fieldNames[key] ?: key
+                lines.add("$label: $value")
+            }
+        }
+        lines.ifEmpty { listOf(extraJson) }
+    } catch (_: Exception) { listOf(extraJson) }
 }
 
 /**
