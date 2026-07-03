@@ -9,7 +9,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.bsfeng.monitor.MainActivity
 import com.bsfeng.monitor.data.DatabaseHelper
-import kotlinx.coroutines.runBlocking
 
 object HealthChecker {
     private const val CHANNEL_ID_ALERT = "monitor_alert"
@@ -24,11 +23,9 @@ object HealthChecker {
         }
 
         // 检查事件积压
-        val count = runBlocking {
-            try {
-                DatabaseHelper.getInstance(context).countUnsent()
-            } catch (_: Exception) { 0 }
-        }
+        val count = try {
+            DatabaseHelper.getInstance(context).countUnsent()
+        } catch (_: Exception) { 0 }
         if (count > 1000) {
             notifyUser(context, "事件积压过多",
                 "当前待上报事件 $count 条，请检查网络连接")

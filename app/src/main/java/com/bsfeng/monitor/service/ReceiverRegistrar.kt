@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.ConnectivityManager
-import android.os.Build
 import android.os.PowerManager
 import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
@@ -71,7 +70,7 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
         }
-        context.registerReceiver(screenReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(screenReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerBattery() {
@@ -80,7 +79,7 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
         }
-        context.registerReceiver(batteryReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(batteryReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerBluetooth() {
@@ -89,7 +88,7 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
         try {
-            context.registerReceiver(bluetoothReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+            context.registerReceiver(bluetoothReceiver, filter, Context.RECEIVER_EXPORTED)
         } catch (_: SecurityException) {
             // 没有 BLUETOOTH_CONNECT 权限
         }
@@ -97,7 +96,7 @@ class ReceiverRegistrar(private val context: Context) {
 
     private fun registerHeadset() {
         val filter = IntentFilter(Intent.ACTION_HEADSET_PLUG)
-        context.registerReceiver(headsetReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(headsetReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerPackage() {
@@ -106,17 +105,17 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(Intent.ACTION_PACKAGE_REMOVED)
             addDataScheme("package")
         }
-        context.registerReceiver(packageReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(packageReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerAirplane() {
         val filter = IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED)
-        context.registerReceiver(airplaneReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(airplaneReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerPowerSave() {
         val filter = IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
-        context.registerReceiver(powerSaveReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(powerSaveReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     @Suppress("DEPRECATION")
@@ -125,7 +124,7 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(Intent.ACTION_DEVICE_STORAGE_LOW)
             addAction(Intent.ACTION_DEVICE_STORAGE_OK)
         }
-        context.registerReceiver(storageReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(storageReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerUsb() {
@@ -133,13 +132,13 @@ class ReceiverRegistrar(private val context: Context) {
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
-        context.registerReceiver(usbReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerCall() {
         val filter = IntentFilter("android.intent.action.PHONE_STATE")
         try {
-            context.registerReceiver(callReceiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+            context.registerReceiver(callReceiver, filter, Context.RECEIVER_EXPORTED)
         } catch (_: SecurityException) {
             // 没有 READ_PHONE_STATE 权限
         }
@@ -154,7 +153,7 @@ class ReceiverRegistrar(private val context: Context) {
         val filter = IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED")
         try {
             context.registerReceiver(wifiReceiver, filter,
-                if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+                Context.RECEIVER_EXPORTED)
         } catch (_: Exception) {
             // 部分 Android 版本不允许普通应用注册此广播
         }
@@ -185,7 +184,7 @@ class ReceiverRegistrar(private val context: Context) {
                 }
             }
         }
-        context.registerReceiver(receiver, filter, if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
     }
 
     private fun registerRingerMode() {
@@ -207,7 +206,6 @@ class ReceiverRegistrar(private val context: Context) {
                 ))
             }
         }
-        context.registerReceiver(receiver, filter,
-            if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_EXPORTED else 0)
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
     }
 }

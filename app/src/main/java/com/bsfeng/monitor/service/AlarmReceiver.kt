@@ -5,27 +5,25 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.util.AppUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         HealthChecker.checkAndRestore(context)
 
         // 每 30 分钟也触发一次数据上报
-        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        scope.launch {
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            val reporter = EventReporter(context)
             if (AppUtils.getToken() != null) {
-                EventReporter(context).uploadBatch()
+                reporter.uploadBatch()
             } else {
-                EventReporter(context).registerDevice()
-                EventReporter(context).uploadBatch()
+                reporter.registerDevice()
+                reporter.uploadBatch()
             }
         }
     }
