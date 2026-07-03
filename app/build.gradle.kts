@@ -19,6 +19,8 @@ android {
         buildConfigField("int", "CACHE_MAX_DAYS", "3")
         buildConfigField("int", "RETRY_MAX_ATTEMPTS", "5")
         buildConfigField("boolean", "NOTIFICATION_CONTENT_ENABLED", "true")
+
+        androidResources.localeFilters += listOf("zh", "zh-rCN")
     }
 
     buildFeatures {
@@ -38,6 +40,7 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -45,6 +48,7 @@ android {
         }
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -59,7 +63,7 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
