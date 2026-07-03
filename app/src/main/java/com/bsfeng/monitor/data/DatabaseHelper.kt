@@ -17,7 +17,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         private const val DATABASE_NAME = "monitor.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         private const val TABLE_EVENTS = "events"
 
         @Volatile
@@ -36,6 +36,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
                 eventType TEXT NOT NULL,
                 timestampMs INTEGER NOT NULL,
                 deviceId TEXT NOT NULL,
+                summary TEXT NOT NULL DEFAULT '',
                 extraJson TEXT NOT NULL,
                 isUploaded INTEGER NOT NULL DEFAULT 0,
                 createdAt INTEGER NOT NULL
@@ -46,7 +47,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 当前只有一个版本，暂无迁移逻辑
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE $TABLE_EVENTS ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+        }
     }
 
     // ========== Insert ==========
@@ -176,6 +179,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
                         eventType = c.getString(c.getColumnIndexOrThrow("eventType")),
                         timestampMs = c.getLong(c.getColumnIndexOrThrow("timestampMs")),
                         deviceId = c.getString(c.getColumnIndexOrThrow("deviceId")),
+                        summary = c.getString(c.getColumnIndexOrThrow("summary")),
                         extraJson = c.getString(c.getColumnIndexOrThrow("extraJson")),
                         isUploaded = c.getInt(c.getColumnIndexOrThrow("isUploaded")) == 1,
                         createdAt = c.getLong(c.getColumnIndexOrThrow("createdAt"))
@@ -191,6 +195,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
         put("eventType", eventType)
         put("timestampMs", timestampMs)
         put("deviceId", deviceId)
+        put("summary", summary)
         put("extraJson", extraJson)
         put("isUploaded", if (isUploaded) 1 else 0)
         put("createdAt", createdAt)

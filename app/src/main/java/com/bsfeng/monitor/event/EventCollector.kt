@@ -16,34 +16,42 @@ object EventCollector {
     private const val TAG = "EventCollector"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun emit(eventType: EventType, extra: Map<String, String> = emptyMap()) {
-        DiagnosticCounters.emitCalledCount++
-        DiagnosticCounters.lastEmittedEventType = eventType.name
-        Log.d(TAG, "emit: eventType=${eventType.name}, extra=$extra")
-        val event = UnifiedEvent(
-            eventType = eventType.name,
-            deviceId = AppUtils.getDeviceId(),
-            extra = extra
-        )
-        val extraJson = JSONObject(extra).toString()
-        val entity = EventEntity.fromEvent(
-            eventId = event.eventId,
-            eventType = event.eventType,
-            extraJson = extraJson,
-            deviceId = event.deviceId
-        )
-        Log.d(TAG, "emit: entity created, eventId=${entity.eventId}")
-        scope.launch {
-            try {
-                val db = DatabaseHelper.getInstance(MonitorApp.instance)
-                db.insert(entity)
-                DiagnosticCounters.emitSuccessCount++
-                Log.d(TAG, "emit: insert success, eventId=${entity.eventId}")
-            } catch (e: Exception) {
-                DiagnosticCounters.emitFailCount++
-                DiagnosticCounters.lastErrorMessage = "${e.javaClass.simpleName}: ${e.message}"
-                Log.e(TAG, "emit: insert FAILED, eventId=${entity.eventId}", e)
+    fun emit(eventType: EventType, extra: Map<String, String> = emptyMap(), summary: String = "") {
+        try {
+            DiagnosticCounters.emitCalledCount++
+            DiagnosticCounters.lastEmittedEventType = eventType.name
+            Log.d(TAG, "emit: eventType=${eventType.name}, extra=$extra")
+            val event = UnifiedEvent(
+                eventType = eventType.name,
+                deviceId = AppUtils.getDeviceId(),
+                summary = summary,
+                extra = extra
+            )
+            val extraJson = JSONObject(extra).toString()
+            val entity = EventEntity.fromEvent(
+                eventId = event.eventId,
+                eventType = event.eventType,
+                extraJson = extraJson,
+                deviceId = event.deviceId,
+                summary = summary
+            )
+            Log.d(TAG, "emit: entity created, eventId=${entity.eventId}")
+            scope.launch {
+                try {
+                    val db = DatabaseHelper.getInstance(MonitorApp.instance)
+                    db.insert(entity)
+                    DiagnosticCounters.emitSuccessCount++
+                    Log.d(TAG, "emit: insert success, eventId=${entity.eventId}")
+                } catch (e: Exception) {
+                    DiagnosticCounters.emitFailCount++
+                    DiagnosticCounters.lastErrorMessage = "${e.javaClass.simpleName}: ${e.message}"
+                    Log.e(TAG, "emit: insert FAILED, eventId=${entity.eventId}", e)
+                }
             }
+        } catch (e: Exception) {
+            DiagnosticCounters.emitFailCount++
+            DiagnosticCounters.lastErrorMessage = "${e.javaClass.simpleName}: ${e.message}"
+            Log.e(TAG, "emit: FAILED before DB insert", e)
         }
     }
 }

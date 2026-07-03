@@ -116,6 +116,7 @@ class EventReporter(private val context: Context) {
             eventType = eventType,
             timestamp = timestampMs,
             deviceId = deviceId,
+            summary = this.summary,
             extra = extraMap
         )
     }

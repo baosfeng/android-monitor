@@ -8,6 +8,7 @@ data class UnifiedEvent(
     val eventType: String,
     val timestamp: Long = System.currentTimeMillis(),
     val deviceId: String,
+    val summary: String = "",
     val extra: Map<String, String> = emptyMap()
 ) {
 /** 事件序列化 — key 使用驼峰命名 */
@@ -15,6 +16,7 @@ data class UnifiedEvent(
         put("eventId", eventId)
         put("eventType", eventType)
         put("eventTypeName", EventType.getChineseName(eventType))
+        put("summary", summary)
         put("timestamp", timestamp)
         put("deviceId", deviceId)
         put("extra", JSONObject(extra))
