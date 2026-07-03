@@ -1,12 +1,14 @@
 package com.bsfeng.monitor.service
 
 import android.accessibilityservice.AccessibilityService
+import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
 import com.bsfeng.monitor.event.ScreenClassifier
 import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.util.DiagnosticCounters
 
 class MonitorAccessibilityService : AccessibilityService() {
 
@@ -15,6 +17,10 @@ class MonitorAccessibilityService : AccessibilityService() {
     private var lastSwitchTimeMs: Long = System.currentTimeMillis()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        DiagnosticCounters.accessibilityEventCount++
+        DiagnosticCounters.lastAccessibilityEventType = event.eventType.toString()
+        DiagnosticCounters.lastAccessibilityPackage = event.packageName?.toString() ?: ""
+        Log.d("MonitorService", "onAccessibilityEvent: type=${event.eventType}, pkg=${event.packageName}")
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 handleWindowChange(event)
@@ -26,17 +32,27 @@ class MonitorAccessibilityService : AccessibilityService() {
     }
 
     private fun handleWindowChange(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
+        val packageName = event.packageName?.toString() ?: run {
+            Log.w("MonitorService", "handleWindowChange: packageName is null")
+            return
+        }
         val className = event.className?.toString() ?: ""
         val now = System.currentTimeMillis()
 
         // 过滤系统界面
-        if (isSystemUi(packageName)) return
+        if (isSystemUi(packageName)) {
+            DiagnosticCounters.accessibilityFilteredCount++
+            Log.d("MonitorService", "handleWindowChange: filtered as system UI: $packageName")
+            return
+        }
+
+        Log.d("MonitorService", "handleWindowChange: pkg=$packageName, cls=$className, lastPkg=$lastPackageName")
 
         val duration = if (lastPackageName != null) now - lastSwitchTimeMs else 0L
 
         // app_foreground: App 切换
         if (packageName != lastPackageName) {
+            Log.d("MonitorService", "  -> emitting APP_FOREGROUND for $packageName")
             EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
                 "package_name" to packageName,
                 "app_name" to AppUtils.getAppName(packageName),
@@ -50,6 +66,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
         // activity_change: 同 App 内界面切换
         if (packageName == lastPackageName && className != lastActivityClass) {
+            Log.d("MonitorService", "  -> emitting ACTIVITY_CHANGE for $className")
             EventCollector.emit(EventType.ACTIVITY_CHANGE, mapOf(
                 "package_name" to packageName,
                 "app_name" to AppUtils.getAppName(packageName),
@@ -65,6 +82,7 @@ class MonitorAccessibilityService : AccessibilityService() {
                 packageName, className, event.text, event.source
             )
             if (content != null) {
+                Log.d("MonitorService", "  -> emitting SCREEN_CONTENT_DETECTED: type=${content.screenType}")
                 EventCollector.emit(EventType.SCREEN_CONTENT_DETECTED, mapOf(
                     "package_name" to packageName,
                     "app_name" to AppUtils.getAppName(packageName),
