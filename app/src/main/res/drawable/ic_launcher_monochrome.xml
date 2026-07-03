@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome 图标：单色白色眼睛，用于 Android 16 自动主题化图标 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 眼白轮廓 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30C42,30 31,36 24,45C22,48 22,52 24,55C31,64 42,70 54,70C66,70 77,64 84,55C86,52 86,48 84,45C77,36 66,30 54,30Z" />
+    <!-- 瞳孔 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,40C49,40 45,44 45,49C45,54 49,58 54,58C59,58 63,54 63,49C63,44 59,40 54,40Z" />
+</vector>
