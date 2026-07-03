@@ -7,6 +7,7 @@ import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.data.EventEntity
 import com.bsfeng.monitor.event.UnifiedEvent
 import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.util.DiagnosticCounters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -16,8 +17,14 @@ class EventReporter(private val context: Context) {
     private val db = DatabaseHelper.getInstance(context)
 
     suspend fun uploadBatch(): Result<Int> = withContext(Dispatchers.IO) {
+        DiagnosticCounters.uploadAttemptCount++
+        DiagnosticCounters.isTokenAvailable = AppUtils.getToken() != null
+
         val events = db.getUnsentEvents(AppConfig.batchMaxSize)
-        if (events.isEmpty()) return@withContext Result.success(0)
+        if (events.isEmpty()) {
+            DiagnosticCounters.lastUploadResult = "无待上报事件"
+            return@withContext Result.success(0)
+        }
 
         val batch = EventsBatch(
             events = events.map { it.toUnifiedEvent() },
@@ -35,14 +42,30 @@ class EventReporter(private val context: Context) {
                     if (httpResp.code in 200..299 && response.code == 0) {
                         db.markUploaded(events.map { it.eventId })
                         cleanOldEvents()
+                        DiagnosticCounters.uploadSuccessCount++
+                        DiagnosticCounters.uploadEventCount = events.size
+                        DiagnosticCounters.lastUploadResult = "成功: HTTP ${httpResp.code}, 上传 ${events.size} 条"
+                        DiagnosticCounters.lastUploadError = ""
                         Result.success(events.size)
                     } else {
-                        Result.failure(Exception("Upload failed: ${httpResp.code} ${response.message}"))
+                        val err = "上传失败: HTTP ${httpResp.code}, code=${response.code}, msg=${response.message}"
+                        DiagnosticCounters.uploadFailCount++
+                        DiagnosticCounters.lastUploadResult = err
+                        DiagnosticCounters.lastUploadError = err
+                        Result.failure(Exception(err))
                     }
                 },
-                onFailure = { Result.failure(it) }
+                onFailure = { e ->
+                    DiagnosticCounters.uploadFailCount++
+                    DiagnosticCounters.lastUploadResult = "网络异常: ${e.message}"
+                    DiagnosticCounters.lastUploadError = "${e.javaClass.simpleName}: ${e.message}"
+                    Result.failure(e)
+                }
             )
         } catch (e: Exception) {
+            DiagnosticCounters.uploadFailCount++
+            DiagnosticCounters.lastUploadResult = "异常: ${e.message}"
+            DiagnosticCounters.lastUploadError = "${e.javaClass.simpleName}: ${e.message}"
             Result.failure(e)
         }
     }
