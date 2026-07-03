@@ -14,6 +14,7 @@ data class UnifiedEvent(
     fun toJsonObject(): JSONObject = JSONObject().apply {
         put("eventId", eventId)
         put("eventType", eventType)
+        put("eventTypeName", EventType.getChineseName(eventType))
         put("timestamp", timestamp)
         put("deviceId", deviceId)
         put("extra", JSONObject(extra))
