@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.ConnectivityManager
+import android.nfc.NfcAdapter
 import android.os.PowerManager
 import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
@@ -33,8 +34,7 @@ class ReceiverRegistrar(private val context: Context) {
         registerScreen()
         // 电池
         registerBattery()
-        // WiFi + 网络（含 VPN + 移动数据）— 通过 ConnectivityManager.NetworkCallback 实现
-        // 蓝牙
+        // WiFi + 网络（含 VPN + 移动数据）
         registerBluetooth()
         // 耳机
         registerHeadset()
@@ -54,7 +54,6 @@ class ReceiverRegistrar(private val context: Context) {
         volumeObserver.register(context.contentResolver)
         // 热点 + 移动数据
         registerNetworkCallback()
-        // 热点状态广播
         registerHotspot()
         // 截屏监听
         registerScreenshot()
@@ -62,6 +61,18 @@ class ReceiverRegistrar(private val context: Context) {
         registerRingerMode()
         // 时区 + 语言
         registerLocale()
+        // === 新增系统状态 ===
+        registerDozeMode()
+        registerShutdown()
+        registerTimeChanged()
+        registerDockEvent()
+        registerUserSwitch()
+        registerNfcState()
+        registerDownloadComplete()
+        registerScreenRefresh()
+        // === 传感器 + 网络深度监控 ===
+        SensorMonitor(context).register()
+        NetworkMonitor(context).register()
     }
 
     private fun registerScreen() {
@@ -207,5 +218,121 @@ class ReceiverRegistrar(private val context: Context) {
             }
         }
         context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    // ========== 新增系统状态广播 ==========
+
+    private fun registerDozeMode() {
+        val filter = IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+                val isIdle = pm.isDeviceIdleMode
+                val eventType = if (isIdle) EventType.DOZE_MODE_ENTERED else EventType.DOZE_MODE_EXITED
+                val summary = if (isIdle) "手机进入省电待机模式" else "手机退出省电待机模式"
+                EventCollector.emit(eventType, mapOf("is_idle" to isIdle.toString()), summary = summary)
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerShutdown() {
+        val filter = IntentFilter(Intent.ACTION_SHUTDOWN)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                EventCollector.emit(EventType.DEVICE_SHUTDOWN, summary = "设备正在关机")
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerTimeChanged() {
+        val filter = IntentFilter(Intent.ACTION_TIME_CHANGED)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                EventCollector.emit(EventType.TIME_MANUALLY_CHANGED, mapOf(
+                    "new_time" to System.currentTimeMillis().toString()
+                ), summary = "系统时间被手动修改")
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerDockEvent() {
+        val filter = IntentFilter(Intent.ACTION_DOCK_EVENT)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val dockState = intent.getIntExtra(Intent.EXTRA_DOCK_STATE, -1)
+                val dockName = when (dockState) {
+                    Intent.EXTRA_DOCK_STATE_DESK -> "桌面底座"
+                    Intent.EXTRA_DOCK_STATE_CAR -> "车载底座"
+                    Intent.EXTRA_DOCK_STATE_LE_DESK -> "轻量桌面底座"
+                    Intent.EXTRA_DOCK_STATE_HE_DESK -> "重型桌面底座"
+                    Intent.EXTRA_DOCK_STATE_UNDOCKED -> "已移除底座"
+                    else -> "未知底座($dockState)"
+                }
+                val summary = "手机$dockName"
+                EventCollector.emit(EventType.DOCK_EVENT, mapOf(
+                    "dock_state" to dockState.toString(),
+                    "dock_name" to dockName
+                ), summary = summary)
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerUserSwitch() {
+        val filter = IntentFilter("android.intent.action.USER_SWITCHED")
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val userHandle = intent.getIntExtra("android.intent.extra.user_handle", -1)
+                EventCollector.emit(EventType.USER_SWITCHED, mapOf(
+                    "user_handle" to userHandle.toString()
+                ), summary = "切换到其他用户")
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerNfcState() {
+        val filter = IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val state = intent.getIntExtra(NfcAdapter.EXTRA_ADAPTER_STATE, -1)
+                val isEnabled = state == NfcAdapter.STATE_ON
+                val summary = if (isEnabled) "NFC 已开启" else "NFC 已关闭"
+                EventCollector.emit(EventType.NFC_STATE_CHANGED, mapOf(
+                    "enabled" to isEnabled.toString(),
+                    "state_code" to state.toString()
+                ), summary = summary)
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerDownloadComplete() {
+        val filter = IntentFilter("android.intent.action.DOWNLOAD_COMPLETE")
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val id = intent.getLongExtra("extra_download_id", -1L)
+                EventCollector.emit(EventType.DOWNLOAD_COMPLETED, mapOf(
+                    "download_id" to id.toString()
+                ), summary = "文件下载完成")
+            }
+        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+    }
+
+    private fun registerScreenRefresh() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val config = ctx.resources.configuration
+                EventCollector.emit(EventType.SCREEN_REFRESH_CHANGED, mapOf(
+                    "density_dpi" to config.densityDpi.toString(),
+                    "font_scale" to config.fontScale.toString()
+                ), summary = "屏幕显示设置发生变化")
+            }
+        }
+        context.registerReceiver(receiver, IntentFilter(Intent.ACTION_CONFIGURATION_CHANGED), Context.RECEIVER_EXPORTED)
     }
 }
