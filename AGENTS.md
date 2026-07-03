@@ -36,8 +36,10 @@
 > 每次代码改动后，必须生成 APK 供用户侧载安装。
 
 ```bash
-# 一行完成：测试 → 编译 Debug APK → 安装到已连接手机
-./gradlew test && ./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+# 一行完成：测试 → 编译 Debug APK → 复制到 Downloads → 安装到已连接手机
+./gradlew test && ./gradlew assembleDebug \
+  && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
+  && adb install -r ~/Downloads/app-debug.apk
 ```
 
 | 命令 | 说明 | APK 输出路径 |

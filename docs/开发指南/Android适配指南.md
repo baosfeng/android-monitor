@@ -391,7 +391,7 @@
 | `android:exported` 所有组件 | ✅ | 已正确设置 |
 | `android:pageSizeCompat="enabled"` | ✅ | 16 KB 页面兼容 |
 | `usesCleartextTraffic="true"` | ✅ | HTTP 明文连接 |
-| `SCHEDULE_EXACT_ALARM` 权限 | ⚠️ | 当前使用非精确闹钟，暂不需要 |
+| `SCHEDULE_EXACT_ALARM` 权限 | ✅ | 当前使用非精确闹钟，暂不需要 |
 | `<queries>` 包可见性声明 | ⚠️ | 如使用 `queryIntentActivities` 需检查 |
 | `POST_NOTIFICATIONS` 权限声明 | ✅ | 已在 Manifest 和代码中处理 |
 
@@ -399,7 +399,7 @@
 
 | 项目 | 状态 | 说明 |
 |------|------|------|
-| Context-registered 传 Export 标志 | ✅ | API 33+ 已用 `RECEIVER_EXPORTED` |
+| Context-registered 传 Export 标志 | ✅ | 已统一使用 `Context.RECEIVER_EXPORTED`（minSdk=36 无需版本判断） |
 | 跨进程 Broadcast 优先级 | ✅ | 同进程注册，不受限 |
 
 ### 前台服务
@@ -416,7 +416,7 @@
 
 | 项目 | 状态 | 说明 |
 |------|------|------|
-| 运行时请求通知权限 | ✅ | API 33+ 动态请求 |
+| 运行时请求通知权限 | ✅ | 无需版本判断，直接请求 |
 
 ### 隐私与权限
 
@@ -425,6 +425,15 @@
 | `NEARBY_WIFI_DEVICES` | ✅ | 已声明 |
 | `BLUETOOTH_CONNECT` | ✅ | 已声明 |
 | 媒体权限（READ_MEDIA_*） | ✅ | 不使用外部存储 |
+
+### Modern 语法已应用
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| `lifecycleScope` 管理协程 | ✅ | Activity 内协程通过 lifecycleScope 自动绑定生命周期 |
+| `SupervisorJob` 隔离协程失败 | ✅ | EventCollector 使用 SupervisorJob 防止级联取消 |
+| 移除 `runBlocking` | ✅ | 数据库查询直接同步调用 |
+| 移除 `Build.VERSION.SDK_INT` 版本判断 | ✅ | minSdk=36，全部直接使用新 API |
 
 ---
 
