@@ -10,6 +10,7 @@ import com.bsfeng.monitor.network.ApiService
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.util.AppUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +39,13 @@ class MainViewModel : ViewModel() {
 
     init {
         loadData()
+        // 每 3 秒自动刷新界面，同步后台自动上报/新事件采集
+        viewModelScope.launch {
+            while (true) {
+                delay(3000)
+                loadData()
+            }
+        }
     }
 
     fun checkAccessibilityStatus() {
@@ -97,6 +105,15 @@ class MainViewModel : ViewModel() {
 
     fun uploadNow() {
         viewModelScope.launch(Dispatchers.IO) {
+            reporter.uploadBatch()
+            loadData()
+        }
+    }
+
+    /** 重置今日所有事件为未上传并立即触发上报 */
+    fun resendTodayData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.resetTodayUploadStatus()
             reporter.uploadBatch()
             loadData()
         }
