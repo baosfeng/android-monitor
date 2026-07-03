@@ -5,7 +5,9 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.util.Log
 import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.util.DiagnosticCounters
 
 /**
  * 替换 Room 的系统内置 SQLite 数据库帮助类
@@ -50,8 +52,23 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     // ========== Insert ==========
 
     fun insert(event: EventEntity) {
-        val db = writableDatabase
-        db.insertWithOnConflict(TABLE_EVENTS, null, event.toContentValues(), SQLiteDatabase.CONFLICT_IGNORE)
+        DiagnosticCounters.dbInsertCalledCount++
+        Log.d("DatabaseHelper", "insert: eventId=${event.eventId}, type=${event.eventType}, ts=${event.timestampMs}")
+        try {
+            val db = writableDatabase
+            val result = db.insertWithOnConflict(TABLE_EVENTS, null, event.toContentValues(), SQLiteDatabase.CONFLICT_IGNORE)
+            if (result == -1L) {
+                DiagnosticCounters.dbInsertConflictCount++
+                Log.w("DatabaseHelper", "insert: CONFLICT_IGNORE returned -1, row not inserted (duplicate eventId?)")
+            } else {
+                DiagnosticCounters.dbInsertSuccessCount++
+                Log.d("DatabaseHelper", "insert: success, rowId=$result")
+            }
+        } catch (e: Exception) {
+            DiagnosticCounters.dbInsertFailCount++
+            DiagnosticCounters.dbLastException = "${e.javaClass.simpleName}: ${e.message}"
+            Log.e("DatabaseHelper", "insert: FAILED", e)
+        }
     }
 
     fun insertAll(events: List<EventEntity>) {
@@ -107,6 +124,14 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
             "UPDATE $TABLE_EVENTS SET isUploaded = 1 WHERE eventId IN ($placeholders)",
             ids.toTypedArray()
         )
+    }
+
+    /** 将今日所有事件重新标记为未上传，用于手动重发 */
+    fun resetTodayUploadStatus() {
+        val now = System.currentTimeMillis()
+        val todayStart = now - (now % 86400000L)
+        val db = writableDatabase
+        db.execSQL("UPDATE $TABLE_EVENTS SET isUploaded = 0 WHERE timestampMs >= ?", arrayOf(todayStart.toString()))
     }
 
     fun cleanOldEvents(before: Long) {

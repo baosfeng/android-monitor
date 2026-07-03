@@ -31,24 +31,24 @@ object ApiService {
     }
 
     /**
-     * 检测服务器是否可达（纯网络连通性，不依赖 Token/HTTP 状态码）
-     * @return true=可连接, false=无法连接
+     * 检测服务器 API 是否可达（连接到实际 API 端点，而非仅 IP）
+     * @return true=API 可连接（收到了任何 HTTP 响应）, false=完全无法连接
      */
     fun checkConnection(): Boolean {
         return try {
-            val url = URL(AppConfig.serverBaseUrl.trimEnd('/'))
+            val url = URL("${AppConfig.serverBaseUrl.trimEnd('/')}/api/monitor/heartbeat")
             val conn = url.openConnection() as HttpURLConnection
             conn.apply {
-                connectTimeout = 5000   // 连接超时 5 秒
-                readTimeout = 5000      // 读取超时 5 秒
+                requestMethod = "GET"
+                connectTimeout = 5000
+                readTimeout = 5000
                 instanceFollowRedirects = false
                 setRequestProperty("Connection", "close")
             }
-            // 只需发起连接，不关心 HTTP 响应码
             conn.connect()
             val code = conn.responseCode
             conn.disconnect()
-            // 只要服务器回了任何响应码就算连通
+            // 只要服务器回了任何响应码说明 API 请求到达了服务器
             code > 0
         } catch (_: Exception) {
             false
@@ -75,9 +75,29 @@ object ApiService {
                 writer.write(body.toString())
                 writer.flush()
             }
-            val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
+            val responseCode = conn.responseCode
+            val responseBody = if (responseCode in 200..299) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                // 非 2xx 响应: 从 errorStream 读取，避免 FileNotFoundException
+                try {
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (_: Exception) { "" }
+            }
             conn.disconnect()
-            Result.success(JsonResponse(conn.responseCode, JSONObject(responseBody)))
+            if (responseBody.isBlank()) {
+                Result.failure(Exception("HTTP $responseCode (empty body)"))
+            } else {
+                val json = try {
+                    JSONObject(responseBody)
+                } catch (_: Exception) {
+                    JSONObject().apply {
+                        put("code", -1)
+                        put("message", "Non-JSON response (HTTP $responseCode): ${responseBody.take(200)}")
+                    }
+                }
+                Result.success(JsonResponse(responseCode, json))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -95,9 +115,28 @@ object ApiService {
                     setRequestProperty("Authorization", "Bearer $it")
                 }
             }
-            val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
+            val responseCode = conn.responseCode
+            val responseBody = if (responseCode in 200..299) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                try {
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (_: Exception) { "" }
+            }
             conn.disconnect()
-            Result.success(JsonResponse(conn.responseCode, JSONObject(responseBody)))
+            if (responseBody.isBlank()) {
+                Result.failure(Exception("HTTP $responseCode (empty body)"))
+            } else {
+                val json = try {
+                    JSONObject(responseBody)
+                } catch (_: Exception) {
+                    JSONObject().apply {
+                        put("code", -1)
+                        put("message", "Non-JSON response (HTTP $responseCode): ${responseBody.take(200)}")
+                    }
+                }
+                Result.success(JsonResponse(responseCode, json))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
