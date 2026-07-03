@@ -1,57 +1,70 @@
-.DS_Store
-/.build
-/Packages
-xcuserdata/
-DerivedData/
-.swiftpm/configuration/registries.json
-.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
-.netrc
-.DS_Store
-dist/
-.reasonix/
-reasonix.toml
-docs/superpowers
-.idea
-.vsvode
-android-sdk
-.gradle
-build
-HELP.md
-.gradle
+## ==============================
+## Android / Kotlin / Gradle
+## ==============================
+local.properties
+*.iml
+*.ipr
+*.iws
+.idea/
+.gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.hprof
+*.log
+*.keystore
+lint/
+lint-baseline.xml
+proguard/
+*.mapping.txt
+*.seeds.txt
+*.usage.txt
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
+## ==============================
+## macOS
+## ==============================
+.DS_Store
+*.swp
+*.swo
 
-### IntelliJ IDEA ###
+## ==============================
+## IntelliJ IDEA
+## ==============================
 .idea
-*.iws
-*.iml
-*.ipr
 out/
-!**/src/main/**/out/
-!**/src/test/**/out/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-### VS Code ###
+## ==============================
+## VS Code
+## ==============================
 .vscode/
-logs/
-/.xcodemap/
+
+## ==============================
+## Gradle (platform agnostic)
+## ==============================
+.gradle
+build
+!gradle/wrapper/gradle-wrapper.jar
+
+## ==============================
+## Environment
+## ==============================
+.netrc
+.env
+.env.local
+
+## ==============================
+## Project specific
+## ==============================
+/reasonix.toml
+.reasonix/
+android-sdk
+docs/superpowers
