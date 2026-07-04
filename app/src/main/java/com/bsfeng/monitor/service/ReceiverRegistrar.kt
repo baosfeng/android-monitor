@@ -114,6 +114,7 @@ class ReceiverRegistrar(private val context: Context) {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_RESTARTED)
             addDataScheme("package")
         }
         context.registerReceiver(packageReceiver, filter, Context.RECEIVER_EXPORTED)
