@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
 import com.bsfeng.monitor.event.ScreenClassifier
@@ -160,6 +161,9 @@ class MonitorAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
             // 提取失败不影响主流程
         }
+
+        // 更新被杀死检测器的目标列表
+        updateKillDetectorTargets(packageName)
 
         // 键盘检测
         checkKeyboard(packageName)
@@ -465,6 +469,17 @@ class MonitorAccessibilityService : AccessibilityService() {
             "com.google.android.gm", "com.android.email" -> "email"
             else -> "other"
         }
+    }
+
+    // 最近前台出现过的应用包名（用于 AppKillDetector 兜底检测）
+    private val recentForegroundPackages = mutableSetOf<String>()
+    private fun updateKillDetectorTargets(packageName: String) {
+        recentForegroundPackages.add(packageName)
+        // 只保留最近 5 个，防止无限增长
+        if (recentForegroundPackages.size > 5) {
+            recentForegroundPackages.remove(recentForegroundPackages.first())
+        }
+        MonitorApp.instance.killDetector.updateTargetPackages(recentForegroundPackages.toSet())
     }
 
     private fun isSystemUi(packageName: String): Boolean {

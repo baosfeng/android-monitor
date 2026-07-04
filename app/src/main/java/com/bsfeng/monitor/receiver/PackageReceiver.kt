@@ -32,6 +32,12 @@ class PackageReceiver : BroadcastReceiver() {
                     "data_removed" to dataRemoved.toString()
                 ))
             }
+            Intent.ACTION_PACKAGE_RESTARTED -> {
+                EventCollector.emit(EventType.APP_KILLED, mapOf(
+                    "package_name" to packageName,
+                    "app_name" to appName
+                ), summary = "$appName 被强制关闭")
+            }
         }
     }
 }
