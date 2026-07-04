@@ -44,6 +44,9 @@ object ApiService {
                 readTimeout = 5000
                 instanceFollowRedirects = false
                 setRequestProperty("Connection", "close")
+                AppUtils.getToken()?.let {
+                    setRequestProperty("Authorization", "Bearer $it")
+                }
             }
             conn.connect()
             val code = conn.responseCode
