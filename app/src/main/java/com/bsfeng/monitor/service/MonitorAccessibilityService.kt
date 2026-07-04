@@ -18,12 +18,7 @@ class MonitorAccessibilityService : AccessibilityService() {
     private var lastPageTitle: String? = null  // 上一级页面标题
 
     // 去抖：防止高频事件刷屏
-    private var lastScrollTimeMs: Long = 0L
-    private var lastContentChangeTimeMs: Long = 0L
     private var lastClickTimeMs: Long = 0L
-    private var lastScrollPackage: String? = null
-    private val DEBOUNCE_SCROLL_MS = 2_000L       // 滚动事件去抖 2 秒
-    private val DEBOUNCE_CONTENT_MS = 1_000L       // 内容变化去抖 1 秒
     private val DEBOUNCE_CLICK_MS = 3_000L         // 点击事件去抖 3 秒
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -38,12 +33,6 @@ class MonitorAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> {
                 handleNotification(event)
             }
-            AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
-                handleScroll(event)
-            }
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                handleContentChange(event)
-            }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 handleClick(event)
             }
@@ -52,9 +41,6 @@ class MonitorAccessibilityService : AccessibilityService() {
             }
             AccessibilityEvent.TYPE_VIEW_SELECTED -> {
                 handleSelected(event)
-            }
-            AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
-                handleTouchInteraction(event)
             }
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
                 handleTextSelection(event)
@@ -188,67 +174,6 @@ class MonitorAccessibilityService : AccessibilityService() {
         lastSwitchTimeMs = now
     }
 
-    // ========== Scroll Event ==========
-
-    private fun handleScroll(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        val now = System.currentTimeMillis()
-
-        // 去抖：同一 App 的滚动事件 2 秒内只记一次
-        if (packageName == lastScrollPackage && now - lastScrollTimeMs < DEBOUNCE_SCROLL_MS) return
-
-        // 过滤系统界面
-        if (isSystemUi(packageName)) return
-
-        lastScrollTimeMs = now
-        lastScrollPackage = packageName
-
-        val className = event.className?.toString() ?: ""
-        val appName = AppUtils.getAppName(packageName)
-        val shortClass = className.substringAfterLast('.')
-
-        // 生成友好的滚动描述
-        val scrollDesc = when {
-            shortClass.contains("ListView", ignoreCase = true) ||
-                shortClass.contains("RecyclerView", ignoreCase = true) -> "滚动浏览"
-            shortClass.contains("WebView", ignoreCase = true) ||
-                shortClass.contains("ScrollView", ignoreCase = true) -> "滚动阅读"
-            else -> "滚动浏览"
-        }
-        val summary = "在 $appName 中$scrollDesc"
-
-        Log.d("MonitorService", "  -> emitting VIEW_SCROLLED for $packageName/$shortClass")
-        EventCollector.emit(EventType.VIEW_SCROLLED, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName,
-            "scroll_view_type" to shortClass
-        ), summary = summary)
-    }
-
-    // ========== Content Change ==========
-
-    private fun handleContentChange(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        val now = System.currentTimeMillis()
-
-        // 去抖：同一 App 的内容变化 1 秒内只记一次
-        if (now - lastContentChangeTimeMs < DEBOUNCE_CONTENT_MS) return
-
-        // 过滤系统界面
-        if (isSystemUi(packageName)) return
-
-        lastContentChangeTimeMs = now
-
-        val appName = AppUtils.getAppName(packageName)
-        val summary = "在 $appName 中内容已更新"
-
-        Log.d("MonitorService", "  -> emitting WINDOW_CONTENT_CHANGED for $packageName")
-        EventCollector.emit(EventType.WINDOW_CONTENT_CHANGED, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName
-        ), summary = summary)
-    }
-
     // ========== Click Event ==========
 
     private fun handleClick(event: AccessibilityEvent) {
@@ -338,17 +263,7 @@ class MonitorAccessibilityService : AccessibilityService() {
         ), summary = summary)
     }
 
-    // ========== Touch & Text Selection ==========
-
-    private var lastTouchTimeMs: Long = 0L
-    private val DEBOUNCE_TOUCH_MS = 30_000L
-
-    private fun handleTouchInteraction(event: AccessibilityEvent) {
-        val now = System.currentTimeMillis()
-        if (now - lastTouchTimeMs < DEBOUNCE_TOUCH_MS) return
-        lastTouchTimeMs = now
-        EventCollector.emit(EventType.TOUCH_INTERACTION, summary = "正在操作手机")
-    }
+    // ========== Text Selection ==========
 
     private fun handleTextSelection(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return

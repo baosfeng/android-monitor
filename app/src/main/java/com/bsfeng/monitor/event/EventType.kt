@@ -9,7 +9,6 @@ enum class EventType(val description: String) {
     // ===== 点击 & 交互 =====
     VIEW_CLICKED("点击交互"),
     VIEW_LONG_CLICKED("长按交互"),
-    VIEW_SCROLLED("页面滚动"),
     VIEW_SELECTED("选中变化"),
     KEYBOARD_SHOWN("键盘弹出"),
     KEYBOARD_HIDDEN("键盘收起"),
@@ -70,14 +69,12 @@ enum class EventType(val description: String) {
     // ===== 应用 & 系统 =====
     APP_INSTALLED("应用安装"),
     APP_UNINSTALLED("应用卸载"),
+    APP_KILLED("应用被杀死"),
     APP_CRASHED("App 崩溃"),
     SCREENSHOT_TAKEN("截屏事件"),
     TIMEZONE_CHANGED("时区变化"),
     LOCALE_CHANGED("语言区域变化"),
     CALL_STATE_CHANGED("通话状态变化"),
-
-    // ===== 窗口内容变化 =====
-    WINDOW_CONTENT_CHANGED("页面内容变化"),
 
     // ===== 传感器 =====
     SENSOR_LIGHT_CHANGED("环境光线变化"),
@@ -96,7 +93,6 @@ enum class EventType(val description: String) {
     SLEEP_PERIOD("睡眠时段"),
 
     // ===== 新增无障碍深度 =====
-    TOUCH_INTERACTION("触摸交互"),
     TEXT_SELECTED("选中文本"),
     DIALOG_DETECTED("弹窗检测"),
     MULTI_WINDOW_CHANGED("多窗口变化");
