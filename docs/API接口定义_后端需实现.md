@@ -221,6 +221,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 | `LOCALE_CHANGED` | 语言区域变化 | `locale` |
 | `CALL_STATE_CHANGED` | 通话状态变化 | `state` (idle/ringing/offhook), `number`（仅限 ringing 状态） |
 | `SCREEN_CONTENT_DETECTED` | 界面内容识别（无障碍） | `package_name`, `content_summary` |
+| `APP_KILLED` | 应用被杀死 | `package_name`, `app_name`, `exit_reason`, `kill_timestamp` |
 
 ### 请求体顶层字段
 
