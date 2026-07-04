@@ -216,7 +216,6 @@ private fun formatExtraJson(extraJson: String): List<String> {
             "button_text" to "按钮文字",
             "view_type" to "视图类型",
             "selected_text" to "选中文字",
-            "scroll_view_type" to "滚动视图类型",
             "network_type" to "网络类型",
             "is_moving" to "是否移动",
             "is_near" to "是否贴近",
