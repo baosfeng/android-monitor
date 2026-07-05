@@ -89,6 +89,31 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        // 调试模式
+        val debugEnabled by viewModel.debugEnabled.collectAsState()
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("调试模式", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (debugEnabled) "输出详细调试日志 (grep MonitorDebug)"
+                        else "已关闭",
+                        fontSize = 14.sp
+                    )
+                }
+                Switch(
+                    checked = debugEnabled,
+                    onCheckedChange = { viewModel.toggleDebug() }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
         // 关于信息
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {

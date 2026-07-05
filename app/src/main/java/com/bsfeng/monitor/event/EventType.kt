@@ -11,6 +11,9 @@ enum class EventType(val description: String) {
     APP_FOREGROUND("App 切换"),
     ACTIVITY_CHANGE("页面跳转"),
 
+    // ===== 交互点击 =====
+    VIEW_CLICKED("点击交互"),
+
     // ===== 导航链路 =====
     NAVIGATION_CHANGE("导航路径"),
 

@@ -44,8 +44,13 @@ fun MainScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Button(onClick = { viewModel.togglePause() }) {
-                        Text(if (isPaused) "恢复" else "暂停")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.togglePause() }) {
+                            Text(if (isPaused) "恢复" else "暂停")
+                        }
+                        OutlinedButton(onClick = { viewModel.clearEvents() }) {
+                            Text("清空")
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -75,6 +80,24 @@ fun MainScreen(
 fun EventCard(event: EventEntity) {
     var expanded by remember { mutableStateOf(false) }
 
+    // 从 extraJson 中提取关键信息
+    val extraObj = remember(event.extraJson) { parseExtraJson(event.extraJson) }
+    val navPath = remember(extraObj) { extraObj.optString("nav_path", "").ifBlank { null } }
+    val pageTitle = remember(extraObj) { extraObj.optString("page_title", "").ifBlank { null } }
+    val toActivityName = remember(extraObj) { extraObj.optString("to_activity_name", "").ifBlank { null } }
+    val appName = remember(extraObj) { extraObj.optString("app_name", "").ifBlank { null } }
+    val fromPageTitle = remember(extraObj) { extraObj.optString("from_page_title", "").ifBlank { null } }
+
+    // 事件类型对应的 emoji 图标
+    val eventIcon = when (event.eventType) {
+        "APP_FOREGROUND" -> "📱"
+        "ACTIVITY_CHANGE" -> "🔄"
+        "VIEW_CLICKED" -> "👆"
+        "NAVIGATION_CHANGE" -> "📍"
+        "RETURN_TO_PAGE" -> "🔙"
+        else -> "📋"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -82,47 +105,25 @@ fun EventCard(event: EventEntity) {
             .clickable { expanded = !expanded }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // 时间
-            Text(
-                text = formatTime(event.timestampMs),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(2.dp))
-            // 友好摘要（大字）
-            Text(
-                text = event.summary.ifBlank { EventType.getChineseName(event.eventType) },
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
-            )
-            // 导航路径面包屑
-            val navPath = extractNavPath(event.extraJson)
-            if (navPath != null) {
-                Spacer(Modifier.height(2.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "📍 ", fontSize = 12.sp)
-                    Text(
-                        text = navPath,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            Spacer(Modifier.height(2.dp))
-            // 事件类型 + 时长
+            // 时间 + 事件类型
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(text = eventIcon, fontSize = 14.sp)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = formatTime(event.timestampMs),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(8.dp))
                 Text(
                     EventType.getChineseName(event.eventType),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // 停留时长
                 val durationText = extractDuration(event.extraJson)
                 if (durationText != null) {
                     Text(
@@ -133,11 +134,108 @@ fun EventCard(event: EventEntity) {
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
-                    if (expanded) "▲ 收起详情" else "▼ 展开详情",
+                    if (expanded) "▲" else "▼",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
+            Spacer(Modifier.height(4.dp))
+
+            // 面包屑导航路径（最突出显示）
+            if (navPath != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "📍 ", fontSize = 13.sp)
+                    Text(
+                        text = navPath,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // 页面标题/内容标题（如果有）
+            val contentTitle = pageTitle ?: toActivityName
+            if (contentTitle != null && (navPath == null || !navPath.contains(contentTitle))) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "📄 ", fontSize = 12.sp)
+                    Text(
+                        text = contentTitle,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // 页面关键内容文本（content_text_1 ~ _8）
+            val contentTexts = extractContentTexts(extraObj)
+            if (contentTexts.isNotEmpty() && (contentTitle == null || !contentTexts.contains(contentTitle))) {
+                for ((index, text) in contentTexts.withIndex()) {
+                    if (index >= 3) break // 最多显示3行
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "📝 ", fontSize = 10.sp)
+                        Text(
+                            text = text,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // 应用名（如果有，且未被面包屑覆盖）
+            if (appName != null && (navPath == null || !navPath.startsWith(appName))) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "📌 ", fontSize = 11.sp)
+                    Text(
+                        text = appName,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // 原始摘要（技术性，灰色小字）
+            val rawSummary = event.summary.ifBlank { null }
+            if (rawSummary != null && (navPath == null || !navPath.equals(rawSummary, ignoreCase = true))
+                && (contentTitle == null || !rawSummary.contains(contentTitle))) {
+                Text(
+                    text = rawSummary,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 2,
+                    lineHeight = 14.sp
+                )
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // 来源提示（从哪来）
+            if (fromPageTitle != null && fromPageTitle != pageTitle) {
+                Text(
+                    text = "← $fromPageTitle",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+
             // 展开的技术详情
             if (expanded && event.extraJson != "{}" && event.extraJson.isNotBlank()) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
@@ -145,14 +243,35 @@ fun EventCard(event: EventEntity) {
                 lines.forEach { line ->
                     Text(
                         text = line,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
+                    Spacer(Modifier.height(2.dp))
                 }
             }
         }
     }
+}
+
+private fun parseExtraJson(extraJson: String): org.json.JSONObject {
+    return try {
+        org.json.JSONObject(extraJson)
+    } catch (_: Exception) {
+        org.json.JSONObject()
+    }
+}
+
+/** 从 extraJson 中提取 content_text_1 ~ _8 */
+private fun extractContentTexts(obj: org.json.JSONObject): List<String> {
+    val texts = mutableListOf<String>()
+    for (i in 1..8) {
+        val key = "content_text_$i"
+        val value = obj.optString(key, "")
+        if (value.isNotBlank() && value != "null") {
+            texts.add(value)
+        }
+    }
+    return texts
 }
 
 private fun extractDuration(extraJson: String): String? {
@@ -170,15 +289,6 @@ private fun extractDuration(extraJson: String): String? {
             seconds >= 1 -> "${seconds}秒"
             else -> null
         }
-    } catch (_: Exception) { null }
-}
-
-private fun extractNavPath(extraJson: String): String? {
-    if (extraJson.isBlank() || extraJson == "{}") return null
-    return try {
-        val obj = org.json.JSONObject(extraJson)
-        val path = obj.optString("nav_path", "")
-        path.ifBlank { null }
     } catch (_: Exception) { null }
 }
 
@@ -201,7 +311,10 @@ private fun formatExtraJson(extraJson: String): List<String> {
             "nav_depth" to "导航深度",
             "nav_index" to "导航索引",
             "foreground_duration_ms" to "停留时长(ms)",
-            "from_app_name" to "从(应用)"
+            "from_app_name" to "从(应用)",
+            "from_activity_name" to "从(页面描述)",
+            "to_activity_name" to "到(页面描述)",
+            "nav_path" to "导航路径"
         )
         for (key in obj.keys()) {
             val value = obj.optString(key, "")

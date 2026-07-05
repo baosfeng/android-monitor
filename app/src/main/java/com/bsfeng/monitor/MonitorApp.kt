@@ -11,6 +11,7 @@ import com.bsfeng.monitor.pipeline.handler.DatabaseHandler
 import com.bsfeng.monitor.pipeline.handler.LogHandler
 import com.bsfeng.monitor.pipeline.handler.UploadHandler
 import com.bsfeng.monitor.pipeline.handler.UploadQueue
+import com.bsfeng.monitor.util.DebugConfig
 
 /**
  * 应用入口 — 仅保持最小初始化。
@@ -24,6 +25,7 @@ class MonitorApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        DebugConfig.init()
         initPipeline()
     }
 

@@ -158,9 +158,22 @@ Success
 ~/Downloads/platform-tools/adb install -r -d ~/Downloads/app-debug.apk
 ```
 
+## 🚨 重要警告：禁止 force-stop（影响无障碍服务）
+
+> **绝对不要**使用 `adb shell am force-stop com.bsfeng.monitor` 来重启应用！
+
+**原因：** MIUI/HyperOS 的 `force-stop` 操作会**自动移除**该应用的无障碍服务权限（详见[踩坑记录](../踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)），导致 `MonitorAccessibilityService` 失效，必须用户在手机上手动重新开启。
+
+**正确做法：**
+- 安装新 APK：直接用 `adb install -r`（进程自动管理）
+- 唤醒应用：`adb shell am start -n com.bsfeng.monitor/.MainActivity`
+- 完整开发流程：使用下面的全流程命令即可
+
 ## 全流程自动化命令
 
 > 每次代码改动后执行，一行完成：测试 → 编译 → 复制到 Downloads → 安装到手机。
+>
+> ⚠️ **无需 force-stop！** `adb install -r` 会自动处理进程切换。
 
 ```bash
 # 标准全流程（手机已连接正常）
@@ -248,6 +261,9 @@ Success
 ```bash
 # 实时查看本应用所有日志（推荐）
 ~/Downloads/platform-tools/adb logcat -v time | grep -i "monitor\|bsfeng"
+
+# 查看用户操作时间线（干净、按时间排序、带 emoji 图标的轨迹）
+~/Downloads/platform-tools/adb logcat -v time | grep MonitorTimeline
 
 # 查看应用崩溃日志
 ~/Downloads/platform-tools/adb logcat -v time -s AndroidRuntime:E

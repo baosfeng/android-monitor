@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.data.EventEntity
 import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,9 @@ class MainViewModel : ViewModel() {
 
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
+    private val _debugEnabled = MutableStateFlow(DebugConfig.enabled)
+    val debugEnabled: StateFlow<Boolean> = _debugEnabled.asStateFlow()
 
     init {
         loadData()
@@ -75,6 +79,22 @@ class MainViewModel : ViewModel() {
         _isPaused.value = newPaused
         if (!newPaused) {
             loadData()
+        }
+    }
+
+    fun toggleDebug() {
+        val newEnabled = !_debugEnabled.value
+        _debugEnabled.value = newEnabled
+        DebugConfig.setEnabled(newEnabled)
+    }
+
+    /** 一键清空所有事件 */
+    fun clearEvents() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.deleteAllEvents()
+                loadData()
+            } catch (_: Exception) {}
         }
     }
 

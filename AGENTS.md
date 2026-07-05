@@ -18,6 +18,7 @@
 > | 修改编译配置或依赖 | → **[编译配置](docs/开发指南/编译配置.md)** — 构建变体、依赖配置、混淆规则 |
 > | 打包签名或发布 | → **[发布指南](docs/开发指南/发布指南.md)** — 打包签名、渠道分发 |
 > | 排查已知编译错误或运行时问题 | → **[踩坑记录](docs/踩坑/)** — 已知问题和解决方案 |
+| 调研 Android / 澎湃 OS AI 能力 | → **[AI 能力调研](docs/开发指南/AI能力调研.md)** — Android 16 + 澎湃 OS 3 AI 相关 API |
 
 ## 项目简介
 - **版本:** 1.0.0
@@ -37,6 +38,8 @@
 > 每次代码改动后，必须生成 APK 供用户侧载安装。
 >
 > ⚠️ **ADB 路径：** 当前环境 ADB 安装在 `~/Downloads/platform-tools/adb`，后续所有 adb 命令必须使用此全路径（详见 [ADB 调试指南](docs/开发指南/ADB调试指南.md)）。
+>
+> 🚨 **MIUI/HyperOS 警告：禁止使用 `adb shell am force-stop`！** 该操作会移除无障碍服务权限，需手动重新开启。详情见 [踩坑记录](docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)。
 
 ```bash
 # 一行完成：测试 → 编译 Debug APK → 复制到 Downloads → 安装到已连接手机
@@ -106,6 +109,8 @@
 → [编译配置](docs/开发指南/编译配置.md)
 → [发布指南](docs/开发指南/发布指南.md)
 → [Android 多版本适配](docs/开发指南/Android适配指南.md) — Android 10~16 行为变更清单与项目合规检查
+→ [AI 能力调研](docs/开发指南/AI能力调研.md) — Android 16 + 澎湃 OS 3 AI 相关 API 与开放能力
 
 ## 踩坑记录
 → [踩坑记录](docs/踩坑/)
+  - [MIUI force-stop 导致无障碍服务被自动移除](docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md) — ⚠️ 禁止 force-stop
