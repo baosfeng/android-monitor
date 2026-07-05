@@ -28,6 +28,10 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     signingConfigs {
         named("debug") {
             storeFile = file("debug.keystore")
@@ -76,4 +80,5 @@ dependencies {
     // Test
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("org.robolectric:robolectric:4.13")
 }
