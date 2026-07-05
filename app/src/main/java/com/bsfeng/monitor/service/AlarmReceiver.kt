@@ -25,7 +25,7 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startActivity(wakeIntent)
         }
 
-        // 每 5 分钟也触发一次数据上报
+        // 每 1 分钟也触发一次数据上报
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             val reporter = EventReporter(context)
             if (AppUtils.getToken() != null) {
@@ -61,11 +61,11 @@ fun scheduleAlarmCheck(context: Context) {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    // 每 5 分钟检查一次保活状态
+    // 每 1 分钟检查一次保活状态
     alarmManager.setInexactRepeating(
         AlarmManager.RTC_WAKEUP,
         System.currentTimeMillis() + 30_000,
-        5 * 60 * 1000L,
+        60 * 1000L,  // 1 分钟心跳
         pendingIntent
     )
 }

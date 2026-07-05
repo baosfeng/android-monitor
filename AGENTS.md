@@ -13,6 +13,7 @@
 > | 修改版本号或发布版本 | → **[版本号管理](docs/开发指南/版本号管理.md)** — 版本号变更规则和操作流程（如存在） |
 > | 构建项目或运行测试 | → **[构建与测试](docs/开发指南/构建与测试.md)** — 构建命令、测试命令、提交策略、APK 打包 |
 > | 编译通过后打包 APK 并安装到手机 | → **[构建与测试 → 每次改动必须打包 APK](docs/开发指南/构建与测试.md#每次改动必须打包-apk)** — `assembleDebug` + `adb install -r` |
+> | 使用 ADB 调试、连接手机、安装 APK | → **[ADB 调试指南](docs/开发指南/ADB调试指南.md)** — macOS + 小米 14 HyperOS 调试完整流程 |
 > | 了解项目整体架构 | → **[架构总览](docs/概览/架构总览.md)** — 系统分层、模块依赖 |
 > | 修改编译配置或依赖 | → **[编译配置](docs/开发指南/编译配置.md)** — 构建变体、依赖配置、混淆规则 |
 > | 打包签名或发布 | → **[发布指南](docs/开发指南/发布指南.md)** — 打包签名、渠道分发 |
@@ -34,19 +35,22 @@
 ## 构建与安装速查
 
 > 每次代码改动后，必须生成 APK 供用户侧载安装。
+>
+> ⚠️ **ADB 路径：** 当前环境 ADB 安装在 `~/Downloads/platform-tools/adb`，后续所有 adb 命令必须使用此全路径（详见 [ADB 调试指南](docs/开发指南/ADB调试指南.md)）。
 
 ```bash
 # 一行完成：测试 → 编译 Debug APK → 复制到 Downloads → 安装到已连接手机
 ./gradlew test && ./gradlew assembleDebug \
   && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
-  && adb install -r ~/Downloads/app-debug.apk
+  && ~/Downloads/platform-tools/adb install -r ~/Downloads/app-debug.apk
 ```
 
 | 命令 | 说明 | APK 输出路径 |
 |------|------|-------------|
 | `./gradlew assembleDebug` | 编译 Debug APK | `app/build/outputs/apk/debug/app-debug.apk` |
-| `adb install -r <apk>` | 覆盖安装到手机 | 保留原有数据 |
-| `adb devices` | 查看已连接设备 | — |
+| `~/Downloads/platform-tools/adb install -r <apk>` | 覆盖安装到手机（使用全路径） | 保留原有数据 |
+| `~/Downloads/platform-tools/adb devices` | 查看已连接设备（使用全路径） | — |
+| 手机未连接时跳过安装 | → [ADB 调试指南 → 未连接手机处理流程](docs/开发指南/ADB调试指南.md#未连接手机处理流程) | — |
 
 ## 功能模块
 | 模块 | 说明 | 源码路径 |
@@ -91,6 +95,7 @@
 → [文档规范](docs/开发指南/文档规范.md)
 → [提交规范](docs/开发指南/提交规范.md)
 → [构建与测试](docs/开发指南/构建与测试.md)
+→ [ADB 调试指南](docs/开发指南/ADB调试指南.md) — macOS + 小米 14 HyperOS USB 调试、APK 安装、故障排查
 → [编译配置](docs/开发指南/编译配置.md)
 → [发布指南](docs/开发指南/发布指南.md)
 → [Android 多版本适配](docs/开发指南/Android适配指南.md) — Android 10~16 行为变更清单与项目合规检查

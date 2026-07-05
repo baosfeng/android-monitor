@@ -30,8 +30,6 @@ fun StatsScreen(
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 StatRow("事件总数", state.todayEventCount.toString())
-                StatRow("解锁次数", state.todayUnlockCount.toString())
-                StatRow("待上报", state.unsentCount.toString())
             }
         }
 
@@ -47,8 +45,7 @@ fun StatsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(EventType.getChineseName(type), fontSize = 14.sp)
-                    Text("${events.size} 次", fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${events.size} 次", fontSize = 14.sp)
                 }
             }
         }
@@ -62,6 +59,6 @@ private fun StatRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, fontSize = 14.sp)
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
