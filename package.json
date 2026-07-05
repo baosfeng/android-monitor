@@ -1,0 +1,7 @@
+{
+  "allowScripts": {
+    "gitnexus@1.6.8": true,
+    "@ladybugdb/core@0.17.1": true,
+    "tree-sitter@0.21.1": true
+  }
+}

@@ -5,47 +5,51 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.event.AppSessionManager
 import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
-import com.bsfeng.monitor.event.ScreenClassifier
+import com.bsfeng.monitor.event.NavChangeResult
+import com.bsfeng.monitor.event.NavigationTracker
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DiagnosticCounters
 
+/**
+ * 无障碍服务 — 仅追踪导航/页面跳转。
+ *
+ * 只处理 TYPE_WINDOW_STATE_CHANGED 事件，其他交互事件全部忽略。
+ */
 class MonitorAccessibilityService : AccessibilityService() {
 
     private var lastPackageName: String? = null
     private var lastActivityClass: String? = null
     private var lastSwitchTimeMs: Long = System.currentTimeMillis()
     private var lastPageTitle: String? = null  // 上一级页面标题
+    private var isAway: Boolean = false  // 用户是否离开了当前 App（去桌面/系统界面）
+    private var homePackage: String? = null  // 系统桌面包名（缓存）
 
-    // 去抖：防止高频事件刷屏
-    private var lastClickTimeMs: Long = 0L
-    private val DEBOUNCE_CLICK_MS = 3_000L         // 点击事件去抖 3 秒
+    /** 检测当前包名是否为系统桌面 */
+    private fun isHomeApp(pkg: String): Boolean {
+        if (homePackage == null) {
+            homePackage = try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                    addCategory(android.content.Intent.CATEGORY_HOME)
+                }
+                packageManager?.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                    ?.activityInfo?.packageName
+            } catch (_: Exception) { null }
+        }
+        return pkg == homePackage
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         DiagnosticCounters.accessibilityEventCount++
         DiagnosticCounters.lastAccessibilityEventType = event.eventType.toString()
         DiagnosticCounters.lastAccessibilityPackage = event.packageName?.toString() ?: ""
         Log.d("MonitorService", "onAccessibilityEvent: type=${event.eventType}, pkg=${event.packageName}")
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                handleWindowChange(event)
-            }
-            AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> {
-                handleNotification(event)
-            }
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                handleClick(event)
-            }
-            AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> {
-                handleLongClick(event)
-            }
-            AccessibilityEvent.TYPE_VIEW_SELECTED -> {
-                handleSelected(event)
-            }
-            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
-                handleTextSelection(event)
-            }
+
+        // 只处理窗口切换事件（App 切换 / 页面跳转）
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handleWindowChange(event)
         }
     }
 
@@ -59,6 +63,16 @@ class MonitorAccessibilityService : AccessibilityService() {
         val className = event.className?.toString() ?: ""
         val now = System.currentTimeMillis()
 
+        // ===== 检测桌面（Home）：离开时保存会话，但不追踪桌面 =====
+        if (isHomeApp(packageName)) {
+            if (packageName != lastPackageName && lastPackageName != null) {
+                saveCurrentSession()
+            }
+            isAway = true
+            Log.d("MonitorService", "handleWindowChange: going to home screen, isAway=true")
+            return
+        }
+
         // 过滤系统界面
         if (isSystemUi(packageName)) {
             DiagnosticCounters.accessibilityFilteredCount++
@@ -66,58 +80,68 @@ class MonitorAccessibilityService : AccessibilityService() {
             return
         }
 
-        Log.d("MonitorService", "handleWindowChange: pkg=$packageName, cls=$className, lastPkg=$lastPackageName")
-
-        val duration = if (lastPackageName != null) now - lastSwitchTimeMs else 0L
         val appName = AppUtils.getAppName(packageName)
 
         // 提取页面标题（如聊天对象名、设置项名、页面标题等）
         val pageTitle = event.text?.joinToString("")?.takeIf { it.isNotBlank() }
+            ?: extractTitleFromNode(event.source)
 
-        // app_foreground: App 切换
-        if (packageName != lastPackageName) {
-            val fromAppName = if (lastPackageName != null) AppUtils.getAppName(lastPackageName!!) else ""
-            val durationText = if (duration >= 60_000L) formatDuration(duration) else ""
-            val titleSuffix = if (pageTitle != null) "（$pageTitle）" else ""
-            val summary = if (lastPackageName != null) {
-                val base = "从 $fromAppName 切换到 $appName$titleSuffix"
-                if (durationText.isNotBlank()) "$base（停留 $durationText）" else base
-            } else {
-                "打开了 $appName$titleSuffix"
-            }
-            Log.d("MonitorService", "  -> emitting APP_FOREGROUND for $packageName")
-            EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
-                "package_name" to packageName,
-                "app_name" to appName,
-                "page_title" to (pageTitle ?: ""),
-                "activity_name" to className.substringAfterLast('.'),
-                "activity_class" to className,
-                "from_package" to (lastPackageName ?: ""),
-                "from_activity" to (lastActivityClass ?: ""),
-                "foreground_duration_ms" to duration.toString()
-            ), summary = summary)
+        // ===== 从 Home 回到当前 App（恢复会话） =====
+        if (isAway && packageName == lastPackageName) {
+            isAway = false
+            handleReturnFromAway(packageName, appName, className, pageTitle, now)
+            AppSessionManager.clearSession(packageName)
         }
 
-        // activity_change: 同 App 内界面切换（二级/三级页面）
+        // 保存当前 App 的会话（离开时记录导航上下文）
+        if (packageName != lastPackageName && lastPackageName != null) {
+            saveCurrentSession()
+        }
+
+        // app_foreground: App 切换（含会话返回检测）
+        if (packageName != lastPackageName) {
+            val fromAppName = if (lastPackageName != null) AppUtils.getAppName(lastPackageName!!) else ""
+            val duration = if (lastPackageName != null) now - lastSwitchTimeMs else 0L
+
+            // 检查是否回到之前保存的会话
+            val session = AppSessionManager.restoreSession(packageName)
+            if (session != null) {
+                handleReturnWithSession(session, packageName, appName, className, pageTitle, fromAppName, now)
+            } else {
+                // ===== 全新 App 切换 =====
+                val durationText = if (duration >= 60_000L) formatDuration(duration) else ""
+                val titleSuffix = if (pageTitle != null) "（$pageTitle）" else ""
+                val summary = if (lastPackageName != null) {
+                    val base = "从 $fromAppName 切换到 $appName$titleSuffix"
+                    if (durationText.isNotBlank()) "$base（停留 $durationText）" else base
+                } else {
+                    "打开了 $appName$titleSuffix"
+                }
+                Log.d("MonitorService", "  -> APP_FOREGROUND for $packageName")
+                EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
+                    "package_name" to packageName,
+                    "app_name" to appName,
+                    "page_title" to (pageTitle ?: ""),
+                    "activity_name" to className.substringAfterLast('.'),
+                    "activity_class" to className,
+                    "from_package" to (lastPackageName ?: ""),
+                    "from_activity" to (lastActivityClass ?: ""),
+                    "foreground_duration_ms" to duration.toString()
+                ), summary = summary)
+
+                val navResult = NavigationTracker.onAppSwitch(packageName, appName)
+                emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
+            }
+        }
+
+        // activity_change: 同 App 内界面切换
         if (packageName == lastPackageName && className != lastActivityClass) {
             val shortClass = className.substringAfterLast('.')
             val desc = describeActivity(shortClass, packageName)
+            val duration = now - lastSwitchTimeMs
 
-            // 构建带页面标题的友好描述
             val base = if (pageTitle != null && pageTitle != lastPageTitle) {
-                when {
-                    // 微信：用页面标题作为聊天对象名或页面名
-                    shortClass.contains("ChattingUI") -> "在 微信 中打开与 $pageTitle 的聊天"
-                    shortClass.contains("SnsTimeLineUI") ||
-                        shortClass.contains("SnsComment") -> "在 微信 中查看 $pageTitle"
-                    shortClass.contains("AppBrandUI") ||
-                        shortClass.contains("MiniProgram") -> "在 微信 中打开小程序：$pageTitle"
-                    shortClass.contains("BizTimeLineUI") ||
-                        shortClass.contains("BizChattingUI") -> "在 微信 中阅读「$pageTitle」"
-                    shortClass.contains("Wallet") ||
-                        shortClass.contains("PayUI") -> "在 微信 中使用「$pageTitle」"
-                    else -> "在 $appName 中进入「$pageTitle」"
-                }
+                "在 $appName 中进入「$pageTitle」"
             } else if (lastPageTitle != null && pageTitle == null) {
                 "在 $appName 中$desc（$lastPageTitle）"
             } else {
@@ -126,7 +150,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
             val durationText = if (duration >= 10_000L) formatDuration(duration) else ""
             val summary = if (durationText.isNotBlank()) "$base（停留 $durationText）" else base
-            Log.d("MonitorService", "  -> emitting ACTIVITY_CHANGE for $className")
+            Log.d("MonitorService", "  -> ACTIVITY_CHANGE for $className")
             EventCollector.emit(EventType.ACTIVITY_CHANGE, mapOf(
                 "package_name" to packageName,
                 "app_name" to appName,
@@ -136,41 +160,15 @@ class MonitorAccessibilityService : AccessibilityService() {
                 "to_activity" to className,
                 "to_class" to className
             ), summary = summary)
-        }
 
-        // screen_content_detected: 界面内容识别（全应用覆盖）
-        try {
-            val content = ScreenClassifier.classify(
-                packageName, className, event.text, event.source
+            val navResult = NavigationTracker.onActivityChange(
+                packageName, appName, className, pageTitle
             )
-            if (content != null) {
-                val screenDesc = describeScreenType(content.screenType)
-                val titleSuffix = if (pageTitle != null) "（$pageTitle）" else ""
-                val summary = "在 $appName 中$screenDesc$titleSuffix"
-                Log.d("MonitorService", "  -> emitting SCREEN_CONTENT_DETECTED: type=${content.screenType}")
-                EventCollector.emit(EventType.SCREEN_CONTENT_DETECTED, mapOf(
-                    "package_name" to packageName,
-                    "app_name" to appName,
-                    "page_title" to (pageTitle ?: ""),
-                    "screen_title" to (content.screenTitle ?: ""),
-                    "screen_type" to content.screenType,
-                    "activity_class" to className,
-                    "confidence" to content.confidence.toString()
-                ), summary = summary)
-            }
-        } catch (_: Exception) {
-            // 提取失败不影响主流程
+            emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
         }
 
-        // 更新被杀死检测器的目标列表
+        // 保留 updateKillDetectorTargets 为空调用（保持兼容）
         updateKillDetectorTargets(packageName)
-
-        // 键盘检测
-        checkKeyboard(packageName)
-
-        // 页面内容摘要 + URL 提取
-        extractPageContent(packageName, appName, pageTitle, className)
-        extractUrlIfBrowser(packageName, appName, pageTitle, className)
 
         lastPackageName = packageName
         lastActivityClass = className
@@ -178,223 +176,212 @@ class MonitorAccessibilityService : AccessibilityService() {
         lastSwitchTimeMs = now
     }
 
-    // ========== Click Event ==========
+    // ========== 辅助方法：会话保存与返回处理 ==========
 
-    private fun handleClick(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        val now = System.currentTimeMillis()
+    /** 保存当前 App 的导航状态到会话管理器（离开时调用） */
+    private fun saveCurrentSession() {
+        val pkg = lastPackageName ?: return
+        val oldNavPath = NavigationTracker.saveState(pkg)
+        if (oldNavPath.isNotEmpty()) {
+            AppSessionManager.saveSession(
+                packageName = pkg,
+                appName = AppUtils.getAppName(pkg),
+                navPath = oldNavPath,
+                pageTitle = lastPageTitle,
+                activityClass = lastActivityClass
+            )
+            Log.d("MonitorService", "  -> saved session for ${AppUtils.getAppName(pkg)}, " +
+                    "path=${NavigationTracker.getPathAsString(pkg)}")
+        }
+    }
 
-        // 去抖：3 秒内只记一次
-        if (now - lastClickTimeMs < DEBOUNCE_CLICK_MS) return
-        if (isSystemUi(packageName)) return
+    /** 从 Home 回到当前 App 时的处理 */
+    private fun handleReturnFromAway(
+        packageName: String,
+        appName: String,
+        className: String,
+        pageTitle: String?,
+        now: Long
+    ) {
+        val session = AppSessionManager.restoreSession(packageName)
+        val durationAway = if (session != null) now - session.leaveTimeMs else 0L
+        val durationText = if (session != null) formatDuration(durationAway) else ""
+        val summary = if (session != null) "回到 $appName（离开 $durationText）" else "回到 $appName"
+        Log.d("MonitorService", "  -> returning from away for $appName" +
+                if (session != null) ", session found" else ", no session")
 
-        // 提取按钮文字
-        val buttonText = extractClickText(event) ?: return
-        if (buttonText.length > 50) return  // 太长的不可能是按钮文字
-
-        lastClickTimeMs = now
-
-        val appName = AppUtils.getAppName(packageName)
-        val viewType = event.className?.toString()?.substringAfterLast('.') ?: ""
-        val viewId = event.source?.viewIdResourceName?.takeIf { it.isNotBlank() } ?: ""
-        val summary = "在 $appName 中点击「$buttonText」"
-
-        Log.d("MonitorService", "  -> emitting VIEW_CLICKED: $buttonText in $packageName")
-        EventCollector.emit(EventType.VIEW_CLICKED, mapOf(
+        EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
             "package_name" to packageName,
             "app_name" to appName,
-            "button_text" to buttonText,
-            "view_type" to viewType,
-            "view_id" to viewId
+            "page_title" to (pageTitle ?: ""),
+            "activity_name" to className.substringAfterLast('.'),
+            "activity_class" to className,
+            "from_package" to "",
+            "returning" to "true",
+            "duration_away_ms" to durationAway.toString(),
+            "duration_away" to durationText,
+            "previous_activity" to (session?.lastActivityClass ?: ""),
+            "previous_page" to (session?.lastPageTitle ?: "")
         ), summary = summary)
-    }
 
-    /**
-     * 从点击事件中提取按钮文字，跳过输入框等敏感内容
-     */
-    private fun extractClickText(event: AccessibilityEvent): String? {
-        // 尝试从 source 节点获取
-        val source = event.source
-        if (source != null) {
-            val className = source.className?.toString() ?: ""
-
-            // 跳过输入框、密码框、搜索框（保护隐私）
-            if (className.contains("EditText", ignoreCase = true) ||
-                className.contains("SearchView", ignoreCase = true)) return null
-
-            // 优先取 text，其次 contentDescription
-            val text = source.text?.toString()?.takeIf { it.isNotBlank() }
-            val desc = source.contentDescription?.toString()?.takeIf { it.isNotBlank() }
-            val result = text ?: desc
-            if (!result.isNullOrBlank()) return result
+        if (session != null) {
+            handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
+        } else {
+            val navResult = NavigationTracker.onAppSwitch(packageName, appName)
+            emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
         }
-
-        // 兜底：取 event.text
-        return event.text?.joinToString("")?.takeIf { it.isNotBlank() }
     }
 
-    // ========== Long Click ==========
-
-    private fun handleLongClick(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        if (isSystemUi(packageName)) return
-
-        val buttonText = extractClickText(event) ?: return
-        if (buttonText.length > 50) return
-
-        val appName = AppUtils.getAppName(packageName)
-        val summary = "在 $appName 中长按「$buttonText」"
-        EventCollector.emit(EventType.VIEW_LONG_CLICKED, mapOf(
+    /** 从另一个 App 回到之前到访过的 App 时的处理 */
+    private fun handleReturnWithSession(
+        session: com.bsfeng.monitor.event.SessionRecord,
+        packageName: String,
+        appName: String,
+        className: String,
+        pageTitle: String?,
+        fromAppName: String,
+        now: Long
+    ) {
+        val durationAway = now - session.leaveTimeMs
+        val durationText = formatDuration(durationAway)
+        val summary = "回到 $appName（离开 $durationText）"
+        Log.d("MonitorService", "  -> returning to session for $appName, away for $durationText")
+        EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
             "package_name" to packageName,
             "app_name" to appName,
-            "button_text" to buttonText
+            "page_title" to (pageTitle ?: ""),
+            "activity_name" to className.substringAfterLast('.'),
+            "activity_class" to className,
+            "from_package" to (lastPackageName ?: ""),
+            "from_app_name" to fromAppName,
+            "returning" to "true",
+            "duration_away_ms" to durationAway.toString(),
+            "duration_away" to durationText,
+            "previous_activity" to (session.lastActivityClass ?: ""),
+            "previous_page" to (session.lastPageTitle ?: "")
         ), summary = summary)
+        AppSessionManager.clearSession(packageName)
+
+        handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
     }
 
-    // ========== View Selected ==========
+    /** 通用：检测是否回到相同页面，发射 RETURN_TO_PAGE 或重置导航 */
+    private fun handlePageReturn(
+        session: com.bsfeng.monitor.event.SessionRecord,
+        packageName: String,
+        appName: String,
+        className: String,
+        pageTitle: String?,
+        durationAway: Long,
+        durationText: String
+    ) {
+        val currentShortClass = className.substringAfterLast('.')
+        val previousShortClass = session.lastActivityClass?.substringAfterLast('.')
+        val isSamePage = currentShortClass == previousShortClass ||
+                className == session.lastActivityClass
 
-    private fun handleSelected(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        if (isSystemUi(packageName)) return
-
-        val text = extractClickText(event) ?: return
-        val appName = AppUtils.getAppName(packageName)
-        val summary = "在 $appName 中选择了「$text」"
-        EventCollector.emit(EventType.VIEW_SELECTED, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName,
-            "selected_text" to text
-        ), summary = summary)
-    }
-
-    // ========== Text Selection ==========
-
-    private fun handleTextSelection(event: AccessibilityEvent) {
-        val pkg = event.packageName?.toString() ?: return
-        if (isSystemUi(pkg)) return
-        val appName = AppUtils.getAppName(pkg)
-        EventCollector.emit(EventType.TEXT_SELECTED, mapOf(
-            "package_name" to pkg, "app_name" to appName
-        ), summary = "在 $appName 中选中了文字")
-    }
-
-    /** 在 handleWindowChange 中调用 */
-    private fun detectDialog(pkg: String, appName: String, cls: String, title: String?) {
-        val isDialog = cls.contains("Dialog", ignoreCase = true) ||
-                cls.contains("Popup", ignoreCase = true) ||
-                cls.contains("Alert", ignoreCase = true)
-        if (isDialog && title != null) {
-            EventCollector.emit(EventType.DIALOG_DETECTED, mapOf(
-                "package_name" to pkg, "app_name" to appName,
-                "dialog_title" to title
-            ), summary = "$appName 弹出「$title」")
-        }
-    }
-
-    // ========== Keyboard Detection ==========
-
-    private var imePackage: String? = null  // 缓存当前输入法包名
-
-    /** 在 handleWindowChange 中调用 */
-    private fun checkKeyboard(packageName: String) {
-        if (imePackage == null) {
-            imePackage = try {
-                android.provider.Settings.Secure.getString(
-                    contentResolver,
-                    android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
-                )?.substringBefore('/')
-            } catch (_: Exception) { null }
-        }
-        if (packageName == imePackage) {
-            EventCollector.emit(EventType.KEYBOARD_SHOWN, summary = "键盘已弹出")
-        } else if (lastPackageName == imePackage && packageName != imePackage) {
-            EventCollector.emit(EventType.KEYBOARD_HIDDEN, summary = "键盘已收起")
-        }
-    }
-
-    // ========== URL & Page Content ==========
-
-    private var lastPageContentHash: String? = null
-
-    private fun extractUrlIfBrowser(pkg: String, appName: String, title: String?, cls: String) {
-        val isBrowser = cls.contains("Browser", ignoreCase = true) ||
-                cls.contains("WebView", ignoreCase = true) ||
-                pkg == "com.android.chrome" || pkg == "org.mozilla.firefox"
-        if (!isBrowser || title == null) return
-        val url = when {
-            title.startsWith("http://") || title.startsWith("https://") -> title
-            title.contains(".com/") || title.contains(".cn/") -> "https://$title"
-            else -> null
-        }
-        if (url != null) {
-            val simple = url.removePrefix("https://").removePrefix("http://").substringBefore("?").take(80)
-            EventCollector.emit(EventType.URL_VISITED, mapOf(
-                "package_name" to pkg, "app_name" to appName, "url" to url
-            ), summary = "在 $appName 中浏览 $simple")
-        }
-    }
-
-    private fun extractPageContent(pkg: String, appName: String, title: String?, cls: String) {
-        if (System.currentTimeMillis() - lastSwitchTimeMs < 60_000L) return
-        val texts = mutableListOf<String>()
-        if (!title.isNullOrBlank()) texts.add(title)
-        try { getRootInActiveWindow()?.let { r -> traverseNodeText(r, texts, 3) } } catch (_: Exception) {}
-        if (texts.isEmpty()) return
-        val hash = texts.joinToString("|")
-        if (hash == lastPageContentHash) return
-        lastPageContentHash = hash
-        EventCollector.emit(EventType.PAGE_CONTENT, mapOf(
-            "package_name" to pkg, "app_name" to appName, "texts" to texts.joinToString(" | ")
-        ), summary = "在 $appName 中：${texts.joinToString(" | ").take(80)}")
-    }
-
-    private fun traverseNodeText(n: android.view.accessibility.AccessibilityNodeInfo,
-                                  t: MutableList<String>, max: Int) {
-        if (t.size >= max) return
-        try {
-            n.text?.toString()?.takeIf { it.length in 4..99 && !t.contains(it) }?.let { t.add(it) }
-            for (i in 0 until n.childCount) n.getChild(i)?.let { traverseNodeText(it, t, max) }
-        } catch (_: Exception) {}
-    }
-
-    // ========== Notification ==========
-
-    private fun handleNotification(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        val text = event.text.joinToString("")
-        val category = extractCategory(event)
-        val appName = AppUtils.getAppName(packageName)
-
-        // 无文本内容 → 通知被移除
-        if (text.isBlank()) {
-            EventCollector.emit(EventType.NOTIFICATION_REMOVED, mapOf(
+        if (isSamePage && pageTitle != null && session.lastPageTitle != null) {
+            NavigationTracker.restoreState(packageName, session.navPath)
+            val returnSummary = "回到之前浏览的页面「${session.lastPageTitle}」（离开 $durationText）"
+            Log.d("MonitorService", "  -> RETURN_TO_PAGE: ${session.lastPageTitle}")
+            EventCollector.emit(EventType.RETURN_TO_PAGE, mapOf(
                 "package_name" to packageName,
                 "app_name" to appName,
-                "category" to category
-            ), summary = "$appName 的通知已清除")
-            return
+                "page_title" to pageTitle,
+                "previous_page_title" to session.lastPageTitle,
+                "duration_away_ms" to durationAway.toString(),
+                "duration_away" to durationText,
+                "nav_path" to NavigationTracker.getPathAsString(packageName),
+                "activity_class" to className
+            ), summary = returnSummary)
+            val restoredPath = NavigationTracker.getCurrentPath(packageName)
+            if (restoredPath.isNotEmpty()) {
+                emitNavigationEvent(NavChangeResult(restoredPath, true, 0),
+                    packageName, appName, pageTitle, className)
+            }
+        } else {
+            val navResult = NavigationTracker.onAppSwitch(packageName, appName)
+            emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
+        }
+    }
+
+    // ========== Navigation Event ==========
+
+    private fun emitNavigationEvent(
+        result: NavChangeResult,
+        packageName: String,
+        appName: String,
+        pageTitle: String?,
+        className: String?
+    ) {
+        if (!result.isNewPath) return
+        if (result.path.isEmpty()) return
+
+        val path = result.path
+        val pathString = path.joinToString(" > ") { it.name }
+        val depth = path.size
+
+        val levelMap = mutableMapOf<String, String>()
+        for (i in path.indices) {
+            val level = i + 1
+            val node = path[i]
+            levelMap["nav_level_${level}"] = node.name
+            levelMap["nav_level_${level}_type"] = node.type
         }
 
-        val summary = "收到 $appName 的通知"
-        EventCollector.emit(EventType.NOTIFICATION_RECEIVED, mapOf(
+        val summary = buildString {
+            append("导航：${pathString}")
+            if (pageTitle != null && path.lastOrNull()?.name != pageTitle) {
+                append("（${pageTitle}）")
+            }
+        }
+
+        Log.d("MonitorService", "  -> NAVIGATION_CHANGE: ${pathString}")
+        EventCollector.emit(EventType.NAVIGATION_CHANGE, mapOf(
             "package_name" to packageName,
             "app_name" to appName,
-            "category" to category,
-            "content" to text.take(100)
-        ), summary = summary)
+            "page_title" to (pageTitle ?: ""),
+            "nav_path" to pathString,
+            "nav_depth" to depth.toString(),
+            "nav_index" to result.changedIndex.toString(),
+            "activity_class" to (className ?: "")
+        ) + levelMap, summary = summary)
+    }
+
+    // ========== Title Extraction ==========
+
+    private fun extractTitleFromNode(source: android.view.accessibility.AccessibilityNodeInfo?): String? {
+        if (source == null) return null
+        val texts = mutableListOf<String>()
+        try {
+            traverseForTitle(source, texts, max = 3)
+        } catch (_: Exception) { /* 安全忽略 */ }
+        return texts.firstOrNull()
+    }
+
+    private fun traverseForTitle(
+        node: android.view.accessibility.AccessibilityNodeInfo,
+        texts: MutableList<String>,
+        max: Int,
+        depth: Int = 0
+    ) {
+        if (depth > 3 || texts.size >= max) return
+        node.text?.toString()?.takeIf { it.length in 4..50 && !texts.contains(it) }?.let {
+            texts.add(it)
+        }
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { traverseForTitle(it, texts, max, depth + 1) }
+        }
     }
 
     // ========== Description Helpers ==========
 
-    /**
-     * 将短类名/包名转为中文描述
-     */
     private fun describeActivity(shortClass: String, packageName: String): String {
         return when {
             shortClass.contains("ChattingUI", ignoreCase = true) -> "聊天界面"
             shortClass.contains("Conversation", ignoreCase = true) ||
                 shortClass.contains("LauncherUI", ignoreCase = true) -> "聊天列表"
-            shortClass.contains("SnsTimeLineUI", ignoreCase = true) || 
+            shortClass.contains("SnsTimeLineUI", ignoreCase = true) ||
                 shortClass.contains("SnsComment", ignoreCase = true) -> "朋友圈"
             shortClass.contains("BizTimeLineUI", ignoreCase = true) ||
                 shortClass.contains("BizChattingUI", ignoreCase = true) -> "公众号"
@@ -413,41 +400,16 @@ class MonitorAccessibilityService : AccessibilityService() {
             shortClass.contains("Album", ignoreCase = true) ||
                 shortClass.contains("Gallery", ignoreCase = true) -> "相册"
             shortClass.contains("Browser", ignoreCase = true) ||
-                shortClass.contains("WebView", ignoreCase = true) -> "网页浏览"
+                shortClass.contains("WebView", ignoreCase = true) -> {
+                if (packageName == "com.tencent.mm") "阅读文章"
+                else "网页浏览"
+            }
             shortClass.contains("Order", ignoreCase = true) ||
                 shortClass.contains("Confirm", ignoreCase = true) -> "订单页面"
             shortClass.contains("Detail", ignoreCase = true) &&
                 packageName.contains("taobao", ignoreCase = true) -> "商品详情"
             packageName == "com.tencent.mm" -> "微信"
             else -> shortClass
-        }
-    }
-
-    /**
-     * 将屏幕类型转为中文描述
-     */
-    private fun describeScreenType(screenType: String): String {
-        return when (screenType) {
-            "chat" -> "正在聊天"
-            "feed" -> "浏览动态"
-            "chat_list" -> "查看聊天列表"
-            "article" -> "阅读文章"
-            "video" -> "观看视频"
-            "search" -> "搜索内容"
-            "settings" -> "调整设置"
-            "mini_program" -> "使用小程序"
-            "payment" -> "进行支付"
-            "official_account" -> "阅读公众号文章"
-            "moments_comment" -> "查看朋友圈"
-            "live_stream" -> "观看直播"
-            "product_detail" -> "查看商品详情"
-            "checkout" -> "提交订单"
-            "cart" -> "查看购物车"
-            "shopping" -> "浏览商品"
-            "recording" -> "拍摄视频"
-            "contacts" -> "查看通讯录"
-            "home" -> "浏览首页"
-            else -> "浏览页面"
         }
     }
 
@@ -463,23 +425,13 @@ class MonitorAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun extractCategory(event: AccessibilityEvent): String {
-        return when (event.packageName?.toString()) {
-            "com.tencent.mm" -> "social"
-            "com.google.android.gm", "com.android.email" -> "email"
-            else -> "other"
-        }
-    }
-
-    // 最近前台出现过的应用包名（用于 AppKillDetector 兜底检测）
+    // 导航路径辅助
     private val recentForegroundPackages = mutableSetOf<String>()
     private fun updateKillDetectorTargets(packageName: String) {
         recentForegroundPackages.add(packageName)
-        // 只保留最近 5 个，防止无限增长
         if (recentForegroundPackages.size > 5) {
             recentForegroundPackages.remove(recentForegroundPackages.first())
         }
-        MonitorApp.instance.killDetector.updateTargetPackages(recentForegroundPackages.toSet())
     }
 
     private fun isSystemUi(packageName: String): Boolean {
@@ -498,6 +450,6 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // 服务已连接，可以初始化
+        // 服务已连接
     }
 }

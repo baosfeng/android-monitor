@@ -15,19 +15,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.service.ReceiverRegistrar
-import com.bsfeng.monitor.service.scheduleAlarmCheck
 import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.SettingsScreen
 import com.bsfeng.monitor.ui.StatsScreen
-import com.bsfeng.monitor.util.AppUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private sealed class Screen(val title: String, val icon: ImageVector) {
     data object Home : Screen("实时", Icons.Default.Home)
@@ -49,18 +42,6 @@ class MainActivity : ComponentActivity() {
         }
 
         registrar = ReceiverRegistrar(this).also { it.registerAll() }
-        scheduleAlarmCheck(this)
-
-        // 启动时注册设备（如无Token）+ 触发首次数据上报
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
-                if (AppUtils.getToken() == null) {
-                    EventReporter(this@MainActivity).registerDevice()
-                }
-                // 无论是否刚注册，都尝试上报一次积压事件
-                EventReporter(this@MainActivity).uploadBatch()
-            }
-        }
 
         setContent {
             MaterialTheme {

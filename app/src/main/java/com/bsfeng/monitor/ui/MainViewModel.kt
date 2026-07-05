@@ -4,10 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.data.EventEntity
-import com.bsfeng.monitor.event.EventCollector
-import com.bsfeng.monitor.event.EventType
-import com.bsfeng.monitor.network.ApiService
-import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.util.AppUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -19,17 +15,13 @@ import kotlinx.coroutines.launch
 data class MonitorState(
     val isMonitoring: Boolean = true,
     val recentEvents: List<EventEntity> = emptyList(),
-    val unsentCount: Int = 0,
-    val todayUnlockCount: Int = 0,
     val todayEventCount: Int = 0,
-    val accessibilityEnabled: Boolean = false,
-    val serverConnected: Boolean? = null  // null=检测中, true=已连接, false=无法连接
+    val accessibilityEnabled: Boolean = false
 )
 
 class MainViewModel : ViewModel() {
     private val app = com.bsfeng.monitor.MonitorApp.instance
     private val db = DatabaseHelper.getInstance(app)
-    private val reporter = EventReporter(app)
 
     private val _state = MutableStateFlow(MonitorState())
     val state: StateFlow<MonitorState> = _state.asStateFlow()
@@ -39,7 +31,7 @@ class MainViewModel : ViewModel() {
 
     init {
         loadData()
-        // 每 3 秒自动刷新界面，同步后台自动上报/新事件采集
+        // 每 3 秒自动刷新界面
         viewModelScope.launch {
             while (true) {
                 delay(3000)
@@ -48,7 +40,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun checkAccessibilityStatus() {
+    private fun checkAccessibilityStatus() {
         val enabled = try {
             val am = app.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
                     as android.view.accessibility.AccessibilityManager
@@ -64,34 +56,17 @@ class MainViewModel : ViewModel() {
 
     fun loadData() {
         checkAccessibilityStatus()
-        checkServerConnection()
 
         viewModelScope.launch(Dispatchers.IO) {
-            val now = System.currentTimeMillis()
-            val todayStart = now - (now % 86400000L)
             try {
                 val recent = db.getRecentEvents(20)
-                val unsent = db.countUnsent()
-                val unlocks = db.countByTypeSince(todayStart, EventType.UNLOCK_SUCCESS.name)
                 val total = db.getRecentEvents(10000).size
 
                 _state.value = _state.value.copy(
                     recentEvents = recent,
-                    unsentCount = unsent,
-                    todayUnlockCount = unlocks,
                     todayEventCount = total
                 )
             } catch (_: Exception) {}
-        }
-    }
-
-    fun checkServerConnection() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _state.value = _state.value.copy(serverConnected = null)  // 检测中
-            val result = ApiService.checkConnection()
-            _state.value = _state.value.copy(
-                serverConnected = result  // true=已连接, false=无法连接
-            )
         }
     }
 
@@ -99,22 +74,6 @@ class MainViewModel : ViewModel() {
         val newPaused = !_isPaused.value
         _isPaused.value = newPaused
         if (!newPaused) {
-            loadData()
-        }
-    }
-
-    fun uploadNow() {
-        viewModelScope.launch(Dispatchers.IO) {
-            reporter.uploadBatch()
-            loadData()
-        }
-    }
-
-    /** 重置今日所有事件为未上传并立即触发上报 */
-    fun resendTodayData() {
-        viewModelScope.launch(Dispatchers.IO) {
-            db.resetTodayUploadStatus()
-            reporter.uploadBatch()
             loadData()
         }
     }
