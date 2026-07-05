@@ -6,10 +6,11 @@ import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.event.AppSessionManager
-import com.bsfeng.monitor.event.EventCollector
 import com.bsfeng.monitor.event.EventType
 import com.bsfeng.monitor.event.NavChangeResult
 import com.bsfeng.monitor.event.NavigationTracker
+import com.bsfeng.monitor.pipeline.EventSource
+import com.bsfeng.monitor.pipeline.RawEventData
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DiagnosticCounters
 
@@ -118,16 +119,22 @@ class MonitorAccessibilityService : AccessibilityService() {
                     "打开了 $appName$titleSuffix"
                 }
                 Log.d("MonitorService", "  -> APP_FOREGROUND for $packageName")
-                EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
-                    "package_name" to packageName,
-                    "app_name" to appName,
-                    "page_title" to (pageTitle ?: ""),
-                    "activity_name" to className.substringAfterLast('.'),
-                    "activity_class" to className,
-                    "from_package" to (lastPackageName ?: ""),
-                    "from_activity" to (lastActivityClass ?: ""),
-                    "foreground_duration_ms" to duration.toString()
-                ), summary = summary)
+                MonitorApp.instance.getCollector().emit(object : EventSource {
+                    override fun collectRaw() = RawEventData(
+                        eventType = EventType.APP_FOREGROUND,
+                        packageName = packageName,
+                        className = className,
+                        summary = summary,
+                        rawExtra = mapOf(
+                            "app_name" to appName,
+                            "page_title" to (pageTitle ?: ""),
+                            "activity_name" to className.substringAfterLast('.'),
+                            "from_package" to (lastPackageName ?: ""),
+                            "from_activity" to (lastActivityClass ?: ""),
+                            "foreground_duration_ms" to duration.toString()
+                        )
+                    )
+                })
 
                 val navResult = NavigationTracker.onAppSwitch(packageName, appName)
                 emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
@@ -151,15 +158,21 @@ class MonitorAccessibilityService : AccessibilityService() {
             val durationText = if (duration >= 10_000L) formatDuration(duration) else ""
             val summary = if (durationText.isNotBlank()) "$base（停留 $durationText）" else base
             Log.d("MonitorService", "  -> ACTIVITY_CHANGE for $className")
-            EventCollector.emit(EventType.ACTIVITY_CHANGE, mapOf(
-                "package_name" to packageName,
-                "app_name" to appName,
-                "page_title" to (pageTitle ?: ""),
-                "from_page_title" to (lastPageTitle ?: ""),
-                "from_activity" to (lastActivityClass ?: ""),
-                "to_activity" to className,
-                "to_class" to className
-            ), summary = summary)
+            MonitorApp.instance.getCollector().emit(object : EventSource {
+                override fun collectRaw() = RawEventData(
+                    eventType = EventType.ACTIVITY_CHANGE,
+                    packageName = packageName,
+                    className = className,
+                    summary = summary,
+                    rawExtra = mapOf(
+                        "app_name" to appName,
+                        "page_title" to (pageTitle ?: ""),
+                        "from_page_title" to (lastPageTitle ?: ""),
+                        "from_activity" to (lastActivityClass ?: ""),
+                        "to_activity" to className
+                    )
+                )
+            })
 
             val navResult = NavigationTracker.onActivityChange(
                 packageName, appName, className, pageTitle
@@ -210,19 +223,24 @@ class MonitorAccessibilityService : AccessibilityService() {
         Log.d("MonitorService", "  -> returning from away for $appName" +
                 if (session != null) ", session found" else ", no session")
 
-        EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName,
-            "page_title" to (pageTitle ?: ""),
-            "activity_name" to className.substringAfterLast('.'),
-            "activity_class" to className,
-            "from_package" to "",
-            "returning" to "true",
-            "duration_away_ms" to durationAway.toString(),
-            "duration_away" to durationText,
-            "previous_activity" to (session?.lastActivityClass ?: ""),
-            "previous_page" to (session?.lastPageTitle ?: "")
-        ), summary = summary)
+        MonitorApp.instance.getCollector().emit(object : EventSource {
+            override fun collectRaw() = RawEventData(
+                eventType = EventType.APP_FOREGROUND,
+                packageName = packageName,
+                className = className,
+                summary = summary,
+                rawExtra = mapOf(
+                    "app_name" to appName,
+                    "page_title" to (pageTitle ?: ""),
+                    "activity_name" to className.substringAfterLast('.'),
+                    "returning" to "true",
+                    "duration_away_ms" to durationAway.toString(),
+                    "duration_away" to durationText,
+                    "previous_activity" to (session?.lastActivityClass ?: ""),
+                    "previous_page" to (session?.lastPageTitle ?: "")
+                )
+            )
+        })
 
         if (session != null) {
             handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
@@ -246,20 +264,26 @@ class MonitorAccessibilityService : AccessibilityService() {
         val durationText = formatDuration(durationAway)
         val summary = "回到 $appName（离开 $durationText）"
         Log.d("MonitorService", "  -> returning to session for $appName, away for $durationText")
-        EventCollector.emit(EventType.APP_FOREGROUND, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName,
-            "page_title" to (pageTitle ?: ""),
-            "activity_name" to className.substringAfterLast('.'),
-            "activity_class" to className,
-            "from_package" to (lastPackageName ?: ""),
-            "from_app_name" to fromAppName,
-            "returning" to "true",
-            "duration_away_ms" to durationAway.toString(),
-            "duration_away" to durationText,
-            "previous_activity" to (session.lastActivityClass ?: ""),
-            "previous_page" to (session.lastPageTitle ?: "")
-        ), summary = summary)
+        MonitorApp.instance.getCollector().emit(object : EventSource {
+            override fun collectRaw() = RawEventData(
+                eventType = EventType.APP_FOREGROUND,
+                packageName = packageName,
+                className = className,
+                summary = summary,
+                rawExtra = mapOf(
+                    "app_name" to appName,
+                    "page_title" to (pageTitle ?: ""),
+                    "activity_name" to className.substringAfterLast('.'),
+                    "from_package" to (lastPackageName ?: ""),
+                    "from_app_name" to fromAppName,
+                    "returning" to "true",
+                    "duration_away_ms" to durationAway.toString(),
+                    "duration_away" to durationText,
+                    "previous_activity" to (session.lastActivityClass ?: ""),
+                    "previous_page" to (session.lastPageTitle ?: "")
+                )
+            )
+        })
         AppSessionManager.clearSession(packageName)
 
         handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
@@ -284,16 +308,22 @@ class MonitorAccessibilityService : AccessibilityService() {
             NavigationTracker.restoreState(packageName, session.navPath)
             val returnSummary = "回到之前浏览的页面「${session.lastPageTitle}」（离开 $durationText）"
             Log.d("MonitorService", "  -> RETURN_TO_PAGE: ${session.lastPageTitle}")
-            EventCollector.emit(EventType.RETURN_TO_PAGE, mapOf(
-                "package_name" to packageName,
-                "app_name" to appName,
-                "page_title" to pageTitle,
-                "previous_page_title" to session.lastPageTitle,
-                "duration_away_ms" to durationAway.toString(),
-                "duration_away" to durationText,
-                "nav_path" to NavigationTracker.getPathAsString(packageName),
-                "activity_class" to className
-            ), summary = returnSummary)
+            MonitorApp.instance.getCollector().emit(object : EventSource {
+                override fun collectRaw() = RawEventData(
+                    eventType = EventType.RETURN_TO_PAGE,
+                    packageName = packageName,
+                    className = className,
+                    summary = returnSummary,
+                    rawExtra = mapOf(
+                        "app_name" to appName,
+                        "page_title" to pageTitle,
+                        "previous_page_title" to (session.lastPageTitle ?: ""),
+                        "duration_away_ms" to durationAway.toString(),
+                        "duration_away" to durationText,
+                        "nav_path" to NavigationTracker.getPathAsString(packageName)
+                    )
+                )
+            })
             val restoredPath = NavigationTracker.getCurrentPath(packageName)
             if (restoredPath.isNotEmpty()) {
                 emitNavigationEvent(NavChangeResult(restoredPath, true, 0),
@@ -337,15 +367,21 @@ class MonitorAccessibilityService : AccessibilityService() {
         }
 
         Log.d("MonitorService", "  -> NAVIGATION_CHANGE: ${pathString}")
-        EventCollector.emit(EventType.NAVIGATION_CHANGE, mapOf(
-            "package_name" to packageName,
-            "app_name" to appName,
-            "page_title" to (pageTitle ?: ""),
-            "nav_path" to pathString,
-            "nav_depth" to depth.toString(),
-            "nav_index" to result.changedIndex.toString(),
-            "activity_class" to (className ?: "")
-        ) + levelMap, summary = summary)
+        MonitorApp.instance.getCollector().emit(object : EventSource {
+            override fun collectRaw() = RawEventData(
+                eventType = EventType.NAVIGATION_CHANGE,
+                packageName = packageName,
+                className = className,
+                summary = summary,
+                rawExtra = mapOf(
+                    "app_name" to appName,
+                    "page_title" to (pageTitle ?: ""),
+                    "nav_path" to pathString,
+                    "nav_depth" to depth.toString(),
+                    "nav_index" to result.changedIndex.toString()
+                ) + levelMap
+            )
+        })
     }
 
     // ========== Title Extraction ==========
