@@ -56,6 +56,7 @@
 | 模块 | 说明 | 源码路径 |
 |------|------|---------|
 | 事件采集 | 定义所有事件类型、数据模型、收集器和屏幕内容分类器 → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.event` |
+| 三层管道 | 采集层(RawEventCollector)→管道层(EventPipeline)→执行层(Handler) → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.pipeline` |
 | 网络通信 | HttpURLConnection + org.json 事件批量上报引擎、设备注册与心跳 → [文档](docs/网络通信/概述.md) | `com.bsfeng.monitor.network` |
 | 数据持久化 | SQLiteOpenHelper 本地数据库，事件 CRUD 和离线缓存管理 → [文档](docs/数据持久化/概述.md) | `com.bsfeng.monitor.data` |
 | BroadcastReceiver 监听器 | 系统广播监听：屏幕、充电、WiFi、蓝牙、耳机、应用安装等 → [文档](docs/BroadcastReceiver监听器/概述.md) | `com.bsfeng.monitor.receiver` |
@@ -71,7 +72,13 @@
 |---------|---------|
 | 修改事件类型定义 | `app/src/main/java/com/bsfeng/monitor/event/EventType.kt` → [文档](docs/事件采集/概述.md) |
 | 修改事件数据模型 | `app/src/main/java/com/bsfeng/monitor/event/EventModels.kt` → [文档](docs/事件采集/概述.md) |
-| 修改事件收集逻辑 | `app/src/main/java/com/bsfeng/monitor/event/EventCollector.kt` → [文档](docs/事件采集/概述.md) |
+| 修改事件收集(新) | `app/src/main/java/com/bsfeng/monitor/pipeline/RawEventCollector.kt` → [文档](docs/事件采集/概述.md) |
+| 修改管道扇出逻辑 | `app/src/main/java/com/bsfeng/monitor/pipeline/EventPipelineImpl.kt` → [文档](docs/事件采集/概述.md) |
+| 修改导航上下文追踪 | `app/src/main/java/com/bsfeng/monitor/pipeline/NavigationContextTracker.kt` → [文档](docs/事件采集/概述.md) |
+| 修改事件源接口 | `app/src/main/java/com/bsfeng/monitor/pipeline/EventSource.kt` → [文档](docs/事件采集/概述.md) |
+| 修改数据库存储 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/DatabaseHandler.kt` → [文档](docs/事件采集/概述.md) |
+| 修改上传 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/UploadHandler.kt` → [文档](docs/事件采集/概述.md) |
+| 修改日志 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/LogHandler.kt` → [文档](docs/事件采集/概述.md) |
 | 修改屏幕内容分类器 | `app/src/main/java/com/bsfeng/monitor/event/ScreenClassifier.kt` → [文档](docs/事件采集/概述.md) |
 | 修改 API 接口定义 | `app/src/main/java/com/bsfeng/monitor/network/ApiService.kt` → [文档](docs/网络通信/概述.md) |
 | 修改事件上报引擎 | `app/src/main/java/com/bsfeng/monitor/network/EventReporter.kt` → [文档](docs/网络通信/概述.md) |
