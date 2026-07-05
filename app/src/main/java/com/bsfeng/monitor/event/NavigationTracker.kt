@@ -54,13 +54,13 @@ object NavigationTracker {
     /**
      * App 切换时调用 → 重置栈。
      */
-    fun onAppSwitch(packageName: String, appName: String): NavChangeResult {
+    fun onAppSwitch(packageName: String, appName: String, className: String? = null): NavChangeResult {
         val now = System.currentTimeMillis()
         val stack = mutableListOf(
             NavigationNode(
                 name = appName,
                 type = "app",
-                className = null,
+                className = className,
                 nodeTitle = null,
                 timestampMs = now
             )
@@ -101,6 +101,10 @@ object NavigationTracker {
 
         // ---- 1. 主页/首页 → 重置到根 ----
         if (isHomeScreen(className)) {
+            // 栈只有 root 时不再重置（防止重复触发）
+            if (stack.size == 1) {
+                return NavChangeResult(stack.toList(), false, -1)
+            }
             val root = stack.first().copy(timestampMs = now)
             stack.clear()
             stack.add(root)
@@ -108,8 +112,9 @@ object NavigationTracker {
         }
 
         // ---- 1.5 去重：短类名与栈顶节点相同 → 同一页面重复事件 ----
+        // 同时处理根节点 className 为 null（刚 onAppSwitch 创建的根）
         val lastNode = stack.lastOrNull()
-        if (lastNode != null && lastNode.className?.substringAfterLast('.') == shortClass) {
+        if (lastNode != null && (lastNode.className == null || lastNode.className?.substringAfterLast('.') == shortClass)) {
             return NavChangeResult(stack.toList(), false, -1)
         }
 
@@ -129,8 +134,9 @@ object NavigationTracker {
             if (nodeName == appName || nodeName == "主页" || nodeName == "首页") {
                 return NavChangeResult(stack.toList(), false, -1)
             }
-            // 无 pageTitle 且 describeShortClass 返回 null → 无名页面，不压栈
-            if (pageTitle.isNullOrBlank() && describeShortClass(shortClass) == null) {
+            // 解析后名称等于 raw shortClass（说明 pageTitle 和 describeShortClass 都不可用）
+            // 或 pageTitle 是 UI 元数据 → 不压栈
+            if (nodeName == shortClass || (pageTitle != null && isUiMetadata(pageTitle))) {
                 return NavChangeResult(stack.toList(), false, -1)
             }
         }
@@ -296,19 +302,37 @@ object NavigationTracker {
 
     /**
      * 解析节点显示名称。
+     * 优先使用 pageTitle，但排除无意义的 UI 元数据文本。
      */
     private fun resolveNodeName(
         pageTitle: String?,
         className: String,
         packageName: String
     ): String {
-        // 有页面标题优先使用
-        if (!pageTitle.isNullOrBlank()) return pageTitle
+        // 有页面标题且不是无意义的 UI 元数据时使用
+        if (!pageTitle.isNullOrBlank() && !isUiMetadata(pageTitle)) return pageTitle
 
         val shortClass = className.substringAfterLast('.')
 
         // 从类名推测描述
         return describeShortClass(shortClass) ?: shortClass
+    }
+
+    /** 判断文本是否为 UI 元数据而非有意义的内容标题 */
+    private fun isUiMetadata(text: String): Boolean {
+        val lower = text.lowercase()
+        // 包含中英文逗号/竖线等分隔符 → 大概率是多个 UI 元素的拼接文本
+        if (text.contains("，") || text.contains(",") || text.contains(" | ")) return true
+        // 包含通用 UI 状态词
+        if (lower.contains("按钮") || lower.contains("已选中") || lower.contains("未选中")
+            || lower.contains("tab") || lower.contains("标签")) return true
+        // UI 状态/加载占位文本（Accessibility API 返回的视图类名）
+        if (lower.contains("progress") || lower.contains("loading")
+            || lower.contains("toast") || lower.contains("dialog")
+            || lower.contains("popup")) return true
+        // 以 "第" 开头（第N页共N页）
+        if (text.startsWith("第") && (text.contains("页") || text.contains("个"))) return true
+        return false
     }
 
     /**
@@ -347,9 +371,14 @@ object NavigationTracker {
             shortClass.contains("Conversation", ignoreCase = true) ||
                 shortClass.contains("LauncherUI", ignoreCase = true) -> "主页"
             shortClass.contains("SnsTimeLineUI", ignoreCase = true) ||
-                shortClass.contains("SnsComment", ignoreCase = true) -> "朋友圈"
+                shortClass.contains("ImproveSnsTimeline", ignoreCase = true) -> "朋友圈"
+            shortClass.contains("SnsBrowseUI", ignoreCase = true) ||
+                shortClass.contains("SnsComment", ignoreCase = true) -> "详情"
             shortClass.contains("BizTimeLineUI", ignoreCase = true) ||
                 shortClass.contains("BizChattingUI", ignoreCase = true) -> "公众号"
+            shortClass.contains("BizFlutterTLFlutterView", ignoreCase = true) -> "公众号"
+            shortClass.contains("TmplWebViewMMUI", ignoreCase = true) ||
+                shortClass.contains("WebView", ignoreCase = true) -> "文章"
             shortClass.contains("AppBrandUI", ignoreCase = true) ||
                 shortClass.contains("MiniProgram", ignoreCase = true) -> "小程序"
             shortClass.contains("Wallet", ignoreCase = true) ||
@@ -374,6 +403,31 @@ object NavigationTracker {
             shortClass.contains("Cart", ignoreCase = true) -> "购物车"
             shortClass.contains("Feed", ignoreCase = true) -> "动态"
             shortClass.contains("Live", ignoreCase = true) -> "直播"
+            shortClass.contains("Progress", ignoreCase = true) ||
+                shortClass.contains("Loading", ignoreCase = true) -> "加载"
+            shortClass.contains("Toast", ignoreCase = true) ||
+                shortClass.contains("Snackbar", ignoreCase = true) -> "提示"
+            shortClass.contains("Permission", ignoreCase = true) ||
+                shortClass.contains("Rationale", ignoreCase = true) -> "权限"
+            shortClass.contains("Share", ignoreCase = true) ||
+                shortClass.contains("Send", ignoreCase = true) ||
+                shortClass.contains("Forward", ignoreCase = true) -> "分享"
+            shortClass.contains("Image", ignoreCase = true) ||
+                shortClass.contains("Photo", ignoreCase = true) ||
+                shortClass.contains("Picture", ignoreCase = true) -> "图片"
+            shortClass.contains("Scan", ignoreCase = true) ||
+                shortClass.contains("QR", ignoreCase = true) ->
+                    if (shortClass.contains("Result", ignoreCase = true)) "扫码结果" else "扫码"
+            shortClass.contains("Location", ignoreCase = true) ||
+                shortClass.contains("Map", ignoreCase = true) -> "位置"
+            shortClass.contains("Download", ignoreCase = true) ||
+                shortClass.contains("Update", ignoreCase = true) -> "下载"
+            shortClass.contains("Notice", ignoreCase = true) ||
+                shortClass.contains("Notification", ignoreCase = true) -> "通知"
+            shortClass.contains("Input", ignoreCase = true) ||
+                shortClass.contains("Keyboard", ignoreCase = true) -> "输入"
+            shortClass.contains("Picker", ignoreCase = true) ||
+                shortClass.contains("Selector", ignoreCase = true) -> "选择"
             shortClass.contains("Detail", ignoreCase = true) -> "详情"
             shortClass.contains("Home", ignoreCase = true) ||
                 shortClass.contains("Main", ignoreCase = true) -> "首页"

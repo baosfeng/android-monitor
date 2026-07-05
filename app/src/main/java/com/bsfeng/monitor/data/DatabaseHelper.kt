@@ -145,6 +145,13 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
         )
     }
 
+    /** 一键清空所有事件 */
+    fun deleteAllEvents() {
+        val db = writableDatabase
+        db.delete(TABLE_EVENTS, null, null)
+        Log.d("DatabaseHelper", "deleteAllEvents: all events cleared")
+    }
+
     // ========== Internal ==========
 
     private fun queryEvents(
