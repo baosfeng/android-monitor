@@ -1,5 +1,9 @@
 package com.bsfeng.monitor.data
 
+import com.bsfeng.monitor.pipeline.RawEvent
+import org.json.JSONArray
+import org.json.JSONObject
+
 /**
  * 事件数据实体 — 纯数据类，由 DatabaseHelper 直接读写
  *
@@ -32,5 +36,34 @@ data class EventEntity(
             extraJson = extraJson,
             isUploaded = false
         )
+
+        fun fromRawEvent(event: RawEvent): EventEntity {
+            val extraJson = JSONObject().apply {
+                put("interactionDetails", JSONObject(event.interactionDetails))
+                put("rawExtra", JSONObject(event.rawExtra))
+                if (event.structuredData != null) put("structuredData", event.structuredData)
+                if (event.navigationContext.isNotEmpty()) {
+                    put("navigationContext", JSONArray(event.navigationContext.map { frame ->
+                        JSONObject().apply {
+                            put("timestampMs", frame.timestampMs)
+                            put("packageName", frame.packageName)
+                            put("className", frame.className)
+                            put("screenLabel", frame.screenLabel)
+                            frame.source?.let { put("source", it) }
+                        }
+                    }))
+                }
+            }.toString()
+            return EventEntity(
+                eventId = event.eventId,
+                eventType = event.eventType.name,
+                timestampMs = event.timestampMs,
+                deviceId = event.deviceId,
+                summary = event.summary,
+                extraJson = extraJson,
+                isUploaded = false,
+                createdAt = System.currentTimeMillis()
+            )
+        }
     }
 }

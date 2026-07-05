@@ -32,6 +32,7 @@ data class ContextFrame(
 )
 
 data class RawEvent(
+    val eventId: String = java.util.UUID.randomUUID().toString(),
     val eventType: EventType,
     val timestampMs: Long = System.currentTimeMillis(),
     val deviceId: String,
