@@ -9,7 +9,7 @@
 | 开发机 | macOS (Darwin 25.5.0, arm64) |
 | 调试手机 | 小米 14 (型号: 23127PN0CC / 代号: houji) |
 | 手机系统 | HyperOS (基于 Android) |
-| ADB 路径 | `~/Downloads/platform-tools/adb` |
+| ADB 路径 | `~/android-platform-tools/adb` |
 | ADB 版本 | 37.0.0 |
 | JDK | 21（`export JAVA_HOME=/opt/homebrew/opt/openjdk@21`） |
 
@@ -21,11 +21,13 @@
 
 ```bash
 # 下载 Platform Tools（如未安装）
-curl -L -o ~/Downloads/platform-tools-latest-darwin.zip \
+curl -L -o ~/android-platform-tools-latest-darwin.zip \
   "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip"
 
-# 解压
-unzip -o ~/Downloads/platform-tools-latest-darwin.zip -d ~/Downloads/
+# 解压到目标目录
+unzip -o ~/android-platform-tools-latest-darwin.zip -d ~/
+mv ~/platform-tools ~/android-platform-tools
+rm ~/android-platform-tools-latest-darwin.zip
 ```
 
 ### PATH 配置
@@ -36,13 +38,13 @@ ADB 路径已写入 `~/.zshrc`，内容如下：
 export PATH="$HOME/Downloads/platform-tools:$PATH"
 ```
 
-**新终端**直接使用 `adb` 命令即可；**当前会话**请使用全路径 `~/Downloads/platform-tools/adb`。
+**新终端**直接使用 `adb` 命令即可；**当前会话**请使用全路径 `~/android-platform-tools/adb`。
 
 ### 验证安装
 
 ```bash
 # 验证版本
-~/Downloads/platform-tools/adb --version
+~/android-platform-tools/adb --version
 # 输出: Android Debug Bridge version 1.0.41
 #       Version 37.0.0-14910828
 ```
@@ -89,10 +91,10 @@ export PATH="$HOME/Downloads/platform-tools:$PATH"
 
 ```bash
 # 1. 确认 ADB 守护进程运行中
-~/Downloads/platform-tools/adb start-server
+~/android-platform-tools/adb start-server
 
 # 2. 查看已连接设备
-~/Downloads/platform-tools/adb devices
+~/android-platform-tools/adb devices
 ```
 
 ### 正常输出
@@ -127,10 +129,10 @@ a1b2c3d4               device usb:1-1 product:houji model:23127PN0CC device:houj
 
 ```bash
 # 安装（首次安装）
-~/Downloads/platform-tools/adb install ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install ~/Downloads/app-debug.apk
 
 # 覆盖安装（保留应用数据，推荐日常使用）
-~/Downloads/platform-tools/adb install -r ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
 ```
 
 ### 安装成功标志
@@ -155,7 +157,7 @@ Success
 
 ```bash
 # 当需要安装版本号更低的 APK 时（-d 允许降级）
-~/Downloads/platform-tools/adb install -r -d ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install -r -d ~/Downloads/app-debug.apk
 ```
 
 ## 🚨 重要警告：禁止 force-stop（影响无障碍服务）
@@ -179,7 +181,7 @@ Success
 # 标准全流程（手机已连接正常）
 ./gradlew test && ./gradlew assembleDebug \
   && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
-  && ~/Downloads/platform-tools/adb install -r ~/Downloads/app-debug.apk
+  && ~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
 ```
 
 ## 未连接手机处理流程
@@ -208,9 +210,9 @@ Success
   → 连接后注意手机是否有授权弹窗
 
 □ 重启 ADB 服务
-  → ~/Downloads/platform-tools/adb kill-server
-  → ~/Downloads/platform-tools/adb start-server
-  → ~/Downloads/platform-tools/adb devices
+  → ~/android-platform-tools/adb kill-server
+  → ~/android-platform-tools/adb start-server
+  → ~/android-platform-tools/adb devices
 
 □ 重启手机
   → 长按电源键 → 重启
@@ -260,31 +262,31 @@ Success
 
 ```bash
 # 实时查看本应用所有日志（推荐）
-~/Downloads/platform-tools/adb logcat -v time | grep -i "monitor\|bsfeng"
+~/android-platform-tools/adb logcat -v time | grep -i "monitor\|bsfeng"
 
 # 查看用户操作时间线（干净、按时间排序、带 emoji 图标的轨迹）
-~/Downloads/platform-tools/adb logcat -v time | grep MonitorTimeline
+~/android-platform-tools/adb logcat -v time | grep MonitorTimeline
 
 # 查看应用崩溃日志
-~/Downloads/platform-tools/adb logcat -v time -s AndroidRuntime:E
+~/android-platform-tools/adb logcat -v time -s AndroidRuntime:E
 
 # 查看具体日志级别
-~/Downloads/platform-tools/adb logcat -v time *:V     # 所有日志
-~/Downloads/platform-tools/adb logcat -v time *:W     # 警告及以上
-~/Downloads/platform-tools/adb logcat -v time *:E     # 仅错误
+~/android-platform-tools/adb logcat -v time *:V     # 所有日志
+~/android-platform-tools/adb logcat -v time *:W     # 警告及以上
+~/android-platform-tools/adb logcat -v time *:E     # 仅错误
 ```
 
 ### 清空日志缓冲区
 
 ```bash
-~/Downloads/platform-tools/adb logcat -c
+~/android-platform-tools/adb logcat -c
 ```
 
 ### 保存日志到文件
 
 ```bash
 # 抓取日志并保存到文件
-~/Downloads/platform-tools/adb logcat -v time -d > ~/Downloads/debug_log_$(date +%Y%m%d_%H%M%S).txt
+~/android-platform-tools/adb logcat -v time -d > ~/Downloads/debug_log_$(date +%Y%m%d_%H%M%S).txt
 ```
 
 > 注意：`adb logcat` 会持续输出日志，需按 `Ctrl+C` 停止。使用 `-d` 参数可在 dump 日志后自动退出。
@@ -293,28 +295,28 @@ Success
 
 ```bash
 # 查看设备详细信息
-~/Downloads/platform-tools/adb devices -l
+~/android-platform-tools/adb devices -l
 
 # 卸载应用
-~/Downloads/platform-tools/adb uninstall com.bsfeng.monitor
+~/android-platform-tools/adb uninstall com.bsfeng.monitor
 
 # 重启 ADB 服务
-~/Downloads/platform-tools/adb kill-server
-~/Downloads/platform-tools/adb start-server
+~/android-platform-tools/adb kill-server
+~/android-platform-tools/adb start-server
 
 # 重启手机
-~/Downloads/platform-tools/adb reboot
+~/android-platform-tools/adb reboot
 
 # 查看应用包信息
-~/Downloads/platform-tools/adb shell dumpsys package com.bsfeng.monitor | head -30
+~/android-platform-tools/adb shell dumpsys package com.bsfeng.monitor | head -30
 
 # 查看应用权限
-~/Downloads/platform-tools/adb shell dumpsys package com.bsfeng.monitor | grep -A 100 "runtime permissions"
+~/android-platform-tools/adb shell dumpsys package com.bsfeng.monitor | grep -A 100 "runtime permissions"
 
 # 模拟输入（需要「USB 调试（安全设置）」开启）
-~/Downloads/platform-tools/adb shell input tap x y           # 模拟点击
-~/Downloads/platform-tools/adb shell input text "hello"      # 模拟输入
-~/Downloads/platform-tools/adb shell input swipe x1 y1 x2 y2 # 模拟滑动
+~/android-platform-tools/adb shell input tap x y           # 模拟点击
+~/android-platform-tools/adb shell input text "hello"      # 模拟输入
+~/android-platform-tools/adb shell input swipe x1 y1 x2 y2 # 模拟滑动
 ```
 
 ## 常见问题 FAQ
@@ -326,7 +328,7 @@ Success
 **解决：**
 ```bash
 # 方式一：使用全路径（推荐）
-~/Downloads/platform-tools/adb devices
+~/android-platform-tools/adb devices
 
 # 方式二：重新加载 .zshrc
 source ~/.zshrc
@@ -355,8 +357,8 @@ echo $PATH | grep platform-tools
 
 **解决：** 卸载后重装：
 ```bash
-~/Downloads/platform-tools/adb uninstall com.bsfeng.monitor
-~/Downloads/platform-tools/adb install ~/Downloads/app-debug.apk
+~/android-platform-tools/adb uninstall com.bsfeng.monitor
+~/android-platform-tools/adb install ~/Downloads/app-debug.apk
 ```
 
 ### Q: HyperOS 通知拦截了 ADB 授权弹窗？
