@@ -58,14 +58,16 @@
 ## 功能模块
 | 模块 | 说明 | 源码路径 |
 |------|------|---------|
-| 事件采集 | 定义所有事件类型、数据模型、收集器和屏幕内容分类器 → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.event` |
+| 事件采集 | 事件类型枚举、数据模型、导航追踪器、App 会话管理、屏幕内容分类 → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.event` |
 | 三层管道 | 采集层(RawEventCollector)→管道层(EventPipeline)→执行层(Handler) → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.pipeline` |
 | 网络通信 | HttpURLConnection + org.json 事件批量上报引擎、设备注册与心跳 → [文档](docs/网络通信/概述.md) | `com.bsfeng.monitor.network` |
 | 数据持久化 | SQLiteOpenHelper 本地数据库，事件 CRUD 和离线缓存管理 → [文档](docs/数据持久化/概述.md) | `com.bsfeng.monitor.data` |
 | BroadcastReceiver 监听器 | 系统广播监听：屏幕、充电、WiFi、蓝牙、耳机、应用安装等 → [文档](docs/BroadcastReceiver监听器/概述.md) | `com.bsfeng.monitor.receiver` |
-| 后台服务 | 无障碍服务、广播注册器、服务健康检查与保活 → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
-| UI 界面 | Jetpack Compose 界面：实时事件流、统计面板、设置页面 → [文档](docs/UI界面/概述.md) | `com.bsfeng.monitor.ui` |
-| 工具与配置 | 应用配置、设备 ID、Token 持久化等工具类 → [文档](docs/工具与配置/概述.md) | `com.bsfeng.monitor.util` |
+| 后台服务 | 无障碍服务、广播注册器、健康检查、AlarmManager 定时保活 → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
+| UI 界面 | Jetpack Compose 界面：实时事件流、设置页面（含调试模式开关） → [文档](docs/UI界面/概述.md) | `com.bsfeng.monitor.ui` |
+| 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 → [文档](docs/工具与配置/概述.md) | `com.bsfeng.monitor.util` |
+| 点击文本处理器 | App 专用点击文本提取接口、注册表和微信实现 → [文档](docs/点击文本处理器/概述.md) | `com.bsfeng.monitor.click` |
+| 导航追踪 | 每个 App 独立的导航栈追踪器、App 会话保存与恢复 → [文档](docs/事件采集/概述.md#导航追踪) | `com.bsfeng.monitor.event` |
 
 ## 代码快速定位
 
@@ -77,12 +79,15 @@
 | 修改事件数据模型 | `app/src/main/java/com/bsfeng/monitor/event/EventModels.kt` → [文档](docs/事件采集/概述.md) |
 | 修改事件收集(新) | `app/src/main/java/com/bsfeng/monitor/pipeline/RawEventCollector.kt` → [文档](docs/事件采集/概述.md) |
 | 修改管道扇出逻辑 | `app/src/main/java/com/bsfeng/monitor/pipeline/EventPipelineImpl.kt` → [文档](docs/事件采集/概述.md) |
-| 修改导航上下文追踪 | `app/src/main/java/com/bsfeng/monitor/pipeline/NavigationContextTracker.kt` → [文档](docs/事件采集/概述.md) |
+| 修改导航上下文追踪(旧) | `app/src/main/java/com/bsfeng/monitor/pipeline/NavigationContextTracker.kt` → [文档](docs/事件采集/概述.md) |
 | 修改事件源接口 | `app/src/main/java/com/bsfeng/monitor/pipeline/EventSource.kt` → [文档](docs/事件采集/概述.md) |
 | 修改数据库存储 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/DatabaseHandler.kt` → [文档](docs/事件采集/概述.md) |
 | 修改上传 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/UploadHandler.kt` → [文档](docs/事件采集/概述.md) |
+| 修改上传队列 | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/UploadQueue.kt` → [文档](docs/事件采集/概述.md) |
 | 修改日志 Handler | `app/src/main/java/com/bsfeng/monitor/pipeline/handler/LogHandler.kt` → [文档](docs/事件采集/概述.md) |
-| 修改屏幕内容分类器 | `app/src/main/java/com/bsfeng/monitor/event/ScreenClassifier.kt` → [文档](docs/事件采集/概述.md) |
+| 修改导航追踪器(新) | `app/src/main/java/com/bsfeng/monitor/event/NavigationTracker.kt` → [文档](docs/事件采集/概述.md) |
+| 修改 App 会话管理 | `app/src/main/java/com/bsfeng/monitor/event/AppSessionManager.kt` → [文档](docs/事件采集/概述.md) |
+| 修改屏幕内容数据模型 | `app/src/main/java/com/bsfeng/monitor/event/ScreenContent.kt` → [文档](docs/事件采集/概述.md) |
 | 修改 API 接口定义 | `app/src/main/java/com/bsfeng/monitor/network/ApiService.kt` → [文档](docs/网络通信/概述.md) |
 | 修改事件上报引擎 | `app/src/main/java/com/bsfeng/monitor/network/EventReporter.kt` → [文档](docs/网络通信/概述.md) |
 | 修改数据库定义 | `app/src/main/java/com/bsfeng/monitor/data/DatabaseHelper.kt` → [文档](docs/数据持久化/概述.md) |
@@ -91,12 +96,18 @@
 | 修改无障碍服务 | `app/src/main/java/com/bsfeng/monitor/service/MonitorAccessibilityService.kt` → [文档](docs/后台服务/概述.md) |
 | 修改广播注册逻辑 | `app/src/main/java/com/bsfeng/monitor/service/ReceiverRegistrar.kt` → [文档](docs/后台服务/概述.md) |
 | 修改健康检查 | `app/src/main/java/com/bsfeng/monitor/service/HealthChecker.kt` → [文档](docs/后台服务/概述.md) |
+| 修改定时保活接收器 | `app/src/main/java/com/bsfeng/monitor/service/AlarmReceiver.kt` → [文档](docs/后台服务/概述.md) |
+| 修改点击文本处理器接口 | `app/src/main/java/com/bsfeng/monitor/click/AppClickHandler.kt` → [文档](docs/点击文本处理器/概述.md) |
+| 修改处理器注册表 | `app/src/main/java/com/bsfeng/monitor/click/AppClickHandlerRegistry.kt` → [文档](docs/点击文本处理器/概述.md) |
+| 修改微信点击文本处理 | `app/src/main/java/com/bsfeng/monitor/click/WeChatClickHandler.kt` → [文档](docs/点击文本处理器/概述.md) |
 | 修改主界面 | `app/src/main/java/com/bsfeng/monitor/ui/MainScreen.kt` → [文档](docs/UI界面/概述.md) |
 | 修改主页面逻辑 | `app/src/main/java/com/bsfeng/monitor/ui/MainViewModel.kt` → [文档](docs/UI界面/概述.md) |
 | 修改设置页面 | `app/src/main/java/com/bsfeng/monitor/ui/SettingsScreen.kt` → [文档](docs/UI界面/概述.md) |
 | 修改统计页面 | `app/src/main/java/com/bsfeng/monitor/ui/StatsScreen.kt` → [文档](docs/UI界面/概述.md) |
 | 修改应用配置 | `app/src/main/java/com/bsfeng/monitor/AppConfig.kt` → [文档](docs/工具与配置/概述.md) |
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` → [文档](docs/工具与配置/概述.md) |
+| 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` → [文档](docs/工具与配置/概述.md) |
+| 修改诊断计数器 | `app/src/main/java/com/bsfeng/monitor/util/DiagnosticCounters.kt` → [文档](docs/工具与配置/概述.md) |
 | 修改 Application 入口 | `app/src/main/java/com/bsfeng/monitor/MonitorApp.kt` → [文档](docs/工具与配置/概述.md) |
 | 修改 MainActivity | `app/src/main/java/com/bsfeng/monitor/MainActivity.kt` → [文档](docs/UI界面/概述.md) |
 
