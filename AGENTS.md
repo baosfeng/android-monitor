@@ -37,7 +37,7 @@
 
 > 每次代码改动后，必须生成 APK 供用户侧载安装。
 >
-> ⚠️ **ADB 路径：** 当前环境 ADB 安装在 `~/Downloads/platform-tools/adb`，后续所有 adb 命令必须使用此全路径（详见 [ADB 调试指南](docs/开发指南/ADB调试指南.md)）。
+> ⚠️ **ADB 路径：** 当前环境 ADB 安装在 `~/android-platform-tools/adb`，后续所有 adb 命令必须使用此全路径（详见 [ADB 调试指南](docs/开发指南/ADB调试指南.md)）。
 >
 > 🚨 **MIUI/HyperOS 警告：禁止使用 `adb shell am force-stop`！** 该操作会移除无障碍服务权限，需手动重新开启。详情见 [踩坑记录](docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)。
 
@@ -45,14 +45,14 @@
 # 一行完成：测试 → 编译 Debug APK → 复制到 Downloads → 安装到已连接手机
 ./gradlew test && ./gradlew assembleDebug \
   && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
-  && ~/Downloads/platform-tools/adb install -r ~/Downloads/app-debug.apk
+  && ~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
 ```
 
 | 命令 | 说明 | APK 输出路径 |
 |------|------|-------------|
 | `./gradlew assembleDebug` | 编译 Debug APK | `app/build/outputs/apk/debug/app-debug.apk` |
-| `~/Downloads/platform-tools/adb install -r <apk>` | 覆盖安装到手机（使用全路径） | 保留原有数据 |
-| `~/Downloads/platform-tools/adb devices` | 查看已连接设备（使用全路径） | — |
+| `~/android-platform-tools/adb install -r <apk>` | 覆盖安装到手机（使用全路径） | 保留原有数据 |
+| `~/android-platform-tools/adb devices` | 查看已连接设备（使用全路径） | — |
 | 手机未连接时跳过安装 | → [ADB 调试指南 → 未连接手机处理流程](docs/开发指南/ADB调试指南.md#未连接手机处理流程) | — |
 
 ## 功能模块
