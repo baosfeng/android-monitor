@@ -276,13 +276,9 @@ fun AddTransactionScreen(
     }
 }
 
-private val staticColorMap = mutableMapOf<String, Color>()
-private var staticColorIndex = 0
-
+// 稳定颜色（基于分类名哈希）
 private fun getCategoryColorStatic(name: String): Color {
-    return staticColorMap.getOrPut(name) {
-        val c = FinanceColors.categoryColors[staticColorIndex % FinanceColors.categoryColors.size]
-        staticColorIndex++
-        c
-    }
+    if (name.isBlank()) return iOSColors.gray
+    val hash = name.hashCode() and 0x7FFFFFFF
+    return categoryPalette[hash % categoryPalette.size]
 }

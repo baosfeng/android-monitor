@@ -24,7 +24,11 @@ import com.bsfeng.monitor.finance.model.Transaction
 /**
  * 记账首页 — iOS 风格。
  *
- * 包含：大标题导航栏 + 月度概览卡片 + 交易列表 + FAB
+ * 性能优化说明：
+ * - 分类颜色使用稳定哈希算法，无全局可变状态
+ * - 分组结果使用 remember 缓存
+ * - 派生值使用 derivedStateOf
+ * - 列表 item 使用 key
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +43,16 @@ fun FinanceMainScreen(
     val stats by viewModel.monthlyStats.collectAsState()
     val loading by viewModel.loading.collectAsState()
 
+    // 缓存派生值：月份显示名
+    val monthDisplay = remember(currentMonth) {
+        viewModel.getMonthDisplayName(currentMonth)
+    }
+
+    // 缓存派生值：按日期分组（仅当 transactions 变化时重新计算）
+    val groupedTransactions = remember(transactions) {
+        viewModel.getTransactionsGroupedByDate(transactions)
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -48,17 +62,17 @@ fun FinanceMainScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // iOS 大标题
-            item {
+            item(key = "title") {
                 iOSLargeTitle(
                     title = "记账",
-                    subtitle = viewModel.getMonthDisplayName(currentMonth)
+                    subtitle = monthDisplay
                 )
             }
 
             // 月份切换
-            item {
+            item(key = "month_selector") {
                 MonthSelector(
-                    currentMonth = viewModel.getMonthDisplayName(currentMonth),
+                    currentMonth = monthDisplay,
                     onPrevious = { viewModel.previousMonth() },
                     onNext = { viewModel.nextMonth() },
                     onToday = { viewModel.goToCurrentMonth() }
@@ -66,12 +80,12 @@ fun FinanceMainScreen(
             }
 
             // 月度概览卡片
-            item {
+            item(key = "overview") {
                 MonthlyOverviewCard(stats = stats)
             }
 
             // 导入入口
-            item {
+            item(key = "import_btn") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -85,7 +99,7 @@ fun FinanceMainScreen(
             }
 
             // 交易列表标题
-            item {
+            item(key = "list_header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -108,7 +122,7 @@ fun FinanceMainScreen(
             }
 
             if (loading) {
-                item {
+                item(key = "loading") {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(32.dp),
                         contentAlignment = Alignment.Center
@@ -121,8 +135,7 @@ fun FinanceMainScreen(
                     }
                 }
             } else if (transactions.isEmpty()) {
-                // 空状态
-                item {
+                item(key = "empty") {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(48.dp),
                         contentAlignment = Alignment.Center
@@ -138,9 +151,8 @@ fun FinanceMainScreen(
                 }
             } else {
                 // 按日期分组展示
-                val grouped = viewModel.getTransactionsGroupedByDate(transactions)
-                grouped.forEach { (date, txs) ->
-                    item {
+                groupedTransactions.forEach { (date, txs) ->
+                    item(key = "date_$date") {
                         DateSectionHeader(date = date, count = txs.size)
                     }
                     items(txs, key = { it.id }) { tx ->
@@ -152,11 +164,11 @@ fun FinanceMainScreen(
                 }
             }
 
-            // 底部留白 (给 FAB 腾空间)
-            item { Spacer(Modifier.height(72.dp)) }
+            // 底部留白
+            item(key = "bottom_spacer") { Spacer(Modifier.height(72.dp)) }
         }
 
-        // FAB 添加按钮（iOS 风格：圆形+投影）
+        // FAB
         FloatingActionButton(
             onClick = onAddClick,
             modifier = Modifier
@@ -201,7 +213,7 @@ private fun MonthSelector(
     }
 }
 
-/** 月度概览卡片 — 收入/支出/结余三栏布局 */
+/** 月度概览卡片 */
 @Composable
 private fun MonthlyOverviewCard(stats: FinanceStats) {
     Card(
@@ -213,7 +225,6 @@ private fun MonthlyOverviewCard(stats: FinanceStats) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // 支出（最大数字，红色）
             Text(
                 text = "¥${stats.displayExpense}",
                 fontSize = iOSFontSizes.title1,
@@ -232,7 +243,6 @@ private fun MonthlyOverviewCard(stats: FinanceStats) {
 
             Spacer(Modifier.height(16.dp))
 
-            // 收入/结余/笔数三栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -242,7 +252,6 @@ private fun MonthlyOverviewCard(stats: FinanceStats) {
                 StatItem(label = "笔数", value = "${stats.transactionCount}", color = iOSColors.gray)
             }
 
-            // 预算进度条
             if (stats.budgetProgress > 0f) {
                 Spacer(Modifier.height(12.dp))
                 Column {
@@ -302,29 +311,25 @@ private fun DateSectionHeader(date: String, count: Int) {
             fontWeight = FontWeight.SemiBold,
             color = iOSColors.labelPrimary
         )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = "周${getWeekDaySuffix(date)}",
-            fontSize = iOSFontSizes.caption,
-            color = iOSColors.labelTertiary
-        )
     }
 }
 
-/** 单条交易行 — iOS 风格，左图标+中内容+右金额 */
+/** 单条交易行 — 稳定 key + 稳定颜色映射 */
 @Composable
 private fun TransactionRow(
     transaction: Transaction,
     onDelete: () -> Unit
 ) {
+    val catColor = remember(transaction.categoryName) {
+        stableCategoryColor(transaction.categoryName, transaction.type)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 分类图标
-        val catColor = getCategoryColor(transaction.categoryName, transaction.type)
         CategoryDot(
             categoryName = transaction.categoryName,
             color = catColor,
@@ -333,7 +338,6 @@ private fun TransactionRow(
 
         Spacer(Modifier.width(12.dp))
 
-        // 中间内容
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = transaction.categoryName,
@@ -370,7 +374,6 @@ private fun TransactionRow(
             }
         }
 
-        // 右侧金额
         Text(
             text = if (transaction.isExpense) "-¥${transaction.displayAmount}" else "+¥${transaction.displayAmount}",
             fontSize = iOSFontSizes.body,
@@ -380,20 +383,14 @@ private fun TransactionRow(
     }
 }
 
-private val categoryColorMap = mutableMapOf<String, Color>()
-private var colorIndex = 0
+// =============================================
+// 稳定分类颜色算法（无全局可变状态）
+// =============================================
 
-/** 根据分类名返回固定颜色 */
-private fun getCategoryColor(categoryName: String, type: Int): Color {
-    if (type == 1) return iOSColors.green
-    return categoryColorMap.getOrPut(categoryName) {
-        val c = FinanceColors.categoryColors[colorIndex % FinanceColors.categoryColors.size]
-        colorIndex++
-        c
-    }
-}
-
-private fun getWeekDaySuffix(date: String): String {
-    // 简化实现：根据日期返回星期（实际应该解析日期）
-    return ""
+/** 基于分类名哈希的稳定颜色（同一分类永远同色，无副作用） */
+private fun stableCategoryColor(categoryName: String, type: Int): Color {
+    if (type == 1) return iOSColors.green // 收入统一绿色
+    if (categoryName.isBlank()) return iOSColors.gray
+    val hash = categoryName.hashCode() and 0x7FFFFFFF
+    return categoryPalette[hash % categoryPalette.size]
 }

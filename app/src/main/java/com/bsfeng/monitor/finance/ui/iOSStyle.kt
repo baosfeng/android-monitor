@@ -49,6 +49,15 @@ object iOSColors {
     val separator = Color(0xFFC6C6C8)
 }
 
+/** 分类图标颜色面板（稳定哈希用，无全局可变状态） */
+val categoryPalette = listOf(
+    Color(0xFFFF3B30), Color(0xFFFF9500), Color(0xFFFFCC00),
+    Color(0xFF34C759), Color(0xFF5AC8FA), Color(0xFF007AFF),
+    Color(0xFFAF52DE), Color(0xFFFF2D55), Color(0xFF5856D6),
+    Color(0xFF00C7BE), Color(0xFFFF6482), Color(0xFF6EA8FF),
+    Color(0xFFA2845E), Color(0xFF8E8E93), Color(0xFFFFD60A)
+)
+
 /** 支出/收入颜色映射 */
 object FinanceColors {
     val expense = iOSColors.red
