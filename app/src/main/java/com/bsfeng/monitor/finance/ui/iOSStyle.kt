@@ -313,3 +313,27 @@ fun CategoryDot(
         )
     }
 }
+
+// =============================================
+// iOS 全面屏安全区域适配
+// =============================================
+
+/**
+ * iOS 全面屏底部安全区域守卫 — 确保内容不被 Home Indicator 遮挡。
+ */
+@Composable
+fun iOSSafeAreaBottomSpacer() {
+    Spacer(
+        Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars)
+    )
+}
+
+/**
+ * 全面屏顶部安全区域守卫 — 确保内容从状态栏下方开始。
+ */
+@Composable
+fun iOSSafeAreaTopSpacer() {
+    Spacer(
+        Modifier.windowInsetsTopHeight(WindowInsets.statusBars)
+    )
+}
