@@ -6,7 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -19,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
-import com.bsfeng.monitor.finance.ui.FinanceStatsScreen
 import com.bsfeng.monitor.finance.ui.ImportScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
 import com.bsfeng.monitor.service.ReceiverRegistrar
@@ -39,7 +44,6 @@ class MainActivity : ComponentActivity() {
     private val screens = listOf(Screen.Home, Screen.Stats, Screen.Finance, Screen.Settings)
     private var registrar: ReceiverRegistrar? = null
 
-    // 记账内部导航
     private sealed class FinanceRoute {
         data object Main : FinanceRoute()
         data class AddTransaction(val fromMonth: String) : FinanceRoute()
@@ -63,18 +67,19 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 val financeViewModel: FinanceViewModel = viewModel()
                 var selectedScreen by remember { mutableStateOf<Screen>(Screen.Home) }
-                // 记账内部路由
                 var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
 
                 Scaffold(
                     bottomBar = {
-                        NavigationBar {
+                        // iOS 规范：Tab Bar 背景延伸到 Home Indicator 安全区域
+                        NavigationBar(
+                            modifier = Modifier.navigationBarsPadding()
+                        ) {
                             screens.forEach { screen ->
                                 NavigationBarItem(
                                     selected = selectedScreen == screen,
                                     onClick = {
                                         selectedScreen = screen
-                                        // 切回记账时重置到主页
                                         if (screen is Screen.Finance) {
                                             financeRoute = FinanceRoute.Main
                                         }
@@ -84,53 +89,64 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                    }
+                    },
+                    // iOS 规范：内容区域排除状态栏和导航栏
+                    contentWindowInsets = WindowInsets(
+                        left = 0,
+                        top = 0,
+                        right = 0,
+                        bottom = 0
+                    )
                 ) { paddingValues ->
-                    when (selectedScreen) {
-                        Screen.Home -> MainScreen(
-                            viewModel = viewModel,
-                            modifier = Modifier.padding(paddingValues)
-                        )
-                        Screen.Stats -> StatsScreen(
-                            viewModel = viewModel,
-                            modifier = Modifier.padding(paddingValues)
-                        )
-                        Screen.Finance -> {
-                            when (financeRoute) {
-                                is FinanceRoute.Main -> FinanceMainScreen(
-                                    viewModel = financeViewModel,
-                                    onAddClick = {
-                                        financeRoute = FinanceRoute.AddTransaction(financeViewModel.currentMonth.value)
-                                    },
-                                    onImportClick = {
-                                        financeRoute = FinanceRoute.Import
-                                    },
-                                    modifier = Modifier.padding(paddingValues)
-                                )
-                                is FinanceRoute.AddTransaction -> AddTransactionScreen(
-                                    categories = financeViewModel.categories.collectAsState().value,
-                                    accounts = financeViewModel.accounts.collectAsState().value,
-                                    onSave = { tx ->
-                                        financeViewModel.addTransaction(tx)
-                                        financeRoute = FinanceRoute.Main
-                                    },
-                                    onDismiss = { financeRoute = FinanceRoute.Main }
-                                )
-                                is FinanceRoute.Import -> ImportScreen(
-                                    importing = financeViewModel.importing.collectAsState().value,
-                                    importResult = financeViewModel.importResult.collectAsState().value,
-                                    onImport = { path -> financeViewModel.importFromPanda(path) },
-                                    onDismiss = { financeRoute = FinanceRoute.Main },
-                                    onClearResult = { financeViewModel.clearImportResult() },
-                                    modifier = Modifier.padding(paddingValues)
-                                )
-                                else -> {}
+                    Box(
+                        modifier = Modifier
+                            .consumeWindowInsets(paddingValues)
+                            .padding(paddingValues)
+                    ) {
+                        when (selectedScreen) {
+                            Screen.Home -> MainScreen(
+                                viewModel = viewModel,
+                                modifier = Modifier
+                            )
+                            Screen.Stats -> StatsScreen(
+                                viewModel = viewModel,
+                                modifier = Modifier
+                            )
+                            Screen.Finance -> {
+                                when (financeRoute) {
+                                    is FinanceRoute.Main -> FinanceMainScreen(
+                                        viewModel = financeViewModel,
+                                        onAddClick = {
+                                            financeRoute = FinanceRoute.AddTransaction(financeViewModel.currentMonth.value)
+                                        },
+                                        onImportClick = {
+                                            financeRoute = FinanceRoute.Import
+                                        }
+                                    )
+                                    is FinanceRoute.AddTransaction -> AddTransactionScreen(
+                                        categories = financeViewModel.categories.collectAsState().value,
+                                        accounts = financeViewModel.accounts.collectAsState().value,
+                                        onSave = { tx ->
+                                            financeViewModel.addTransaction(tx)
+                                            financeRoute = FinanceRoute.Main
+                                        },
+                                        onDismiss = { financeRoute = FinanceRoute.Main }
+                                    )
+                                    is FinanceRoute.Import -> ImportScreen(
+                                        importing = financeViewModel.importing.collectAsState().value,
+                                        importResult = financeViewModel.importResult.collectAsState().value,
+                                        onImport = { path -> financeViewModel.importFromPanda(path) },
+                                        onDismiss = { financeRoute = FinanceRoute.Main },
+                                        onClearResult = { financeViewModel.clearImportResult() }
+                                    )
+                                    else -> {}
+                                }
                             }
+                            Screen.Settings -> SettingsScreen(
+                                viewModel = viewModel,
+                                modifier = Modifier
+                            )
                         }
-                        Screen.Settings -> SettingsScreen(
-                            viewModel = viewModel,
-                            modifier = Modifier.padding(paddingValues)
-                        )
                     }
                 }
             }

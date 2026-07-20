@@ -270,11 +270,12 @@ fun AddTransactionScreen(
                     },
                     enabled = (amountText.toDoubleOrNull() ?: 0.0) > 0 && selectedCategory.isNotEmpty()
                 )
-                Spacer(Modifier.height(32.dp))
+                }
+                item { Spacer(Modifier.height(32.dp)) }
+                item { iOSSafeAreaBottomSpacer() }
             }
         }
     }
-}
 
 // 稳定颜色（基于分类名哈希）
 private fun getCategoryColorStatic(name: String): Color {

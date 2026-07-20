@@ -164,21 +164,30 @@ fun FinanceMainScreen(
                 }
             }
 
-            // 底部留白
-            item(key = "bottom_spacer") { Spacer(Modifier.height(72.dp)) }
+            // 底部留白（含 Home Indicator 安全区域）
+            item(key = "bottom_spacer") {
+                Column {
+                    Spacer(Modifier.height(72.dp))
+                    iOSSafeAreaBottomSpacer()
+                }
+            }
         }
 
-        // FAB
-        FloatingActionButton(
-            onClick = onAddClick,
+        // FAB（放置在 safe area 内）
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = iOSColors.blue,
-            contentColor = Color.White,
-            shape = RoundedCornerShape(28.dp)
+                .windowInsetsBottomHeight(WindowInsets.navigationBars)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "添加")
+            FloatingActionButton(
+                onClick = onAddClick,
+                modifier = Modifier.padding(16.dp),
+                containerColor = iOSColors.blue,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "添加")
+            }
         }
     }
 }
