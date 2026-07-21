@@ -66,6 +66,7 @@
 | UI 界面 | Jetpack Compose 界面：实时事件流、设置页面（含调试模式开关） → [文档](docs/UI界面/概述.md) | `com.bsfeng.monitor.ui` |
 | 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 → [文档](docs/工具与配置/概述.md) | `com.bsfeng.monitor.util` |
 | 点击文本处理器 | App 专用点击文本提取接口、注册表和微信实现 → [文档](docs/点击文本处理器/概述.md) | `com.bsfeng.monitor.click` |
+| 开屏跳过 | CSS 风格选择器 DSL、规则引擎、内置规则库、规则管理 → [文档](docs/开屏跳过/设计.md) | `com.bsfeng.monitor.skip` |
 | 导航追踪 | 每个 App 独立的导航栈追踪器、App 会话保存与恢复 → [文档](docs/事件采集/概述.md#导航追踪) | `com.bsfeng.monitor.event` |
 
 ## 代码快速定位
@@ -99,6 +100,17 @@
 | 修改点击文本处理器接口 | `app/src/main/java/com/bsfeng/monitor/click/AppClickHandler.kt` → [文档](docs/点击文本处理器/概述.md) |
 | 修改处理器注册表 | `app/src/main/java/com/bsfeng/monitor/click/AppClickHandlerRegistry.kt` → [文档](docs/点击文本处理器/概述.md) |
 | 修改微信点击文本处理 | `app/src/main/java/com/bsfeng/monitor/click/WeChatClickHandler.kt` → [文档](docs/点击文本处理器/概述.md) |
+| 修改选择器 DSL 数据模型 | `app/src/main/java/com/bsfeng/monitor/skip/Selector.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改选择器解析器 | `app/src/main/java/com/bsfeng/monitor/skip/SelectorParser.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改无障碍节点匹配器 | `app/src/main/java/com/bsfeng/monitor/skip/NodeMatcher.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改动作执行器 | `app/src/main/java/com/bsfeng/monitor/skip/ActionExecutor.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改规则数据模型 | `app/src/main/java/com/bsfeng/monitor/skip/SkipRule.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改规则引擎核心 | `app/src/main/java/com/bsfeng/monitor/skip/SkipRuleEngine.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改规则管理器 | `app/src/main/java/com/bsfeng/monitor/skip/SkipRuleManager.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改内置规则库 | `app/src/main/java/com/bsfeng/monitor/skip/BuiltInRules.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改跳过事件记录器 | `app/src/main/java/com/bsfeng/monitor/skip/SkipEventRecorder.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改规则管理页面 | `app/src/main/java/com/bsfeng/monitor/ui/SkipRuleScreen.kt` → [文档](docs/开屏跳过/设计.md) |
+| 修改规则管理 ViewModel | `app/src/main/java/com/bsfeng/monitor/ui/SkipRuleViewModel.kt` → [文档](docs/开屏跳过/设计.md) |
 | 修改主界面 | `app/src/main/java/com/bsfeng/monitor/ui/MainScreen.kt` → [文档](docs/UI界面/概述.md) |
 | 修改主页面逻辑 | `app/src/main/java/com/bsfeng/monitor/ui/MainViewModel.kt` → [文档](docs/UI界面/概述.md) |
 | 修改设置页面 | `app/src/main/java/com/bsfeng/monitor/ui/SettingsScreen.kt` → [文档](docs/UI界面/概述.md) |
