@@ -8,23 +8,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
+import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.ImportScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
 import com.bsfeng.monitor.service.ReceiverRegistrar
@@ -32,16 +27,17 @@ import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.SettingsScreen
 import com.bsfeng.monitor.ui.StatsScreen
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
+import io.github.alexzhirkevich.cupertino.CupertinoScaffold
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
+import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
+import io.github.alexzhirkevich.cupertino.icons.outlined.*
+import io.github.alexzhirkevich.cupertino.icons.filled.*
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 
-private sealed class Screen(val title: String, val icon: ImageVector) {
-    data object Home : Screen("实时", Icons.Default.Home)
-    data object Stats : Screen("统计", Icons.Default.Info)
-    data object Finance : Screen("记账", Icons.Default.Star)
-    data object Settings : Screen("设置", Icons.Default.Settings)
-}
-
+@OptIn(ExperimentalCupertinoApi::class)
 class MainActivity : ComponentActivity() {
-    private val screens = listOf(Screen.Home, Screen.Stats, Screen.Finance, Screen.Settings)
     private var registrar: ReceiverRegistrar? = null
 
     private sealed class FinanceRoute {
@@ -63,65 +59,77 @@ class MainActivity : ComponentActivity() {
         registrar = ReceiverRegistrar(this).also { it.registerAll() }
 
         setContent {
-            MaterialTheme {
+            CupertinoTheme {
                 val viewModel: MainViewModel = viewModel()
                 val financeViewModel: FinanceViewModel = viewModel()
-                var selectedScreen by remember { mutableStateOf<Screen>(Screen.Home) }
+                var selectedTab by remember { mutableIntStateOf(0) }
                 var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
 
-                Scaffold(
+                val tabs = remember {
+                    listOf(
+                        TabItem("实时", CupertinoIcons.Outlined.House, CupertinoIcons.Filled.House),
+                        TabItem("统计", CupertinoIcons.Outlined.ListBullet, CupertinoIcons.Filled.Star),
+                        TabItem("记账", CupertinoIcons.Outlined.PlusCircle, CupertinoIcons.Filled.PlusCircle),
+                        TabItem("设置", CupertinoIcons.Outlined.Gearshape, CupertinoIcons.Filled.Gearshape),
+                    )
+                }
+
+                CupertinoScaffold(
+                    modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        // iOS 规范：Tab Bar 背景延伸到 Home Indicator 安全区域
-                        NavigationBar(
-                            modifier = Modifier.navigationBarsPadding()
+                        CupertinoNavigationBar(
+                            modifier = Modifier.fillMaxWidth(),
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                         ) {
-                            screens.forEach { screen ->
-                                NavigationBarItem(
-                                    selected = selectedScreen == screen,
+                            tabs.forEachIndexed { index, tab ->
+                                CupertinoNavigationBarItem(
+                                    selected = selectedTab == index,
                                     onClick = {
-                                        selectedScreen = screen
-                                        if (screen is Screen.Finance) {
+                                        selectedTab = index
+                                        if (index == 2) {
                                             financeRoute = FinanceRoute.Main
                                         }
                                     },
-                                    icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                    label = { Text(screen.title) }
+                                    icon = {
+                                        Icon(
+                                            if (selectedTab == index) tab.selectedIcon else tab.icon,
+                                            contentDescription = tab.title,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    },
+                                    label = { Text(tab.title) },
                                 )
                             }
                         }
                     },
-                    // iOS 规范：内容区域排除状态栏和导航栏
-                    contentWindowInsets = WindowInsets(
-                        left = 0,
-                        top = 0,
-                        right = 0,
-                        bottom = 0
-                    )
                 ) { paddingValues ->
                     Box(
                         modifier = Modifier
-                            .consumeWindowInsets(paddingValues)
+                            .fillMaxSize()
                             .padding(paddingValues)
                     ) {
-                        when (selectedScreen) {
-                            Screen.Home -> MainScreen(
+                        when (selectedTab) {
+                            0 -> MainScreen(
                                 viewModel = viewModel,
-                                modifier = Modifier
+                                modifier = Modifier.fillMaxSize()
                             )
-                            Screen.Stats -> StatsScreen(
+                            1 -> StatsScreen(
                                 viewModel = viewModel,
-                                modifier = Modifier
+                                modifier = Modifier.fillMaxSize()
                             )
-                            Screen.Finance -> {
-                                when (financeRoute) {
+                            2 -> {
+                                when (val route = financeRoute) {
                                     is FinanceRoute.Main -> FinanceMainScreen(
                                         viewModel = financeViewModel,
                                         onAddClick = {
-                                            financeRoute = FinanceRoute.AddTransaction(financeViewModel.currentMonth.value)
+                                            financeRoute = FinanceRoute.AddTransaction(
+                                                financeViewModel.currentMonth.value
+                                            )
                                         },
                                         onImportClick = {
                                             financeRoute = FinanceRoute.Import
-                                        }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                     is FinanceRoute.AddTransaction -> AddTransactionScreen(
                                         categories = financeViewModel.categories.collectAsState().value,
@@ -142,9 +150,9 @@ class MainActivity : ComponentActivity() {
                                     else -> {}
                                 }
                             }
-                            Screen.Settings -> SettingsScreen(
+                            3 -> SettingsScreen(
                                 viewModel = viewModel,
-                                modifier = Modifier
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
@@ -153,3 +161,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private data class TabItem(
+    val title: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+)
