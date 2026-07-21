@@ -26,6 +26,8 @@ import com.bsfeng.monitor.service.ReceiverRegistrar
 import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.SettingsScreen
+import com.bsfeng.monitor.ui.SkipRuleScreen
+import com.bsfeng.monitor.ui.SkipRuleViewModel
 import com.bsfeng.monitor.ui.StatsScreen
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
@@ -62,8 +64,10 @@ class MainActivity : ComponentActivity() {
             CupertinoTheme {
                 val viewModel: MainViewModel = viewModel()
                 val financeViewModel: FinanceViewModel = viewModel()
+                val skipRuleViewModel: SkipRuleViewModel = viewModel()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
+                var showSkipRuleScreen by remember { mutableStateOf(false) }
 
                 val tabs = remember {
                     listOf(
@@ -152,7 +156,19 @@ class MainActivity : ComponentActivity() {
                             }
                             3 -> SettingsScreen(
                                 viewModel = viewModel,
+                                onNavigateToSkipRules = { showSkipRuleScreen = true },
                                 modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // 开屏跳过规则管理页面（覆盖层）
+                        if (showSkipRuleScreen) {
+                            SkipRuleScreen(
+                                onBack = {
+                                    showSkipRuleScreen = false
+                                    skipRuleViewModel.refresh()
+                                },
+                                viewModel = skipRuleViewModel
                             )
                         }
                     }

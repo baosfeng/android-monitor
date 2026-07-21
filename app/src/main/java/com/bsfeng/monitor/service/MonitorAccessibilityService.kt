@@ -12,6 +12,8 @@ import com.bsfeng.monitor.event.NavChangeResult
 import com.bsfeng.monitor.event.NavigationTracker
 import com.bsfeng.monitor.pipeline.EventSource
 import com.bsfeng.monitor.pipeline.RawEventData
+import com.bsfeng.monitor.skip.SkipEventRecorder
+import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DebugConfig
 import com.bsfeng.monitor.util.DiagnosticCounters
@@ -51,6 +53,11 @@ class MonitorAccessibilityService : AccessibilityService() {
     private var lastClickText: String? = null  // 上次点击文本（防重复）
     private var lastNavPathMs: Long = 0  // 导航路径防抖
     private var lastNavPath: String = ""  // 上一次的导航路径
+
+    /** 开屏跳过规则引擎 */
+    private val skipEngine: SkipRuleEngine by lazy {
+        (application as MonitorApp).getSkipRuleEngine()
+    }
 
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
     private fun timeline(emoji: String, message: String) {
@@ -94,6 +101,22 @@ class MonitorAccessibilityService : AccessibilityService() {
             DiagnosticCounters.accessibilityFilteredCount++
             Log.d("MonitorService", "handleWindowChange: filtered as system UI: $packageName")
             return
+        }
+
+        // ===== 开屏广告跳过 =====
+        try {
+            val root = rootInActiveWindow
+            if (root != null) {
+                val skipped = skipEngine.onWindowChanged(packageName, className, root)
+                if (skipped) {
+                    val appNameShort = AppUtils.getAppName(packageName)
+                    timeline("⏭️", "跳过 $appNameShort 开屏广告")
+                    SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
+                }
+                root.recycle()
+            }
+        } catch (e: Exception) {
+            Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
         }
 
         val appName = AppUtils.getAppName(packageName)

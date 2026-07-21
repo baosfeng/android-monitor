@@ -11,6 +11,8 @@ import com.bsfeng.monitor.pipeline.handler.DatabaseHandler
 import com.bsfeng.monitor.pipeline.handler.LogHandler
 import com.bsfeng.monitor.pipeline.handler.UploadHandler
 import com.bsfeng.monitor.pipeline.handler.UploadQueue
+import com.bsfeng.monitor.skip.SkipRuleEngine
+import com.bsfeng.monitor.skip.SkipRuleManager
 import com.bsfeng.monitor.util.DebugConfig
 
 /**
@@ -22,10 +24,15 @@ class MonitorApp : Application() {
     private lateinit var collector: RawEventCollector
     private lateinit var navTracker: NavigationContextTracker
 
+    private var skipRuleManager: SkipRuleManager? = null
+    private var skipRuleEngine: SkipRuleEngine? = null
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         DebugConfig.init()
+        skipRuleManager = SkipRuleManager(this)
+        skipRuleEngine = SkipRuleEngine(skipRuleManager!!)
         initPipeline()
     }
 
@@ -46,6 +53,8 @@ class MonitorApp : Application() {
 
     fun getCollector(): RawEventCollector = collector
     fun getNavTracker(): NavigationContextTracker = navTracker
+    fun getSkipRuleManager(): SkipRuleManager = skipRuleManager!!
+    fun getSkipRuleEngine(): SkipRuleEngine = skipRuleEngine!!
 
     companion object {
         @Volatile
