@@ -81,28 +81,30 @@ class MainActivity : ComponentActivity() {
                 CupertinoScaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        CupertinoNavigationBar(
-                            modifier = Modifier.fillMaxWidth(),
-                            windowInsets = WindowInsets(0, 0, 0, 0),
-                        ) {
-                            tabs.forEachIndexed { index, tab ->
-                                CupertinoNavigationBarItem(
-                                    selected = selectedTab == index,
-                                    onClick = {
-                                        selectedTab = index
-                                        if (index == 2) {
-                                            financeRoute = FinanceRoute.Main
-                                        }
-                                    },
-                                    icon = {
-                                        Icon(
-                                            if (selectedTab == index) tab.selectedIcon else tab.icon,
-                                            contentDescription = tab.title,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    },
-                                    label = { Text(tab.title) },
-                                )
+                        if (!showSkipRuleScreen) {
+                            CupertinoNavigationBar(
+                                modifier = Modifier.fillMaxWidth(),
+                                windowInsets = WindowInsets(0, 0, 0, 0),
+                            ) {
+                                tabs.forEachIndexed { index, tab ->
+                                    CupertinoNavigationBarItem(
+                                        selected = selectedTab == index,
+                                        onClick = {
+                                            selectedTab = index
+                                            if (index == 2) {
+                                                financeRoute = FinanceRoute.Main
+                                            }
+                                        },
+                                        icon = {
+                                            Icon(
+                                                if (selectedTab == index) tab.selectedIcon else tab.icon,
+                                                contentDescription = tab.title,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        },
+                                        label = { Text(tab.title) },
+                                    )
+                                }
                             }
                         }
                     },
