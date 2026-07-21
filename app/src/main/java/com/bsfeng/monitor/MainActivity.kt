@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.compose.BackHandler
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
 import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.ImportScreen
@@ -165,6 +166,10 @@ class MainActivity : ComponentActivity() {
 
                         // 开屏跳过规则管理页面（覆盖层）
                         if (showSkipRuleScreen) {
+                            BackHandler {
+                                showSkipRuleScreen = false
+                                skipRuleViewModel.refresh()
+                            }
                             SkipRuleScreen(
                                 onBack = {
                                     showSkipRuleScreen = false
