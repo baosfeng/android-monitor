@@ -12,11 +12,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.skip.SkipRule
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 
 /**
  * 开屏广告跳过规则管理页面。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalCupertinoApi::class)
 @Composable
 fun SkipRuleScreen(
     onBack: () -> Unit,
@@ -29,20 +30,35 @@ fun SkipRuleScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 顶部导航栏
-        TopAppBar(
-            title = { Text("开屏广告跳过", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                TextButton(onClick = onBack) {
-                    Text("← 返回")
-                }
-            },
-            actions = {
-                TextButton(onClick = { viewModel.resetToBuiltIn() }) {
-                    Text("重置")
-                }
+        // 顶部导航栏（Cupertino 风格）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Text(
+                    "← 返回",
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-        )
+            Text(
+                "开屏广告跳过",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp
+            )
+            TextButton(onClick = { viewModel.resetToBuiltIn() }) {
+                Text(
+                    "重置",
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
         // 状态摘要
         Card(
