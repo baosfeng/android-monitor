@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -23,7 +24,11 @@ fun SkipRuleScreen(
 ) {
     val state by viewModel.state.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         // 顶部导航栏
         TopAppBar(
             title = { Text("开屏广告跳过", fontWeight = FontWeight.Bold) },
