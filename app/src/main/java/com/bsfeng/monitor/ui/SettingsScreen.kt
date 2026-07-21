@@ -23,6 +23,7 @@ import io.github.alexzhirkevich.cupertino.section.section
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
+    onNavigateToSkipRules: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -93,7 +94,40 @@ fun SettingsScreen(
             }
         }
 
-        // Section 4: 调试模式
+        // Section 3: 开屏广告跳过
+        section(style = SectionStyle.InsetGrouped) {
+            item {
+                SettingsRow(
+                    title = "开屏广告跳过",
+                    subtitle = "管理自动跳过规则",
+                    trailing = {
+                        Button(onClick = onNavigateToSkipRules) {
+                            Text("管理")
+                        }
+                    }
+                )
+            }
+        }
+
+        // Section 4: 电池优化
+        section(style = SectionStyle.InsetGrouped) {
+            item {
+                SettingsRow(
+                    title = "电池优化",
+                    subtitle = "设为无限制以防止被系统关闭",
+                    trailing = {
+                        Button(onClick = {
+                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            context.startActivity(intent)
+                        }) {
+                            Text("设置")
+                        }
+                    }
+                )
+            }
+        }
+
+        // Section 5: 调试模式
         section(style = SectionStyle.InsetGrouped) {
             item {
                 SettingsRow(
@@ -109,7 +143,7 @@ fun SettingsScreen(
             }
         }
 
-        // Section 5: 关于
+        // Section 6: 关于
         section(style = SectionStyle.InsetGrouped) {
             item {
                 Column(modifier = Modifier.padding(16.dp)) {
