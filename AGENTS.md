@@ -42,10 +42,9 @@
 > 🚨 **MIUI/HyperOS 警告：禁止使用 `adb shell am force-stop`！** 该操作会移除无障碍服务权限，需手动重新开启。详情见 [踩坑记录](docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)。
 
 ```bash
-# 一行完成：测试 → 编译 Debug APK → 复制到 Downloads → 安装到已连接手机
+# 一行完成：测试 → 编译 Debug APK → 安装到已连接手机
 ./gradlew test && ./gradlew assembleDebug \
-  && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
-  && ~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
+  && ~/android-platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 | 命令 | 说明 | APK 输出路径 |

@@ -129,10 +129,10 @@ a1b2c3d4               device usb:1-1 product:houji model:23127PN0CC device:houj
 
 ```bash
 # 安装（首次安装）
-~/android-platform-tools/adb install ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install app/build/outputs/apk/debug/app-debug.apk
 
 # 覆盖安装（保留应用数据，推荐日常使用）
-~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ### 安装成功标志
@@ -157,7 +157,7 @@ Success
 
 ```bash
 # 当需要安装版本号更低的 APK 时（-d 允许降级）
-~/android-platform-tools/adb install -r -d ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install -r -d app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## 🚨 重要警告：禁止 force-stop（影响无障碍服务）
@@ -173,15 +173,14 @@ Success
 
 ## 全流程自动化命令
 
-> 每次代码改动后执行，一行完成：测试 → 编译 → 复制到 Downloads → 安装到手机。
+> 每次代码改动后执行，一行完成：测试 → 编译 → 安装到手机。
 >
 > ⚠️ **无需 force-stop！** `adb install -r` 会自动处理进程切换。
 
 ```bash
 # 标准全流程（手机已连接正常）
 ./gradlew test && ./gradlew assembleDebug \
-  && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/ \
-  && ~/android-platform-tools/adb install -r ~/Downloads/app-debug.apk
+  && ~/android-platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## 未连接手机处理流程
@@ -224,11 +223,10 @@ Success
 
 ```bash
 # 仅执行测试和编译，跳过 adb 安装
-./gradlew test && ./gradlew assembleDebug \
-  && cp app/build/outputs/apk/debug/app-debug.apk ~/Downloads/
+./gradlew test && ./gradlew assembleDebug
 ```
 
-> ⚠️ **即使跳过安装，也必须完成编译和复制 APK 到 Downloads。**
+> ⚠️ **即使跳过安装，也必须完成编译。** APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 
 ## 未授权处理流程
 
@@ -358,7 +356,7 @@ echo $PATH | grep platform-tools
 **解决：** 卸载后重装：
 ```bash
 ~/android-platform-tools/adb uninstall com.bsfeng.monitor
-~/android-platform-tools/adb install ~/Downloads/app-debug.apk
+~/android-platform-tools/adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ### Q: HyperOS 通知拦截了 ADB 授权弹窗？
