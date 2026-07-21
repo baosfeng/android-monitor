@@ -61,6 +61,14 @@ android {
     }
 }
 
+tasks.withType<Test> {
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED"
+    )
+}
+
 dependencies {
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
@@ -74,11 +82,15 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended")
 
+    // Cupertino — iOS 风格 UI 组件
+    implementation("io.github.alexzhirkevich:cupertino:0.1.0-alpha04")
+    implementation("io.github.alexzhirkevich:cupertino-icons-extended:0.1.0-alpha04")
+
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
 
     // Test
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }
