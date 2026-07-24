@@ -29,7 +29,8 @@ import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.SettingsScreen
 import com.bsfeng.monitor.ui.SkipRuleScreen
 import com.bsfeng.monitor.ui.SkipRuleViewModel
-import com.bsfeng.monitor.ui.StatsScreen
+import com.bsfeng.monitor.ui.AdScreen
+import com.bsfeng.monitor.ui.AdViewModel
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
@@ -73,7 +74,7 @@ class MainActivity : ComponentActivity() {
                 val tabs = remember {
                     listOf(
                         TabItem("实时", CupertinoIcons.Outlined.House, CupertinoIcons.Filled.House),
-                        TabItem("统计", CupertinoIcons.Outlined.ListBullet, CupertinoIcons.Filled.Star),
+                        TabItem("广告", CupertinoIcons.Outlined.Eye, CupertinoIcons.Outlined.Eye),
                         TabItem("记账", CupertinoIcons.Outlined.PlusCircle, CupertinoIcons.Filled.PlusCircle),
                         TabItem("设置", CupertinoIcons.Outlined.Gearshape, CupertinoIcons.Filled.Gearshape),
                     )
@@ -120,8 +121,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 modifier = Modifier.fillMaxSize()
                             )
-                            1 -> StatsScreen(
-                                viewModel = viewModel,
+                            1 -> AdScreen(
+                                adViewModel = viewModel(),
                                 modifier = Modifier.fillMaxSize()
                             )
                             2 -> {
