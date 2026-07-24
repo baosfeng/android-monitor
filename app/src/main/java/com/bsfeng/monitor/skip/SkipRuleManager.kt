@@ -93,12 +93,22 @@ class SkipRuleManager(private val context: Context) {
 
     /**
      * 加载规则。
-     * 首次调用时合并内置规则到本地存储。
+     * - 首次启动：写入内置规则
+     * - 内置版本变化时：合并更新（保留用户启/禁用状态和自定义规则）
      */
     private fun loadRules() {
+        val builtInVersion = BuiltInRules.BUILT_IN_VERSION
+        val storedVersion = prefs.getInt(KEY_BUILT_IN_VERSION, 0)
+
         if (!rulesFile.exists()) {
-            // 首次启动：写入内置规则
+            // 首次启动：直接写入内置规则
             saveBuiltInRules()
+            prefs.edit().putInt(KEY_BUILT_IN_VERSION, builtInVersion).apply()
+        } else if (storedVersion != builtInVersion) {
+            // 内置规则有增删改：合并更新
+            mergeBuiltInRules()
+            prefs.edit().putInt(KEY_BUILT_IN_VERSION, builtInVersion).apply()
+            Log.i(TAG, "内置规则已更新: v$storedVersion → v$builtInVersion")
         }
 
         allRules = readRulesFromFile().toMutableList()
@@ -137,6 +147,44 @@ class SkipRuleManager(private val context: Context) {
     }
 
     /**
+     * 合并内置规则到本地存储，保留用户设置。
+     *
+     * 策略：
+     * 1. 内置规则全部覆盖写入（确保新选择器生效）
+     * 2. 保留用户之前设置的启/禁用状态
+     * 3. 保留用户自定义的非内置规则
+     */
+    private fun mergeBuiltInRules() {
+        val builtInRules = BuiltInRules.getRules()
+        val storedRules = if (rulesFile.exists()) readRulesFromFile() else emptyList()
+        val storedMap = storedRules.associateBy { it.id }
+
+        // 合并：取内置规则，但保留用户的启/禁用状态
+        val merged = builtInRules.map { builtIn ->
+            val stored = storedMap[builtIn.id]
+            if (stored != null) {
+                builtIn.copy(enabled = stored.enabled)
+            } else {
+                builtIn
+            }
+        }.toMutableList()
+
+        // 追加用户自定义规则（不在内置规则中的）
+        val builtInIds = builtInRules.map { it.id }.toSet()
+        merged.addAll(storedRules.filter { it.id !in builtInIds })
+
+        // 写入文件
+        try {
+            val jsonArray = JSONArray()
+            merged.forEach { jsonArray.put(it.toJson()) }
+            rulesFile.writeText(jsonArray.toString(2))
+            Log.d(TAG, "内置规则合并完成: ${merged.size} 条")
+        } catch (e: Exception) {
+            Log.e(TAG, "合并内置规则失败", e)
+        }
+    }
+
+    /**
      * 从文件读取规则。
      */
     private fun readRulesFromFile(): List<SkipRule> {
@@ -163,5 +211,6 @@ class SkipRuleManager(private val context: Context) {
         private const val TAG = "SkipRuleManager"
         private const val PREFS_NAME = "skip_rule_prefs"
         private const val RULES_FILE_NAME = "skip_rules.json"
+        private const val KEY_BUILT_IN_VERSION = "built_in_version"
     }
 }
