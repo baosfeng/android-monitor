@@ -3,6 +3,7 @@ package com.bsfeng.monitor.service
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.KeyEvent
+import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.click.AppClickHandlerRegistry
@@ -12,6 +13,7 @@ import com.bsfeng.monitor.event.NavChangeResult
 import com.bsfeng.monitor.event.NavigationTracker
 import com.bsfeng.monitor.pipeline.EventSource
 import com.bsfeng.monitor.pipeline.RawEventData
+import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.util.AppUtils
@@ -104,16 +106,29 @@ class MonitorAccessibilityService : AccessibilityService() {
         }
 
         // ===== 开屏广告跳过 =====
+        // 进入新 App，清除上一条残留弹幕
+        removeCurrentDanmaku()
         try {
             val root = rootInActiveWindow
             if (root != null) {
-                val skipped = skipEngine.onWindowChanged(packageName, className, root)
-                if (skipped) {
-                    val appNameShort = AppUtils.getAppName(packageName)
-                    timeline("⏭️", "跳过 $appNameShort 开屏广告")
-                    SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
+                if (packageName == "com.bsfeng.monitor") {
+                    // 进入本 App，停止所有外部监控和重置状态
+                    skipEngine.resetAppState(packageName)
+                } else {
+                    val skipped = skipEngine.onWindowChanged(packageName, className, root)
+                    if (skipped) {
+                        val appNameShort = AppUtils.getAppName(packageName)
+                        timeline("⏭️", "跳过 $appNameShort 开屏广告")
+                        SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
+                        showSkipDanmaku(appNameShort)
+                    } else {
+                        // 首次尝试未命中，启动持续监控（处理白屏→广告延迟加载）
+                        skipEngine.startWatching(packageName, className)
+                    }
                 }
                 root.recycle()
+            } else {
+                Log.w("MonitorService", "handleWindowChange: rootInActiveWindow is null for $packageName")
             }
         } catch (e: Exception) {
             Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
@@ -698,12 +713,93 @@ class MonitorAccessibilityService : AccessibilityService() {
         // 服务被系统中断
     }
 
+    // ========== 跳过提示（弹幕风格浮层） ==========
+
+    /** 当前正在显示的弹幕视图，防止重叠 */
+    private var currentDanmaku: android.view.View? = null
+
+    companion object {
+        private const val DANMAKU_DURATION_MS = 1200L
+    }
+
+    /**
+     * 显示弹幕式跳过提示（居中半透明浮层）。
+     * 使用 [android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY]
+     * 保证在任意 App 上方显示，且不需要额外权限。
+     */
+    private fun showSkipDanmaku(appName: String) {
+        Log.d("MonitorService", "showSkipDanmaku: $appName")
+        try {
+            // 移除之前的弹幕
+            removeCurrentDanmaku()
+
+            val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            val message = "⏭️ 已跳过 $appName 开屏广告"
+
+            val tv = android.widget.TextView(this).apply {
+                text = message
+                textSize = 17f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(android.graphics.Color.WHITE)
+                setBackgroundColor(android.graphics.Color.argb(200, 0, 0, 0))
+                setPadding(40, 20, 40, 20)
+                elevation = 12f
+                // 圆角通过 shape 背景
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.argb(200, 0, 0, 0))
+                    cornerRadius = 20f
+                }
+            }
+
+            val params = android.view.WindowManager.LayoutParams(
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+                y = 120
+            }
+
+            currentDanmaku = tv
+            wm.addView(tv, params)
+
+            // 2.5 秒后移除
+            tv.postDelayed({
+                removeCurrentDanmaku()
+            }, DANMAKU_DURATION_MS)
+        } catch (e: Exception) {
+            Log.w("MonitorService", "显示跳过弹幕失败", e)
+        }
+    }
+
+    /** 移除当前弹幕视图 */
+    private fun removeCurrentDanmaku() {
+        try {
+            val view = currentDanmaku ?: return
+            currentDanmaku = null
+            val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            wm.removeView(view)
+        } catch (_: Exception) {}
+    }
+
     override fun onKeyEvent(event: KeyEvent): Boolean {
         return false // 不拦截按键
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // 服务已连接
+        ActionExecutor.accessibilityService = this
+        skipEngine.setRootNodeProvider { rootInActiveWindow }
+        skipEngine.onSkipSuccess = { pkg ->
+            skipEngine.recordSkipCooldown(pkg)
+            val name = AppUtils.getAppName(pkg)
+            timeline("⏭️", "跳过 $name 开屏广告")
+            SkipEventRecorder.recordSkip(pkg, name, "", null)
+            showSkipDanmaku(name)
+        }
     }
 }
