@@ -195,6 +195,7 @@ object NodeMatcher {
             "clickable" -> node.isClickable.toString()
             "longclickable" -> node.isLongClickable.toString()
             "visible" -> node.isVisibleToUser.toString()
+            "visibletouser" -> node.isVisibleToUser.toString()
             "enabled" -> node.isEnabled.toString()
             "checked" -> node.isChecked.toString()
             "focusable" -> node.isFocusable.toString()
