@@ -15,6 +15,12 @@ import org.json.JSONArray
  */
 object BuiltInRules {
 
+    /**
+     * 内置规则版本号。
+     * 每次增删改内置规则时 +1，SkipRuleManager 据此判断是否需要同步。
+     */
+    const val BUILT_IN_VERSION = 6
+
     /** 获取所有内置规则（JSON 格式） */
     fun getRulesJson(): String = JSONArray(rules.map { it.toJson() }).toString(2)
 
@@ -57,7 +63,7 @@ object BuiltInRules {
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
-                    matchDelay = 800, actionCd = 60000, actionMaximum = 1,
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
                     matches = listOf(
                         "[text*=\"跳过\"]",
                         "[text*=\"关闭广告\"]",
@@ -77,7 +83,7 @@ object BuiltInRules {
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
-                    matchDelay = 800, actionCd = 60000, actionMaximum = 1,
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
                     matches = listOf(
                         "[text*=\"跳过\"]",
                         "[text*=\"关闭\"]",
@@ -190,7 +196,7 @@ object BuiltInRules {
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
-                    matchDelay = 800, actionCd = 60000, actionMaximum = 1,
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
                     matches = listOf(
                         "[text*=\"跳过\"]",
                         "[text*=\"关闭\"]",
@@ -350,10 +356,15 @@ object BuiltInRules {
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matchDelay = 300, actionCd = 30000, actionMaximum = 1,
                     matches = listOf(
                         "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
+                        "[text*=\"关闭\"]",
+                        "[desc*=\"关闭\"]",
+                        "[text*=\"知道了\"]",
+                        "[clickable=true][desc*=\"关闭\"]",
+                        "[id$=\"tt_splash_skip_btn\"]",
+                        "[id*=\"skip\"]"
                     )
                 ))
             ))
@@ -600,40 +611,6 @@ object BuiltInRules {
             ))
         ),
 
-        // ===== 驾考宝典（新增） =====
-        SkipRule(
-            id = "jiakao_splash",
-            app = "com.handsgo.jiakao.android",
-            name = "驾考宝典",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== Soul（新增） =====
-        SkipRule(
-            id = "soul_splash",
-            app = "cn.soulapp.android",
-            name = "Soul",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
         // ===== TapTap（新增） =====
         SkipRule(
             id = "taptap_splash",
@@ -650,63 +627,11 @@ object BuiltInRules {
                 ))
             ))
         ),
-
-        // ===== 网易邮箱（新增） =====
-        SkipRule(
-            id = "netease_mail_splash",
-            app = "com.netease.mobimail",
-            name = "网易邮箱",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
         // ===== 酷狗音乐（新增） =====
         SkipRule(
             id = "kugou_splash",
             app = "com.kugou.android",
             name = "酷狗音乐",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== 山姆会员商店（新增） =====
-        SkipRule(
-            id = "samsclub_splash",
-            app = "cn.samsclub.app",
-            name = "山姆会员商店",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== 123云盘（新增） =====
-        SkipRule(
-            id = "123pan_splash",
-            app = "com.123cloud.www",
-            name = "123云盘",
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
@@ -769,92 +694,6 @@ object BuiltInRules {
                 ))
             ))
         ),
-
-        // ===== 腾讯微云（新增） =====
-        SkipRule(
-            id = "tencent_weiyun_splash",
-            app = "com.qq.qcloud",
-            name = "腾讯微云",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== ECOVACS HOME（新增） =====
-        SkipRule(
-            id = "ecovacs_splash",
-            app = "com.eco.global.app",
-            name = "ECOVACS HOME",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "ImageView[id=\"com.eco.global.app:id/adview_jump\"]",
-                        "[text*=\"跳过\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== 小蚕霸王餐（新增） =====
-        SkipRule(
-            id = "xiaocan_splash",
-            app = "com.realtech.xiaocan",
-            name = "小蚕霸王餐",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== 亲邻开门（新增） =====
-        SkipRule(
-            id = "qinlinkm_splash",
-            app = "com.qiekj.user",
-            name = "亲邻开门",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
-        // ===== 智谱（新增） =====
-        SkipRule(
-            id = "zhipu_splash",
-            app = "com.crirp.zhipu",
-            name = "智谱",
-            groups = listOf(RuleGroup(
-                name = "开屏广告",
-                rules = listOf(MatchRule(
-                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
-                    matches = listOf(
-                        "[text*=\"跳过\"]",
-                        "[id$=\"tt_splash_skip_btn\"]"
-                    )
-                ))
-            ))
-        ),
-
         // ===== 网易邮箱大师（新增） =====
         SkipRule(
             id = "netease_mailmaster_splash",
@@ -872,11 +711,11 @@ object BuiltInRules {
             ))
         ),
 
-        // ===== 网速管家（新增） =====
+        // ===== 小恩爱（新增） =====
         SkipRule(
-            id = "speedtest_splash",
-            app = "cn.lezhi.speedtest",
-            name = "网速管家",
+            id = "xiaoenai_splash",
+            app = "com.xiaoenai.app",
+            name = "小恩爱",
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
@@ -889,11 +728,850 @@ object BuiltInRules {
             ))
         ),
 
-        // ===== 小恩爱（新增） =====
+        // ===== 微信 =====
         SkipRule(
-            id = "xiaoenai_splash",
-            app = "com.xiaoenai.app",
-            name = "小恩爱",
+            id = "wechat_splash",
+            app = "com.tencent.mm",
+            name = "微信",
+            groups = listOf(
+                RuleGroup(
+                    name = "开屏广告",
+                    activityIds = listOf("LauncherUI"),
+                    rules = listOf(MatchRule(
+                        matchDelay = 300, actionCd = 60000, actionMaximum = 1,
+                        matches = listOf(
+                            "[id$=\"tt_splash_skip_btn\"]",
+                            "[text*=\"跳过\"]",
+                            "[vid*=\"skip\"]"
+                        )
+                    ))
+                ),
+                RuleGroup(
+                    name = "小程序广告",
+                    activityIds = listOf("appbrand"),
+                    rules = listOf(
+                        MatchRule(
+                            matchDelay = 2000, actionCd = 60000, actionMaximum = 3,
+                            matches = listOf(
+                                "[desc*=\"关闭\"]",
+                                "[text*=\"跳过\"]",
+                                "[clickable=true][text*=\"跳过\"]",
+                                "[id$=\"tt_video_ad_close\"]",
+                                "[text*=\"关闭广告\"]",
+                                "[vid*=\"close\"]"
+                            )
+                        )
+                    )
+                )
+            )
+        ),
+
+        // ===== 抖音 =====
+        SkipRule(
+            id = "douyin_splash",
+            app = "com.ss.android.ugc.aweme",
+            name = "抖音",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]",
+                        "[vid*=\"skip\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 支付宝 =====
+        SkipRule(
+            id = "alipay_splash",
+            app = "com.eg.android.AlipayGphone",
+            name = "支付宝",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== QQ =====
+        SkipRule(
+            id = "qq_splash",
+            app = "com.tencent.mobileqq",
+            name = "QQ",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[id$=\"tt_splash_skip_btn\"]",
+                        "[text*=\"跳过\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 今日头条 =====
+        SkipRule(
+            id = "toutiao_splash",
+            app = "com.ss.android.article.news",
+            name = "今日头条",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 百度地图 =====
+        SkipRule(
+            id = "baidumap_splash",
+            app = "com.baidu.BaiduMap",
+            name = "百度地图",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 芒果TV =====
+        SkipRule(
+            id = "mgtv_splash",
+            app = "com.hunantv.imgo.activity",
+            name = "芒果TV",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]",
+                        "[vid*=\"skip\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 钉钉 =====
+        SkipRule(
+            id = "dingtalk_splash",
+            app = "com.alibaba.android.rimet",
+            name = "钉钉",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 企业微信 =====
+        SkipRule(
+            id = "wecom_splash",
+            app = "com.tencent.wework",
+            name = "企业微信",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 腾讯会议 =====
+        SkipRule(
+            id = "tencentmeeting_splash",
+            app = "com.tencent.wemeet.app",
+            name = "腾讯会议",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 携程旅行 =====
+        SkipRule(
+            id = "ctrip_splash",
+            app = "com.ctrip.android.view",
+            name = "携程旅行",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 夸克 =====
+        SkipRule(
+            id = "quark_splash",
+            app = "com.quark.browser",
+            name = "夸克",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 百度网盘 =====
+        SkipRule(
+            id = "baidupan_splash",
+            app = "com.baidu.netdisk",
+            name = "百度网盘",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== WPS Office =====
+        SkipRule(
+            id = "wps_splash",
+            app = "cn.wps.moffice_eng",
+            name = "WPS Office",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 美团外卖 =====
+        SkipRule(
+            id = "meituanwaimai_splash",
+            app = "com.sankuai.meituan.takeoutnew",
+            name = "美团外卖",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 盒马 =====
+        SkipRule(
+            id = "hima_splash",
+            app = "com.wudaokou.hippo",
+            name = "盒马",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 闲鱼 =====
+        SkipRule(
+            id = "xianyu_splash",
+            app = "com.taobao.idlefish",
+            name = "闲鱼",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 云闪付 =====
+        SkipRule(
+            id = "unionpay_splash",
+            app = "com.unionpay",
+            name = "云闪付",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 扫描全能王 =====
+        SkipRule(
+            id = "camscanner_splash",
+            app = "com.intsig.camscanner",
+            name = "扫描全能王",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 菜鸟 =====
+        SkipRule(
+            id = "cainiao_splash",
+            app = "com.cainiao.wireless",
+            name = "菜鸟",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 唯品会 =====
+        SkipRule(
+            id = "vipshop_splash",
+            app = "com.achievo.vipshop",
+            name = "唯品会",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 微信读书 =====
+        SkipRule(
+            id = "weread_splash",
+            app = "com.tencent.weread",
+            name = "微信读书",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== Keep =====
+        SkipRule(
+            id = "keep_splash",
+            app = "com.gotokeep.keep",
+            name = "Keep",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 喜马拉雅 =====
+        SkipRule(
+            id = "ximalaya_splash",
+            app = "com.ximalaya.ting.android",
+            name = "喜马拉雅",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 虎牙直播 =====
+        SkipRule(
+            id = "huya_splash",
+            app = "com.duowan.kiwi",
+            name = "虎牙直播",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 斗鱼 =====
+        SkipRule(
+            id = "douyu_splash",
+            app = "air.tv.douyu.android",
+            name = "斗鱼",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 剪映 =====
+        SkipRule(
+            id = "jianying_splash",
+            app = "com.lemon.lv",
+            name = "剪映",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 全民K歌 =====
+        SkipRule(
+            id = "quanminkge_splash",
+            app = "com.tencent.karaoke",
+            name = "全民K歌",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 铁路12306 =====
+        SkipRule(
+            id = "12306_splash",
+            app = "com.MobileTicket",
+            name = "铁路12306",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 60000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 番茄免费小说 =====
+        SkipRule(
+            id = "fanqie_splash",
+            app = "com.dragon.read",
+            name = "番茄免费小说",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 七猫免费小说 =====
+        SkipRule(
+            id = "qimao_splash",
+            app = "com.kmxs.reader",
+            name = "七猫免费小说",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 起点读书 =====
+        SkipRule(
+            id = "qidian_splash",
+            app = "com.qidian.QDReader",
+            name = "起点读书",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 美图秀秀 =====
+        SkipRule(
+            id = "meitu_splash",
+            app = "com.mt.mtxx.mtxx",
+            name = "美图秀秀",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 飞猪 =====
+        SkipRule(
+            id = "feizhu_splash",
+            app = "com.taobao.trip",
+            name = "飞猪",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 腾讯地图 =====
+        SkipRule(
+            id = "tencentmap_splash",
+            app = "com.tencent.map",
+            name = "腾讯地图",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 汽水音乐 =====
+        SkipRule(
+            id = "qishuiyinyue_splash",
+            app = "com.luna.music",
+            name = "汽水音乐",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 网易新闻 =====
+        SkipRule(
+            id = "wangyixinwen_splash",
+            app = "com.netease.newsreader.activity",
+            name = "网易新闻",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 腾讯新闻 =====
+        SkipRule(
+            id = "tencentnews_splash",
+            app = "com.tencent.news",
+            name = "腾讯新闻",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 掌上生活 =====
+        SkipRule(
+            id = "cmbchina_splash",
+            app = "cmbchina.ccd.pluto.cmbActivity",
+            name = "掌上生活",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 哈啰 =====
+        SkipRule(
+            id = "hellobike_splash",
+            app = "com.jingyao.easybike",
+            name = "哈啰",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 中国移动 =====
+        SkipRule(
+            id = "chinamobile_splash",
+            app = "com.greenpoint.android.mc10086.activity",
+            name = "中国移动",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 中国电信 =====
+        SkipRule(
+            id = "chinatelecom_splash",
+            app = "com.ct.client",
+            name = "中国电信",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 网上国网 =====
+        SkipRule(
+            id = "sgcc_splash",
+            app = "com.sgcc.wsgw.cn",
+            name = "网上国网",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 有道词典 =====
+        SkipRule(
+            id = "youdao_splash",
+            app = "com.youdao.dict",
+            name = "有道词典",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 平安好车主 =====
+        SkipRule(
+            id = "pingan_splash",
+            app = "com.pingan.carowner",
+            name = "平安好车主",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 豆包 =====
+        SkipRule(
+            id = "doubao_splash",
+            app = "com.larus.nova",
+            name = "豆包",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 300, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== Kimi智能助手 =====
+        SkipRule(
+            id = "kimi_splash",
+            app = "com.moonshot.kimichat",
+            name = "Kimi智能助手",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 300, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 陌陌 =====
+        SkipRule(
+            id = "momo_splash",
+            app = "com.immomo.momo",
+            name = "陌陌",
+            groups = listOf(RuleGroup(
+                name = "开屏广告",
+                rules = listOf(MatchRule(
+                    matchDelay = 500, actionCd = 30000, actionMaximum = 1,
+                    matches = listOf(
+                        "[text*=\"跳过\"]",
+                        "[id$=\"tt_splash_skip_btn\"]"
+                    )
+                ))
+            ))
+        ),
+
+        // ===== 番茄畅听 =====
+        SkipRule(
+            id = "fanqiechangting_splash",
+            app = "com.xs.fm",
+            name = "番茄畅听",
             groups = listOf(RuleGroup(
                 name = "开屏广告",
                 rules = listOf(MatchRule(
