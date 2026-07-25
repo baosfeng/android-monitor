@@ -2,6 +2,13 @@ package com.bsfeng.monitor.core.di
 
 import android.app.Application
 import com.bsfeng.monitor.data.DatabaseHelper
+import com.bsfeng.monitor.data.datasource.LocalEventDataSource
+import com.bsfeng.monitor.data.repository.DeviceRepositoryImpl
+import com.bsfeng.monitor.data.repository.EventRepositoryImpl
+import com.bsfeng.monitor.data.repository.SkipRuleRepositoryImpl
+import com.bsfeng.monitor.domain.repository.DeviceRepository
+import com.bsfeng.monitor.domain.repository.EventRepository
+import com.bsfeng.monitor.domain.repository.SkipRuleRepository
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.pipeline.EventPipeline
 import com.bsfeng.monitor.pipeline.EventPipelineImpl
@@ -44,6 +51,16 @@ class ServiceContainer(private val app: Application) {
     val skipRuleManager: SkipRuleManager by lazy { SkipRuleManager(app) }
 
     val skipRuleEngine: SkipRuleEngine by lazy { SkipRuleEngine(skipRuleManager) }
+
+    // ========== Repository ==========
+
+    val localEventDataSource: LocalEventDataSource by lazy { LocalEventDataSource(databaseHelper) }
+
+    val eventRepository: EventRepository by lazy { EventRepositoryImpl(localEventDataSource) }
+
+    val skipRuleRepository: SkipRuleRepository by lazy { SkipRuleRepositoryImpl(skipRuleManager) }
+
+    val deviceRepository: DeviceRepository by lazy { DeviceRepositoryImpl() }
 
     init {
         DebugConfig.init()
