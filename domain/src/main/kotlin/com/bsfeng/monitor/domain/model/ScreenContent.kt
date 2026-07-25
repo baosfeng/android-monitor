@@ -1,4 +1,4 @@
-package com.bsfeng.monitor.event
+package com.bsfeng.monitor.domain.model
 
 /**
  * 屏幕内容分类信息。

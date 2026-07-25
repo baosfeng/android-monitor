@@ -1,4 +1,4 @@
-package com.bsfeng.monitor.skip
+package com.bsfeng.monitor.domain.model
 
 /**
  * 选择器 DSL — 用于在 Android 无障碍节点树中定位目标节点。

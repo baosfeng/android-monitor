@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.pipeline.handler
 
 import com.bsfeng.monitor.data.DatabaseHelper
-import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.domain.model.EventType
 import com.bsfeng.monitor.pipeline.RawEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test

@@ -5,7 +5,7 @@ import com.bsfeng.monitor.AppConfig
 import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.data.EventEntity
-import com.bsfeng.monitor.event.UnifiedEvent
+import com.bsfeng.monitor.domain.model.UnifiedEvent
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DiagnosticCounters
 import kotlinx.coroutines.Dispatchers

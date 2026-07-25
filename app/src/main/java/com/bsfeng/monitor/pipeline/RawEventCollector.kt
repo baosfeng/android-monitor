@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.pipeline
 
-import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.domain.model.EventType
 import com.bsfeng.monitor.util.AppUtils
 
 class RawEventCollector(

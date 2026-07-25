@@ -1,6 +1,9 @@
 package com.bsfeng.monitor.skip
 
 import android.os.Handler
+import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.RuleGroup
+import com.bsfeng.monitor.domain.model.SkipRule
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo

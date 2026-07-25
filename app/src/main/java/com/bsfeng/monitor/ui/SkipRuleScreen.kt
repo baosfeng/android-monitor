@@ -11,7 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.skip.SkipRule
+import com.bsfeng.monitor.domain.model.SkipRule
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 
 /**

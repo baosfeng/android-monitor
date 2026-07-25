@@ -1,5 +1,10 @@
 package com.bsfeng.monitor.skip
 
+import com.bsfeng.monitor.domain.model.AttrCondition
+import com.bsfeng.monitor.domain.model.AttrOp
+import com.bsfeng.monitor.domain.model.Combinator
+import com.bsfeng.monitor.domain.model.Selector
+
 /**
  * 选择器字符串解析器。
  *

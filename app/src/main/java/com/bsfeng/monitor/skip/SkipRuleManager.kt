@@ -1,6 +1,9 @@
 package com.bsfeng.monitor.skip
 
 import android.content.Context
+import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.RuleGroup
+import com.bsfeng.monitor.domain.model.SkipRule
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -195,7 +198,7 @@ class SkipRuleManager(private val context: Context) {
             val rules = mutableListOf<SkipRule>()
             for (i in 0 until jsonArray.length()) {
                 try {
-                    rules.add(SkipRule.fromJson(jsonArray.getJSONObject(i)))
+                    rules.add(parseSkipRule(jsonArray.getJSONObject(i)))
                 } catch (e: Exception) {
                     Log.w(TAG, "跳过无效规则 #$i", e)
                 }

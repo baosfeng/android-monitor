@@ -6,7 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
-import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.domain.model.EventType
 import com.bsfeng.monitor.util.DiagnosticCounters
 
 /**

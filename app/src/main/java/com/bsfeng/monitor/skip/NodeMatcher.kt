@@ -1,6 +1,10 @@
 package com.bsfeng.monitor.skip
 
 import android.view.accessibility.AccessibilityNodeInfo
+import com.bsfeng.monitor.domain.model.AttrCondition
+import com.bsfeng.monitor.domain.model.AttrOp
+import com.bsfeng.monitor.domain.model.Selector
+import com.bsfeng.monitor.domain.model.Combinator
 import java.util.regex.Pattern
 
 /**
