@@ -195,7 +195,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             if (navResult.isNewPath) {
                 emitNavigationEvent(
                     navResult, packageName, appName, pageTitle, className,
-                    extra = buildContentTextsMap(contentTexts) + mapOf(
+                    extra = PageContentExtractor.buildContentTextsMap(contentTexts) + mapOf(
                         "to_activity_name" to desc
                     )
                 )
@@ -264,7 +264,7 @@ class MonitorAccessibilityService : AccessibilityService() {
                 val rootPkg = root.packageName?.toString()
                 if (rootPkg == packageName) {
                     // 用 quick collect 只提取有意义的长文本
-                    collectContentTexts(root, texts, max = 30, depth = 0, maxDepth = 12)
+                    pageContentExtractor.collectContentTexts(root, texts, max = 30, depth = 0, maxDepth = 12)
                 }
                 root.recycle()
                 // 过滤掉点击文本自身
@@ -482,120 +482,12 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     // ========== Content Extraction ==========
 
-    /**
-     * 从 AccessibilityEvent 中提取页面内容。
-     * 返回 (bestTitle, contentTexts)
-     * - bestTitle: 最适合作为页面标题的文本
-     * - contentTexts: 页面上所有有意义的文本（发帖人、文章标题、商品名等），按长度降序
-     */
+    /** 页面内容提取器 */
+    private val pageContentExtractor: PageContentExtractor by lazy { PageContentExtractor() }
+
+    /** 从 AccessibilityEvent 中提取页面内容。 */
     private fun extractPageContent(event: AccessibilityEvent): Pair<String?, List<String>> {
-        val allTexts = linkedSetOf<String>()
-
-        // 1. 从 event 本身获取
-        event.text?.joinToString("")?.takeIf { it.isNotBlank() }?.let {
-            allTexts.add(it.trim())
-        }
-        event.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let {
-            allTexts.add(it.trim())
-        }
-
-        // 2. 从 event.source 节点树遍历（加深到12层，收集最多30个）
-        if (event.source != null) {
-            collectContentTexts(event.source!!, allTexts, max = 30, depth = 0, maxDepth = 12)
-        }
-
-        // 3. 从 rootInActiveWindow 补充（仅当 package 匹配，防止跨 App 文本污染）
-        try {
-            val root = rootInActiveWindow
-            if (root != null && root != event.source) {
-                val rootPkg = root.packageName?.toString()
-                if (rootPkg == event.packageName?.toString()) {
-                    collectContentTexts(root, allTexts, max = 30, depth = 0, maxDepth = 12)
-                }
-                root.recycle()
-            }
-        } catch (_: Exception) {}
-
-        if (allTexts.isEmpty()) return Pair(null, emptyList())
-
-        // 按长度降序排列，过滤无意义短文本
-        val meaningful = allTexts
-            .map { it.trim() }
-            .filter { it.length >= 2 && !isNonsenseText(it) }
-            .distinct()
-            .sortedByDescending { it.length }
-
-        // bestTitle: 优先选最长的 >=6 字符的文本，否则选最长的
-        val bestTitle = meaningful.firstOrNull { it.length >= 6 }
-            ?: meaningful.firstOrNull()
-
-        // 取前 8 个作为 content_texts
-        val topTexts = meaningful.take(8)
-
-        // 日志：打印找到的文本（用于调试 content extraction）
-        if (topTexts.isNotEmpty()) {
-            Log.d("MonitorService", "  -> texts[${topTexts.size}]: ${topTexts.joinToString(" | ") { it.take(40) }}")
-        }
-
-        return Pair(bestTitle, topTexts)
-    }
-
-    /** 过滤无意义的占位文本 */
-    private fun isNonsenseText(text: String): Boolean {
-        val lower = text.lowercase()
-        return lower in setOf(
-            "返回", "取消", "确定", "确认", "关闭", "更多", "分享",
-            "退出", "保存", "删除", "编辑", "完成", "下一步",
-            "back", "cancel", "ok", "close", "more", "share"
-        ) || text.all { it.isWhitespace() || it.isDigit() || it == ':' || it == '/' }
-    }
-
-    private fun collectContentTexts(
-        node: android.view.accessibility.AccessibilityNodeInfo,
-        texts: MutableSet<String>,
-        max: Int,
-        depth: Int,
-        maxDepth: Int
-    ) {
-        if (depth > maxDepth || texts.size >= max) return
-
-        // 读取 text
-        node.text?.toString()?.takeIf {
-            it.isNotBlank() && it.trim().length >= 2
-        }?.let { t ->
-            val trimmed = t.trim()
-            if (trimmed !in texts) texts.add(trimmed)
-        }
-
-        // 读取 contentDescription（很多 App 的关键内容在此）
-        node.contentDescription?.toString()?.takeIf {
-            it.isNotBlank() && it.trim().length >= 2
-        }?.let { cd ->
-            val trimmed = cd.trim()
-            if (trimmed !in texts) texts.add(trimmed)
-        }
-
-        // 遍历子节点
-        for (i in 0 until node.childCount) {
-            try {
-                node.getChild(i)?.let {
-                    collectContentTexts(it, texts, max, depth + 1, maxDepth)
-                }
-            } catch (_: Exception) { /* 安全忽略单个子节点异常 */ }
-        }
-    }
-
-    /** 构建 content_text_N 的 rawExtra 映射 */
-    private fun buildContentTextsMap(texts: List<String>): Map<String, String> {
-        if (texts.isEmpty()) return emptyMap()
-        val map = mutableMapOf<String, String>()
-        for (i in texts.indices) {
-            val key = "content_text_${i + 1}"
-            val value = texts[i]
-            map[key] = value
-            if (i >= 7) break
-        }
-        return map
+        return pageContentExtractor.extract(event) { rootInActiveWindow }
     }
 
     // ========== Description Helpers ==========
