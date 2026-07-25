@@ -37,7 +37,7 @@ object SkipEventRecorder {
 
         Log.d(TL, "⏭️ 跳过广告: $appName <- $selectorExpr")
 
-        MonitorApp.instance.getCollector().emit(object : EventSource {
+        MonitorApp.instance.container.collector.emit(object : EventSource {
             override fun collectRaw() = RawEventData(
                 eventType = EventType.VIEW_CLICKED,
                 packageName = packageName,
