@@ -1,5 +1,7 @@
 package com.bsfeng.monitor.skip
 
+import com.bsfeng.monitor.domain.model.AttrOp
+import com.bsfeng.monitor.domain.model.Combinator
 import org.junit.Assert.*
 import org.junit.Test
 

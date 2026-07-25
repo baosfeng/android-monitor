@@ -1,5 +1,8 @@
 package com.bsfeng.monitor.skip
 
+import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.RuleGroup
+import com.bsfeng.monitor.domain.model.SkipRule
 import org.json.JSONArray
 
 /**

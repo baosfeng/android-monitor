@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.pipeline
 
-import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.domain.model.EventType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test

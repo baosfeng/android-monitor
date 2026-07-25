@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui
 
 import androidx.lifecycle.ViewModel
 import com.bsfeng.monitor.MonitorApp
-import com.bsfeng.monitor.skip.SkipRule
+import com.bsfeng.monitor.domain.model.SkipRule
 import com.bsfeng.monitor.skip.SkipRuleManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

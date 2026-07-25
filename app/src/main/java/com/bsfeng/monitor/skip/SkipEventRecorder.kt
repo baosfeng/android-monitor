@@ -1,8 +1,8 @@
 package com.bsfeng.monitor.skip
 
 import android.util.Log
+import com.bsfeng.monitor.domain.model.EventType
 import com.bsfeng.monitor.MonitorApp
-import com.bsfeng.monitor.event.EventType
 import com.bsfeng.monitor.pipeline.EventSource
 import com.bsfeng.monitor.pipeline.RawEventData
 

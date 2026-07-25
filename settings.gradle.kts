@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-monitor"
 include(":app")
+include(":domain")

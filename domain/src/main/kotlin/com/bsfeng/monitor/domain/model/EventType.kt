@@ -1,4 +1,4 @@
-package com.bsfeng.monitor.event
+package com.bsfeng.monitor.domain.model
 
 /**
  * 事件类型枚举。

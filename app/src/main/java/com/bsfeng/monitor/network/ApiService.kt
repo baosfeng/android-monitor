@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.network
 
 import com.bsfeng.monitor.AppConfig
-import com.bsfeng.monitor.event.UnifiedEvent
+import com.bsfeng.monitor.domain.model.UnifiedEvent
 import com.bsfeng.monitor.util.AppUtils
 import org.json.JSONArray
 import org.json.JSONObject

@@ -8,8 +8,8 @@ import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.click.AppClickHandlerRegistry
 import com.bsfeng.monitor.event.AppSessionManager
-import com.bsfeng.monitor.event.EventType
-import com.bsfeng.monitor.event.NavChangeResult
+import com.bsfeng.monitor.domain.model.EventType
+import com.bsfeng.monitor.domain.model.NavChangeResult
 import com.bsfeng.monitor.event.NavigationTracker
 import com.bsfeng.monitor.pipeline.EventSource
 import com.bsfeng.monitor.pipeline.RawEventData
@@ -359,7 +359,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     /** 从另一个 App 回到之前到访过的 App 时的处理 */
     private fun handleReturnWithSession(
-        session: com.bsfeng.monitor.event.SessionRecord,
+        session: com.bsfeng.monitor.domain.model.SessionRecord,
         packageName: String,
         appName: String,
         className: String,
@@ -378,7 +378,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     /** 通用：检测是否回到相同页面，发射 RETURN_TO_PAGE 或重置导航 */
     private fun handlePageReturn(
-        session: com.bsfeng.monitor.event.SessionRecord,
+        session: com.bsfeng.monitor.domain.model.SessionRecord,
         packageName: String,
         appName: String,
         className: String,

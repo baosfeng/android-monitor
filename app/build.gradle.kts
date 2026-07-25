@@ -70,6 +70,9 @@ tasks.withType<Test> {
 }
 
 dependencies {
+    // Domain 模块
+    implementation(project(":domain"))
+
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

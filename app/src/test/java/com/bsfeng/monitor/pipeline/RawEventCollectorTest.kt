@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.pipeline
 
 import com.bsfeng.monitor.MonitorApp
-import com.bsfeng.monitor.event.EventType
+import com.bsfeng.monitor.domain.model.EventType
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
