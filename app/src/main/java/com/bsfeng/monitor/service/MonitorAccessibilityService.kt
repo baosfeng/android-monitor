@@ -58,7 +58,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     /** 开屏跳过规则引擎 */
     private val skipEngine: SkipRuleEngine by lazy {
-        (application as MonitorApp).getSkipRuleEngine()
+        (application as MonitorApp).container.skipRuleEngine
     }
 
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
@@ -305,7 +305,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             Log.d("MonitorService", "  -> page_context(${pageTexts.size}): ${pageTexts.first().take(40)}")
         }
 
-        MonitorApp.instance.getCollector().emit(object : EventSource {
+        MonitorApp.instance.container.collector.emit(object : EventSource {
             override fun collectRaw() = RawEventData(
                 eventType = EventType.VIEW_CLICKED,
                 packageName = packageName,
@@ -395,7 +395,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             NavigationTracker.restoreState(packageName, session.navPath)
             val returnSummary = "回到之前浏览的页面「${session.lastPageTitle}」（离开 $durationText）"
             Log.d("MonitorService", "  -> RETURN_TO_PAGE: ${session.lastPageTitle}")
-            MonitorApp.instance.getCollector().emit(object : EventSource {
+            MonitorApp.instance.container.collector.emit(object : EventSource {
                 override fun collectRaw() = RawEventData(
                     eventType = EventType.RETURN_TO_PAGE,
                     packageName = packageName,
@@ -463,7 +463,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
         Log.d("MonitorService", "  -> NAVIGATION_CHANGE: ${pathString}")
         timeline("📍", "$pathString")
-        MonitorApp.instance.getCollector().emit(object : EventSource {
+        MonitorApp.instance.container.collector.emit(object : EventSource {
             override fun collectRaw() = RawEventData(
                 eventType = EventType.NAVIGATION_CHANGE,
                 packageName = packageName,

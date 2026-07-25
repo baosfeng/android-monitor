@@ -22,7 +22,7 @@ data class SkipRuleUiState(
  */
 class SkipRuleViewModel : ViewModel() {
 
-    private val ruleManager: SkipRuleManager = MonitorApp.instance.getSkipRuleManager()
+    private val ruleManager: SkipRuleManager = MonitorApp.instance.container.skipRuleManager
 
     private val _state = MutableStateFlow(SkipRuleUiState())
     val state: StateFlow<SkipRuleUiState> = _state.asStateFlow()
