@@ -6,6 +6,8 @@ import com.bsfeng.monitor.data.datasource.LocalEventDataSource
 import com.bsfeng.monitor.data.repository.DeviceRepositoryImpl
 import com.bsfeng.monitor.data.repository.EventRepositoryImpl
 import com.bsfeng.monitor.data.repository.SkipRuleRepositoryImpl
+import com.bsfeng.monitor.domain.AppSessionManager
+import com.bsfeng.monitor.domain.NavigationTracker
 import com.bsfeng.monitor.domain.repository.DeviceRepository
 import com.bsfeng.monitor.domain.repository.EventRepository
 import com.bsfeng.monitor.domain.repository.SkipRuleRepository
@@ -20,6 +22,8 @@ import com.bsfeng.monitor.pipeline.handler.UploadHandler
 import com.bsfeng.monitor.pipeline.handler.UploadQueue
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.skip.SkipRuleManager
+import com.bsfeng.monitor.usecase.ManageNavigationUseCase
+import com.bsfeng.monitor.usecase.SessionUseCase
 import com.bsfeng.monitor.util.DebugConfig
 
 /**
@@ -61,6 +65,22 @@ class ServiceContainer(private val app: Application) {
     val skipRuleRepository: SkipRuleRepository by lazy { SkipRuleRepositoryImpl(skipRuleManager) }
 
     val deviceRepository: DeviceRepository by lazy { DeviceRepositoryImpl() }
+
+    // ========== Domain Services ==========
+
+    val navigationTracker: NavigationTracker by lazy { NavigationTracker() }
+
+    val appSessionManager: AppSessionManager by lazy { AppSessionManager() }
+
+    // ========== UseCases ==========
+
+    val manageNavigationUseCase: ManageNavigationUseCase by lazy {
+        ManageNavigationUseCase(navigationTracker)
+    }
+
+    val sessionUseCase: SessionUseCase by lazy {
+        SessionUseCase(appSessionManager)
+    }
 
     init {
         DebugConfig.init()
