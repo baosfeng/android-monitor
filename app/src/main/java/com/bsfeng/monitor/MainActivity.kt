@@ -23,7 +23,6 @@ import com.bsfeng.monitor.finance.ui.AddTransactionScreen
 import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.ImportScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
-import com.bsfeng.monitor.service.ReceiverRegistrar
 import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.SettingsScreen
@@ -42,7 +41,6 @@ import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 
 @OptIn(ExperimentalCupertinoApi::class)
 class MainActivity : ComponentActivity() {
-    private var registrar: ReceiverRegistrar? = null
 
     private sealed class FinanceRoute {
         data object Main : FinanceRoute()
@@ -59,8 +57,6 @@ class MainActivity : ComponentActivity() {
         if (!nm.areNotificationsEnabled()) {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
         }
-
-        registrar = ReceiverRegistrar(this).also { it.registerAll() }
 
         setContent {
             CupertinoTheme {
