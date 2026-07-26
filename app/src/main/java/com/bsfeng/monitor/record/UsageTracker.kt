@@ -20,6 +20,15 @@ class UsageTracker(
     @Suppress("unused")
     private var screenOn: Boolean = true
 
+    /**
+     * 设置记录回调（用于解决与 RecordCollector 的循环依赖）。
+     * 构造时传空 lambda，构造完成后调用此方法设置实际回调。
+     */
+    private var recordCallback: ((Record) -> Unit)? = null
+    fun setOnRecordCallback(callback: (Record) -> Unit) {
+        recordCallback = callback
+    }
+
     fun onAppSwitch(packageName: String, appName: String, timestamp: Long) {
         // 关闭上一个 App
         closeCurrentSession(timestamp)
