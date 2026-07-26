@@ -2,8 +2,8 @@ package com.bsfeng.monitor.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.bsfeng.monitor.data.DatabaseHelper
-import com.bsfeng.monitor.data.EventEntity
+import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
@@ -15,14 +15,14 @@ import kotlinx.coroutines.launch
 
 data class MonitorState(
     val isMonitoring: Boolean = true,
-    val recentEvents: List<EventEntity> = emptyList(),
+    val recentEvents: List<Record> = emptyList(),
     val todayEventCount: Int = 0,
     val accessibilityEnabled: Boolean = false
 )
 
 class MainViewModel : ViewModel() {
-    private val app = com.bsfeng.monitor.MonitorApp.instance
-    private val db = DatabaseHelper.getInstance(app)
+    private val app = MonitorApp.instance
+    private val store = app.container.recordStore
 
     private val _state = MutableStateFlow(MonitorState())
     val state: StateFlow<MonitorState> = _state.asStateFlow()
@@ -35,7 +35,6 @@ class MainViewModel : ViewModel() {
 
     init {
         loadData()
-        // 每 3 秒自动刷新界面
         viewModelScope.launch {
             while (true) {
                 delay(3000)
@@ -63,11 +62,13 @@ class MainViewModel : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val recent = db.getRecentEvents(20)
-                val total = db.getRecentEvents(10000).size
+                val now = System.currentTimeMillis()
+                val todayStart = now - (now % 86400000L)
+                val recent = store.queryByDate(todayStart - 86400000L, now)
+                val total = recent.size
 
                 _state.value = _state.value.copy(
-                    recentEvents = recent,
+                    recentEvents = recent.reversed().take(20),
                     todayEventCount = total
                 )
             } catch (_: Exception) {}
@@ -88,11 +89,11 @@ class MainViewModel : ViewModel() {
         DebugConfig.setEnabled(newEnabled)
     }
 
-    /** 一键清空所有事件 */
     fun clearEvents() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                db.deleteAllEvents()
+                val before = System.currentTimeMillis()
+                store.deleteBefore(before)
                 loadData()
             } catch (_: Exception) {}
         }

@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bsfeng.monitor.domain.model.EventType
+import com.bsfeng.monitor.domain.model.RecordType
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.section.SectionStyle
 import io.github.alexzhirkevich.cupertino.section.section
@@ -27,7 +27,7 @@ fun StatsScreen(
     }
 
     val grouped = remember(state.recentEvents) {
-        state.recentEvents.groupBy { it.eventType }.entries.toList()
+        state.recentEvents.groupBy { it.type::class.simpleName ?: "" }.entries.toList()
     }
 
     LazyColumn(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
@@ -79,7 +79,7 @@ fun StatsScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(EventType.getChineseName(type), fontSize = 14.sp)
+                        Text(type, fontSize = 14.sp)
                         Text("${events.size} 次", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }

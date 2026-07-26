@@ -1,7 +1,8 @@
 package com.bsfeng.monitor.network
 
 import com.bsfeng.monitor.AppConfig
-import com.bsfeng.monitor.domain.model.UnifiedEvent
+import com.bsfeng.monitor.domain.model.Record
+import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.util.AppUtils
 import org.json.JSONArray
 import org.json.JSONObject
@@ -204,14 +205,24 @@ object ApiService {
 // ========== Request / Response DTOs ==========
 
 data class EventsBatch(
-    val events: List<UnifiedEvent>,
+    val events: List<Record>,
     val batchId: String,
     val deviceId: String,
     val batchCreatedAtMs: Long,
     val batchSize: Int
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
-        put("events", JSONArray(events.map { it.toJsonObject() }))
+        put("events", JSONArray(events.map { record ->
+            JSONObject().apply {
+                put("id", record.id)
+                put("type", RecordType.Companion.toString(record.type))
+                put("action", record.action)
+                put("timestamp", record.timestamp)
+                record.duration?.let { put("duration", it) }
+                put("label", record.label)
+                record.detail?.let { put("detail", JSONObject(it)) }
+            }
+        }))
         put("batchId", batchId)
         put("deviceId", deviceId)
         put("batchCreatedAtMs", batchCreatedAtMs)

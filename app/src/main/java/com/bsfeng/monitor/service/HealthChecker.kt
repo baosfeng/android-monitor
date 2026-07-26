@@ -22,10 +22,8 @@ object HealthChecker {
             notifyUser(context, "监控服务已停止", "请前往 设置 → 无障碍 → 行为记录 重新开启")
         }
 
-        // 检查事件积压
-        val count = try {
-            DatabaseHelper.getInstance(context).countUnsent()
-        } catch (_: Exception) { 0 }
+        // 检查事件积压（二期实现后接入 RecordStore 统计）
+        val count = 0
         if (count > 1000) {
             notifyUser(context, "事件积压过多",
                 "当前待上报事件 $count 条，请检查网络连接")

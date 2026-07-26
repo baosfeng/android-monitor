@@ -211,4 +211,9 @@ object NodeMatcher {
             else -> null
         }
     }
+
+    /** 页面结构诊断 — 桩实现 */
+    fun diagnosePageStructure(rootNode: AccessibilityNodeInfo) {
+        // 暂不实现
+    }
 }
