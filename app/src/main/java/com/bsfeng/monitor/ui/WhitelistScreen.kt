@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,7 +29,11 @@ fun WhitelistScreen(
     val filteredApps by viewModel.filteredApps.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
         // 顶部栏
         TopAppBar(
             title = { Text("广告白名单", fontWeight = FontWeight.Bold) },

@@ -67,16 +67,14 @@ class WhitelistViewModel : ViewModel() {
                 val pm = MonitorApp.instance.packageManager
                 val whitelist = getWhitelist()
                 val installedApps = pm.getInstalledPackages(PackageManager.GET_ACTIVITIES)
-                    .filter { pkg ->
-                        // 过滤系统应用（有系统标志的）和本应用自身
-                        val info = pkg.applicationInfo
-                        info != null &&
-                        (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
-                        pkg.packageName != MonitorApp.instance.packageName
+                    .mapNotNull { pkg ->
+                        val info = pkg.applicationInfo ?: return@mapNotNull null
+                        if ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) return@mapNotNull null
+                        if (pkg.packageName == MonitorApp.instance.packageName) return@mapNotNull null
+                        pkg to info
                     }
-                    .sortedBy { pm.getApplicationLabel(it.applicationInfo!!).toString().lowercase() }
-                    .map { pkg ->
-                        val info = pkg.applicationInfo!!
+                    .sortedBy { (_, info) -> pm.getApplicationLabel(info).toString().lowercase() }
+                    .map { (pkg, info) ->
                         AppInfo(
                             packageName = pkg.packageName,
                             appName = pm.getApplicationLabel(info).toString(),
