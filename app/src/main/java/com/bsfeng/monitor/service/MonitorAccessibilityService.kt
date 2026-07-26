@@ -105,33 +105,38 @@ class MonitorAccessibilityService : AccessibilityService() {
             return
         }
 
-        // ===== 开屏广告跳过 =====
-        // 进入新 App，清除上一条残留弹幕
-        removeCurrentDanmaku()
-        try {
-            val root = rootInActiveWindow
-            if (root != null) {
-                if (packageName == "com.bsfeng.monitor") {
-                    // 进入本 App，停止所有外部监控和重置状态
-                    skipEngine.resetAppState(packageName)
-                } else {
-                    val skipped = skipEngine.onWindowChanged(packageName, className, root)
-                    if (skipped) {
-                        val appNameShort = AppUtils.getAppName(packageName)
-                        timeline("⏭️", "跳过 $appNameShort 开屏广告")
-                        SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
-                        showSkipDanmaku(appNameShort)
+        // ===== 开屏广告跳过（仅在真正进入 App 时检测）=====
+        // 条件：包名变化（切换 App）或从桌面返回（isAway=true）
+        // 同 App 内页面切换（Activity 跳转）不触发开屏检测，避免误拦截
+        val shouldCheckSplash = packageName != lastPackageName || isAway
+        if (shouldCheckSplash) {
+            // 进入新 App，清除上一条残留弹幕
+            removeCurrentDanmaku()
+            try {
+                val root = rootInActiveWindow
+                if (root != null) {
+                    if (packageName == "com.bsfeng.monitor") {
+                        // 进入本 App，停止所有外部监控和重置状态
+                        skipEngine.resetAppState(packageName)
                     } else {
-                        // 首次尝试未命中，启动持续监控（处理白屏→广告延迟加载）
-                        skipEngine.startWatching(packageName, className)
+                        val skipped = skipEngine.onWindowChanged(packageName, className, root)
+                        if (skipped) {
+                            val appNameShort = AppUtils.getAppName(packageName)
+                            timeline("⏭️", "跳过 $appNameShort 开屏广告")
+                            SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
+                            showSkipDanmaku(appNameShort)
+                        } else {
+                            // 首次尝试未命中，启动持续监控（处理白屏→广告延迟加载）
+                            skipEngine.startWatching(packageName, className)
+                        }
                     }
+                    root.recycle()
+                } else {
+                    Log.w("MonitorService", "handleWindowChange: rootInActiveWindow is null for $packageName")
                 }
-                root.recycle()
-            } else {
-                Log.w("MonitorService", "handleWindowChange: rootInActiveWindow is null for $packageName")
+            } catch (e: Exception) {
+                Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
             }
-        } catch (e: Exception) {
-            Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
         }
 
         val appName = AppUtils.getAppName(packageName)
