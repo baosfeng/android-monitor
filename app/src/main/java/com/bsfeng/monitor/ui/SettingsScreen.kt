@@ -24,6 +24,7 @@ import io.github.alexzhirkevich.cupertino.section.section
 fun SettingsScreen(
     viewModel: MainViewModel,
     onNavigateToSkipRules: () -> Unit = {},
+    onNavigateToWhitelist: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -107,27 +108,20 @@ fun SettingsScreen(
                     }
                 )
             }
-        }
-
-        // Section 4: 电池优化
-        section(style = SectionStyle.InsetGrouped) {
             item {
                 SettingsRow(
-                    title = "电池优化",
-                    subtitle = "设为无限制以防止被系统关闭",
+                    title = "广告白名单",
+                    subtitle = "选择不检测广告的 App",
                     trailing = {
-                        Button(onClick = {
-                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                            context.startActivity(intent)
-                        }) {
-                            Text("设置")
+                        Button(onClick = onNavigateToWhitelist) {
+                            Text("管理")
                         }
                     }
                 )
             }
         }
 
-        // Section 5: 调试模式
+        // Section 4: 调试模式
         section(style = SectionStyle.InsetGrouped) {
             item {
                 SettingsRow(

@@ -13,12 +13,21 @@ import java.util.UUID
  * 与 UsageTracker 的循环依赖处理：
  * - 构造时传入 UsageTracker
  * - 构造完成后调用 usageTracker.setOnRecordCallback { ... }
+ *
+ * 状态去重：WiFi、电量等高频广播携带状态缓存，只有值真正变化时才写入事件。
  */
 class RecordCollector(
     private val store: RecordStore,
     private val usageTracker: UsageTracker,
     private val handlerRegistry: RecordHandlerRegistry
 ) {
+    /** WiFi 状态缓存 — 避免 WIFI_STATE_CHANGED_ACTION 重复触发 */
+    private var lastWifiAction: String? = null
+
+    /** 电量状态缓存 — 避免 ACTION_BATTERY_CHANGED 粘性广播重复触发 */
+    private var lastBatteryLevel: Int? = null
+    private var lastBatteryPlugged: Boolean? = null
+
     private fun emit(type: RecordType, action: String, timestamp: Long, duration: Long? = null, detail: Map<String, String>? = null) {
         if (!handlerRegistry.validate(type, action, detail)) return
         val label = handlerRegistry.createLabel(type, action, detail)
@@ -49,6 +58,9 @@ class RecordCollector(
     }
 
     fun onWifiChanged(action: String, ssid: String?, timestamp: Long) {
+        // 去重：WiFi 状态未变化时跳过
+        if (action == lastWifiAction) return
+        lastWifiAction = action
         val detail = if (ssid != null) mapOf("ssid" to ssid) else null
         emit(RecordType.WIFI, action, timestamp, detail = detail)
     }
@@ -59,6 +71,10 @@ class RecordCollector(
     }
 
     fun onBatteryChanged(level: Int, plugged: Boolean, timestamp: Long) {
+        // 去重：电量 level 和 plugged 状态均未变化时跳过（ACTION_BATTERY_CHANGED 是粘性广播）
+        if (level == lastBatteryLevel && plugged == lastBatteryPlugged) return
+        lastBatteryLevel = level
+        lastBatteryPlugged = plugged
         emit(RecordType.BATTERY, "CHANGED", timestamp, detail = mapOf("level" to level.toString(), "plugged" to plugged.toString()))
     }
 

@@ -30,6 +30,8 @@ import com.bsfeng.monitor.ui.SkipRuleScreen
 import com.bsfeng.monitor.ui.SkipRuleViewModel
 import com.bsfeng.monitor.ui.AdScreen
 import com.bsfeng.monitor.ui.AdViewModel
+import com.bsfeng.monitor.ui.WhitelistScreen
+import com.bsfeng.monitor.ui.WhitelistViewModel
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
 import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
@@ -63,9 +65,11 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 val financeViewModel: FinanceViewModel = viewModel()
                 val skipRuleViewModel: SkipRuleViewModel = viewModel()
+                val whitelistViewModel: WhitelistViewModel = viewModel()
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
                 var showSkipRuleScreen by remember { mutableStateOf(false) }
+                var showWhitelistScreen by remember { mutableStateOf(false) }
 
                 val tabs = remember {
                     listOf(
@@ -79,7 +83,7 @@ class MainActivity : ComponentActivity() {
                 CupertinoScaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        if (!showSkipRuleScreen) {
+                        if (!showSkipRuleScreen && !showWhitelistScreen) {
                             CupertinoNavigationBar(
                                 modifier = Modifier.fillMaxWidth(),
                                 windowInsets = WindowInsets(0, 0, 0, 0),
@@ -157,6 +161,7 @@ class MainActivity : ComponentActivity() {
                             3 -> SettingsScreen(
                                 viewModel = viewModel,
                                 onNavigateToSkipRules = { showSkipRuleScreen = true },
+                                onNavigateToWhitelist = { showWhitelistScreen = true },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -173,6 +178,21 @@ class MainActivity : ComponentActivity() {
                                     skipRuleViewModel.refresh()
                                 },
                                 viewModel = skipRuleViewModel
+                            )
+                        }
+
+                        // 广告白名单页面（覆盖层）
+                        if (showWhitelistScreen) {
+                            BackHandler(showWhitelistScreen) {
+                                showWhitelistScreen = false
+                                whitelistViewModel.refresh()
+                            }
+                            WhitelistScreen(
+                                onBack = {
+                                    showWhitelistScreen = false
+                                    whitelistViewModel.refresh()
+                                },
+                                viewModel = whitelistViewModel
                             )
                         }
                     }
