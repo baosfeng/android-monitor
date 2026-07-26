@@ -12,7 +12,7 @@ import java.util.UUID
  * 息屏时关闭当前 App 会话，亮屏后等待用户切到 App 再开始计时。
  */
 class UsageTracker(
-    private val onRecord: (Record) -> Unit
+    private val onRecord: (Record) -> Unit = {}
 ) {
     private var currentPkg: String? = null
     private var currentAppName: String? = null
@@ -20,13 +20,15 @@ class UsageTracker(
     @Suppress("unused")
     private var screenOn: Boolean = true
 
-    /**
-     * 设置记录回调（用于解决与 RecordCollector 的循环依赖）。
-     * 构造时传空 lambda，构造完成后调用此方法设置实际回调。
-     */
+    /** 实际回调（解决循环依赖），设置后取代构造参数 */
     private var recordCallback: ((Record) -> Unit)? = null
+
     fun setOnRecordCallback(callback: (Record) -> Unit) {
         recordCallback = callback
+    }
+
+    private fun emit(record: Record) {
+        (recordCallback ?: onRecord)(record)
     }
 
     fun onAppSwitch(packageName: String, appName: String, timestamp: Long) {
@@ -36,7 +38,7 @@ class UsageTracker(
         currentPkg = packageName
         currentAppName = appName
         sessionStart = timestamp
-        onRecord(Record(
+        emit(Record(
             id = UUID.randomUUID().toString(),
             type = RecordType.APP_USAGE,
             action = "OPENED",
@@ -61,7 +63,7 @@ class UsageTracker(
         val appName = currentAppName ?: return
         val duration = timestamp - sessionStart
         if (duration > 1000) { // 过滤 <1s 的闪切
-            onRecord(Record(
+            emit(Record(
                 id = UUID.randomUUID().toString(),
                 type = RecordType.APP_USAGE,
                 action = "CLOSED",

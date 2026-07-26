@@ -2,35 +2,23 @@ package com.bsfeng.monitor.core.di
 
 import android.app.Application
 import com.bsfeng.monitor.data.DatabaseHelper
-import com.bsfeng.monitor.data.datasource.LocalEventDataSource
 import com.bsfeng.monitor.data.repository.DeviceRepositoryImpl
-import com.bsfeng.monitor.data.repository.EventRepositoryImpl
 import com.bsfeng.monitor.data.repository.SkipRuleRepositoryImpl
-import com.bsfeng.monitor.domain.AppSessionManager
-import com.bsfeng.monitor.domain.NavigationTracker
 import com.bsfeng.monitor.domain.repository.DeviceRepository
-import com.bsfeng.monitor.domain.repository.EventRepository
 import com.bsfeng.monitor.domain.repository.SkipRuleRepository
 import com.bsfeng.monitor.network.EventReporter
-import com.bsfeng.monitor.pipeline.EventPipeline
-import com.bsfeng.monitor.pipeline.EventPipelineImpl
-import com.bsfeng.monitor.pipeline.NavigationContextTracker
-import com.bsfeng.monitor.pipeline.RawEventCollector
-import com.bsfeng.monitor.pipeline.handler.DatabaseHandler
-import com.bsfeng.monitor.pipeline.handler.LogHandler
-import com.bsfeng.monitor.pipeline.handler.UploadHandler
-import com.bsfeng.monitor.pipeline.handler.UploadQueue
+import com.bsfeng.monitor.record.RecordCollector
+import com.bsfeng.monitor.record.RecordHandlerRegistry
+import com.bsfeng.monitor.record.RecordStore
+import com.bsfeng.monitor.record.UsageTracker
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.skip.SkipRuleManager
-import com.bsfeng.monitor.usecase.ManageNavigationUseCase
-import com.bsfeng.monitor.usecase.SessionUseCase
 import com.bsfeng.monitor.util.DebugConfig
 
 /**
- * 手动 DI 容器 — 取代 MonitorApp 中分散的 getter。
+ * 手动 DI 容器。
  *
  * 所有依赖通过懒加载创建，按需初始化。
- * 后续可逐步将构造器注入推广到各组件。
  */
 class ServiceContainer(private val app: Application) {
 
@@ -40,15 +28,20 @@ class ServiceContainer(private val app: Application) {
 
     val eventReporter: EventReporter by lazy { EventReporter(app) }
 
-    val uploadQueue: UploadQueue by lazy { UploadQueue() }
+    // ========== Record 系统 ==========
 
-    // ========== Pipeline ==========
+    val recordHandlerRegistry: RecordHandlerRegistry by lazy { RecordHandlerRegistry.createDefault() }
 
-    val pipeline: EventPipeline by lazy { EventPipelineImpl() }
+    val recordStore: RecordStore by lazy { RecordStore(databaseHelper) }
 
-    val navTracker: NavigationContextTracker by lazy { NavigationContextTracker() }
+    /**
+     * UsageTracker 构造时传空 lambda，init 块中通过 setOnRecordCallback 设置实际回调。
+     */
+    val usageTracker: UsageTracker by lazy { UsageTracker { } }
 
-    val collector: RawEventCollector by lazy { RawEventCollector(pipeline, navTracker) }
+    val recordCollector: RecordCollector by lazy {
+        RecordCollector(recordStore, usageTracker, recordHandlerRegistry)
+    }
 
     // ========== 跳过规则 ==========
 
@@ -58,39 +51,19 @@ class ServiceContainer(private val app: Application) {
 
     // ========== Repository ==========
 
-    val localEventDataSource: LocalEventDataSource by lazy { LocalEventDataSource(databaseHelper) }
-
-    val eventRepository: EventRepository by lazy { EventRepositoryImpl(localEventDataSource) }
-
     val skipRuleRepository: SkipRuleRepository by lazy { SkipRuleRepositoryImpl(skipRuleManager) }
 
     val deviceRepository: DeviceRepository by lazy { DeviceRepositoryImpl() }
 
-    // ========== Domain Services ==========
-
-    val navigationTracker: NavigationTracker by lazy { NavigationTracker() }
-
-    val appSessionManager: AppSessionManager by lazy { AppSessionManager() }
-
-    // ========== UseCases ==========
-
-    val manageNavigationUseCase: ManageNavigationUseCase by lazy {
-        ManageNavigationUseCase(navigationTracker)
-    }
-
-    val sessionUseCase: SessionUseCase by lazy {
-        SessionUseCase(appSessionManager)
-    }
-
     init {
         DebugConfig.init()
-        initPipeline()
-    }
-
-    private fun initPipeline() {
-        pipeline.register(DatabaseHandler(databaseHelper))
-        pipeline.register(UploadHandler(uploadQueue, eventReporter))
-        pipeline.register(LogHandler())
+        // 解决 UsageTracker 与 RecordCollector 的循环依赖
+        usageTracker.setOnRecordCallback { record ->
+            recordCollector.let {
+                // UsageTracker 的回调由 RecordCollector.onAppSwitched 触发，
+                // 这里不需要额外操作，因为 onAppSwitch 内部已通过 closeCurrentSession 生成 CLOSED 事件
+            }
+        }
     }
 }
 
