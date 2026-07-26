@@ -12,9 +12,11 @@ interface RecordHandler {
 class ScreenHandler : RecordHandler {
     override val type = RecordType.SCREEN
     override fun validate(action: String, detail: Map<String, String>?): Boolean =
-        action in setOf("ON", "OFF", "UNLOCKED", "LOCKED")
+        action in setOf("ON", "OFF", "UNLOCKED", "LOCKED", "AD_SKIPPED")
     override fun createLabel(action: String, detail: Map<String, String>?): String = when (action) {
-        "ON" -> "屏幕亮起"; "OFF" -> "屏幕熄灭"; "UNLOCKED" -> "解锁成功"; else -> "锁屏"
+        "ON" -> "屏幕亮起"; "OFF" -> "屏幕熄灭"; "UNLOCKED" -> "解锁成功"; "AD_SKIPPED" -> {
+            detail?.get("app_name")?.let { "跳过 $it 广告" } ?: "跳过广告"
+        }; else -> "锁屏"
     }
     override fun needsDuration(action: String) = false
 }

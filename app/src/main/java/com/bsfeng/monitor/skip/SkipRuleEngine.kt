@@ -94,7 +94,7 @@ class SkipRuleEngine(
          * 纯文本匹配（[text*=]、[desc*=]）已移除——它们在正常页面中误触率极高。
          * 只有广告 SDK 留下的 View ID 模式（tt_splash、skip）才是可靠的通用信号。
          */
-        private val GENERIC_SELECTORS = listOf(
+        val GENERIC_SELECTORS = listOf(
             "[id$=\"tt_splash_skip_btn\"]",
             "[vid*=\"skip\"]",
             "[id*=\"skip_btn\"]",
@@ -106,7 +106,7 @@ class SkipRuleEngine(
          * 匹配常见的"跳过""关闭"等文本和内容描述。
          * 这些选择器在正常页面中误触率很高，因此只能通过 [isSplashPage] 守卫后使用。
          */
-        private val TEXT_SELECTORS = listOf(
+        val TEXT_SELECTORS = listOf(
             "[clickable=true][text*=\"跳过\"]",
             "[text*=\"跳过\"][visibleToUser=true]",
             "[text*=\"跳过广告\"]",
@@ -332,7 +332,7 @@ class SkipRuleEngine(
      *
      * @return 是否成功点击
      */
-    private fun matchSelectors(
+    fun matchSelectors(
         packageName: String,
         rootNode: AccessibilityNodeInfo,
         selectors: List<String>
@@ -375,7 +375,7 @@ class SkipRuleEngine(
      * 在屏幕右侧 10% 范围内从上到下依次点击，模拟用户点击跳过按钮。
      * 仅当确认是开屏页时使用，且是最后几种策略之一。
      */
-    private fun tryCoordinateClick(rootNode: AccessibilityNodeInfo): Boolean {
+    fun tryCoordinateClick(rootNode: AccessibilityNodeInfo): Boolean {
         val pkg = watchPackage ?: currentPackageName ?: return false
         if (pkg in coordinateClickAttempted) return false  // 每个 session 只尝试一次
         coordinateClickAttempted.add(pkg)
@@ -635,6 +635,10 @@ class SkipRuleEngine(
 
         try {
             if (runMonitoringStrategyChain(pkg, freshRoot)) {
+                // 进入验证阶段：后续扫描确认广告是否消失
+                pendingConfirmPkg = pkg
+                verifyMissCount = 0
+                verifyRetryCount = 0
                 watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
                 return
             }
@@ -794,6 +798,31 @@ class SkipRuleEngine(
     /** 记录 App 跳过冷却时间，防止短时间内重复触发 */
     fun recordSkipCooldown(packageName: String) {
         skipCooldowns[packageName] = System.currentTimeMillis() + SKIP_COOLDOWN_MS
+    }
+
+    /**
+     * 执行精确规则匹配：遍历规则组和规则，检查冷却和最大执行次数，执行匹配和点击。
+     *
+     * @param ruleId 规则 ID
+     * @param skipRule 要执行的规则
+     * @param rootNode 无障碍树根节点
+     * @return 是否成功跳过
+     */
+    fun executeExactRules(ruleId: String, skipRule: com.bsfeng.monitor.domain.model.SkipRule, rootNode: AccessibilityNodeInfo): Boolean {
+        for (group in skipRule.groups) {
+            for (matchRule in group.rules) {
+                if (isOnCooldown(matchRule)) continue
+                if (matchRule.actionMaximum > 0 &&
+                    (actionCounters[matchRule.toCounterKey(ruleId)] ?: 0) >= matchRule.actionMaximum) continue
+
+                if (executeRule(ruleId, matchRule, rootNode)) {
+                    updateCooldown(matchRule)
+                    incrementCounter(matchRule, ruleId)
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun MatchRule.toCooldownKey(): String = "cd_${key}"
