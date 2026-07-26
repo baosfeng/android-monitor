@@ -184,7 +184,12 @@ class SkipRuleEngine(
         val hasMatchingRuleGroup = skipRule?.groups?.any { group ->
             group.activityIds.isEmpty() || group.activityIds.any { className.contains(it) }
         } == true
-        val canRunFullChain = isSplash || hasMatchingRuleGroup
+        // canRunFullChain: 仅当确定是开屏页时才允许文本匹配/坐标点击等高危策略
+        // activityIds 为空的规则组（50+ 个内置 App 中绝大多数）不能触发高危策略
+        val hasExplicitMatch = skipRule?.groups?.any { group ->
+            group.activityIds.isNotEmpty() && group.activityIds.any { className.contains(it) }
+        } == true
+        val canRunFullChain = isSplash || hasExplicitMatch
 
         val ctx = AdContext(
             packageName = packageName,
@@ -654,7 +659,11 @@ class SkipRuleEngine(
         val hasMatchingRuleGroup = skipRule?.groups?.any { group ->
             group.activityIds.isEmpty() || group.activityIds.any { cls.contains(it) }
         } == true
-        val canRunFullChain = isSplash || hasMatchingRuleGroup || skipRule != null
+        // canRunFullChain: 仅当明确是开屏页时才允许文本匹配等高危策略
+        val hasExplicitMatch = skipRule?.groups?.any { group ->
+            group.activityIds.isNotEmpty() && group.activityIds.any { cls.contains(it) }
+        } == true
+        val canRunFullChain = isSplash || hasExplicitMatch
 
         val ctx = AdContext(
             packageName = packageName,
