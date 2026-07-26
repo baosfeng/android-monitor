@@ -7,12 +7,8 @@ import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.click.AppClickHandlerRegistry
-import com.bsfeng.monitor.event.AppSessionManager
-import com.bsfeng.monitor.domain.model.EventType
-import com.bsfeng.monitor.domain.model.NavChangeResult
-import com.bsfeng.monitor.event.NavigationTracker
-import com.bsfeng.monitor.pipeline.EventSource
-import com.bsfeng.monitor.pipeline.RawEventData
+import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
@@ -30,14 +26,14 @@ private const val TL = "MonitorTimeline"
  */
 class MonitorAccessibilityService : AccessibilityService() {
 
+    private val recordCollector: RecordCollector
+        get() = (application as MonitorApp).container.recordCollector
+
     private var lastPackageName: String? = null
     private var lastActivityClass: String? = null
     private var lastSwitchTimeMs: Long = System.currentTimeMillis()
     private var lastPageTitle: String? = null  // 上一级页面标题
-    private var isAway: Boolean = false  // 用户是否离开了当前 App（去桌面/系统界面）
     private var homePackage: String? = null  // 系统桌面包名（缓存）
-
-    /** 检测当前包名是否为系统桌面 */
     private fun isHomeApp(pkg: String): Boolean {
         if (homePackage == null) {
             homePackage = try {
@@ -53,10 +49,6 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     private var lastClickTimeMs: Long = 0  // 点击事件防抖
     private var lastClickText: String? = null  // 上次点击文本（防重复）
-    private var lastNavPathMs: Long = 0  // 导航路径防抖
-    private var lastNavPath: String = ""  // 上一次的导航路径
-
-    /** 开屏跳过规则引擎 */
     private val skipEngine: SkipRuleEngine by lazy {
         (application as MonitorApp).container.skipRuleEngine
     }
@@ -88,13 +80,9 @@ class MonitorAccessibilityService : AccessibilityService() {
         val className = event.className?.toString() ?: ""
         val now = System.currentTimeMillis()
 
-        // ===== 检测桌面（Home）：离开时保存会话，但不追踪桌面 =====
+        // ===== 检测桌面（Home）：不追踪桌面 =====
         if (isHomeApp(packageName)) {
-            if (packageName != lastPackageName && lastPackageName != null) {
-                saveCurrentSession()
-            }
-            isAway = true
-            Log.d("MonitorService", "handleWindowChange: going to home screen, isAway=true")
+            Log.d("MonitorService", "handleWindowChange: going to home screen")
             return
         }
 
@@ -106,9 +94,9 @@ class MonitorAccessibilityService : AccessibilityService() {
         }
 
         // ===== 开屏广告跳过（仅在真正进入 App 时检测）=====
-        // 条件：包名变化（切换 App）或从桌面返回（isAway=true）
+        // 条件：包名变化（切换 App）
         // 同 App 内页面切换（Activity 跳转）不触发开屏检测，避免误拦截
-        val shouldCheckSplash = packageName != lastPackageName || isAway
+        val shouldCheckSplash = packageName != lastPackageName
         if (shouldCheckSplash) {
             // 进入新 App，清除上一条残留弹幕
             removeCurrentDanmaku()
@@ -141,79 +129,19 @@ class MonitorAccessibilityService : AccessibilityService() {
 
         val appName = AppUtils.getAppName(packageName)
 
-        // 提取页面内容（标题 + 页面关键文本：发帖人、文章标题、商品名等）
-        // 跳过本 App 自身的事件——界面显示的是已存事件的回显，无新内容
-        val pageContent = if (packageName == "com.bsfeng.monitor") {
-            Pair(null, emptyList())
-        } else {
-            extractPageContent(event)
-        }
-        val pageTitle = pageContent.first
-        val contentTexts = pageContent.second
-
-        // ===== 从 Home 回到当前 App（恢复会话） =====
-        if (isAway && packageName == lastPackageName) {
-            isAway = false
-            handleReturnFromAway(packageName, appName, className, pageTitle, now)
-            AppSessionManager.clearSession(packageName)
-        }
-
-        // 保存当前 App 的会话（离开时记录导航上下文）
-        if (packageName != lastPackageName && lastPackageName != null) {
-            saveCurrentSession()
-        }
-
-        // app_foreground: App 切换（含会话返回检测）
+        // ===== app_switch: 记录 App 切换 =====
         if (packageName != lastPackageName) {
-            val fromAppName = if (lastPackageName != null) AppUtils.getAppName(lastPackageName!!) else ""
-            val duration = if (lastPackageName != null) now - lastSwitchTimeMs else 0L
-
-            // 检查是否回到之前保存的会话
-            val session = AppSessionManager.restoreSession(packageName)
-            if (session != null) {
-                handleReturnWithSession(session, packageName, appName, className, pageTitle, fromAppName, now)
-            } else {
-                // ===== 全新 App 切换 =====
-                // NAVIGATION_CHANGE 已有 📍 输出，不再重复输出 📱
-                val navResult = NavigationTracker.onAppSwitch(packageName, appName, className)
-                emitNavigationEvent(
-                    navResult, packageName, appName, pageTitle, className,
-                    extra = mapOf(
-                        "from_app_name" to fromAppName,
-                        "foreground_duration_ms" to duration.toString()
-                    )
-                )
-            }
+            timeline("📱", "$appName")
+            recordCollector.onAppSwitched(packageName, appName, now)
         }
 
-        // activity_change: 同 App 内界面切换（只需更新导航路径，由 NAVIGATION_CHANGE 统一呈现）
-        if (packageName == lastPackageName && className != lastActivityClass) {
-            val shortClass = className.substringAfterLast('.')
-            val desc = describeActivity(shortClass, packageName)
-
-            // 更新导航栈
-            val navResult = NavigationTracker.onActivityChange(
-                packageName, appName, className, pageTitle
-            )
-
-            // 只在导航路径确实变化时才发射 NAVIGATION_CHANGE（不再单独发射 ACTIVITY_CHANGE）
-            if (navResult.isNewPath) {
-                emitNavigationEvent(
-                    navResult, packageName, appName, pageTitle, className,
-                    extra = PageContentExtractor.buildContentTextsMap(contentTexts) + mapOf(
-                        "to_activity_name" to desc
-                    )
-                )
-            }
-        }
-
-        // 保留 updateKillDetectorTargets 为空调用（保持兼容）
-        updateKillDetectorTargets(packageName)
+        lastSwitchTimeMs = now
 
         lastPackageName = packageName
         lastActivityClass = className
-        lastPageTitle = pageTitle
-        lastSwitchTimeMs = now
+
+        // 保留 updateKillDetectorTargets 为空调用（保持兼容）
+        updateKillDetectorTargets(packageName)
     }
 
     // ========== View Click ==========
@@ -310,179 +238,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             Log.d("MonitorService", "  -> page_context(${pageTexts.size}): ${pageTexts.first().take(40)}")
         }
 
-        MonitorApp.instance.container.collector.emit(object : EventSource {
-            override fun collectRaw() = RawEventData(
-                eventType = EventType.VIEW_CLICKED,
-                packageName = packageName,
-                className = lastActivityClass,
-                summary = clickSummary,
-                rawExtra = extra
-            )
-        })
-    }
-
-    // ========== 辅助方法：会话保存与返回处理 ==========
-
-    /** 保存当前 App 的导航状态到会话管理器（离开时调用） */
-    private fun saveCurrentSession() {
-        val pkg = lastPackageName ?: return
-        val oldNavPath = NavigationTracker.saveState(pkg)
-        if (oldNavPath.isNotEmpty()) {
-            AppSessionManager.saveSession(
-                packageName = pkg,
-                appName = AppUtils.getAppName(pkg),
-                navPath = oldNavPath,
-                pageTitle = lastPageTitle,
-                activityClass = lastActivityClass
-            )
-            Log.d("MonitorService", "  -> saved session for ${AppUtils.getAppName(pkg)}, " +
-                    "path=${NavigationTracker.getPathAsString(pkg)}")
-        }
-    }
-
-    /** 从 Home 回到当前 App 时的处理 */
-    private fun handleReturnFromAway(
-        packageName: String,
-        appName: String,
-        className: String,
-        pageTitle: String?,
-        now: Long
-    ) {
-        val session = AppSessionManager.restoreSession(packageName)
-        val durationAway = if (session != null) now - session.leaveTimeMs else 0L
-        val durationText = if (session != null) formatDuration(durationAway) else ""
-        Log.d("MonitorService", "  -> returning from away for $appName" +
-                if (session != null) ", session found" else ", no session")
-
-        if (session != null) {
-            handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
-        } else {
-            val navResult = NavigationTracker.onAppSwitch(packageName, appName, className)
-            emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
-        }
-    }
-
-    /** 从另一个 App 回到之前到访过的 App 时的处理 */
-    private fun handleReturnWithSession(
-        session: com.bsfeng.monitor.domain.model.SessionRecord,
-        packageName: String,
-        appName: String,
-        className: String,
-        pageTitle: String?,
-        fromAppName: String,
-        now: Long
-    ) {
-        val durationAway = now - session.leaveTimeMs
-        val durationText = formatDuration(durationAway)
-        Log.d("MonitorService", "  -> returning to session for $appName, away for $durationText")
-        AppSessionManager.clearSession(packageName)
-        isAway = false
-
-        handlePageReturn(session, packageName, appName, className, pageTitle, durationAway, durationText)
-    }
-
-    /** 通用：检测是否回到相同页面，发射 RETURN_TO_PAGE 或重置导航 */
-    private fun handlePageReturn(
-        session: com.bsfeng.monitor.domain.model.SessionRecord,
-        packageName: String,
-        appName: String,
-        className: String,
-        pageTitle: String?,
-        durationAway: Long,
-        durationText: String
-    ) {
-        val currentShortClass = className.substringAfterLast('.')
-        val previousShortClass = session.lastActivityClass?.substringAfterLast('.')
-        val isSamePage = currentShortClass == previousShortClass ||
-                className == session.lastActivityClass
-
-        if (isSamePage && pageTitle != null && session.lastPageTitle != null) {
-            NavigationTracker.restoreState(packageName, session.navPath)
-            val returnSummary = "回到之前浏览的页面「${session.lastPageTitle}」（离开 $durationText）"
-            Log.d("MonitorService", "  -> RETURN_TO_PAGE: ${session.lastPageTitle}")
-            MonitorApp.instance.container.collector.emit(object : EventSource {
-                override fun collectRaw() = RawEventData(
-                    eventType = EventType.RETURN_TO_PAGE,
-                    packageName = packageName,
-                    className = className,
-                    summary = returnSummary,
-                    rawExtra = mapOf(
-                        "app_name" to appName,
-                        "page_title" to pageTitle,
-                        "previous_page_title" to (session.lastPageTitle ?: ""),
-                        "duration_away_ms" to durationAway.toString(),
-                        "duration_away" to durationText,
-                        "nav_path" to NavigationTracker.getPathAsString(packageName)
-                    )
-                )
-            })
-            val restoredPath = NavigationTracker.getCurrentPath(packageName)
-            if (restoredPath.isNotEmpty()) {
-                emitNavigationEvent(NavChangeResult(restoredPath, true, 0),
-                    packageName, appName, pageTitle, className)
-            }
-        } else {
-            val navResult = NavigationTracker.onAppSwitch(packageName, appName, className)
-            emitNavigationEvent(navResult, packageName, appName, pageTitle, className)
-        }
-    }
-
-    // ========== Navigation Event ==========
-
-    private fun emitNavigationEvent(
-        result: NavChangeResult,
-        packageName: String,
-        appName: String,
-        pageTitle: String?,
-        className: String?,
-        extra: Map<String, String> = emptyMap()
-    ) {
-        if (!result.isNewPath) return
-        if (result.path.isEmpty()) return
-
-        val path = result.path
-        val pathString = path.joinToString(" > ") { it.name }
-
-        // 防抖：15 秒内相同路径忽略（瞬态中间 Activity 返回时不重复发射）
-        val now = System.currentTimeMillis()
-        if (pathString == lastNavPath && now - lastNavPathMs < 15000) return
-        lastNavPath = pathString
-        lastNavPathMs = now
-
-        val depth = path.size
-
-        val levelMap = mutableMapOf<String, String>()
-        for (i in path.indices) {
-            val level = i + 1
-            val node = path[i]
-            levelMap["nav_level_${level}"] = node.name
-            levelMap["nav_level_${level}_type"] = node.type
-        }
-
-        val summary = buildString {
-            append("导航：${pathString}")
-            if (pageTitle != null && path.lastOrNull()?.name != pageTitle) {
-                append("（${pageTitle}）")
-            }
-        }
-
-        Log.d("MonitorService", "  -> NAVIGATION_CHANGE: ${pathString}")
-        timeline("📍", "$pathString")
-        MonitorApp.instance.container.collector.emit(object : EventSource {
-            override fun collectRaw() = RawEventData(
-                eventType = EventType.NAVIGATION_CHANGE,
-                packageName = packageName,
-                className = className,
-                summary = summary,
-                rawExtra = mapOf(
-                    "app_name" to appName,
-                    "page_title" to (pageTitle ?: ""),
-                    "nav_path" to pathString,
-                    "nav_depth" to depth.toString(),
-                    "nav_index" to result.changedIndex.toString()
-                ) + levelMap + extra
-            )
-        })
+        recordCollector.onSkipAd(appName, packageName, "view_click")
     }
 
     // ========== Content Extraction ==========
@@ -572,18 +328,6 @@ class MonitorAccessibilityService : AccessibilityService() {
             // 兜底
             packageName == "com.tencent.mm" -> "微信"
             else -> shortClass
-        }
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val seconds = ms / 1000
-        val minutes = seconds / 60
-        val hours = minutes / 60
-        return when {
-            hours > 0 -> "${hours}小时${minutes % 60}分钟"
-            minutes > 0 -> "${minutes}分钟${seconds % 60}秒"
-            seconds > 0 -> "${seconds}秒"
-            else -> "不到1秒"
         }
     }
 
