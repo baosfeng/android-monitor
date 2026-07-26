@@ -238,7 +238,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             Log.d("MonitorService", "  -> page_context(${pageTexts.size}): ${pageTexts.first().take(40)}")
         }
 
-        recordCollector.onSkipAd(appName, packageName, "view_click")
+        // 点击记录已通过 timeline 日志输出，无需额外存储
     }
 
     // ========== Content Extraction ==========
