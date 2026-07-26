@@ -74,3 +74,4 @@ build
 android-sdk
 docs/superpowers
 tools/
+.superpowers/
