@@ -145,7 +145,13 @@ class LocationHandler : RecordHandler {
     override fun validate(action: String, detail: Map<String, String>?): Boolean =
         action in setOf("COORDINATE", "ENTER", "EXIT")
     override fun createLabel(action: String, detail: Map<String, String>?): String {
-        return detail?.get("address") ?: detail?.let { "${it["lat"]},${it["lng"]}" } ?: "位置"
+        return detail?.get("address")
+            ?: detail?.let { d ->
+                val lat = d["lat"]
+                val lng = d["lng"]
+                if (lat != null && lng != null) "$lat,$lng" else null
+            }
+            ?: "位置"
     }
     override fun needsDuration(action: String) = false
 }
