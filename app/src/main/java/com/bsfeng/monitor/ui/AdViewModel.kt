@@ -69,6 +69,12 @@ class AdViewModel : ViewModel() {
     }
 
     fun clearAll() {
-        // 二期实现：清理逻辑待定
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                store.deleteByAction("AD_SKIPPED")
+                _skipRecords.value = emptyList()
+                _totalCount.value = 0
+            } catch (_: Exception) {}
+        }
     }
 }
