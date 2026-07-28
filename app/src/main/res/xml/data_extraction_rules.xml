@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ 数据提取规则。
+    allowBackup=false 时此文件不会被实际使用，但声明它消除 lint:
+    "android:allowBackup is deprecated from Android 12"
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>
