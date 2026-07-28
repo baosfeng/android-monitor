@@ -319,6 +319,6 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         val year = parts[0].toInt()
         val month = parts[1].toInt()
         return if (month == 12) "${year + 1}-01-01"
-        else String.format("%04d-%02d-01", year, month + 1)
+        else String.format(java.util.Locale.CHINA, "%04d-%02d-01", year, month + 1)
     }
 }

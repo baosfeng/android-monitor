@@ -15,7 +15,7 @@ data class Account(
     val isCash: Boolean get() = type == 0
     val isBankCard: Boolean get() = type == 1
     val isThirdParty: Boolean get() = type == 2
-    val displayBalance: String get() = String.format("%.2f", balance)
+    val displayBalance: String get() = String.format(java.util.Locale.CHINA, "%.2f", balance)
 
     companion object {
         /** 熊猫记账导入时默认创建的账户 */

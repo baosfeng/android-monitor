@@ -25,6 +25,6 @@ data class Transaction(
     val isIncome: Boolean get() = type == 1
     val isTransfer: Boolean get() = type == 2
     val isRefund: Boolean get() = type == 3
-    val displayAmount: String get() = String.format("%.2f", amount)
+    val displayAmount: String get() = String.format(java.util.Locale.CHINA, "%.2f", amount)
     val signedAmount: Double get() = if (isExpense || isRefund) -amount else amount
 }
