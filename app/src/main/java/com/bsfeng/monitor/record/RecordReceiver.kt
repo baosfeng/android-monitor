@@ -23,7 +23,6 @@ class RecordReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val now = System.currentTimeMillis()
         when (intent.action) {
-            Intent.ACTION_SCREEN_ON -> collector.onScreenChanged("ON", now)
             Intent.ACTION_SCREEN_OFF -> collector.onScreenChanged("OFF", now)
             Intent.ACTION_USER_PRESENT -> collector.onScreenChanged("UNLOCKED", now)
 
@@ -103,7 +102,6 @@ class RecordReceiver : BroadcastReceiver() {
     companion object {
         fun createFilters(): List<IntentFilter> = listOf(
             IntentFilter().apply {
-                addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction(Intent.ACTION_POWER_CONNECTED)
