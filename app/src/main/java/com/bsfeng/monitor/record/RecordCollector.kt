@@ -10,6 +10,9 @@ import java.util.UUID
  * 各采集源（BroadcastReceiver、AccessibilityService）调用对应方法，
  * RecordCollector 通过 handlerRegistry 校验并生成 label，最终写入 store。
  *
+ * 前台 App 切换采用状态驱动：由轮询每秒调用 [onTick]，
+ * UsageTracker 内部累加时长，切换时自动写入一条带时长的记录。
+ *
  * 与 UsageTracker 的循环依赖处理：
  * - 构造时传入 UsageTracker
  * - 构造完成后调用 usageTracker.setOnRecordCallback { ... }
@@ -51,8 +54,7 @@ class RecordCollector(
 
     fun onScreenChanged(action: String, timestamp: Long) {
         emit(RecordType.SCREEN, action, timestamp)
-        if (action == "OFF") usageTracker.onScreenOff(timestamp)
-        if (action == "ON") usageTracker.onScreenOn(timestamp)
+        if (action == "OFF") usageTracker.flush(timestamp)
     }
 
     fun onChargingChanged(action: String, chargeType: String?, timestamp: Long) {
@@ -61,13 +63,15 @@ class RecordCollector(
         emit(RecordType.CHARGING, action, timestamp, detail = detail)
     }
 
-    fun onAppSwitched(packageName: String, appName: String, timestamp: Long) {
-        usageTracker.onAppSwitch(packageName, appName, timestamp)
-    }
-
-    /** 回到桌面：关闭当前 App session，不打开新 App */
-    fun onHomeScreen(timestamp: Long) {
-        usageTracker.closeSession(timestamp)
+    /**
+     * 前台轮询 tick：每秒由 MonitorAccessibilityService 调用。
+     *
+     * @param packageName 当前前台 App 包名，null 表示桌面/系统 UI/息屏
+     * @param appName 当前前台 App 显示名
+     * @param timestamp 当前毫秒时间戳
+     */
+    fun onTick(packageName: String?, appName: String?, timestamp: Long) {
+        usageTracker.tick(packageName, appName, timestamp)
     }
 
     fun onWifiChanged(action: String, ssid: String?, timestamp: Long) {

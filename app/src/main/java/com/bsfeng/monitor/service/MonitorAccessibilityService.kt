@@ -6,14 +6,11 @@ import android.view.KeyEvent
 import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
-import com.bsfeng.monitor.click.AppClickHandlerRegistry
-import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.util.AppUtils
-import com.bsfeng.monitor.util.DebugConfig
 import com.bsfeng.monitor.util.DiagnosticCounters
 
 /** 时间线日志标签 — grep 此标签即可看到干净的用户操作时间线 */
@@ -22,7 +19,7 @@ private const val TL = "MonitorTimeline"
 /**
  * 无障碍服务 — 仅追踪导航/页面跳转。
  *
- * 只处理 TYPE_WINDOW_STATE_CHANGED 事件，其他交互事件全部忽略。
+ * 只处理 TYPE_WINDOW_STATE_CHANGED 事件。
  */
 class MonitorAccessibilityService : AccessibilityService() {
 
@@ -47,8 +44,6 @@ class MonitorAccessibilityService : AccessibilityService() {
         return pkg == homePackage
     }
 
-    private var lastClickTimeMs: Long = 0  // 点击事件防抖
-    private var lastClickText: String? = null  // 上次点击文本（防重复）
     private val skipEngine: SkipRuleEngine by lazy {
         (application as MonitorApp).container.skipRuleEngine
     }
@@ -76,25 +71,32 @@ class MonitorAccessibilityService : AccessibilityService() {
         if (isHomeApp(pkg)) {
             if (!isOnHomeScreen) {
                 isOnHomeScreen = true
-                lastPackageName = pkg
-                recordCollector.onHomeScreen(now)
                 timeline("🏠", "回到桌面")
             }
+            // flush 当前 session（桌面不计时）
+            recordCollector.onTick(null, null, now)
+            lastPackageName = pkg
             return
         }
         isOnHomeScreen = false
 
-        // 系统 UI 跳过
-        if (isSystemUi(pkg)) return
+        // 系统 UI → flush 当前 session（不计时）
+        if (isSystemUi(pkg)) {
+            recordCollector.onTick(null, null, now)
+            return
+        }
 
-        // App 切换
+        val appName = AppUtils.getAppName(pkg)
+
+        // 日志（仅 App 切换时）
         if (pkg != lastPackageName) {
-            val appName = AppUtils.getAppName(pkg)
             Log.d("MonitorService", "pollForegroundApp: $appName ($pkg)")
             timeline("📱", appName)
-            recordCollector.onAppSwitched(pkg, appName, now)
             lastPackageName = pkg
         }
+
+        // 通知 UsageTracker 累加时长（状态驱动，每秒调用一次）
+        recordCollector.onTick(pkg, appName, now)
     }
 
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
@@ -110,7 +112,6 @@ class MonitorAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> handleViewClick(event)
         }
     }
 
@@ -174,113 +175,6 @@ class MonitorAccessibilityService : AccessibilityService() {
 
         // 保留 updateKillDetectorTargets 为空调用（保持兼容）
         updateKillDetectorTargets(packageName)
-    }
-
-    // ========== View Click ==========
-
-    /** 处理点击事件：提取点击了什么元素上的什么文本 + 当前页面内容 */
-    private fun handleViewClick(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
-        val now = System.currentTimeMillis()
-
-        // 防抖：500ms 内忽略
-        if (now - lastClickTimeMs < 500) return
-
-        // 过滤系统界面和桌面
-        if (isSystemUi(packageName) || isHomeApp(packageName)) return
-
-        // 提取点击元素的文本
-        val clickText = event.text?.joinToString("")?.takeIf { it.isNotBlank() }
-            ?: event.contentDescription?.toString()?.takeIf { it.isNotBlank() }
-            ?: try {
-                event.source?.let { src ->
-                    val t = src.text?.toString()?.takeIf { it.isNotBlank() }
-                        ?: src.contentDescription?.toString()?.takeIf { it.isNotBlank() }
-                    src.recycle()
-                    t
-                }
-            } catch (_: Exception) { null }
-
-        // ===== App 专用处理器：优先替换无意义的点击文本（时间戳等） =====
-        val appHandler = AppClickHandlerRegistry.getHandler(packageName)
-        val handlerResolved = appHandler?.resolveClickDisplayText(event, clickText)
-        DebugConfig.log("handleViewClick: pkg=$packageName clickText=$clickText handler=${appHandler?.javaClass?.simpleName} resolved=$handlerResolved")
-
-        // 提取 viewIdResourceName
-        val viewId = try {
-            event.source?.let { src -> val id = src.viewIdResourceName; src.recycle(); id }
-        } catch (_: Exception) { null }
-
-        // 重复文本过滤：3秒内相同文本忽略
-        if (clickText != null && clickText == lastClickText && now - lastClickTimeMs < 3000) return
-        if (clickText.isNullOrBlank() && viewId == null) return
-
-        lastClickTimeMs = now
-        lastClickText = clickText
-
-        val appName = AppUtils.getAppName(packageName)
-
-        // ===== 同时抓取当前页面上下文内容（视频标题、帖子正文等） =====
-        val pageTexts = try {
-            val root = rootInActiveWindow
-            DebugConfig.log("handleViewClick: rootInActiveWindow=${if (root != null) "non-null(pkg=${root.packageName})" else "null"}")
-            if (root != null) {
-                val texts = linkedSetOf<String>()
-                val rootPkg = root.packageName?.toString()
-                if (rootPkg == packageName) {
-                    // 用 quick collect 只提取有意义的长文本
-                    pageContentExtractor.collectContentTexts(root, texts, max = 30, depth = 0, maxDepth = 12)
-                }
-                root.recycle()
-                // 过滤掉点击文本自身
-                texts.filter { it.length >= 4 && !it.contains(clickText ?: "") }
-                    .sortedByDescending { it.length }
-                    .take(5)
-            } else emptyList()
-        } catch (_: Exception) { emptyList() }
-
-        DebugConfig.log("handleViewClick: pageTexts(${pageTexts.size}): ${pageTexts.take(3)}")
-
-        // 点击文本：优先使用 App 专用处理器结果，否则用原始点击文本（不依赖不稳定的页面上下文）
-        val displayText = handlerResolved ?: clickText
-
-        val clickSummary = if (displayText != null) {
-            "在 $appName 点击了「${displayText.take(30)}」"
-        } else {
-            "在 $appName 点击了 $viewId"
-        }
-
-        timeline("👆", "点击「${displayText?.take(25) ?: viewId ?: "?"}」")
-        Log.d("MonitorService", "  -> CLICK: ${displayText ?: viewId ?: "(unknown)"}")
-        DebugConfig.log("handleViewClick: final displayText='$displayText' (clickText='$clickText', handlerResolved='$handlerResolved')")
-
-        val extra = mutableMapOf(
-            "app_name" to appName,
-            "package_name" to packageName,
-            "view_id" to (viewId ?: ""),
-            "current_activity" to (lastActivityClass ?: ""),
-            "current_page" to (lastPageTitle ?: "")
-        )
-        if (clickText != null) extra["click_text"] = clickText
-        // 加入当前页面上下文内容（视频标题、帖子正文等）
-        if (pageTexts.isNotEmpty()) {
-            for ((i, t) in pageTexts.withIndex()) {
-                extra["page_context_${i + 1}"] = t
-            }
-            Log.d("MonitorService", "  -> page_context(${pageTexts.size}): ${pageTexts.first().take(40)}")
-        }
-
-        // 点击记录已通过 timeline 日志输出，无需额外存储
-    }
-
-    // ========== Content Extraction ==========
-
-    /** 页面内容提取器 */
-    private val pageContentExtractor: PageContentExtractor by lazy { PageContentExtractor() }
-
-    /** 从 AccessibilityEvent 中提取页面内容。 */
-    private fun extractPageContent(event: AccessibilityEvent): Pair<String?, List<String>> {
-        return pageContentExtractor.extract(event) { rootInActiveWindow }
     }
 
     // ========== Description Helpers ==========
