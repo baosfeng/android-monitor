@@ -16,7 +16,7 @@ data class FinanceStats(
     /** 预算是否超支 */
     val isOverBudget: Boolean get() = budgetProgress >= 1f
 
-    val displayIncome: String get() = String.format("%.2f", totalIncome)
-    val displayExpense: String get() = String.format("%.2f", totalExpense)
-    val displayBalance: String get() = String.format("%.2f", balance)
+    val displayIncome: String get() = String.format(java.util.Locale.CHINA, "%.2f", totalIncome)
+    val displayExpense: String get() = String.format(java.util.Locale.CHINA, "%.2f", totalExpense)
+    val displayBalance: String get() = String.format(java.util.Locale.CHINA, "%.2f", balance)
 }

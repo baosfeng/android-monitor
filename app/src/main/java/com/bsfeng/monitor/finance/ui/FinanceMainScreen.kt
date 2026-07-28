@@ -24,17 +24,20 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.CategoryDot
+import com.bsfeng.monitor.ui.theme.FinanceColors
+import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorIconSize
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.Radius
+import com.bsfeng.monitor.ui.theme.categoryPalette
 
 /**
  * 记账首页。
  */
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun FinanceMainScreen(
     viewModel: FinanceViewModel,
@@ -63,12 +66,18 @@ fun FinanceMainScreen(
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             // 大标题
             item(key = "title") {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("记账", fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                Column(modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm)) {
+                    Text(
+                        "记账",
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
                     if (monthDisplay.isNotEmpty()) {
-                        Text(monthDisplay, fontSize = 15.sp,
+                        Text(
+                            monthDisplay,
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp))
+                            modifier = Modifier.padding(top = MonitorSpacing.xxs),
+                        )
                     }
                 }
             }
@@ -76,36 +85,38 @@ fun FinanceMainScreen(
             // 月份切换
             item(key = "month_selector") {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val prevInteractionSource = remember { MutableInteractionSource() }
                     val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
                     val prevScale by animateFloatAsState(
                         targetValue = if (isPrevPressed) 0.85f else 1f,
-                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
                     )
                     TextButton(
                         onClick = { viewModel.previousMonth() },
                         modifier = Modifier.graphicsLayer { scaleX = prevScale; scaleY = prevScale },
-                        interactionSource = prevInteractionSource
+                        interactionSource = prevInteractionSource,
                     ) {
-                        Text("◀", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("◀", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary)
                     }
-                    Text(monthDisplay, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(monthDisplay, style = MaterialTheme.typography.titleLarge)
                     val nextInteractionSource = remember { MutableInteractionSource() }
                     val isNextPressed by nextInteractionSource.collectIsPressedAsState()
                     val nextScale by animateFloatAsState(
                         targetValue = if (isNextPressed) 0.85f else 1f,
-                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
                     )
                     TextButton(
                         onClick = { viewModel.nextMonth() },
                         modifier = Modifier.graphicsLayer { scaleX = nextScale; scaleY = nextScale },
-                        interactionSource = nextInteractionSource
+                        interactionSource = nextInteractionSource,
                     ) {
-                        Text("▶", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("▶", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -113,71 +124,73 @@ fun FinanceMainScreen(
             // 月度概览
             item(key = "overview") {
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
+                    shape = RoundedCornerShape(Radius.lg),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(MonitorSpacing.lg)) {
                         val animatedExpense by animateFloatAsState(
                             targetValue = stats.totalExpense.toFloat(),
-                            animationSpec = tween(durationMillis = 600)
+                            animationSpec = tween(durationMillis = 600),
                         )
                         val animatedIncome by animateFloatAsState(
                             targetValue = stats.totalIncome.toFloat(),
-                            animationSpec = tween(durationMillis = 600)
+                            animationSpec = tween(durationMillis = 600),
                         )
                         val animatedBalance by animateFloatAsState(
                             targetValue = (stats.totalIncome - stats.totalExpense).toFloat(),
-                            animationSpec = tween(durationMillis = 600)
+                            animationSpec = tween(durationMillis = 600),
                         )
                         val animatedCount by animateIntAsState(
                             targetValue = stats.transactionCount,
-                            animationSpec = tween(durationMillis = 600)
+                            animationSpec = tween(durationMillis = 600),
                         )
                         Text(
                             "¥${String.format("%.2f", animatedExpense.toDouble())}",
-                            fontSize = 28.sp, fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF3B30),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = FinanceColors.expense,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                         Text(
-                            "本月支出", fontSize = 13.sp,
+                            "本月支出",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(MonitorSpacing.lg))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                            horizontalArrangement = Arrangement.SpaceEvenly,
                         ) {
-                            StatItem("收入", "¥${String.format("%.2f", animatedIncome.toDouble())}", Color(0xFF34C759))
-                            StatItem("结余", "¥${String.format("%.2f", animatedBalance.toDouble())}", Color(0xFF007AFF))
-                            StatItem("笔数", "${animatedCount}", Color(0xFF8E8E93))
+                            StatItem("收入", "¥${String.format("%.2f", animatedIncome.toDouble())}", FinanceColors.income)
+                            StatItem("结余", "¥${String.format("%.2f", animatedBalance.toDouble())}", FinanceColors.budget)
+                            StatItem("笔数", "${animatedCount}", IOSColors.gray)
                         }
                         if (stats.budgetProgress > 0f) {
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(MonitorSpacing.md))
                             Column {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text("预算", fontSize = 12.sp,
+                                    Text("预算",
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(
                                         "${(stats.budgetProgress * 100).toInt()}%",
-                                        fontSize = 12.sp,
-                                        color = if (stats.isOverBudget) Color(0xFFFF3B30) else Color(0xFF34C759)
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (stats.isOverBudget) FinanceColors.expense else FinanceColors.income,
                                     )
                                 }
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(Modifier.height(MonitorSpacing.xs))
                                 LinearProgressIndicator(
                                     progress = { stats.budgetProgress },
-                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                    color = if (stats.isOverBudget) Color(0xFFFF3B30) else Color(0xFF007AFF),
-                                    trackColor = Color(0xFFE5E5EA)
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(Radius.xxs)),
+                                    color = if (stats.isOverBudget) FinanceColors.expense else FinanceColors.budget,
+                                    trackColor = IOSColors.lightGray,
                                 )
                             }
                         }
@@ -188,11 +201,11 @@ fun FinanceMainScreen(
             // 导入入口
             item(key = "import_btn") {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.End
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
+                    horizontalArrangement = Arrangement.End,
                 ) {
                     TextButton(onClick = onImportClick) {
-                        Text("导入数据", fontSize = 13.sp)
+                        Text("导入数据", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -200,12 +213,15 @@ fun FinanceMainScreen(
             // 交易列表标题
             item(key = "list_header") {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("交易记录", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Text("共 ${transactions.size} 笔", fontSize = 13.sp,
+                    Text("交易记录",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text("共 ${transactions.size} 笔",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -213,23 +229,27 @@ fun FinanceMainScreen(
             if (loading) {
                 item(key = "loading") {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.xxxl),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(MonitorIconSize.lg),
+                            strokeWidth = 2.dp,
+                        )
                     }
                 }
             } else if (transactions.isEmpty()) {
                 item(key = "empty") {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(48.dp),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.huge),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             "暂无交易记录\n点击右下角 + 添加第一笔",
-                            fontSize = 15.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            textAlign = TextAlign.Center, lineHeight = 22.sp
+                            textAlign = TextAlign.Center,
+                            lineHeight = MaterialTheme.typography.titleSmall.lineHeight,
                         )
                     }
                 }
@@ -238,15 +258,25 @@ fun FinanceMainScreen(
                     item(key = "date_$date") {
                         Row(
                             modifier = Modifier.fillMaxWidth()
-                                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)
+                                .padding(start = MonitorSpacing.lg, end = MonitorSpacing.lg,
+                                    top = MonitorSpacing.md, bottom = MonitorSpacing.sm.minus(2.dp)),
                         ) {
-                            Text(date, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Text(date,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    section(style = SectionStyle.InsetGrouped) {
-                        txs.forEach { tx ->
-                            item(key = tx.id) { _ ->
+                    item {
+                        InsetGroupedCard {
+                            txs.forEach { tx ->
                                 TransactionRowContent(transaction = tx)
+                                if (tx != txs.last()) {
+                                    HorizontalDivider(
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                                    )
+                                }
                             }
                         }
                     }
@@ -266,12 +296,12 @@ fun FinanceMainScreen(
             var fabPressed by remember { mutableStateOf(false) }
             val fabScale by animateFloatAsState(
                 targetValue = if (fabPressed) 0.88f else 1f,
-                animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f)
+                animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
             )
             FloatingActionButton(
                 onClick = onAddClick,
                 modifier = Modifier
-                    .padding(16.dp)
+                    .padding(MonitorSpacing.lg)
                     .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
                     .pointerInput(Unit) {
                         detectTapGestures(
@@ -282,9 +312,9 @@ fun FinanceMainScreen(
                             }
                         )
                     },
-                containerColor = Color(0xFF007AFF),
+                containerColor = FinanceColors.budget,
                 contentColor = Color.White,
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(28.dp),
             ) {
                 Icon(Icons.Default.Add, contentDescription = "添加")
             }
@@ -295,13 +325,14 @@ fun FinanceMainScreen(
 @Composable
 private fun StatItem(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color)
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold, color = color)
+        Text(label, style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 /** 单条交易行 */
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 private fun TransactionRowContent(transaction: Transaction) {
     val catColor = remember(transaction.categoryName) {
@@ -309,48 +340,55 @@ private fun TransactionRowContent(transaction: Transaction) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         CategoryDot(
             categoryName = transaction.categoryName,
-            color = catColor, size = 40
+            color = catColor, size = 40.dp,
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(MonitorSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Text(transaction.categoryName, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(transaction.categoryName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium)
             if (transaction.remark.isNotEmpty()) {
-                Text(transaction.remark, fontSize = 13.sp,
+                Text(transaction.remark,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             Row {
                 if (transaction.accountName.isNotEmpty()) {
-                    Text(transaction.accountName, fontSize = 12.sp,
+                    Text(transaction.accountName,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
                 if (transaction.tag.isNotEmpty()) {
                     if (transaction.accountName.isNotEmpty()) {
-                        Text(" · ", fontSize = 12.sp,
+                        Text(" · ",
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                     }
-                    Text(transaction.tag, fontSize = 12.sp,
+                    Text(transaction.tag,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             }
         }
         Text(
             text = if (transaction.isExpense) "-¥${transaction.displayAmount}" else "+¥${transaction.displayAmount}",
-            fontSize = 15.sp, fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
             color = if (transaction.isExpense) MaterialTheme.colorScheme.onSurface
-            else Color(0xFF34C759)
+            else FinanceColors.income,
         )
     }
 }
 
 /** 基于分类名哈希的稳定颜色 */
 private fun stableCategoryColor(categoryName: String, type: Int): Color {
-    if (type == 1) return Color(0xFF34C759)
-    if (categoryName.isBlank()) return Color(0xFF8E8E93)
+    if (type == 1) return FinanceColors.income
+    if (categoryName.isBlank()) return IOSColors.gray
     val hash = categoryName.hashCode() and 0x7FFFFFFF
     return categoryPalette[hash % categoryPalette.size]
 }

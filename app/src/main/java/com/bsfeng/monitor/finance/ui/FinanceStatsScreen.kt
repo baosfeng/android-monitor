@@ -26,17 +26,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.model.FinanceStats
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.FinanceColors
+import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.Radius
 
 /**
  * 记账统计页面。
  * 月度概览 + 分类支出环形图。
  */
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun FinanceStatsScreen(
     currentMonth: String,
@@ -63,46 +63,46 @@ fun FinanceStatsScreen(
         item {
             Text(
                 "统计",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
 
         // 月份切换
         item {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 val prevInteractionSource = remember { MutableInteractionSource() }
                 val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
                 val prevScale by animateFloatAsState(
                     targetValue = if (isPrevPressed) 0.85f else 1f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
                 )
                 TextButton(
                     onClick = onPreviousMonth,
                     modifier = Modifier.graphicsLayer { scaleX = prevScale; scaleY = prevScale },
-                    interactionSource = prevInteractionSource
+                    interactionSource = prevInteractionSource,
                 ) {
-                    Text("◀", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("◀", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary)
                 }
-                Text(monthDisplay, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(monthDisplay, style = MaterialTheme.typography.titleLarge)
                 val nextInteractionSource = remember { MutableInteractionSource() }
                 val isNextPressed by nextInteractionSource.collectIsPressedAsState()
                 val nextScale by animateFloatAsState(
                     targetValue = if (isNextPressed) 0.85f else 1f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
                 )
                 TextButton(
                     onClick = onNextMonth,
                     modifier = Modifier.graphicsLayer { scaleX = nextScale; scaleY = nextScale },
-                    interactionSource = nextInteractionSource
+                    interactionSource = nextInteractionSource,
                 ) {
-                    Text("▶", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("▶", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -111,34 +111,34 @@ fun FinanceStatsScreen(
         item {
             val animatedExpense by animateFloatAsState(
                 targetValue = stats.totalExpense.toFloat(),
-                animationSpec = tween(durationMillis = 600)
+                animationSpec = tween(durationMillis = 600),
             )
             val animatedIncome by animateFloatAsState(
                 targetValue = stats.totalIncome.toFloat(),
-                animationSpec = tween(durationMillis = 600)
+                animationSpec = tween(durationMillis = 600),
             )
             val animatedBalance by animateFloatAsState(
                 targetValue = (stats.totalIncome - stats.totalExpense).toFloat(),
-                animationSpec = tween(durationMillis = 600)
+                animationSpec = tween(durationMillis = 600),
             )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.md),
             ) {
                 StatCard(
                     title = "支出",
                     amount = "¥${String.format("%.2f", animatedExpense.toDouble())}",
-                    color = Color(0xFFFF3B30), modifier = Modifier.weight(1f)
+                    color = FinanceColors.expense, modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     title = "收入",
                     amount = "¥${String.format("%.2f", animatedIncome.toDouble())}",
-                    color = Color(0xFF34C759), modifier = Modifier.weight(1f)
+                    color = FinanceColors.income, modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     title = "结余",
                     amount = "¥${String.format("%.2f", animatedBalance.toDouble())}",
-                    color = if (stats.balance >= 0) Color(0xFF007AFF) else Color(0xFFFF3B30),
+                    color = if (stats.balance >= 0) FinanceColors.budget else FinanceColors.expense,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -147,80 +147,81 @@ fun FinanceStatsScreen(
         // 分类支出环形图
         if (categoryBreakdown.isNotEmpty()) {
             item {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
             }
-            section(
-                style = SectionStyle.InsetGrouped,
-            ) {
-                item {
+            item {
+                InsetGroupedCard {
                     Text(
                         "支出分类占比",
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+                        modifier = Modifier.padding(MonitorSpacing.lg, MonitorSpacing.lg, MonitorSpacing.lg, MonitorSpacing.sm),
                     )
-                }
 
-                item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(180.dp)
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(MonitorSpacing.lg),
+                        contentAlignment = Alignment.Center,
                     ) {
                         DonutChart(data = categoryBreakdown, total = total)
                     }
-                }
 
-                sortedEntries.forEachIndexed { index, entry ->
-                    item(key = entry.key) { _ ->
+                    sortedEntries.forEachIndexed { index, entry ->
                         val color = getChartColor(index)
                         val percent = if (total > 0) (entry.value / total * 100).toInt() else 0
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
                                         .size(8.dp)
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .clip(RoundedCornerShape(Radius.xxs))
                                         .background(color)
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                Text(entry.key, fontSize = 15.sp)
+                                Spacer(Modifier.width(MonitorSpacing.sm))
+                                Text(entry.key, style = MaterialTheme.typography.titleSmall)
                             }
                             Text(
                                 "¥${String.format("%.0f", entry.value)} ($percent%)",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (index < sortedEntries.lastIndex) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.padding(start = MonitorSpacing.lg),
                             )
                         }
                     }
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
+            item { Spacer(Modifier.height(MonitorSpacing.xxl)) }
         } else {
             item {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(48.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.huge),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         "暂无本月的分类数据",
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
         }
 
-        item { Spacer(Modifier.height(32.dp)) }
+        item { Spacer(Modifier.height(MonitorSpacing.xxxl)) }
     }
 }
 
@@ -229,21 +230,23 @@ private fun StatCard(
     title: String,
     amount: String,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(Radius.lg),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(MonitorSpacing.md),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(amount, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = color, maxLines = 1)
-            Spacer(Modifier.height(2.dp))
-            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(amount, style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold, color = color, maxLines = 1)
+            Spacer(Modifier.height(MonitorSpacing.xxs))
+            Text(title, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -274,7 +277,7 @@ private fun DonutChart(data: Map<String, Double>, total: Double) {
                 startAngle = startAngle, sweepAngle = sweepAngle,
                 useCenter = false,
                 topLeft = Offset(center.x - radius, center.y - radius),
-                size = arcSize, style = Stroke(width = strokeWidth)
+                size = arcSize, style = Stroke(width = strokeWidth),
             )
             startAngle += sweepAngle
         }
@@ -282,10 +285,10 @@ private fun DonutChart(data: Map<String, Double>, total: Double) {
 }
 
 private val chartColors = listOf(
-    Color(0xFFFF3B30), Color(0xFFFF9500), Color(0xFFFFCC00),
-    Color(0xFF34C759), Color(0xFF5AC8FA), Color(0xFF007AFF),
-    Color(0xFFAF52DE), Color(0xFFFF2D55), Color(0xFF8E8E93),
-    Color(0xFF5856D6)
+    IOSColors.red, IOSColors.orange, IOSColors.yellow,
+    IOSColors.green, IOSColors.lightBlue, IOSColors.blue,
+    IOSColors.purple, IOSColors.pink, IOSColors.gray,
+    IOSColors.indigo,
 )
 
 private fun getChartColor(index: Int): Color = chartColors[index % chartColors.size]

@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -21,24 +20,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.model.Account
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.FinanceColors
+import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.Radius
+import com.bsfeng.monitor.ui.theme.categoryPalette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 /**
  * 添加交易页面 — iOS 风格表单。
  */
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun AddTransactionScreen(
     categories: List<Category>,
@@ -75,15 +74,18 @@ fun AddTransactionScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = MonitorSpacing.sm, vertical = MonitorSpacing.sm),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, contentDescription = "取消",
                     tint = MaterialTheme.colorScheme.primary)
             }
-            Text("新增交易", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "新增交易",
+                style = MaterialTheme.typography.titleLarge,
+            )
             IconButton(
                 onClick = {
                     val a = amountText.toDoubleOrNull() ?: return@IconButton
@@ -98,7 +100,7 @@ fun AddTransactionScreen(
                         createdAt = now, updatedAt = now
                     ))
                 },
-                enabled = canSave
+                enabled = canSave,
             ) {
                 Icon(Icons.Default.Check, contentDescription = "保存",
                     tint = if (canSave) MaterialTheme.colorScheme.primary
@@ -109,31 +111,34 @@ fun AddTransactionScreen(
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             // 金额输入
             item(key = "amount") {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(MonitorSpacing.lg))
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg),
+                    contentAlignment = Alignment.Center,
                 ) {
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
-                        placeholder = { Text("0.00", fontSize = 40.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)) },
+                        placeholder = { Text("0.00",
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                        ) },
                         textStyle = LocalTextStyle.current.copy(
-                            fontSize = 40.sp, fontWeight = FontWeight.Bold,
-                            color = if (txType == 0) Color(0xFFFF3B30) else Color(0xFF34C759),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            fontSize = MaterialTheme.typography.headlineLarge.fontSize,
+                            fontWeight = FontWeight.Bold,
+                            color = if (txType == 0) FinanceColors.expense else FinanceColors.income,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         ),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent
-                        )
+                            unfocusedBorderColor = Color.Transparent,
+                        ),
                     )
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
             }
 
             // 类型切换
@@ -147,32 +152,36 @@ fun AddTransactionScreen(
 
             // 日期 + 备注
             item(key = "date_remark") {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
             }
-            section(style = SectionStyle.InsetGrouped) {
-                item {
+
+            item {
+                InsetGroupedCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("日期", fontSize = 15.sp)
-                        Text(dateText, fontSize = 15.sp,
+                        Text("日期", style = MaterialTheme.typography.titleSmall)
+                        Text(dateText, style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
-                item {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("备注", fontSize = 15.sp)
-                        Text(remark.ifBlank { "添加备注" }, fontSize = 15.sp,
+                        Text("备注", style = MaterialTheme.typography.titleSmall)
+                        Text(remark.ifBlank { "添加备注" }, style = MaterialTheme.typography.titleSmall,
                             color = if (remark.isNotEmpty()) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -181,21 +190,23 @@ fun AddTransactionScreen(
 
             // 分类选择
             item(key = "category_header") {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
                 Text(
-                    "选择分类", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    "选择分类",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                 )
             }
 
-            section(style = SectionStyle.InsetGrouped) {
-                item {
+            item {
+                InsetGroupedCard {
                     val chunked = filteredCategories.chunked(4)
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    Column(modifier = Modifier.padding(MonitorSpacing.sm)) {
                         for (row in chunked) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
+                                horizontalArrangement = Arrangement.SpaceEvenly,
                             ) {
                                 for (cat in row) {
                                     val isSelected = cat.name == selectedCategory
@@ -203,20 +214,20 @@ fun AddTransactionScreen(
                                     val isCatPressed by catInteractionSource.collectIsPressedAsState()
                                     val catScale by animateFloatAsState(
                                         targetValue = if (isCatPressed) 0.85f else 1f,
-                                        animationSpec = spring(dampingRatio = 0.4f, stiffness = 600f)
+                                        animationSpec = spring(dampingRatio = 0.4f, stiffness = 600f),
                                     )
                                     Column(
                                         modifier = Modifier
                                             .clickable(
                                                 interactionSource = catInteractionSource,
-                                                indication = null
+                                                indication = null,
                                             ) { selectedCategory = cat.name }
-                                            .padding(4.dp)
+                                            .padding(MonitorSpacing.xs)
                                             .graphicsLayer {
                                                 scaleX = catScale
                                                 scaleY = catScale
                                             },
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                        horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         Box(
                                             modifier = Modifier
@@ -224,22 +235,24 @@ fun AddTransactionScreen(
                                                 .clip(RoundedCornerShape(24.dp))
                                                 .background(
                                                     if (isSelected) getCategoryColorStatic(cat.name)
-                                                    else Color(0xFFE5E5EA)
+                                                    else IOSColors.lightGray
                                                 ),
-                                            contentAlignment = Alignment.Center
+                                            contentAlignment = Alignment.Center,
                                         ) {
                                             Text(
                                                 text = cat.name.take(1),
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Bold, fontSize = 16.sp
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium,
                                             )
                                         }
-                                        Spacer(Modifier.height(4.dp))
+                                        Spacer(Modifier.height(MonitorSpacing.xs))
                                         Text(
-                                            text = cat.name, fontSize = 11.sp,
+                                            text = cat.name,
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = if (isSelected) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
+                                            maxLines = 1,
                                         )
                                     }
                                 }
@@ -253,25 +266,34 @@ fun AddTransactionScreen(
 
             // 账户选择
             item(key = "account_header") {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
                 Text(
-                    "选择账户", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    "选择账户",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                 )
             }
-            section(style = SectionStyle.InsetGrouped) {
-                accounts.forEach { account ->
-                    item(key = account.id) { _ ->
+            item {
+                InsetGroupedCard {
+                    accounts.forEach { account ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(account.name, fontSize = 15.sp)
-                            Text("¥${account.displayBalance}", fontSize = 15.sp,
+                            Text(account.name, style = MaterialTheme.typography.titleSmall)
+                            Text("¥${account.displayBalance}", style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (account != accounts.last()) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.padding(start = MonitorSpacing.lg),
+                            )
                         }
                     }
                 }
@@ -279,24 +301,24 @@ fun AddTransactionScreen(
 
             // 保存按钮
             item(key = "save") {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(MonitorSpacing.lg))
                 val saveInteractionSource = remember { MutableInteractionSource() }
                 val isSavePressed by saveInteractionSource.collectIsPressedAsState()
                 val saveScale by animateFloatAsState(
                     targetValue = if (isSavePressed) 0.95f else 1f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f)
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .padding(horizontal = MonitorSpacing.lg)
+                        .clip(RoundedCornerShape(Radius.md))
                         .graphicsLayer { scaleX = saveScale; scaleY = saveScale }
                         .background(
                             if (canSave) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                         ),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     TextButton(
                         onClick = {
@@ -313,13 +335,13 @@ fun AddTransactionScreen(
                             ))
                         },
                         enabled = canSave,
-                        interactionSource = saveInteractionSource
+                        interactionSource = saveInteractionSource,
                     ) {
                         Text("保存", color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold)
                     }
                 }
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(MonitorSpacing.xxxl))
             }
         }
     }
@@ -331,22 +353,22 @@ private fun SegmentedControl(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm)
             .height(32.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFE5E5EA)),
-        horizontalArrangement = Arrangement.SpaceEvenly
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(IOSColors.lightGray),
+        horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         options.forEachIndexed { index, option ->
             val isSelected = index == selectedIndex
             val segScale by animateFloatAsState(
                 targetValue = if (isSelected) 1f else 0.95f,
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f)
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
             )
             Box(
                 modifier = Modifier
@@ -357,13 +379,14 @@ private fun SegmentedControl(
                         .background(MaterialTheme.colorScheme.surface) else Modifier
                             .graphicsLayer { scaleX = segScale; scaleY = segScale })
                     .clickable { onSelect(index) },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = option, fontSize = 13.sp,
+                    text = option,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -372,7 +395,7 @@ private fun SegmentedControl(
 
 /** 稳定分类颜色 */
 private fun getCategoryColorStatic(name: String): Color {
-    if (name.isBlank()) return Color(0xFF8E8E93)
+    if (name.isBlank()) return IOSColors.gray
     val hash = name.hashCode() and 0x7FFFFFFF
     return categoryPalette[hash % categoryPalette.size]
 }

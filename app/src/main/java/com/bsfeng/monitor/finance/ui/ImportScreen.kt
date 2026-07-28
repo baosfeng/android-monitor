@@ -16,16 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.PandaImporter
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.FinanceColors
+import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.Radius
 import java.io.File
 import java.io.FileOutputStream
 
@@ -33,7 +32,6 @@ import java.io.FileOutputStream
  * 数据导入页面。
  * 选择熊猫记账的 .db 文件并导入。
  */
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun ImportScreen(
     importing: Boolean,
@@ -78,16 +76,16 @@ fun ImportScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(horizontal = MonitorSpacing.sm, vertical = MonitorSpacing.sm),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
                     Text("完成", color = MaterialTheme.colorScheme.primary)
                 }
                 Text(
-                    "导入数据", fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold
+                    "导入数据",
+                    style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(Modifier.width(64.dp))
             }
@@ -95,56 +93,58 @@ fun ImportScreen(
 
         // 说明
         item(key = "desc") {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MonitorSpacing.xxl))
             Text(
                 "熊猫记账数据导入",
-                fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedCard {
                 Text(
                     "请选择熊猫记账导出的 .db 数据库文件。\n" +
                             "支持导入：账单记录、分类、账户、预算。\n\n" +
                             "已导入的记录不会重复导入（按原始 ID 去重）。",
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(16.dp)
+                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
+                    modifier = Modifier.padding(MonitorSpacing.lg),
                 )
             }
         }
 
         // 文件选择
         item(key = "file_label") {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MonitorSpacing.sm))
             Text(
                 "选择数据库文件",
-                fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedCard {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(MonitorSpacing.lg),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             if (selectedFileName.isNotEmpty()) selectedFileName else "点击选取文件",
-                            fontSize = 15.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             color = if (selectedFileName.isNotEmpty())
                                 MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (selectedFileName.isNotEmpty()) {
                             Text(
-                                "已选择", fontSize = 12.sp,
-                                color = Color(0xFF34C759)
+                                "已选择",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = FinanceColors.income,
                             )
                         }
                     }
@@ -157,49 +157,50 @@ fun ImportScreen(
 
         // 导入按钮
         item(key = "import_btn") {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MonitorSpacing.lg))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .padding(horizontal = MonitorSpacing.lg)
+                    .clip(RoundedCornerShape(Radius.md))
                     .background(
                         if (selectedFilePath.isNotEmpty() && !importing)
                             MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                     ),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 TextButton(
                     onClick = {
                         if (selectedFilePath.isNotEmpty()) onImport(selectedFilePath)
                     },
-                    enabled = selectedFilePath.isNotEmpty() && !importing
+                    enabled = selectedFilePath.isNotEmpty() && !importing,
                 ) {
                     Text(
                         if (importing) "导入中..." else "开始导入",
                         color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MonitorSpacing.lg))
         }
 
         // 导入中
         if (importing) {
             item(key = "loading") {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.xxxl),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(36.dp),
-                            strokeWidth = 3.dp
+                            strokeWidth = 3.dp,
                         )
-                        Spacer(Modifier.height(12.dp))
-                        Text("正在导入数据...", fontSize = 15.sp,
+                        Spacer(Modifier.height(MonitorSpacing.md))
+                        Text("正在导入数据...",
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -210,76 +211,93 @@ fun ImportScreen(
         val result = importResult
         if (result != null && !importing) {
             item(key = "result_section") {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MonitorSpacing.sm))
                 Text(
                     "导入结果",
-                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                 )
             }
-            section(style = SectionStyle.InsetGrouped) {
-                item {
+            item {
+                InsetGroupedCard {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.lg),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (result.isSuccess) "✅" else "⚠️", fontSize = 24.sp)
-                        Spacer(Modifier.width(12.dp))
+                        Text(if (result.isSuccess) "✅" else "⚠️",
+                            style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.width(MonitorSpacing.md))
                         Column {
                             Text(
                                 if (result.isSuccess) "导入完成" else "导入完成（有错误）",
-                                fontSize = 15.sp, fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
                             )
                             val animTransactions by animateIntAsState(
                                 targetValue = result.totalTransactions,
-                                animationSpec = tween(durationMillis = 600)
+                                animationSpec = tween(durationMillis = 600),
                             )
                             Text(
                                 "共 $animTransactions 条记录",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 }
             }
 
-            section(style = SectionStyle.InsetGrouped) {
-                item {
+            item {
+                InsetGroupedCard {
                     ImportStatRow("账单导入", "${result.importedTransactions}")
-                }
-                item {
+                    if (result.importedTransactions > 0) {
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(start = MonitorSpacing.lg),
+                        )
+                    }
                     ImportStatRow("账单跳过（已存在）", "${result.skippedTransactions}")
-                }
-                item {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                    )
                     ImportStatRow("分类导入", "${result.importedCategories}")
-                }
-                item {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                    )
                     ImportStatRow("账户导入", "${result.importedAccounts}")
-                }
-                item {
+                    HorizontalDivider(
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                    )
                     ImportStatRow("预算导入", "${result.importedBudgets}")
                 }
             }
 
             // 错误列表
             if (result.hasErrors) {
-                section(style = SectionStyle.InsetGrouped) {
-                    item {
+                item {
+                    InsetGroupedCard {
                         Text(
                             "错误信息",
-                            fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 4.dp)
+                            modifier = Modifier.padding(MonitorSpacing.lg, MonitorSpacing.md,
+                                MonitorSpacing.lg, MonitorSpacing.xs),
                         )
-                    }
-                    result.errors.forEach { error ->
-                        item {
+                        result.errors.forEach { error ->
                             Text(
                                 "⚠ $error",
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
                             )
                         }
                     }
@@ -288,20 +306,20 @@ fun ImportScreen(
 
             // 重新导入按钮
             item(key = "retry") {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(MonitorSpacing.lg))
                 OutlinedButton(
                     onClick = { onClearResult() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = MonitorSpacing.lg),
                 ) {
                     Text("重新导入")
                 }
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(MonitorSpacing.xxxl))
             }
         }
 
-        item(key = "bottom") { Spacer(Modifier.height(32.dp)) }
+        item(key = "bottom") { Spacer(Modifier.height(MonitorSpacing.xxxl)) }
     }
 }
 
@@ -310,11 +328,11 @@ private fun ImportStatRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, fontSize = 15.sp)
-        Text(value, fontSize = 15.sp,
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        Text(value, style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold)
     }
