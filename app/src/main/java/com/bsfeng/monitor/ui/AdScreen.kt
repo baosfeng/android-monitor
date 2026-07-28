@@ -1,5 +1,10 @@
 package com.bsfeng.monitor.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,8 +58,12 @@ fun AdScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(4.dp))
+                        val animatedCount by animateIntAsState(
+                            targetValue = totalCount,
+                            animationSpec = tween(durationMillis = 600)
+                        )
                         Text(
-                            "累计跳过 $totalCount 次",
+                            "累计跳过 ${animatedCount} 次",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -105,7 +114,12 @@ fun AdScreen(
             }
             section(style = SectionStyle.InsetGrouped) {
                 items(records, key = { "${it.packageName}_${it.timestampMs}" }) { record ->
-                    TimelineItem(record = record)
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn() + slideInVertically { it / 6 }
+                    ) {
+                        TimelineItem(record = record)
+                    }
                 }
             }
         }

@@ -1,5 +1,9 @@
 package com.bsfeng.monitor.ui
 
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,10 +116,15 @@ fun SkipRuleScreen(
             ) {
                 items(state.rules.size, key = { index -> state.rules[index].id }) { index ->
                     val rule = state.rules[index]
-                    RuleItem(
-                        rule = rule,
-                        onToggle = { viewModel.toggleRule(rule.id) }
-                    )
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn() + slideInVertically { it / 6 }
+                    ) {
+                        RuleItem(
+                            rule = rule,
+                            onToggle = { viewModel.toggleRule(rule.id) }
+                        )
+                    }
                 }
             }
         }
@@ -126,6 +136,7 @@ private fun RuleItem(
     rule: SkipRule,
     onToggle: () -> Unit
 ) {
+    val view = LocalView.current
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -158,7 +169,10 @@ private fun RuleItem(
             Spacer(Modifier.width(8.dp))
             Switch(
                 checked = rule.enabled,
-                onCheckedChange = { onToggle() }
+                onCheckedChange = {
+                    onToggle()
+                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                }
             )
         }
     }
