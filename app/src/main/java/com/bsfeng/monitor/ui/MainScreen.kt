@@ -12,11 +12,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.MonitorIconSize
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.Radius
+import com.bsfeng.monitor.ui.theme.toEventColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -44,11 +49,27 @@ fun MainScreen(
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
 
+    // 活跃 App 出现时自动滚动到顶部（让绿色卡片可见）
+    LaunchedEffect(state.activeAppName) {
+        if (state.activeAppName != null) {
+            listState.animateScrollToItem(0)
+        }
+    }
+    // 新事件产生时也滚动到顶部
+    var lastEventCount by remember { mutableStateOf(state.todayEventCount) }
+    LaunchedEffect(state.todayEventCount) {
+        if (state.todayEventCount > lastEventCount && lastEventCount > 0) {
+            listState.animateScrollToItem(0)
+        }
+        lastEventCount = state.todayEventCount
+    }
+
     // 检测是否接近底部（还剩 3 项时触发加载更多）
     val shouldLoadMore by remember {
         derivedStateOf {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= listState.layoutInfo.totalItemsCount - 3
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = listState.layoutInfo.totalItemsCount
+            lastVisible >= 0 && lastVisible >= total - 3
         }
     }
     LaunchedEffect(shouldLoadMore) {
@@ -57,7 +78,7 @@ fun MainScreen(
         }
     }
 
-    Column(modifier = modifier.padding(16.dp)) {
+    Column(modifier = modifier.padding(MonitorSpacing.lg)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -67,67 +88,76 @@ fun MainScreen(
                 Text(
                     text = "行为记录",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(MonitorSpacing.xxs))
                 Text(
                     text = "今日共 ${state.todayEventCount} 条，已加载 ${state.recentEvents.size} 条",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             // 清除今日按钮
             if (state.todayEventCount > 0) {
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = { viewModel.clearToday() }
                 ) {
                     Text(
                         text = "清除今日",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.error
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(MonitorSpacing.md))
 
         LazyColumn(
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(MonitorSpacing.sm.plus(2.dp)),
         ) {
-            itemsIndexed(
-                items = state.recentEvents,
-                key = { _, record -> record.id }
-            ) { index, record ->
-                // 如果是当前活跃 App 的 OPENED 记录，传递实时时长
-                val activeText = remember(record.id, state.activeAppName, state.activeAppDurationText) {
-                    if (record.type is RecordType.APP_USAGE &&
-                        record.action == "OPENED" &&
-                        record.label == state.activeAppName)
-                        state.activeAppDurationText else null
+            // ===== 当前活跃 App（置顶） =====
+            if (state.activeAppName != null) {
+                item(key = "active_app") {
+                    ActiveAppCard(
+                        appName = state.activeAppName ?: "",
+                        durationText = state.activeAppDurationText ?: ""
+                    )
                 }
-                TimelineCard(record, activeDurationText = activeText)
             }
 
-            // 加载更多指示器
+    // ===== 历史记录列表（过滤掉与当前活跃 App 重复的最新一条） =====
+            val hiddenIds = if (state.activeAppName != null) {
+                val firstMatch = state.recentEvents.indexOfFirst {
+                    it.type is RecordType.APP_USAGE && it.label == state.activeAppName
+                }
+                if (firstMatch >= 0) setOf(state.recentEvents[firstMatch].id) else emptySet()
+            } else emptySet()
+            itemsIndexed(
+                items = state.recentEvents.filter { it.id !in hiddenIds },
+                key = { _, record -> record.id }
+            ) { _, record ->
+                TimelineCard(record)  // 历史记录时长固定不变
+            }
+
+            // ===== 加载更多指示器 =====
             if (state.hasMore || state.isLoadingMore) {
                 item(key = "loading_more") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = MonitorSpacing.lg),
                         contentAlignment = Alignment.Center
                     ) {
                         if (state.isLoadingMore) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                                modifier = Modifier.size(MonitorIconSize.md),
+                                strokeWidth = 2.dp,
                             )
                         } else {
                             Text(
                                 text = "上拉加载更多",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -137,14 +167,14 @@ fun MainScreen(
     }
 }
 
-// ========== Emoji & 颜色映射 ==========
+// ========== Emoji 映射 ==========
 
 private val emojiMap: Map<RecordType, (String) -> String> = mapOf(
     RecordType.SCREEN to { action ->
-        when (action) { "ON" -> "🔆"; "OFF" -> "🌙"; "UNLOCKED" -> "🔓"
+        when (action) { "OFF" -> "🌙"; "UNLOCKED" -> "🔓"
             "AD_SKIPPED" -> "⏭️"; else -> "🖥️" }
     },
-    RecordType.APP_USAGE to { when (it) { "OPENED" -> "📱" else -> "📱" } },
+    RecordType.APP_USAGE to { "📱" },
     RecordType.CHARGING to { when (it) { "STARTED" -> "🔌" else -> "🔋" } },
     RecordType.BATTERY to { when (it) { "LOW" -> "⚠️"; "OKAY" -> "✅" else -> "🔋" } },
     RecordType.WIFI to { when (it) { "CONNECTED" -> "📶" else -> "📵" } },
@@ -159,24 +189,10 @@ private val emojiMap: Map<RecordType, (String) -> String> = mapOf(
 private fun getEmoji(type: RecordType, action: String): String =
     emojiMap[type]?.invoke(action) ?: "📝"
 
-private fun getTypeColor(type: RecordType): Color = when (type) {
-    RecordType.SCREEN -> Color(0xFF5B8DEF)
-    RecordType.APP_USAGE -> Color(0xFF34C759)
-    RecordType.CHARGING, RecordType.BATTERY -> Color(0xFFFF9500)
-    RecordType.WIFI -> Color(0xFF007AFF)
-    RecordType.AUDIO -> Color(0xFFAF52DE)
-    RecordType.PACKAGE -> Color(0xFFFF2D55)
-    RecordType.POWER_SAVE -> Color(0xFF8E8E93)
-    RecordType.AIRPLANE -> Color(0xFF5856D6)
-    RecordType.PHONE_STATE -> Color(0xFF30B0C7)
-    RecordType.LOCATION -> Color(0xFF4CD964)
-    else -> Color(0xFF8E8E93)
-}
-
 // ========== App 图标加载 ==========
 
 @Composable
-private fun AppIcon(packageName: String?, modifier: Modifier = Modifier.size(20.dp)) {
+private fun AppIcon(packageName: String?, modifier: Modifier = Modifier.size(MonitorIconSize.md)) {
     if (packageName == null) return
     val context = LocalContext.current
     var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -200,20 +216,20 @@ private fun AppIcon(packageName: String?, modifier: Modifier = Modifier.size(20.
         ComposeImage(
             bitmap = icon.asImageBitmap(),
             contentDescription = null,
-            modifier = modifier.clip(RoundedCornerShape(4.dp)),
-            contentScale = ContentScale.Fit
+            modifier = modifier.clip(RoundedCornerShape(Radius.xs)),
+            contentScale = ContentScale.Fit,
         )
     } else {
-        Text("📱", fontSize = 16.sp)
+        Text("📱", fontSize = MaterialTheme.typography.bodyMedium.fontSize)
     }
 }
 
 // ========== 时间线卡片 ==========
 
 @Composable
-private fun TimelineCard(record: Record, activeDurationText: String? = null) {
+private fun TimelineCard(record: Record) {
     val emoji = getEmoji(record.type, record.action)
-    val typeColor = getTypeColor(record.type)
+    val typeColor = record.type.toEventColor()
     val detail = record.detail
 
     val appPkg: String? = if (record.type is RecordType.APP_USAGE)
@@ -222,18 +238,18 @@ private fun TimelineCard(record: Record, activeDurationText: String? = null) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(10.dp),
+            .padding(horizontal = MonitorSpacing.xs),
+        shape = RoundedCornerShape(Radius.md),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = MonitorSpacing.sm.plus(2.dp), vertical = MonitorSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Emoji 圆点
             Box(
@@ -241,68 +257,125 @@ private fun TimelineCard(record: Record, activeDurationText: String? = null) {
                     .size(26.dp)
                     .clip(CircleShape)
                     .background(typeColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
-                Text(text = emoji, fontSize = 14.sp)
+                Text(text = emoji, style = MaterialTheme.typography.bodyMedium)
             }
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(MonitorSpacing.sm))
 
             // 时间
             Text(
                 text = formatTime(record.timestamp),
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(52.dp)
+                modifier = Modifier.width(52.dp),
             )
 
             // App 图标（仅 APP_USAGE）
             if (appPkg != null) {
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(MonitorSpacing.xs))
                 AppIcon(appPkg)
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(MonitorSpacing.xs))
             }
 
             // Label（可伸缩，自动省略）
             Text(
                 text = record.label,
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
 
-            // 时长：优先使用活跃时长文字，其次用记录的 duration
-            val displayDuration = activeDurationText ?: record.duration?.let { dur ->
+            // 时长（历史记录固定不变）
+            val displayDuration = record.duration?.let { dur ->
                 "${dur / 60000}分${(dur % 60000) / 1000}秒"
             }
             if (displayDuration != null) {
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(MonitorSpacing.sm.minus(2.dp)))
                 Text(
                     text = displayDuration,
-                    fontSize = 11.sp,
-                    color = if (activeDurationText != null) Color(0xFF34C759) else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
                 )
             }
 
             // 类型标签
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(MonitorSpacing.sm.minus(2.dp)))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(Radius.xs))
                     .background(typeColor.copy(alpha = 0.12f))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                    .padding(horizontal = 5.dp, vertical = MonitorSpacing.xxs),
             ) {
                 Text(
                     text = record.type::class.simpleName?.take(4) ?: "",
-                    fontSize = 9.sp,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = typeColor,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
                 )
             }
+        }
+    }
+}
+
+// ========== 当前活跃 App 卡片（置顶） ==========
+
+@Composable
+private fun ActiveAppCard(appName: String, durationText: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MonitorSpacing.xs),
+        shape = RoundedCornerShape(Radius.md),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MonitorSpacing.sm.plus(2.dp), vertical = MonitorSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 绿色活跃指示圆点
+            Box(
+                modifier = Modifier
+                    .size(MonitorIconSize.sm)
+                    .clip(CircleShape)
+                    .background(IOSColors.green)
+            )
+            Spacer(Modifier.width(MonitorSpacing.sm))
+
+            // App 名称
+            Text(
+                text = appName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+
+            // "使用中" 标签
+            Text(
+                text = "使用中",
+                style = MaterialTheme.typography.labelSmall,
+                color = IOSColors.green,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.width(MonitorSpacing.xs))
+            // 时长（绿色）
+            Text(
+                text = durationText,
+                style = MaterialTheme.typography.labelSmall,
+                color = IOSColors.green,
+                fontWeight = FontWeight.Medium,
+            )
         }
     }
 }

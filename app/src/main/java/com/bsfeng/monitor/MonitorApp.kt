@@ -42,14 +42,21 @@ class MonitorApp : Application() {
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val wifiCallback = object : ConnectivityManager.NetworkCallback() {
             private var lastConnected = false
+            /** 跳过注册后的首次状态同步回调（防止 force-stop 后误记录"连接 WiFi"） */
+            private var isInitialSync = true
 
             override fun onAvailable(network: Network) {
                 val caps = connectivityManager.getNetworkCapabilities(network)
                 if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true && !lastConnected) {
                     lastConnected = true
+                    if (isInitialSync) {
+                        isInitialSync = false
+                        return  // 首次同步仅更新状态，不写记录
+                    }
                     val ssid = getWifiSsid()
                     container.recordCollector.onWifiChanged("CONNECTED", ssid, System.currentTimeMillis())
                 }
+                isInitialSync = false
             }
 
             override fun onLost(network: Network) {
@@ -58,6 +65,7 @@ class MonitorApp : Application() {
                     lastConnected = false
                     container.recordCollector.onWifiChanged("DISCONNECTED", null, System.currentTimeMillis())
                 }
+                isInitialSync = false
             }
 
             private fun getWifiSsid(): String? {
