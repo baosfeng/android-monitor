@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.Record
+import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.record.AppUsageStat
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
@@ -12,12 +14,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class MonitorState(
     val isMonitoring: Boolean = true,
+    /** 当前已加载的事件列表（分页） */
     val recentEvents: List<Record> = emptyList(),
+    /** 今天的事件总数 */
     val todayEventCount: Int = 0,
-    val accessibilityEnabled: Boolean = false
+    /** 是否正在加载更多 */
+    val isLoadingMore: Boolean = false,
+    /** 是否还有更多数据可加载 */
+    val hasMore: Boolean = true,
+    val accessibilityEnabled: Boolean = false,
+    val appUsageStats: List<AppUsageStat> = emptyList(),
+    val screenEvents: List<Record> = emptyList(),
+    /** 当前正在使用的 App 名称（没有 CLOSED 的 OPENED） */
+    val activeAppName: String? = null,
+    /** 当前 App 已用时长文字（如 "使用中 1分23秒"） */
+    val activeAppDurationText: String? = null
 )
 
 class MainViewModel : ViewModel() {
@@ -33,13 +48,154 @@ class MainViewModel : ViewModel() {
     private val _debugEnabled = MutableStateFlow(DebugConfig.enabled)
     val debugEnabled: StateFlow<Boolean> = _debugEnabled.asStateFlow()
 
+    companion object {
+        private const val PAGE_SIZE = 20
+    }
+
+    /** 今天所有记录的缓存（按时间倒序，最新的在前） */
+    private var cachedTodayRecords: List<Record> = emptyList()
+    /** 当前已加载的记录数 */
+    private var loadedCount = 0
+    private var initialLoadDone = false
+
     init {
-        loadData()
         viewModelScope.launch {
+            loadDataInternal()  // 等待初次加载完成
+            initialLoadDone = true
+            // 再启动轮询
             while (true) {
                 delay(3000)
-                loadData()
+                refreshData()
             }
+        }
+    }
+
+    /**
+     * 外部触发的加载（如切换 tab、手动刷新）。
+     */
+    fun loadData() {
+        checkAccessibilityStatus()
+        viewModelScope.launch(Dispatchers.IO) {
+            loadDataInternal()
+        }
+    }
+
+    /**
+     * 内部初次加载 + 统计数据（挂起函数，确保串行执行）。
+     */
+    private suspend fun loadDataInternal() {
+        checkAccessibilityStatus()
+        try {
+            val now = System.currentTimeMillis()
+            val todayStart = now - (now % 86400000L)
+
+            // 数据库操作在 IO 线程
+            val records = withContext(Dispatchers.IO) {
+                store.queryByDate(todayStart, now).sortedByDescending { it.timestamp }
+            }
+
+            cachedTodayRecords = records
+            loadedCount = PAGE_SIZE.coerceAtMost(records.size)
+
+            // 先更新列表（尽快显示）
+            _state.value = _state.value.copy(
+                recentEvents = records.take(loadedCount),
+                todayEventCount = records.size,
+                isLoadingMore = false,
+                hasMore = loadedCount < records.size
+            )
+            updateActiveApp(records)
+
+            // 再加载统计数据（较慢的聚合查询）
+            val (usage, screens) = withContext(Dispatchers.IO) {
+                val u = store.getAppUsageRank(todayStart, now)
+                val s = store.queryByType(RecordType.SCREEN, todayStart, now)
+                u to s
+            }
+            _state.value = _state.value.copy(
+                appUsageStats = usage,
+                screenEvents = screens
+            )
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * 轮询刷新：重新加载今天数据，但保持当前已加载的页数不变。
+     * 新事件会自动出现在列表顶部（因为按时间倒序）。
+     */
+    private fun refreshData() {
+        checkAccessibilityStatus()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val now = System.currentTimeMillis()
+                val todayStart = now - (now % 86400000L)
+                val records = store.queryByDate(todayStart, now)
+                    .sortedByDescending { it.timestamp }
+
+                cachedTodayRecords = records
+
+                // 如果总记录数比已加载的少（删除事件后），修正 loadedCount
+                if (loadedCount > records.size) {
+                    loadedCount = records.size
+                }
+
+                _state.value = _state.value.copy(
+                    recentEvents = records.take(loadedCount),
+                    todayEventCount = records.size,
+                    hasMore = loadedCount < records.size
+                )
+                updateActiveApp(records)
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * 检测当前正在使用的 App（最新一条 OPENED 且没有后续 CLOSED 的），计算已用时长。
+     */
+    private fun updateActiveApp(records: List<Record>) {
+        val now = System.currentTimeMillis()
+        // 从最新的记录开始找：找到第一条 APP_USAGE/OPENED，看它后面是否有同名的 CLOSED
+        for (i in records.indices) {
+            val r = records[i]
+            if (r.type !is RecordType.APP_USAGE || r.action != "OPENED") continue
+            // 检查这条 OPENED 之后是否有同名的 CLOSED
+            val hasClosed = records.asSequence()
+                .take(i) // i 之前的记录时间更新（records 是 DESC 排序）
+                .any { it.type is RecordType.APP_USAGE && it.action == "CLOSED" && it.label == r.label }
+            if (hasClosed) continue // 已关闭，跳过
+            // 找到了！当前正在使用的 App
+            val durationMs = now - r.timestamp
+            val min = durationMs / 60000
+            val sec = (durationMs % 60000) / 1000
+            val text = if (min > 0) "使用中 ${min}分${sec}秒" else "使用中 ${sec}秒"
+            _state.value = _state.value.copy(
+                activeAppName = r.label,
+                activeAppDurationText = text
+            )
+            return
+        }
+        // 没有活跃 App
+        _state.value = _state.value.copy(activeAppName = null, activeAppDurationText = null)
+    }
+
+    /**
+     * 分页加载更多（滚动到底部时调用）。
+     */
+    fun loadMore() {
+        val state = _state.value
+        if (state.isLoadingMore || loadedCount >= cachedTodayRecords.size) return
+
+        _state.value = state.copy(isLoadingMore = true)
+
+        // 模拟短暂延迟，让加载指示器可见
+        viewModelScope.launch(Dispatchers.IO) {
+            loadedCount = (loadedCount + PAGE_SIZE).coerceAtMost(cachedTodayRecords.size)
+            _state.value = _state.value.copy(
+                recentEvents = cachedTodayRecords.take(loadedCount),
+                isLoadingMore = false,
+                hasMore = loadedCount < cachedTodayRecords.size
+            )
         }
     }
 
@@ -57,24 +213,6 @@ class MainViewModel : ViewModel() {
         _state.value = _state.value.copy(accessibilityEnabled = enabled)
     }
 
-    fun loadData() {
-        checkAccessibilityStatus()
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val now = System.currentTimeMillis()
-                val todayStart = now - (now % 86400000L)
-                val recent = store.queryByDate(todayStart - 86400000L, now)
-                val total = recent.size
-
-                _state.value = _state.value.copy(
-                    recentEvents = recent.reversed().take(20),
-                    todayEventCount = total
-                )
-            } catch (_: Exception) {}
-        }
-    }
-
     fun togglePause() {
         val newPaused = !_isPaused.value
         _isPaused.value = newPaused
@@ -89,12 +227,22 @@ class MainViewModel : ViewModel() {
         DebugConfig.setEnabled(newEnabled)
     }
 
-    fun clearEvents() {
+    fun clearToday() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val before = System.currentTimeMillis()
-                store.deleteBefore(before)
-                loadData()
+                val now = System.currentTimeMillis()
+                val todayStart = now - (now % 86400000L)
+                store.deleteByRange(todayStart, now)
+                cachedTodayRecords = emptyList()
+                loadedCount = 0
+                _state.value = _state.value.copy(
+                    recentEvents = emptyList(),
+                    todayEventCount = 0,
+                    hasMore = false,
+                    isLoadingMore = false,
+                    activeAppName = null,
+                    activeAppDurationText = null
+                )
             } catch (_: Exception) {}
         }
     }
