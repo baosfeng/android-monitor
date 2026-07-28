@@ -6,6 +6,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -16,12 +17,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.InsetGroupedSection
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.SettingsRow
 
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
@@ -42,13 +41,16 @@ fun SettingsScreen(
                 "设置",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                modifier = Modifier.padding(
+                    horizontal = MonitorSpacing.lg,
+                    vertical = MonitorSpacing.md
+                ),
             )
         }
 
         // Section 1: 无障碍服务
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedSection {
                 SettingsRow(
                     title = "无障碍服务",
                     subtitle = if (state.accessibilityEnabled) "✅ 已开启" else "❌ 未开启",
@@ -66,8 +68,8 @@ fun SettingsScreen(
         }
 
         // Section 2: 监控开关
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedSection {
                 SettingsRow(
                     title = "监控开关",
                     subtitle = if (isPaused) "已暂停" else "运行中",
@@ -81,8 +83,8 @@ fun SettingsScreen(
         }
 
         // Section 3: 电池优化
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedSection {
                 SettingsRow(
                     title = "电池优化",
                     subtitle = "设为无限制以防止被系统关闭",
@@ -98,9 +100,9 @@ fun SettingsScreen(
             }
         }
 
-        // Section 3: 开屏广告跳过
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        // Section 4: 开屏广告跳过
+        item {
+            InsetGroupedSection {
                 SettingsRow(
                     title = "开屏广告跳过",
                     subtitle = "管理自动跳过规则",
@@ -110,8 +112,10 @@ fun SettingsScreen(
                         }
                     }
                 )
-            }
-            item {
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
                 SettingsRow(
                     title = "广告白名单",
                     subtitle = "选择不检测广告的 App",
@@ -124,9 +128,9 @@ fun SettingsScreen(
             }
         }
 
-        // Section 4: 调试模式
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        // Section 5: 调试模式
+        item {
+            InsetGroupedSection {
                 SettingsRow(
                     title = "调试模式",
                     subtitle = if (debugEnabled) "输出详细调试日志" else "已关闭",
@@ -144,42 +148,31 @@ fun SettingsScreen(
         }
 
         // Section 6: 关于
-        section(style = SectionStyle.InsetGrouped) {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("关于", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("版本: 1.0.0", fontSize = 14.sp)
-                    Text("设备 ID: ${viewModel.getDeviceId().take(8)}...",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("包名: com.bsfeng.monitor",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item {
+            InsetGroupedSection {
+                Column(modifier = Modifier.padding(MonitorSpacing.lg)) {
+                    Text(
+                        "关于",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(MonitorSpacing.xs))
+                    Text(
+                        "版本: 1.0.0",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "设备 ID: ${viewModel.getDeviceId().take(8)}...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "包名: com.bsfeng.monitor",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    title: String,
-    subtitle: String,
-    subtitleColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    trailing: @Composable () -> Unit = {},
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text(subtitle, fontSize = 13.sp, color = subtitleColor)
-        }
-        Spacer(Modifier.width(8.dp))
-        trailing()
     }
 }

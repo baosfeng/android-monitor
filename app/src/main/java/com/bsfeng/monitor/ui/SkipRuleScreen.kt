@@ -17,12 +17,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.model.SkipRule
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
+import com.bsfeng.monitor.ui.theme.IOSNavigationBar
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
 
 /**
  * 开屏广告跳过规则管理页面。
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalCupertinoApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkipRuleScreen(
     onBack: () -> Unit,
@@ -35,94 +36,85 @@ fun SkipRuleScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 顶部导航栏（Cupertino 风格）
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) {
-                Text(
-                    "← 返回",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Text(
-                "开屏广告跳过",
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp
-            )
-            TextButton(onClick = { viewModel.resetToBuiltIn() }) {
-                Text(
-                    "重置",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
+        IOSNavigationBar(
+            title = "开屏广告跳过",
+            onBack = onBack,
+            actions = {
+                TextButton(onClick = { viewModel.resetToBuiltIn() }) {
+                    Text("重置", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+        )
 
         // 状态摘要
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+            ),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(MonitorSpacing.lg),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    Text("已启用规则", fontWeight = FontWeight.Bold)
+                    Text(
+                        "已启用规则",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
                     Text(
                         "${state.enabledCount} / ${state.rules.size}",
-                        fontSize = 24.sp,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 Text(
                     "自动跳过开屏广告",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontSize = 14.sp
                 )
             }
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(MonitorSpacing.xs))
 
         // 规则列表
         if (state.rules.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
-                Text("暂无规则", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "暂无规则",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                contentPadding = PaddingValues(
+                    horizontal = MonitorSpacing.lg,
+                    vertical = MonitorSpacing.xs,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MonitorSpacing.xs),
             ) {
                 items(state.rules.size, key = { index -> state.rules[index].id }) { index ->
                     val rule = state.rules[index]
                     AnimatedVisibility(
                         visible = true,
-                        enter = fadeIn() + slideInVertically { it / 6 }
+                        enter = fadeIn() + slideInVertically { it / 6 },
                     ) {
                         RuleItem(
                             rule = rule,
-                            onToggle = { viewModel.toggleRule(rule.id) }
+                            onToggle = { viewModel.toggleRule(rule.id) },
                         )
                     }
                 }
@@ -134,45 +126,43 @@ fun SkipRuleScreen(
 @Composable
 private fun RuleItem(
     rule: SkipRule,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
 ) {
     val view = LocalView.current
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = rule.name,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
                 )
                 Text(
                     text = rule.app,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = MonitorSpacing.xxs),
                 )
                 Text(
                     text = "${rule.groups.size} 组规则 · ${rule.groups.sumOf { it.rules.size }} 条匹配",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = MonitorSpacing.xxs),
                 )
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(MonitorSpacing.sm))
             Switch(
                 checked = rule.enabled,
                 onCheckedChange = {
                     onToggle()
                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                }
+                },
             )
         }
     }
