@@ -5,6 +5,8 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -228,8 +230,12 @@ fun ImportScreen(
                                 if (result.isSuccess) "导入完成" else "导入完成（有错误）",
                                 fontSize = 15.sp, fontWeight = FontWeight.SemiBold
                             )
+                            val animTransactions by animateIntAsState(
+                                targetValue = result.totalTransactions,
+                                animationSpec = tween(durationMillis = 600)
+                            )
                             Text(
-                                "共 ${result.totalTransactions} 条记录",
+                                "共 $animTransactions 条记录",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
