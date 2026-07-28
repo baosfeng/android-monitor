@@ -3,9 +3,17 @@ package com.bsfeng.monitor
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +21,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.BackHandler
@@ -70,6 +80,7 @@ class MainActivity : ComponentActivity() {
                 var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
                 var showSkipRuleScreen by remember { mutableStateOf(false) }
                 var showWhitelistScreen by remember { mutableStateOf(false) }
+                val view = LocalView.current
 
                 val tabs = remember {
                     listOf(
@@ -89,22 +100,35 @@ class MainActivity : ComponentActivity() {
                                 windowInsets = WindowInsets(0, 0, 0, 0),
                             ) {
                                 tabs.forEachIndexed { index, tab ->
+                                    val isSelected = selectedTab == index
+                                    val tabColor by animateColorAsState(
+                                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f)
+                                    )
                                     CupertinoNavigationBarItem(
-                                        selected = selectedTab == index,
+                                        selected = isSelected,
                                         onClick = {
                                             selectedTab = index
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                                             if (index == 2) {
                                                 financeRoute = FinanceRoute.Main
                                             }
                                         },
                                         icon = {
                                             Icon(
-                                                if (selectedTab == index) tab.selectedIcon else tab.icon,
+                                                if (isSelected) tab.selectedIcon else tab.icon,
                                                 contentDescription = tab.title,
-                                                modifier = Modifier.size(24.dp)
+                                                modifier = Modifier.size(24.dp),
+                                                tint = tabColor
                                             )
                                         },
-                                        label = { Text(tab.title) },
+                                        label = {
+                                            Text(
+                                                tab.title,
+                                                color = tabColor
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -166,34 +190,46 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 开屏跳过规则管理页面（覆盖层）
-                        if (showSkipRuleScreen) {
-                            BackHandler {
-                                showSkipRuleScreen = false
-                                skipRuleViewModel.refresh()
-                            }
-                            SkipRuleScreen(
-                                onBack = {
+                        // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
+                        AnimatedVisibility(
+                            visible = showSkipRuleScreen,
+                            enter = slideInHorizontally() + fadeIn(),
+                            exit = slideOutHorizontally() + fadeOut()
+                        ) {
+                            Box(Modifier.fillMaxSize()) {
+                                BackHandler {
                                     showSkipRuleScreen = false
                                     skipRuleViewModel.refresh()
-                                },
-                                viewModel = skipRuleViewModel
-                            )
+                                }
+                                SkipRuleScreen(
+                                    onBack = {
+                                        showSkipRuleScreen = false
+                                        skipRuleViewModel.refresh()
+                                    },
+                                    viewModel = skipRuleViewModel
+                                )
+                            }
                         }
 
-                        // 广告白名单页面（覆盖层）
-                        if (showWhitelistScreen) {
-                            BackHandler(showWhitelistScreen) {
-                                showWhitelistScreen = false
-                                whitelistViewModel.refresh()
-                            }
-                            WhitelistScreen(
-                                onBack = {
+                        // 广告白名单页面（覆盖层）— 从右侧滑入
+                        AnimatedVisibility(
+                            visible = showWhitelistScreen,
+                            enter = slideInHorizontally() + fadeIn(),
+                            exit = slideOutHorizontally() + fadeOut()
+                        ) {
+                            Box(Modifier.fillMaxSize()) {
+                                BackHandler(showWhitelistScreen) {
                                     showWhitelistScreen = false
                                     whitelistViewModel.refresh()
-                                },
-                                viewModel = whitelistViewModel
-                            )
+                                }
+                                WhitelistScreen(
+                                    onBack = {
+                                        showWhitelistScreen = false
+                                        whitelistViewModel.refresh()
+                                    },
+                                    viewModel = whitelistViewModel
+                                )
+                            }
                         }
                     }
                 }
