@@ -24,6 +24,35 @@ class RecordStore(private val db: DatabaseHelper) {
         db.writableDatabase.insertWithOnConflict("records", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
+    /**
+     * 插入 APP_USAGE/USAGE 记录，如果 5 分钟内有同 App 的记录则合并（累加 duration）。
+     * 其他类型（SCREEN、WIFI 等）正常插入。
+     *
+     * @return true 表示合并到了上一条记录（未新增），false 表示正常插入
+     */
+    fun insertOrMerge(record: Record): Boolean {
+        if (record.type != RecordType.APP_USAGE || record.action != "USAGE") {
+            insert(record)
+            return false
+        }
+        // 查找 5 分钟内同 App 的上一条 USAGE 记录
+        val fiveMinAgo = record.timestamp - 300_000L
+        val lastSame = query(
+            "type='APP_USAGE' AND action='USAGE' AND label = ? AND timestamp >= ? AND timestamp < ?",
+            arrayOf(record.label, fiveMinAgo.toString(), record.timestamp.toString())
+        ).lastOrNull()
+
+        if (lastSame != null && record.timestamp - lastSame.timestamp < 300_000L) {
+            // 合并：累加 duration 到上一条记录
+            val newDuration = (lastSame.duration ?: 0L) + (record.duration ?: 0L)
+            val cv = ContentValues().apply { put("duration", newDuration) }
+            db.writableDatabase.update("records", cv, "id = ?", arrayOf(lastSame.id))
+            return true
+        }
+        insert(record)
+        return false
+    }
+
     fun queryByDate(dateStart: Long, dateEnd: Long): List<Record> {
         return query("timestamp >= ? AND timestamp <= ?", arrayOf(dateStart.toString(), dateEnd.toString()))
     }
@@ -48,7 +77,7 @@ class RecordStore(private val db: DatabaseHelper) {
 
         val topApps = db.rawQuery(
             """SELECT label, SUM(COALESCE(duration,0)) as total_ms, COUNT(*) as cnt
-               FROM records WHERE type='APP_USAGE' AND action='CLOSED'
+               FROM records WHERE type='APP_USAGE' AND (action='CLOSED' OR action='USAGE')
                AND timestamp >= ? AND timestamp <= ?
                GROUP BY label ORDER BY total_ms DESC LIMIT 10""",
             arrayOf(dateStart.toString(), dateEnd.toString())
@@ -82,7 +111,7 @@ class RecordStore(private val db: DatabaseHelper) {
         val db = db.readableDatabase
         return db.rawQuery(
             """SELECT label, SUM(COALESCE(duration,0)) as total_ms, COUNT(*) as cnt
-               FROM records WHERE type='APP_USAGE' AND action='CLOSED'
+               FROM records WHERE type='APP_USAGE' AND (action='CLOSED' OR action='USAGE')
                AND timestamp >= ? AND timestamp <= ?
                GROUP BY label ORDER BY total_ms DESC""",
             arrayOf(dateStart.toString(), dateEnd.toString())
