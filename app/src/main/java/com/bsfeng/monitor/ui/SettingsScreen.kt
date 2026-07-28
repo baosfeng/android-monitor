@@ -2,6 +2,7 @@ package com.bsfeng.monitor.ui
 
 import android.content.Intent
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,6 +30,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val debugEnabled by viewModel.debugEnabled.collectAsState()
@@ -130,7 +133,10 @@ fun SettingsScreen(
                     trailing = {
                         Switch(
                             checked = debugEnabled,
-                            onCheckedChange = { viewModel.toggleDebug() }
+                            onCheckedChange = {
+                                viewModel.toggleDebug()
+                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            }
                         )
                     }
                 )
