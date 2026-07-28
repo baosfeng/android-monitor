@@ -104,6 +104,11 @@ class RecordStore(private val db: DatabaseHelper) {
         db.writableDatabase.delete("records", "timestamp < ?", arrayOf(timestamp.toString()))
     }
 
+    fun deleteByRange(start: Long, end: Long) {
+        db.writableDatabase.delete("records", "timestamp >= ? AND timestamp <= ?",
+            arrayOf(start.toString(), end.toString()))
+    }
+
     fun deleteByAction(action: String) {
         db.writableDatabase.delete("records", "action = ?", arrayOf(action))
     }

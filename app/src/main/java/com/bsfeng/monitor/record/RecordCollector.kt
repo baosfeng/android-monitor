@@ -23,10 +23,17 @@ class RecordCollector(
 ) {
     /** WiFi 状态缓存 — 避免 WIFI_STATE_CHANGED_ACTION 重复触发 */
     private var lastWifiAction: String? = null
+    /** WiFi 时间窗口防抖 — 30 秒内不重复记录 WiFi 切换事件（防止网络波动） */
+    private var lastWifiTimestamp: Long = 0L
+    private companion object {
+        private const val WIFI_DEBOUNCE_MS = 30_000L
+    }
 
-    /** 电量状态缓存 — 避免 ACTION_BATTERY_CHANGED 粘性广播重复触发 */
+    /** 当前最新电量（持续更新，供充电开始/结束使用） */
+    private var currentBatteryLevel: Int = 0
+
+    /** 未充电时的电量缓存 — 避免 ACTION_BATTERY_CHANGED 粘性广播重复触发 */
     private var lastBatteryLevel: Int? = null
-    private var lastBatteryPlugged: Boolean? = null
 
     private fun emit(type: RecordType, action: String, timestamp: Long, duration: Long? = null, detail: Map<String, String>? = null) {
         if (!handlerRegistry.validate(type, action, detail)) return
@@ -49,7 +56,8 @@ class RecordCollector(
     }
 
     fun onChargingChanged(action: String, chargeType: String?, timestamp: Long) {
-        val detail = if (chargeType != null) mapOf("type" to chargeType) else null
+        val detail = mutableMapOf("level" to currentBatteryLevel.toString())
+        chargeType?.let { detail["type"] = it }
         emit(RecordType.CHARGING, action, timestamp, detail = detail)
     }
 
@@ -57,10 +65,18 @@ class RecordCollector(
         usageTracker.onAppSwitch(packageName, appName, timestamp)
     }
 
+    /** 回到桌面：关闭当前 App session，不打开新 App */
+    fun onHomeScreen(timestamp: Long) {
+        usageTracker.closeSession(timestamp)
+    }
+
     fun onWifiChanged(action: String, ssid: String?, timestamp: Long) {
-        // 去重：WiFi 状态未变化时跳过
+        // 去重1：相同 action 跳过
         if (action == lastWifiAction) return
+        // 去重2：30 秒内不重复记录 WiFi 切换事件（防止网络波动导致频繁断开重连）
+        if (timestamp - lastWifiTimestamp < WIFI_DEBOUNCE_MS) return
         lastWifiAction = action
+        lastWifiTimestamp = timestamp
         val detail = if (ssid != null) mapOf("ssid" to ssid) else null
         emit(RecordType.WIFI, action, timestamp, detail = detail)
     }
@@ -71,11 +87,16 @@ class RecordCollector(
     }
 
     fun onBatteryChanged(level: Int, plugged: Boolean, timestamp: Long) {
-        // 去重：电量 level 和 plugged 状态均未变化时跳过（ACTION_BATTERY_CHANGED 是粘性广播）
-        if (level == lastBatteryLevel && plugged == lastBatteryPlugged) return
+        // 始终更新最新电量（供充电开始/结束事件使用）
+        currentBatteryLevel = level
+
+        // 充电中：不记录中间电量变化，只更新缓存（充电开始/结束由 onChargingChanged 处理）
+        if (plugged) return
+
+        // 未充电时：仅电量真正变化时记录
+        if (level == lastBatteryLevel) return
         lastBatteryLevel = level
-        lastBatteryPlugged = plugged
-        emit(RecordType.BATTERY, "CHANGED", timestamp, detail = mapOf("level" to level.toString(), "plugged" to plugged.toString()))
+        emit(RecordType.BATTERY, "CHANGED", timestamp, detail = mapOf("level" to level.toString()))
     }
 
     fun onBatteryLow(level: Int, timestamp: Long) {

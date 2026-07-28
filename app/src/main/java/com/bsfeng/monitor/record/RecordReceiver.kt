@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.telephony.TelephonyManager
@@ -48,12 +47,6 @@ class RecordReceiver : BroadcastReceiver() {
             Intent.ACTION_BATTERY_OKAY -> {
                 val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
                 collector.onBatteryOkay(level, now)
-            }
-
-            WifiManager.WIFI_STATE_CHANGED_ACTION -> {
-                val state = intent.getIntExtra("wifi_state", -1)
-                if (state == 1) collector.onWifiChanged("DISCONNECTED", null, now)
-                else if (state == 3) collector.onWifiChanged("CONNECTED", null, now)
             }
 
             Intent.ACTION_HEADSET_PLUG -> {
@@ -118,7 +111,6 @@ class RecordReceiver : BroadcastReceiver() {
                 addAction(Intent.ACTION_BATTERY_CHANGED)
                 addAction(Intent.ACTION_BATTERY_LOW)
                 addAction(Intent.ACTION_BATTERY_OKAY)
-                addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
                 addAction(Intent.ACTION_HEADSET_PLUG)
                 addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
                 addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)

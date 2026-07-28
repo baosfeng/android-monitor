@@ -53,6 +53,50 @@ class MonitorAccessibilityService : AccessibilityService() {
         (application as MonitorApp).container.skipRuleEngine
     }
 
+    /** 是否在桌面（防止重复触发回桌面事件） */
+    private var isOnHomeScreen: Boolean = false
+
+    /** 前台 App 轮询：每 1 秒检测当前前台 App，变化即记录（不依赖窗口事件） */
+    private val foregroundHandler: android.os.Handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val foregroundPoller = object : Runnable {
+        override fun run() {
+            try { pollForegroundApp() } catch (_: Exception) {}
+            foregroundHandler.postDelayed(this, 1_000L)
+        }
+    }
+
+    private fun pollForegroundApp() {
+        val now = System.currentTimeMillis()
+        val root = rootInActiveWindow ?: return
+        val pkg = root.packageName?.toString()
+        root.recycle()
+        if (pkg == null) return
+
+        // 桌面
+        if (isHomeApp(pkg)) {
+            if (!isOnHomeScreen) {
+                isOnHomeScreen = true
+                lastPackageName = pkg
+                recordCollector.onHomeScreen(now)
+                timeline("🏠", "回到桌面")
+            }
+            return
+        }
+        isOnHomeScreen = false
+
+        // 系统 UI 跳过
+        if (isSystemUi(pkg)) return
+
+        // App 切换
+        if (pkg != lastPackageName) {
+            val appName = AppUtils.getAppName(pkg)
+            Log.d("MonitorService", "pollForegroundApp: $appName ($pkg)")
+            timeline("📱", appName)
+            recordCollector.onAppSwitched(pkg, appName, now)
+            lastPackageName = pkg
+        }
+    }
+
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
     private fun timeline(emoji: String, message: String) {
         Log.d("MonitorTimeline", "$emoji $message")
@@ -80,13 +124,11 @@ class MonitorAccessibilityService : AccessibilityService() {
         val className = event.className?.toString() ?: ""
         val now = System.currentTimeMillis()
 
-        // ===== 检测桌面（Home）：不追踪桌面 =====
+        // 过滤桌面和系统界面（纯日志，不处理 App 切换——由轮询负责）
         if (isHomeApp(packageName)) {
-            Log.d("MonitorService", "handleWindowChange: going to home screen")
+            Log.d("MonitorService", "handleWindowChange: home screen")
             return
         }
-
-        // 过滤系统界面
         if (isSystemUi(packageName)) {
             DiagnosticCounters.accessibilityFilteredCount++
             Log.d("MonitorService", "handleWindowChange: filtered as system UI: $packageName")
@@ -127,17 +169,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             }
         }
 
-        val appName = AppUtils.getAppName(packageName)
-
-        // ===== app_switch: 记录 App 切换 =====
-        if (packageName != lastPackageName) {
-            timeline("📱", "$appName")
-            recordCollector.onAppSwitched(packageName, appName, now)
-        }
-
         lastSwitchTimeMs = now
-
-        lastPackageName = packageName
         lastActivityClass = className
 
         // 保留 updateKillDetectorTargets 为空调用（保持兼容）
@@ -344,9 +376,13 @@ class MonitorAccessibilityService : AccessibilityService() {
         return packageName.startsWith("com.android.systemui") ||
                 packageName == "com.miui.systemui" ||
                 packageName == "com.miui.personalassistant" ||
+                packageName == "com.miui.securitycenter" ||
+                packageName == "com.miui.misound" ||
+                packageName == "miui.systemui.plugin" ||
                 packageName == "com.sohu.inputmethod.sogou" ||
                 packageName == "com.baidu.input" ||
                 packageName.startsWith("com.android.inputmethod") ||
+                packageName == "com.android.quicksearchbox" ||
                 packageName == "android"
     }
 
@@ -367,6 +403,7 @@ class MonitorAccessibilityService : AccessibilityService() {
      * 显示弹幕式跳过提示（居中半透明浮层）。
      * 使用 [android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY]
      * 保证在任意 App 上方显示，且不需要额外权限。
+     * 带有淡入淡出和上下滑入滑出的入场/退场动画。
      */
     private fun showSkipDanmaku(appName: String) {
         Log.d("MonitorService", "showSkipDanmaku: $appName")
@@ -390,6 +427,9 @@ class MonitorAccessibilityService : AccessibilityService() {
                     setColor(android.graphics.Color.argb(200, 0, 0, 0))
                     cornerRadius = 20f
                 }
+                // 初始状态：透明 + 向上偏移（为入场动画做准备）
+                alpha = 0f
+                translationY = -50f
             }
 
             val params = android.view.WindowManager.LayoutParams(
@@ -408,9 +448,27 @@ class MonitorAccessibilityService : AccessibilityService() {
             currentDanmaku = tv
             wm.addView(tv, params)
 
-            // 2.5 秒后移除
+            // 入场动画：淡入 + 下滑到目标位置（300ms）
+            tv.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(300)
+                .setInterpolator(android.view.animation.OvershootInterpolator(0.8f))
+                .start()
+
+            // 展示 DANMAKU_DURATION_MS 后退场
             tv.postDelayed({
-                removeCurrentDanmaku()
+                try {
+                    // 退场动画：淡出 + 上滑（250ms）
+                    tv.animate()
+                        .alpha(0f)
+                        .translationY(-30f)
+                        .setDuration(250)
+                        .withEndAction { removeCurrentDanmaku() }
+                        .start()
+                } catch (e: Exception) {
+                    removeCurrentDanmaku()
+                }
             }, DANMAKU_DURATION_MS)
         } catch (e: Exception) {
             Log.w("MonitorService", "显示跳过弹幕失败", e)
@@ -442,5 +500,7 @@ class MonitorAccessibilityService : AccessibilityService() {
             SkipEventRecorder.recordSkip(pkg, name, "", null)
             showSkipDanmaku(name)
         }
+        // 启动前台 App 轮询（兜底监测）
+        foregroundHandler.postDelayed(foregroundPoller, 10_000L)
     }
 }
