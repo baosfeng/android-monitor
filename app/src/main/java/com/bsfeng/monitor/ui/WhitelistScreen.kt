@@ -15,12 +15,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.ui.theme.IOSNavigationBar
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,17 +37,9 @@ fun WhitelistScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        // 顶部栏
-        TopAppBar(
-            title = { Text("广告白名单", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                TextButton(onClick = onBack) {
-                    Text("返回", color = MaterialTheme.colorScheme.primary)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+        IOSNavigationBar(
+            title = "广告白名单",
+            onBack = onBack,
         )
 
         // 搜索框
@@ -56,16 +49,16 @@ fun WhitelistScreen(
             placeholder = { Text("搜索应用...") },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            singleLine = true
+                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
+            singleLine = true,
         )
 
         // 提示文字
         Text(
             text = "加入白名单的 App 将跳过开屏广告检测",
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
         )
 
         // 应用列表
@@ -73,12 +66,12 @@ fun WhitelistScreen(
             items(filteredApps, key = { it.packageName }) { app ->
                 AppWhitelistRow(
                     app = app,
-                    onToggle = { viewModel.toggleWhitelist(app.packageName) }
+                    onToggle = { viewModel.toggleWhitelist(app.packageName) },
                 )
                 if (app != filteredApps.last()) {
                     HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        modifier = Modifier.padding(start = MonitorSpacing.lg),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
                 }
             }
@@ -89,15 +82,15 @@ fun WhitelistScreen(
 @Composable
 private fun AppWhitelistRow(
     app: AppInfo,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
 ) {
     val view = LocalView.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // 应用图标
         val iconBitmap = remember(app.icon) {
@@ -107,38 +100,38 @@ private fun AppWhitelistRow(
             Image(
                 bitmap = iconBitmap,
                 contentDescription = app.appName,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(40.dp),
             )
         } else {
             // 无图标时占位
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
+                    .padding(MonitorSpacing.xs),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = app.appName.take(1),
-                    fontSize = 18.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(MonitorSpacing.md))
 
         // 应用名 + 包名
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = app.appName,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
-                fontSize = 15.sp
             )
             Text(
                 text = app.packageName,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -148,7 +141,7 @@ private fun AppWhitelistRow(
             onCheckedChange = {
                 onToggle()
                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-            }
+            },
         )
     }
 }

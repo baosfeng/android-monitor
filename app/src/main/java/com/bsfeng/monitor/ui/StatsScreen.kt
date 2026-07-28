@@ -16,13 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.domain.model.RecordType
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
 
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun StatsScreen(
     viewModel: MainViewModel,
@@ -38,35 +35,34 @@ fun StatsScreen(
         state.recentEvents.groupBy { it.type::class.simpleName ?: "" }.entries.toList()
     }
 
-    LazyColumn(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
+    LazyColumn(modifier = modifier.fillMaxSize().padding(top = MonitorSpacing.sm)) {
         // 今日统计 — 总览
         item(key = "stats_title") {
             Text(
                 "今日统计",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(
-            style = SectionStyle.InsetGrouped,
-        ) {
-            item {
+        item {
+            InsetGroupedCard {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("事件总数", fontSize = 15.sp)
+                    Text("事件总数",
+                        style = MaterialTheme.typography.titleSmall)
                     val animatedEventCount by animateIntAsState(
                         targetValue = state.todayEventCount,
-                        animationSpec = tween(durationMillis = 600)
+                        animationSpec = tween(durationMillis = 600),
                     )
                     Text(
                         "$animatedEventCount",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
@@ -78,57 +74,53 @@ fun StatsScreen(
                 "App 使用时长",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(
-            style = SectionStyle.InsetGrouped,
-        ) {
-            if (state.appUsageStats.isEmpty()) {
-                item {
+        item {
+            InsetGroupedCard {
+                if (state.appUsageStats.isEmpty()) {
                     Text(
                         "暂无数据",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                     )
-                }
-            } else {
-                state.appUsageStats.forEachIndexed { index, stat ->
-                    item(key = "usage_$index") {
+                } else {
+                    state.appUsageStats.forEachIndexed { index, stat ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // App 名
                             Text(
                                 text = stat.appName,
-                                fontSize = 15.sp,
+                                style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
                             )
                             // 使用时长
                             Text(
                                 text = if (stat.totalMinutes > 0) "${stat.totalMinutes} 分钟" else "<1 分钟",
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
                             )
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(MonitorSpacing.md))
                             // 打开次数
                             Text(
                                 text = "${stat.openCount} 次",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         if (index < state.appUsageStats.lastIndex) {
                             HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp
+                                modifier = Modifier.padding(start = MonitorSpacing.lg),
+                                thickness = 0.5.dp,
                             )
                         }
                     }
@@ -142,50 +134,43 @@ fun StatsScreen(
                 "屏幕状态",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(
-            style = SectionStyle.InsetGrouped,
-        ) {
-            if (state.screenEvents.isEmpty()) {
-                item {
+        item {
+            InsetGroupedCard {
+                if (state.screenEvents.isEmpty()) {
                     Text(
                         "暂无数据",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                     )
-                }
-            } else {
-                // 显示最新的 10 条屏幕事件（倒序，最新的在上）
-                val displayScreens = state.screenEvents.reversed().take(10)
-                displayScreens.forEachIndexed { index, record ->
-                    item(key = "screen_$index") {
+                } else {
+                    val displayScreens = state.screenEvents.reversed().take(10)
+                    displayScreens.forEachIndexed { index, record ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 时间
                             Text(
                                 text = formatTime(record.timestamp),
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.width(60.dp)
+                                modifier = Modifier.width(60.dp),
                             )
-                            // 状态
                             Text(
                                 text = record.label,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
                             )
                         }
                         if (index < displayScreens.lastIndex) {
                             HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp
+                                modifier = Modifier.padding(start = MonitorSpacing.lg),
+                                thickness = 0.5.dp,
                             )
                         }
                     }
@@ -198,22 +183,22 @@ fun StatsScreen(
             Text(
                 "事件类型分布",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
             )
         }
-        section(
-            style = SectionStyle.InsetGrouped,
-        ) {
-            grouped.forEach { (type, events) ->
-                item(key = type) { _ ->
+        item {
+            InsetGroupedCard {
+                grouped.forEach { (type, events) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(type, fontSize = 14.sp)
-                        Text("${events.size} 次", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(type, style = MaterialTheme.typography.bodyMedium)
+                        Text("${events.size} 次",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -221,9 +206,6 @@ fun StatsScreen(
     }
 }
 
-/**
- * 格式化时间戳为 HH:mm:ss。
- */
 private fun formatTime(timestamp: Long): String {
     val cal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
     return String.format("%02d:%02d:%02d", cal.get(java.util.Calendar.HOUR_OF_DAY),

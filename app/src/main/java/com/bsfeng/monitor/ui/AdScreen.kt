@@ -20,14 +20,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.section.SectionStyle
-import io.github.alexzhirkevich.cupertino.section.section
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
+import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun AdScreen(
     modifier: Modifier = Modifier,
@@ -42,30 +40,30 @@ fun AdScreen(
 
     LazyColumn(modifier = modifier.fillMaxSize()) {
         // 头部统计
-        section(style = SectionStyle.InsetGrouped) {
-            item {
+        item {
+            InsetGroupedCard {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column {
                         Text(
                             "⏭️ 广告跳过记录",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(MonitorSpacing.xs))
                         val animatedCount by animateIntAsState(
                             targetValue = totalCount,
-                            animationSpec = tween(durationMillis = 600)
+                            animationSpec = tween(durationMillis = 600),
                         )
                         Text(
                             "累计跳过 ${animatedCount} 次",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (records.isNotEmpty()) {
@@ -84,21 +82,22 @@ fun AdScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 80.dp),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🛡️", fontSize = 48.sp)
-                        Spacer(Modifier.height(16.dp))
+                        Text("🛡️",
+                            style = MaterialTheme.typography.headlineLarge)
+                        Spacer(Modifier.height(MonitorSpacing.lg))
                         Text(
                             "暂无跳过记录",
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(MonitorSpacing.xs))
                         Text(
                             "打开有开屏广告的 App 即可自动跳过",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                 }
@@ -109,16 +108,18 @@ fun AdScreen(
                 Text(
                     "时间线",
                     style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                 )
             }
-            section(style = SectionStyle.InsetGrouped) {
-                items(records, key = { "${it.packageName}_${it.timestampMs}" }) { record ->
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + slideInVertically { it / 6 }
-                    ) {
-                        TimelineItem(record = record)
+            item {
+                InsetGroupedCard {
+                    records.forEach { record ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically { it / 6 },
+                        ) {
+                            TimelineItem(record = record)
+                        }
                     }
                 }
             }
@@ -134,69 +135,69 @@ private fun TimelineItem(record: SkipRecord) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.Top
+            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+        verticalAlignment = Alignment.Top,
     ) {
         // 时间线左侧：时间 + 竖线
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.width(52.dp)
+            modifier = Modifier.width(52.dp),
         ) {
             Text(
                 text = timeText,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 text = dateText,
-                fontSize = 9.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
         }
 
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(MonitorSpacing.md))
 
         // 时间线竖线 + 圆点
         Box(
             modifier = Modifier.width(20.dp).fillMaxHeight(),
-            contentAlignment = Alignment.TopCenter
+            contentAlignment = Alignment.TopCenter,
         ) {
             HorizontalDivider(
-                modifier = Modifier.width(2.dp).padding(top = 8.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                modifier = Modifier.width(2.dp).padding(top = MonitorSpacing.sm),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
             )
             Text(
                 "⏭️",
-                fontSize = 14.sp,
-                modifier = Modifier.padding(top = 2.dp)
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = MonitorSpacing.xxs),
             )
         }
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MonitorSpacing.sm))
 
         // 右侧内容
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = record.appName.ifBlank { record.packageName },
-                fontSize = 15.sp,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(MonitorSpacing.xxs))
             Text(
                 text = "已自动跳过开屏广告",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (record.selector.isNotBlank()) {
                 Text(
                     text = "选择器: ${record.selector}",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
