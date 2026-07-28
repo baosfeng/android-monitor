@@ -1,7 +1,12 @@
 package com.bsfeng.monitor.finance.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -192,10 +199,23 @@ fun AddTransactionScreen(
                             ) {
                                 for (cat in row) {
                                     val isSelected = cat.name == selectedCategory
+                                    val catInteractionSource = remember(cat.name) { MutableInteractionSource() }
+                                    val isCatPressed by catInteractionSource.collectIsPressedAsState()
+                                    val catScale by animateFloatAsState(
+                                        targetValue = if (isCatPressed) 0.85f else 1f,
+                                        animationSpec = spring(dampingRatio = 0.4f, stiffness = 600f)
+                                    )
                                     Column(
                                         modifier = Modifier
-                                            .clickable { selectedCategory = cat.name }
-                                            .padding(4.dp),
+                                            .clickable(
+                                                interactionSource = catInteractionSource,
+                                                indication = null
+                                            ) { selectedCategory = cat.name }
+                                            .padding(4.dp)
+                                            .graphicsLayer {
+                                                scaleX = catScale
+                                                scaleY = catScale
+                                            },
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Box(
@@ -260,11 +280,18 @@ fun AddTransactionScreen(
             // 保存按钮
             item(key = "save") {
                 Spacer(Modifier.height(16.dp))
+                val saveInteractionSource = remember { MutableInteractionSource() }
+                val isSavePressed by saveInteractionSource.collectIsPressedAsState()
+                val saveScale by animateFloatAsState(
+                    targetValue = if (isSavePressed) 0.95f else 1f,
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f)
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(10.dp))
+                        .graphicsLayer { scaleX = saveScale; scaleY = saveScale }
                         .background(
                             if (canSave) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
@@ -285,7 +312,8 @@ fun AddTransactionScreen(
                                 createdAt = now, updatedAt = now
                             ))
                         },
-                        enabled = canSave
+                        enabled = canSave,
+                        interactionSource = saveInteractionSource
                     ) {
                         Text("保存", color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold)
@@ -316,12 +344,18 @@ private fun SegmentedControl(
     ) {
         options.forEachIndexed { index, option ->
             val isSelected = index == selectedIndex
+            val segScale by animateFloatAsState(
+                targetValue = if (isSelected) 1f else 0.95f,
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f)
+            )
             Box(
                 modifier = Modifier
                     .weight(1f).fillMaxHeight()
                     .then(if (isSelected) Modifier
+                        .graphicsLayer { scaleX = segScale; scaleY = segScale }
                         .clip(RoundedCornerShape(7.dp))
-                        .background(MaterialTheme.colorScheme.surface) else Modifier)
+                        .background(MaterialTheme.colorScheme.surface) else Modifier
+                            .graphicsLayer { scaleX = segScale; scaleY = segScale })
                     .clickable { onSelect(index) },
                 contentAlignment = Alignment.Center
             ) {

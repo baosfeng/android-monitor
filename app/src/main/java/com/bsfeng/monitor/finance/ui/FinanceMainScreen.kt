@@ -1,6 +1,13 @@
 package com.bsfeng.monitor.finance.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -71,11 +80,31 @@ fun FinanceMainScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { viewModel.previousMonth() }) {
+                    val prevInteractionSource = remember { MutableInteractionSource() }
+                    val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
+                    val prevScale by animateFloatAsState(
+                        targetValue = if (isPrevPressed) 0.85f else 1f,
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                    )
+                    TextButton(
+                        onClick = { viewModel.previousMonth() },
+                        modifier = Modifier.graphicsLayer { scaleX = prevScale; scaleY = prevScale },
+                        interactionSource = prevInteractionSource
+                    ) {
                         Text("◀", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                     }
                     Text(monthDisplay, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = { viewModel.nextMonth() }) {
+                    val nextInteractionSource = remember { MutableInteractionSource() }
+                    val isNextPressed by nextInteractionSource.collectIsPressedAsState()
+                    val nextScale by animateFloatAsState(
+                        targetValue = if (isNextPressed) 0.85f else 1f,
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                    )
+                    TextButton(
+                        onClick = { viewModel.nextMonth() },
+                        modifier = Modifier.graphicsLayer { scaleX = nextScale; scaleY = nextScale },
+                        interactionSource = nextInteractionSource
+                    ) {
                         Text("▶", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -90,8 +119,24 @@ fun FinanceMainScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        val animatedExpense by animateFloatAsState(
+                            targetValue = stats.totalExpense.toFloat(),
+                            animationSpec = tween(durationMillis = 600)
+                        )
+                        val animatedIncome by animateFloatAsState(
+                            targetValue = stats.totalIncome.toFloat(),
+                            animationSpec = tween(durationMillis = 600)
+                        )
+                        val animatedBalance by animateFloatAsState(
+                            targetValue = (stats.totalIncome - stats.totalExpense).toFloat(),
+                            animationSpec = tween(durationMillis = 600)
+                        )
+                        val animatedCount by animateIntAsState(
+                            targetValue = stats.transactionCount,
+                            animationSpec = tween(durationMillis = 600)
+                        )
                         Text(
-                            "¥${stats.displayExpense}",
+                            "¥${String.format("%.2f", animatedExpense.toDouble())}",
                             fontSize = 28.sp, fontWeight = FontWeight.Bold,
                             color = Color(0xFFFF3B30),
                             modifier = Modifier.fillMaxWidth(),
@@ -108,9 +153,9 @@ fun FinanceMainScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            StatItem("收入", "¥${stats.displayIncome}", Color(0xFF34C759))
-                            StatItem("结余", "¥${stats.displayBalance}", Color(0xFF007AFF))
-                            StatItem("笔数", "${stats.transactionCount}", Color(0xFF8E8E93))
+                            StatItem("收入", "¥${String.format("%.2f", animatedIncome.toDouble())}", Color(0xFF34C759))
+                            StatItem("结余", "¥${String.format("%.2f", animatedBalance.toDouble())}", Color(0xFF007AFF))
+                            StatItem("笔数", "${animatedCount}", Color(0xFF8E8E93))
                         }
                         if (stats.budgetProgress > 0f) {
                             Spacer(Modifier.height(12.dp))
@@ -218,9 +263,25 @@ fun FinanceMainScreen(
                 .align(Alignment.BottomEnd)
                 .windowInsetsBottomHeight(WindowInsets.navigationBars)
         ) {
+            var fabPressed by remember { mutableStateOf(false) }
+            val fabScale by animateFloatAsState(
+                targetValue = if (fabPressed) 0.88f else 1f,
+                animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f)
+            )
             FloatingActionButton(
                 onClick = onAddClick,
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .padding(16.dp)
+                    .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                fabPressed = true
+                                tryAwaitRelease()
+                                fabPressed = false
+                            }
+                        )
+                    },
                 containerColor = Color(0xFF007AFF),
                 contentColor = Color.White,
                 shape = RoundedCornerShape(28.dp)

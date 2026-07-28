@@ -1,7 +1,15 @@
 package com.bsfeng.monitor.finance.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,11 +77,31 @@ fun FinanceStatsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onPreviousMonth) {
+                val prevInteractionSource = remember { MutableInteractionSource() }
+                val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
+                val prevScale by animateFloatAsState(
+                    targetValue = if (isPrevPressed) 0.85f else 1f,
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                )
+                TextButton(
+                    onClick = onPreviousMonth,
+                    modifier = Modifier.graphicsLayer { scaleX = prevScale; scaleY = prevScale },
+                    interactionSource = prevInteractionSource
+                ) {
                     Text("◀", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                 }
                 Text(monthDisplay, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                TextButton(onClick = onNextMonth) {
+                val nextInteractionSource = remember { MutableInteractionSource() }
+                val isNextPressed by nextInteractionSource.collectIsPressedAsState()
+                val nextScale by animateFloatAsState(
+                    targetValue = if (isNextPressed) 0.85f else 1f,
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f)
+                )
+                TextButton(
+                    onClick = onNextMonth,
+                    modifier = Modifier.graphicsLayer { scaleX = nextScale; scaleY = nextScale },
+                    interactionSource = nextInteractionSource
+                ) {
                     Text("▶", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -80,20 +109,35 @@ fun FinanceStatsScreen(
 
         // 收支卡片
         item {
+            val animatedExpense by animateFloatAsState(
+                targetValue = stats.totalExpense.toFloat(),
+                animationSpec = tween(durationMillis = 600)
+            )
+            val animatedIncome by animateFloatAsState(
+                targetValue = stats.totalIncome.toFloat(),
+                animationSpec = tween(durationMillis = 600)
+            )
+            val animatedBalance by animateFloatAsState(
+                targetValue = (stats.totalIncome - stats.totalExpense).toFloat(),
+                animationSpec = tween(durationMillis = 600)
+            )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 StatCard(
-                    title = "支出", amount = "¥${stats.displayExpense}",
+                    title = "支出",
+                    amount = "¥${String.format("%.2f", animatedExpense.toDouble())}",
                     color = Color(0xFFFF3B30), modifier = Modifier.weight(1f)
                 )
                 StatCard(
-                    title = "收入", amount = "¥${stats.displayIncome}",
+                    title = "收入",
+                    amount = "¥${String.format("%.2f", animatedIncome.toDouble())}",
                     color = Color(0xFF34C759), modifier = Modifier.weight(1f)
                 )
                 StatCard(
-                    title = "结余", amount = "¥${stats.displayBalance}",
+                    title = "结余",
+                    amount = "¥${String.format("%.2f", animatedBalance.toDouble())}",
                     color = if (stats.balance >= 0) Color(0xFF007AFF) else Color(0xFFFF3B30),
                     modifier = Modifier.weight(1f)
                 )
@@ -204,9 +248,17 @@ private fun StatCard(
     }
 }
 
-/** 环形图（Compose Canvas 自绘） */
+/** 环形图（Compose Canvas 自绘），带旋转展开入场动画 */
 @Composable
 private fun DonutChart(data: Map<String, Double>, total: Double) {
+    val animationProgress = remember { Animatable(0f) }
+    LaunchedEffect(data, total) {
+        animationProgress.snapTo(0f)
+        animationProgress.animateTo(1f,
+            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+        )
+    }
+
     Canvas(modifier = Modifier.size(150.dp)) {
         if (total <= 0) return@Canvas
         val strokeWidth = 30f
@@ -216,7 +268,7 @@ private fun DonutChart(data: Map<String, Double>, total: Double) {
         var startAngle = -90f
         val sorted = data.entries.sortedByDescending { it.value }
         for ((index, entry) in sorted.withIndex()) {
-            val sweepAngle = (entry.value / total * 360).toFloat()
+            val sweepAngle = (entry.value / total * 360).toFloat() * animationProgress.value
             drawArc(
                 color = getChartColor(index),
                 startAngle = startAngle, sweepAngle = sweepAngle,
