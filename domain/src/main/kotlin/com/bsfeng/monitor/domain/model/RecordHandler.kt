@@ -27,9 +27,14 @@ class ChargingHandler : RecordHandler {
         action in setOf("STARTED", "STOPPED")
     override fun createLabel(action: String, detail: Map<String, String>?): String {
         val chargeType = detail?.get("type") ?: ""
+        val level = detail?.get("level") ?: ""
+        val levelSuffix = if (level.isNotEmpty()) "（电量 ${level}%）" else ""
         return when (action) {
-            "STARTED" -> if (chargeType.isNotEmpty()) "${chargeType}充电" else "开始充电"
-            else -> "停止充电"
+            "STARTED" -> {
+                val prefix = if (chargeType.isNotEmpty()) chargeType else ""
+                "${prefix}充电$levelSuffix"
+            }
+            else -> "停止充电$levelSuffix"
         }
     }
     override fun needsDuration(action: String) = false

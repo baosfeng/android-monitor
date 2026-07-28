@@ -58,6 +58,11 @@ class UsageTracker(
         // 亮屏后不立即开始计时，等待用户切到具体 App
     }
 
+    /** 关闭当前 App session（回到桌面时调用），不清除缓存供后续恢复 */
+    fun closeSession(timestamp: Long) {
+        closeCurrentSession(timestamp)
+    }
+
     private fun closeCurrentSession(timestamp: Long) {
         val pkg = currentPkg ?: return
         val appName = currentAppName ?: return

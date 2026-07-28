@@ -57,12 +57,10 @@ class ServiceContainer(private val app: Application) {
 
     init {
         DebugConfig.init()
-        // 解决 UsageTracker 与 RecordCollector 的循环依赖
+        // 解决 UsageTracker 与 RecordCollector 的循环依赖：
+        // UsageTracker 生成 APP_USAGE 记录后，通过回调写入 RecordStore
         usageTracker.setOnRecordCallback { record ->
-            recordCollector.let {
-                // UsageTracker 的回调由 RecordCollector.onAppSwitched 触发，
-                // 这里不需要额外操作，因为 onAppSwitch 内部已通过 closeCurrentSession 生成 CLOSED 事件
-            }
+            recordStore.insert(record)
         }
     }
 }
