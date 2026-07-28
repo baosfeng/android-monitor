@@ -59,8 +59,9 @@ class ServiceContainer(private val app: Application) {
         DebugConfig.init()
         // 解决 UsageTracker 与 RecordCollector 的循环依赖：
         // UsageTracker 生成 APP_USAGE 记录后，通过回调写入 RecordStore
+        // 同 App 5 分钟内多次使用合并为一条（累加 duration）
         usageTracker.setOnRecordCallback { record ->
-            recordStore.insert(record)
+            recordStore.insertOrMerge(record)
         }
     }
 }
