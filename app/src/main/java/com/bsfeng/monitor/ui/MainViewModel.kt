@@ -25,7 +25,7 @@ data class MonitorState(
     /** 是否正在加载更多 */
     val isLoadingMore: Boolean = false,
     /** 是否还有更多数据可加载 */
-    val hasMore: Boolean = true,
+    val hasMore: Boolean = false,
     val accessibilityEnabled: Boolean = false,
     val appUsageStats: List<AppUsageStat> = emptyList(),
     val screenEvents: List<Record> = emptyList(),
@@ -68,6 +68,13 @@ class MainViewModel : ViewModel() {
                 refreshData()
             }
         }
+        // 活跃 App 检测：每秒更新，不依赖数据刷新
+        viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                updateActiveApp()
+            }
+        }
     }
 
     /**
@@ -104,7 +111,7 @@ class MainViewModel : ViewModel() {
                 isLoadingMore = false,
                 hasMore = loadedCount < records.size
             )
-            updateActiveApp(records)
+            updateActiveApp()
 
             // 再加载统计数据（较慢的聚合查询）
             val (usage, screens) = withContext(Dispatchers.IO) {
@@ -145,38 +152,54 @@ class MainViewModel : ViewModel() {
                     todayEventCount = records.size,
                     hasMore = loadedCount < records.size
                 )
-                updateActiveApp(records)
+                updateActiveApp()
             } catch (_: Exception) {}
         }
     }
 
     /**
-     * 检测当前正在使用的 App（最新一条 OPENED 且没有后续 CLOSED 的），计算已用时长。
+     * 检测当前正在使用的 App，计算已用时长。
+     * 通过 UsageTracker.getActiveSession() 获取当前活跃 session。
      */
-    private fun updateActiveApp(records: List<Record>) {
-        val now = System.currentTimeMillis()
-        // 从最新的记录开始找：找到第一条 APP_USAGE/OPENED，看它后面是否有同名的 CLOSED
-        for (i in records.indices) {
-            val r = records[i]
-            if (r.type !is RecordType.APP_USAGE || r.action != "OPENED") continue
-            // 检查这条 OPENED 之后是否有同名的 CLOSED
-            val hasClosed = records.asSequence()
-                .take(i) // i 之前的记录时间更新（records 是 DESC 排序）
-                .any { it.type is RecordType.APP_USAGE && it.action == "CLOSED" && it.label == r.label }
-            if (hasClosed) continue // 已关闭，跳过
-            // 找到了！当前正在使用的 App
-            val durationMs = now - r.timestamp
-            val min = durationMs / 60000
-            val sec = (durationMs % 60000) / 1000
+    private fun updateActiveApp() {
+        val usageTracker = app.container.usageTracker
+        val session = usageTracker.getActiveSession()
+        if (session != null) {
+            val (name, totalMs) = session
+            val min = totalMs / 60000
+            val sec = (totalMs % 60000) / 1000
             val text = if (min > 0) "使用中 ${min}分${sec}秒" else "使用中 ${sec}秒"
             _state.value = _state.value.copy(
-                activeAppName = r.label,
+                activeAppName = name,
                 activeAppDurationText = text
             )
-            return
+        } else {
+            // 1. 先用 UsageTracker 记录的最后活跃 App
+            val lastLabel = usageTracker.lastActiveLabel
+            if (lastLabel != null) {
+                _state.value = _state.value.copy(
+                    activeAppName = lastLabel,
+                    activeAppDurationText = "使用中"
+                )
+                return
+            }
+            // 2. 兜底：从数据库最近记录推断（force-stop 后恢复）
+            val inferred = inferActiveFromRecentRecords()
+            _state.value = _state.value.copy(
+                activeAppName = inferred,
+                activeAppDurationText = if (inferred != null) "使用中" else null
+            )
         }
-        // 没有活跃 App
-        _state.value = _state.value.copy(activeAppName = null, activeAppDurationText = null)
+    }
+
+    /**
+     * 从最近 5 分钟的 USAGE 记录推断当前活跃 App（force-stop 重启后 poller 不可用时兜底）。
+     */
+    private fun inferActiveFromRecentRecords(): String? {
+        val fiveMinAgo = System.currentTimeMillis() - 300_000L
+        return cachedTodayRecords.firstOrNull {
+            it.type is RecordType.APP_USAGE && it.action == "USAGE" && it.timestamp >= fiveMinAgo
+        }?.label
     }
 
     /**
