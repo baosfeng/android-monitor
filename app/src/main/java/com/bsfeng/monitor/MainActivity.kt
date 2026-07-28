@@ -15,14 +15,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -42,16 +52,9 @@ import com.bsfeng.monitor.ui.AdScreen
 import com.bsfeng.monitor.ui.AdViewModel
 import com.bsfeng.monitor.ui.WhitelistScreen
 import com.bsfeng.monitor.ui.WhitelistViewModel
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
-import io.github.alexzhirkevich.cupertino.CupertinoScaffold
-import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
-import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
-import io.github.alexzhirkevich.cupertino.icons.outlined.*
-import io.github.alexzhirkevich.cupertino.icons.filled.*
-import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
+import com.bsfeng.monitor.ui.theme.MonitorTheme
+import androidx.compose.ui.graphics.vector.ImageVector
 
-@OptIn(ExperimentalCupertinoApi::class)
 class MainActivity : ComponentActivity() {
 
     private sealed class FinanceRoute {
@@ -71,7 +74,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            CupertinoTheme {
+            MonitorTheme {
                 val viewModel: MainViewModel = viewModel()
                 val financeViewModel: FinanceViewModel = viewModel()
                 val skipRuleViewModel: SkipRuleViewModel = viewModel()
@@ -84,29 +87,26 @@ class MainActivity : ComponentActivity() {
 
                 val tabs = remember {
                     listOf(
-                        TabItem("实时", CupertinoIcons.Outlined.House, CupertinoIcons.Filled.House),
-                        TabItem("广告", CupertinoIcons.Outlined.Eye, CupertinoIcons.Outlined.Eye),
-                        TabItem("记账", CupertinoIcons.Outlined.PlusCircle, CupertinoIcons.Filled.PlusCircle),
-                        TabItem("设置", CupertinoIcons.Outlined.Gearshape, CupertinoIcons.Filled.Gearshape),
+                        TabItem("实时", Icons.Outlined.Home, Icons.Filled.Home),
+                        TabItem("广告", Icons.Outlined.Visibility, Icons.Outlined.Visibility),
+                        TabItem("记账", Icons.Outlined.AddCircle, Icons.Filled.AddCircle),
+                        TabItem("设置", Icons.Outlined.Settings, Icons.Filled.Settings),
                     )
                 }
 
-                CupertinoScaffold(
+                Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
                         if (!showSkipRuleScreen && !showWhitelistScreen) {
-                            CupertinoNavigationBar(
-                                modifier = Modifier.fillMaxWidth(),
-                                windowInsets = WindowInsets(0, 0, 0, 0),
-                            ) {
+                            NavigationBar {
                                 tabs.forEachIndexed { index, tab ->
                                     val isSelected = selectedTab == index
                                     val tabColor by animateColorAsState(
                                         targetValue = if (isSelected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f)
+                                        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
                                     )
-                                    CupertinoNavigationBarItem(
+                                    NavigationBarItem(
                                         selected = isSelected,
                                         onClick = {
                                             selectedTab = index
@@ -120,14 +120,11 @@ class MainActivity : ComponentActivity() {
                                                 if (isSelected) tab.selectedIcon else tab.icon,
                                                 contentDescription = tab.title,
                                                 modifier = Modifier.size(24.dp),
-                                                tint = tabColor
+                                                tint = tabColor,
                                             )
                                         },
                                         label = {
-                                            Text(
-                                                tab.title,
-                                                color = tabColor
-                                            )
+                                            Text(tab.title, color = tabColor)
                                         },
                                     )
                                 }
@@ -240,6 +237,6 @@ class MainActivity : ComponentActivity() {
 
 private data class TabItem(
     val title: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon: ImageVector,
+    val selectedIcon: ImageVector,
 )
