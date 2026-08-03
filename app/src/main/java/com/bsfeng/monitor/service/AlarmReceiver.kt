@@ -14,6 +14,9 @@ import kotlinx.coroutines.launch
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // 系统重启后 AlarmManager 闹钟丢失,重新调度(重复调用会更新同一 PendingIntent,不会叠加)
+        scheduleAlarmCheck(context)
+
         HealthChecker.checkAndRestore(context)
 
         // 检查 AccessibilityService 是否存活，如果不在则尝试唤醒应用进程
@@ -26,13 +29,19 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         // 每 1 分钟也触发一次数据上报
+        // goAsync():广播回调返回后进程可能被系统回收,异步任务必须持有 pendingResult
+        val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            val reporter = EventReporter(context)
-            if (AppUtils.getToken() != null) {
-                reporter.uploadBatch()
-            } else {
-                reporter.registerDevice()
-                reporter.uploadBatch()
+            try {
+                val reporter = EventReporter(context)
+                if (AppUtils.getToken() != null) {
+                    reporter.uploadBatch()
+                } else {
+                    reporter.registerDevice()
+                    reporter.uploadBatch()
+                }
+            } finally {
+                pendingResult.finish()
             }
         }
     }

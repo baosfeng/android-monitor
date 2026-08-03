@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import com.bsfeng.monitor.core.di.ServiceContainer
 import com.bsfeng.monitor.record.RecordReceiver
+import com.bsfeng.monitor.service.scheduleAlarmCheck
 
 /**
  * 应用入口 — 初始化 DI 容器并注册系统广播接收器。
@@ -25,6 +26,8 @@ class MonitorApp : Application() {
         container = ServiceContainer(this)
         registerRecordReceiver()
         registerWifiNetworkCallback()
+        // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
+        scheduleAlarmCheck(this)
     }
 
     private fun registerRecordReceiver() {

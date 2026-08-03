@@ -51,5 +51,14 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- 定时保活检查 + 周期上报触发(每分钟一次) -->
+        <receiver
+            android:name=".service.AlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
