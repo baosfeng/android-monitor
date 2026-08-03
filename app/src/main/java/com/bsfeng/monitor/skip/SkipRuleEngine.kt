@@ -35,6 +35,9 @@ class SkipRuleEngine(
     private val actionCooldowns = mutableMapOf<String, Long>()
     private val handler = Handler(Looper.getMainLooper())
 
+    /** matchDelay 延迟匹配任务句柄,停止监控/切包时清理,防止对错误前台 App 误点击 */
+    private var pendingDelayedTask: Runnable? = null
+
     /** 通用兜底：每个 App 的最近执行时间 */
     /** 跳过成功后冷却：包名 → 上次成功跳过时间 */
     private val skipCooldowns = mutableMapOf<String, Long>()
@@ -232,8 +235,11 @@ class SkipRuleEngine(
 
         // matchDelay：延迟 matchDelay 毫秒后使用新鲜根节点执行匹配
         if (matchRule.matchDelay > 0) {
-            handler.postDelayed({
-                val freshRoot = rootNodeProvider?.invoke() ?: return@postDelayed
+            // 清理旧的延迟任务，防止切包/停止后对错误前台 App 误点击
+            pendingDelayedTask?.let { handler.removeCallbacks(it) }
+            val delayedTask = Runnable {
+                pendingDelayedTask = null
+                val freshRoot = rootNodeProvider?.invoke() ?: return@Runnable
                 try {
                     if (performMatchAndClick(ruleId, matchRule, freshRoot)) {
                         updateCooldown(matchRule)
@@ -243,7 +249,9 @@ class SkipRuleEngine(
                 } finally {
                     freshRoot.recycle()
                 }
-            }, matchRule.matchDelay)
+            }
+            pendingDelayedTask = delayedTask
+            handler.postDelayed(delayedTask, matchRule.matchDelay)
             return false
         }
 
@@ -553,6 +561,9 @@ class SkipRuleEngine(
             Log.d(TAG, "⏹ 停止监控: $watchPackage")
         }
         watchHandler.removeCallbacks(watchScanTask)
+        // 清理 matchDelay 延迟匹配任务,防止切包后对错误前台 App 误点击
+        pendingDelayedTask?.let { handler.removeCallbacks(it) }
+        pendingDelayedTask = null
         watchPackage = null
         watchClassName = null
         watchStartTime = 0L
