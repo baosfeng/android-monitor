@@ -63,6 +63,16 @@ class RecordStore(private val db: DatabaseHelper) {
             arrayOf(typeName, dateStart.toString(), dateEnd.toString()))
     }
 
+    /**
+     * 按类型 + action 查询(SQL 层过滤,避免全量拉取后内存过滤,
+     * 适用于 AD_SKIPPED 等高频记录类型的定向查询)。
+     */
+    fun queryByTypeAndAction(type: RecordType, action: String, dateStart: Long, dateEnd: Long): List<Record> {
+        val typeName = RecordType.Companion.toString(type)
+        return query("type = ? AND action = ? AND timestamp >= ? AND timestamp <= ?",
+            arrayOf(typeName, action, dateStart.toString(), dateEnd.toString()))
+    }
+
     fun getDailySummary(dateStart: Long, dateEnd: Long): DailySummary {
         val db = db.readableDatabase
         // 亮屏时长:UNLOCKED→OFF 配对计算,无配对时按 5 分钟估算
