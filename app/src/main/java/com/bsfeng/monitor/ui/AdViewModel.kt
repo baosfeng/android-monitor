@@ -52,8 +52,10 @@ class AdViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val todayStart = System.currentTimeMillis() - 86400000L * 7
-                val records = store.queryByType(RecordType.SCREEN, todayStart, System.currentTimeMillis())
-                val skipEvents = records.filter { it.action == "AD_SKIPPED" }
+                // SQL 层直接过滤 AD_SKIPPED,避免全量 SCREEN 记录拉取+JSON 反序列化
+                val skipEvents = store.queryByTypeAndAction(
+                    RecordType.SCREEN, "AD_SKIPPED", todayStart, System.currentTimeMillis()
+                )
 
                 _skipRecords.value = skipEvents.map { record ->
                     SkipRecord(
