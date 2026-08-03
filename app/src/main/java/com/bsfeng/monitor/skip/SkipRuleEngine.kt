@@ -263,31 +263,34 @@ class SkipRuleEngine(
             try {
                 val selector = SelectorParser.parse(selectorExpr)
                 val nodes = NodeMatcher.find(rootNode, selector)
+                try {
+                    DebugConfig.log("规则 $ruleId 尝试选择器: $selectorExpr → 找到 ${nodes.size} 个节点")
 
-                DebugConfig.log("规则 $ruleId 尝试选择器: $selectorExpr → 找到 ${nodes.size} 个节点")
+                    // 过滤不可见的节点
+                    val visibleNodes = nodes.filter { it.isVisibleToUser }
 
-                // 过滤不可见的节点
-                val visibleNodes = nodes.filter { it.isVisibleToUser }
+                    if (visibleNodes.isNotEmpty()) {
+                        // 取第一个可见节点执行点击
+                        val target = visibleNodes.first()
+                        val targetText = target.text
+                        val targetId = target.viewIdResourceName
+                        val bounds = android.graphics.Rect().also { target.getBoundsInScreen(it) }
+                        DebugConfig.log("点击目标: text=$targetText id=$targetId bounds=$bounds")
 
-                if (visibleNodes.isNotEmpty()) {
-                    // 取第一个可见节点执行点击
-                    val target = visibleNodes.first()
-                    val targetText = target.text
-                    val targetId = target.viewIdResourceName
-                    val bounds = android.graphics.Rect().also { target.getBoundsInScreen(it) }
-                    DebugConfig.log("点击目标: text=$targetText id=$targetId bounds=$bounds")
-
-                    if (ActionExecutor.perform(target, matchRule.action)) {
-                        Log.d(TAG, "✅ 点击成功: $selectorExpr")
-                        return true
+                        if (ActionExecutor.perform(target, matchRule.action)) {
+                            Log.d(TAG, "✅ 点击成功: $selectorExpr")
+                            return true
+                        } else {
+                            DebugConfig.log("点击失败: $selectorExpr — perform 返回 false")
+                        }
+                    } else if (nodes.isNotEmpty()) {
+                        val first = nodes.first()
+                        DebugConfig.log("找到 ${nodes.size} 个节点但全部不可见，示例: text=${first.text} id=${first.viewIdResourceName}")
                     } else {
-                        DebugConfig.log("点击失败: $selectorExpr — perform 返回 false")
+                        DebugConfig.log("选择器无匹配: $selectorExpr")
                     }
-                } else if (nodes.isNotEmpty()) {
-                    val first = nodes.first()
-                    DebugConfig.log("找到 ${nodes.size} 个节点但全部不可见，示例: text=${first.text} id=${first.viewIdResourceName}")
-                } else {
-                    DebugConfig.log("选择器无匹配: $selectorExpr")
+                } finally {
+                    NodeMatcher.recycleAll(nodes)
                 }
             } catch (e: Exception) {
                 DebugConfig.log("选择器解析/匹配异常: $selectorExpr → ${e.message}")
@@ -341,26 +344,30 @@ class SkipRuleEngine(
             try {
                 val selector = SelectorParser.parse(selectorExpr)
                 val nodes = NodeMatcher.find(rootNode, selector)
-                if (nodes.isEmpty()) continue
+                try {
+                    if (nodes.isEmpty()) continue
 
-                // 第一轮：可见节点
-                val visibleNodes = nodes.filter { it.isVisibleToUser }
-                if (visibleNodes.isNotEmpty()) {
-                    val target = visibleNodes.first()
-                    if (ActionExecutor.perform(target, "click")) {
-                        DebugConfig.log("  ✅ 匹配成功: $selectorExpr → ${target.text}")
-                        return true
+                    // 第一轮：可见节点
+                    val visibleNodes = nodes.filter { it.isVisibleToUser }
+                    if (visibleNodes.isNotEmpty()) {
+                        val target = visibleNodes.first()
+                        if (ActionExecutor.perform(target, "click")) {
+                            DebugConfig.log("  ✅ 匹配成功: $selectorExpr → ${target.text}")
+                            return true
+                        }
                     }
-                }
 
-                // 第二轮：不可见节点
-                val invisibleNodes = nodes.filter { !it.isVisibleToUser }
-                if (invisibleNodes.isNotEmpty()) {
-                    val target = invisibleNodes.first()
-                    if (ActionExecutor.perform(target, "click")) {
-                        DebugConfig.log("  ✅ 匹配成功(不可见): $selectorExpr → ${target.text}")
-                        return true
+                    // 第二轮：不可见节点
+                    val invisibleNodes = nodes.filter { !it.isVisibleToUser }
+                    if (invisibleNodes.isNotEmpty()) {
+                        val target = invisibleNodes.first()
+                        if (ActionExecutor.perform(target, "click")) {
+                            DebugConfig.log("  ✅ 匹配成功(不可见): $selectorExpr → ${target.text}")
+                            return true
+                        }
                     }
+                } finally {
+                    NodeMatcher.recycleAll(nodes)
                 }
             } catch (e: Exception) {
                 DebugConfig.log("  $selectorExpr → 异常: ${e.message}")
@@ -705,33 +712,37 @@ class SkipRuleEngine(
             try {
                 val selector = SelectorParser.parse(selectorExpr)
                 val nodes = NodeMatcher.find(rootNode, selector)
-                val visibleNodes = nodes.filter { it.isVisibleToUser }
-                if (visibleNodes.isNotEmpty()) {
-                    val target = visibleNodes.first()
+                try {
+                    val visibleNodes = nodes.filter { it.isVisibleToUser }
+                    if (visibleNodes.isNotEmpty()) {
+                        val target = visibleNodes.first()
 
-                    // 过滤空边界节点
-                    val bounds = android.graphics.Rect()
-                    target.getBoundsInScreen(bounds)
-                    if (bounds.isEmpty) {
-                        Log.d(TAG, "跳过空边界节点: ${target.text} (${target.viewIdResourceName})")
-                        continue
+                        // 过滤空边界节点
+                        val bounds = android.graphics.Rect()
+                        target.getBoundsInScreen(bounds)
+                        if (bounds.isEmpty) {
+                            Log.d(TAG, "跳过空边界节点: ${target.text} (${target.viewIdResourceName})")
+                            continue
+                        }
+
+                        Log.d(TAG, "监控找到匹配节点: ${target.text} (${target.viewIdResourceName}) " +
+                                "bounds=[${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]")
+
+                        // 小程序广告用坐标点击命中覆盖层，普通 App 用规则默认动作
+                        val clickAction = if (MiniProgramSkipHandler.isMiniProgram(watchClassName))
+                            MiniProgramSkipHandler.getClickAction() else matchRule.action
+                        ActionExecutor.perform(target, clickAction)
+                        Log.d(TAG, "⏳ 规则点击已执行，进入验证: $ruleId <- $selectorExpr")
+                        val pkg = watchPackage ?: return false
+                        pendingConfirmPkg = pkg
+                        verifyMissCount = 0
+                        verifyRetryCount = 0
+                        lastClickSelector = selectorExpr
+                        lastMatchRuleKey = matchRule.key
+                        return true
                     }
-
-                    Log.d(TAG, "监控找到匹配节点: ${target.text} (${target.viewIdResourceName}) " +
-                            "bounds=[${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]")
-
-                    // 小程序广告用坐标点击命中覆盖层，普通 App 用规则默认动作
-                    val clickAction = if (MiniProgramSkipHandler.isMiniProgram(watchClassName))
-                        MiniProgramSkipHandler.getClickAction() else matchRule.action
-                    ActionExecutor.perform(target, clickAction)
-                    Log.d(TAG, "⏳ 规则点击已执行，进入验证: $ruleId <- $selectorExpr")
-                    val pkg = watchPackage ?: return false
-                    pendingConfirmPkg = pkg
-                    verifyMissCount = 0
-                    verifyRetryCount = 0
-                    lastClickSelector = selectorExpr
-                    lastMatchRuleKey = matchRule.key
-                    return true
+                } finally {
+                    NodeMatcher.recycleAll(nodes)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "监控选择器匹配失败: $selectorExpr", e)
@@ -787,9 +798,13 @@ class SkipRuleEngine(
             try {
                 val selector = SelectorParser.parse(selectorExpr)
                 val nodes = NodeMatcher.find(rootNode, selector)
-                if (nodes.isEmpty()) continue
-                // 只要有一个匹配节点（无论是否可见）就认为广告还在
-                return true
+                try {
+                    if (nodes.isEmpty()) continue
+                    // 只要有一个匹配节点（无论是否可见）就认为广告还在
+                    return true
+                } finally {
+                    NodeMatcher.recycleAll(nodes)
+                }
             } catch (_: Exception) {}
         }
         return false

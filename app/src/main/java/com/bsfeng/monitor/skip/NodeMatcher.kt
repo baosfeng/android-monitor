@@ -41,21 +41,22 @@ object NodeMatcher {
         val leftResults = findLeaf(root, selector)
         val rightSel = selector.right ?: return leftResults
 
-        return when (selector.combinator) {
+        val results = when (selector.combinator) {
             Combinator.CHILD -> {
                 // A > B：对每个 A 节点找其直接子节点中匹配 B 的
                 leftResults.flatMap { parent ->
-                    val results = mutableListOf<AccessibilityNodeInfo>()
+                    val childResults = mutableListOf<AccessibilityNodeInfo>()
                     for (i in 0 until parent.childCount) {
                         try {
-                            parent.getChild(i)?.let { child ->
-                                if (matchNode(child, rightSel)) {
-                                    results.add(child)
-                                }
+                            val child = parent.getChild(i) ?: continue
+                            if (matchNode(child, rightSel)) {
+                                childResults.add(child)
+                            } else {
+                                child.recycle()
                             }
                         } catch (_: Exception) {}
                     }
-                    results
+                    childResults
                 }
             }
             Combinator.DESCENDANT -> {
@@ -68,28 +69,38 @@ object NodeMatcher {
                 // A + B：对每个 A 节点找其下一个兄弟节点中匹配 B 的
                 leftResults.flatMap { sibling ->
                     val parent = sibling.parent ?: return@flatMap emptyList<AccessibilityNodeInfo>()
-                    val results = mutableListOf<AccessibilityNodeInfo>()
-                    var foundSibling = false
-                    for (i in 0 until parent.childCount) {
-                        try {
-                            val child = parent.getChild(i) ?: continue
-                            if (child == sibling) {
-                                foundSibling = true
-                                child.recycle()
-                                continue
-                            }
-                            if (foundSibling && matchNode(child, rightSel)) {
-                                results.add(child)
-                            } else {
-                                child.recycle()
-                            }
-                        } catch (_: Exception) {}
+                    try {
+                        val siblingResults = mutableListOf<AccessibilityNodeInfo>()
+                        var foundSibling = false
+                        for (i in 0 until parent.childCount) {
+                            try {
+                                val child = parent.getChild(i) ?: continue
+                                if (child == sibling) {
+                                    foundSibling = true
+                                    child.recycle()
+                                    continue
+                                }
+                                if (foundSibling && matchNode(child, rightSel)) {
+                                    siblingResults.add(child)
+                                } else {
+                                    child.recycle()
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        siblingResults
+                    } finally {
+                        parent.recycle()
                     }
-                    results
                 }
             }
             null -> leftResults
         }
+
+        // 组合器已消费 leftResults（null 分支直接返回，不在此回收）
+        if (selector.combinator != null) {
+            recycleAll(leftResults)
+        }
+        return results
     }
 
     /**
@@ -100,15 +111,13 @@ object NodeMatcher {
         // 1) 优先使用 ID 加速
         val idCondition = selector.attributes.find { it.name == "id" && it.op == AttrOp.EQ }
         if (idCondition != null) {
-            val nodes = root.findAccessibilityNodeInfosByViewId(idCondition.value)
-            return nodes.filter { matchNode(it, selector) }
+            return filterAndRecycle(root.findAccessibilityNodeInfosByViewId(idCondition.value), selector)
         }
 
         // 2) 使用文本加速
         val textCondition = selector.attributes.find { it.name == "text" && it.op == AttrOp.EQ }
         if (textCondition != null && textCondition.value.length >= 2) {
-            val nodes = root.findAccessibilityNodeInfosByText(textCondition.value)
-            return nodes.filter { matchNode(it, selector) }
+            return filterAndRecycle(root.findAccessibilityNodeInfosByText(textCondition.value), selector)
         }
 
         // 3) 回退到遍历匹配
@@ -118,31 +127,73 @@ object NodeMatcher {
     }
 
     /**
+     * 过滤原生 API 返回的节点：匹配的保留（调用方负责回收），未匹配的立即回收。
+     */
+    private fun filterAndRecycle(
+        nodes: List<AccessibilityNodeInfo>,
+        selector: Selector
+    ): List<AccessibilityNodeInfo> {
+        val matched = mutableListOf<AccessibilityNodeInfo>()
+        for (node in nodes) {
+            try {
+                if (matchNode(node, selector)) {
+                    matched.add(node)
+                } else {
+                    node.recycle()
+                }
+            } catch (_: Exception) {
+                node.recycle()
+            }
+        }
+        return matched
+    }
+
+    /**
      * 遍历无障碍树，收集所有匹配选择器的节点。
+     *
+     * @return 本节点是否匹配（已加入结果集；匹配节点不回收，由调用方统一回收）
      */
     private fun collectMatchingNodes(
         node: AccessibilityNodeInfo,
         selector: Selector,
         results: MutableList<AccessibilityNodeInfo>,
         depth: Int = 0
-    ) {
-        if (depth > 50) return // 防止栈溢出
+    ): Boolean {
+        if (depth > 50) return false // 防止栈溢出
 
-        try {
-            if (matchNode(node, selector)) {
-                results.add(node)
-                // 找到一个匹配后不返回——同级可能有多个
-            }
+        val selfMatched = try {
+            matchNode(node, selector)
+        } catch (_: Exception) {
+            false
+        }
+        if (selfMatched) {
+            results.add(node)
+            // 找到一个匹配后不返回——同级可能有多个
+        }
 
-            for (i in 0 until node.childCount) {
-                try {
-                    node.getChild(i)?.let { child ->
-                        collectMatchingNodes(child, selector, results, depth + 1)
-                        child.recycle()
-                    }
-                } catch (_: Exception) {}
-            }
-        } catch (_: Exception) {}
+        for (i in 0 until node.childCount) {
+            try {
+                val child = node.getChild(i) ?: continue
+                val childMatched = collectMatchingNodes(child, selector, results, depth + 1)
+                // 未匹配的子节点回收；匹配的已入结果集，由调用方统一回收
+                if (!childMatched) {
+                    child.recycle()
+                }
+            } catch (_: Exception) {}
+        }
+        return selfMatched
+    }
+
+    /**
+     * 安全回收节点列表（忽略已回收/无效节点）。
+     * 调用方对 [find] 返回的结果使用完毕后统一调用。
+     */
+    fun recycleAll(nodes: List<AccessibilityNodeInfo>) {
+        for (node in nodes) {
+            try {
+                node.recycle()
+            } catch (_: Exception) {}
+        }
     }
 
     /**
