@@ -65,11 +65,12 @@ class RecordStore(private val db: DatabaseHelper) {
 
     fun getDailySummary(dateStart: Long, dateEnd: Long): DailySummary {
         val db = db.readableDatabase
-        // count screen ON events
-        val screenOnCount = db.rawQuery(
-            "SELECT COUNT(*) FROM records WHERE type='SCREEN' AND action='ON' AND timestamp >= ? AND timestamp <= ?",
+        // 亮屏时长:UNLOCKED→OFF 配对计算,无配对时按 5 分钟估算
+        val screenRecords = query(
+            "type='SCREEN' AND (action='UNLOCKED' OR action='OFF') AND timestamp >= ? AND timestamp <= ?",
             arrayOf(dateStart.toString(), dateEnd.toString())
-        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        )
+        val totalScreenOnMinutes = computeScreenOnMillis(screenRecords) / 60_000L
 
         val chargeRecords = query("type='CHARGING' AND timestamp >= ? AND timestamp <= ?",
             arrayOf(dateStart.toString(), dateEnd.toString()))
@@ -100,7 +101,7 @@ class RecordStore(private val db: DatabaseHelper) {
         ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
         return DailySummary(
-            totalScreenOnMinutes = screenOnCount * 5L,  // 估算值，精确计算需相邻事件时间差
+            totalScreenOnMinutes = totalScreenOnMinutes,
             chargeCount = chargeCount,
             topApps = topApps,
             wifiChanges = wifiChanges
@@ -164,4 +165,34 @@ class RecordStore(private val db: DatabaseHelper) {
             list
         }
     }
+}
+
+/**
+ * 根据 SCREEN 的 UNLOCKED/OFF 序列计算亮屏时长（毫秒）。
+ *
+ * 规则：
+ * - UNLOCKED 标记一次亮屏开始，下一个 OFF 标记结束，时间差累加；
+ * - 无配对 OFF 的 UNLOCKED（跨天/统计区间内未熄屏）与无配对 UNLOCKED 的 OFF
+ *   （亮屏未解锁直接熄屏），按 [estimateMs] 估算。
+ */
+internal fun computeScreenOnMillis(records: List<Record>, estimateMs: Long = 5 * 60_000L): Long {
+    var totalMs = 0L
+    var lastUnlockTs: Long? = null
+    var unmatched = 0
+    for (record in records) {
+        when (record.action) {
+            "UNLOCKED" -> lastUnlockTs = record.timestamp
+            "OFF" -> {
+                val unlock = lastUnlockTs
+                if (unlock != null) {
+                    totalMs += (record.timestamp - unlock).coerceAtLeast(0L)
+                    lastUnlockTs = null
+                } else {
+                    unmatched++
+                }
+            }
+        }
+    }
+    if (lastUnlockTs != null) unmatched++
+    return totalMs + unmatched * estimateMs
 }
