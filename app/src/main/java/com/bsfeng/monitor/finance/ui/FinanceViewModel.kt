@@ -69,7 +69,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // ========== 初始化 ==========
 
     init {
-        loadCurrentMonth()
+        // 种子数据（分类/账户）初始化在后台协程完成后再加载数据，
+        // 避免主线程同步建库造成卡顿
+        viewModelScope.launch {
+            manager.ensureInitialized()
+            loadCurrentMonth()
+        }
     }
 
     fun loadCurrentMonth() {
