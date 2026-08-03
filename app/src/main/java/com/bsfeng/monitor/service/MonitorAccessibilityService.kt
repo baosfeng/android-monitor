@@ -425,6 +425,8 @@ class MonitorAccessibilityService : AccessibilityService() {
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
         removeCurrentDanmaku()
+        // 清空静态引用,防止持有已销毁的 Service 实例
+        ActionExecutor.accessibilityService = null
         super.onDestroy()
     }
 }
