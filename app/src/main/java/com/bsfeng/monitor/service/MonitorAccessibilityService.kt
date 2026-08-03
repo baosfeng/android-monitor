@@ -368,10 +368,14 @@ class MonitorAccessibilityService : AccessibilityService() {
                         .alpha(0f)
                         .translationY(-30f)
                         .setDuration(250)
-                        .withEndAction { removeCurrentDanmaku() }
+                        .withEndAction {
+                            // 只移除自己，不触碰 currentDanmaku——
+                            // 若期间已展示新弹幕，currentDanmaku 指向新视图，不能误删
+                            removeDanmakuView(tv)
+                        }
                         .start()
                 } catch (e: Exception) {
-                    removeCurrentDanmaku()
+                    removeDanmakuView(tv)
                 }
             }, DANMAKU_DURATION_MS)
         } catch (e: Exception) {
@@ -381,9 +385,14 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     /** 移除当前弹幕视图 */
     private fun removeCurrentDanmaku() {
+        val view = currentDanmaku ?: return
+        currentDanmaku = null
+        removeDanmakuView(view)
+    }
+
+    /** 从 WindowManager 移除指定弹幕视图（幂等：已移除/服务已销毁时静默忽略） */
+    private fun removeDanmakuView(view: android.view.View) {
         try {
-            val view = currentDanmaku ?: return
-            currentDanmaku = null
             val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
             wm.removeView(view)
         } catch (_: Exception) {}
