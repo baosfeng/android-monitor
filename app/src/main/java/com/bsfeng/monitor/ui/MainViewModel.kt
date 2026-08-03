@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
@@ -123,7 +124,11 @@ class MainViewModel : ViewModel() {
                 appUsageStats = usage,
                 screenEvents = screens
             )
-        } catch (_: Exception) {}
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MainViewModel", "加载今日数据失败", e)
+        }
     }
 
     /**
@@ -153,7 +158,11 @@ class MainViewModel : ViewModel() {
                     hasMore = loadedCount < records.size
                 )
                 updateActiveApp()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("MainViewModel", "轮询刷新数据失败", e)
+            }
         }
     }
 
@@ -266,7 +275,11 @@ class MainViewModel : ViewModel() {
                     activeAppName = null,
                     activeAppDurationText = null
                 )
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("MainViewModel", "清除今日数据失败", e)
+            }
         }
     }
 

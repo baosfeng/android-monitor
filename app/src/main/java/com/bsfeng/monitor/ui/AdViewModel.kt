@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
@@ -64,7 +65,11 @@ class AdViewModel : ViewModel() {
                     )
                 }
                 _totalCount.value = skipEvents.size
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AdViewModel", "加载跳过广告记录失败", e)
+            }
         }
     }
 
@@ -74,7 +79,11 @@ class AdViewModel : ViewModel() {
                 store.deleteByAction("AD_SKIPPED")
                 _skipRecords.value = emptyList()
                 _totalCount.value = 0
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("AdViewModel", "清除跳过广告记录失败", e)
+            }
         }
     }
 }
