@@ -36,9 +36,10 @@ object ApiService {
      * @return true=API 可连接（收到了任何 HTTP 响应）, false=完全无法连接
      */
     fun checkConnection(): Boolean {
+        var conn: HttpURLConnection? = null
         return try {
             val url = URL("${AppConfig.serverBaseUrl.trimEnd('/')}/api/monitor/heartbeat")
-            val conn = url.openConnection() as HttpURLConnection
+            conn = url.openConnection() as HttpURLConnection
             conn.apply {
                 requestMethod = "GET"
                 connectTimeout = 5000
@@ -51,20 +52,23 @@ object ApiService {
             }
             conn.connect()
             val code = conn.responseCode
-            conn.disconnect()
             // 只要服务器回了任何响应码说明 API 请求到达了服务器
             code > 0
         } catch (_: Exception) {
             false
+        } finally {
+            // 异常路径也必须断开连接，防止 socket 泄漏
+            conn?.disconnect()
         }
     }
 
     // ========== Internal HTTP ==========
 
     private fun httpPost(path: String, body: JSONObject): Result<JsonResponse> {
+        var conn: HttpURLConnection? = null
         return try {
             val url = URL("${AppConfig.serverBaseUrl.trimEnd('/')}/$path")
-            val conn = url.openConnection() as HttpURLConnection
+            conn = url.openConnection() as HttpURLConnection
             conn.apply {
                 requestMethod = "POST"
                 connectTimeout = TIMEOUT_MS
@@ -88,7 +92,6 @@ object ApiService {
                     conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                 } catch (_: Exception) { "" }
             }
-            conn.disconnect()
             if (responseBody.isBlank()) {
                 Result.failure(Exception("HTTP $responseCode (empty body)"))
             } else {
@@ -104,13 +107,17 @@ object ApiService {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            // 异常路径也必须断开连接，防止 socket 泄漏
+            conn?.disconnect()
         }
     }
 
     private fun httpGet(path: String): Result<JsonResponse> {
+        var conn: HttpURLConnection? = null
         return try {
             val url = URL("${AppConfig.serverBaseUrl.trimEnd('/')}/$path")
-            val conn = url.openConnection() as HttpURLConnection
+            conn = url.openConnection() as HttpURLConnection
             conn.apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MS
@@ -127,7 +134,6 @@ object ApiService {
                     conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                 } catch (_: Exception) { "" }
             }
-            conn.disconnect()
             if (responseBody.isBlank()) {
                 Result.failure(Exception("HTTP $responseCode (empty body)"))
             } else {
@@ -143,6 +149,9 @@ object ApiService {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            // 异常路径也必须断开连接，防止 socket 泄漏
+            conn?.disconnect()
         }
     }
 
