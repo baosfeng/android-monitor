@@ -18,8 +18,9 @@ import com.bsfeng.monitor.MonitorApp
  * 2. 在无障碍树中定位目标节点（使用选择器）
  * 3. 执行点击操作跳过广告
  *
- * 如果首次匹配未命中（广告尚未加载），自动启动持续监控模式，
- * 每 500ms 扫描一次屏幕，一旦检测到跳过按钮立即点击。
+ * 如果首次匹配未命中（广告尚未加载），自动启动持续监控模式：
+ * 以 TYPE_WINDOW_CONTENT_CHANGED 事件驱动扫描（100ms 节流），
+ * 同时保留 500ms 兜底轮询，一旦检测到跳过按钮立即点击。
  * 监控最长持续 5 秒后自动停止。
  *
  * 内置防误触机制：
@@ -50,6 +51,12 @@ class SkipRuleEngine(
     /** 跳过成功回调（供服务层显示通知） */
     var onSkipSuccess: ((packageName: String) -> Unit)? = null
 
+    /**
+     * 时钟提供器（默认系统时间）。
+     * 测试注入虚拟时钟以控制监控超时/事件节流判断。
+     */
+    internal var currentTimeMillis: () -> Long = { System.currentTimeMillis() }
+
     // ========== 持续监控（白屏→广告延迟加载场景） ==========
 
     /** 监控 Handler（独立实例，避免与 matchDelay 冲突） */
@@ -60,6 +67,8 @@ class SkipRuleEngine(
     private var watchClassName: String? = null
     /** 监控开始时间 */
     private var watchStartTime = 0L
+    /** 上次事件驱动扫描时间（用于节流 CONTENT_CHANGED 风暴） */
+    private var lastContentTriggerMs = 0L
     /** 监控扫描任务 */
     private val watchScanTask = Runnable { performWatchScan() }
 
@@ -85,8 +94,12 @@ class SkipRuleEngine(
         private const val VERIFY_SUCCESS_MISSES = 3
         /** 验证阶段：最大重试点击次数 */
         private const val VERIFY_MAX_RETRIES = 3
-        /** 监控扫描间隔（毫秒） */
+        /** 验证阶段扫描间隔（毫秒，需快速确认广告是否已关闭） */
         private const val WATCH_INTERVAL_MS = 100L
+        /** 普通扫描兜底轮询间隔（毫秒；主驱动为 CONTENT_CHANGED 事件） */
+        private const val WATCH_BACKUP_INTERVAL_MS = 500L
+        /** CONTENT_CHANGED 事件触发扫描的节流间隔（毫秒） */
+        private const val CONTENT_TRIGGER_INTERVAL_MS = 100L
         /** 监控超时（毫秒，超过此时间仍未检测到广告则停止） */
         private const val WATCH_TIMEOUT_MS = 5_000L
         /** 同一 App 跳过成功后冷却期（避免后续窗口事件重复触发） */
@@ -168,7 +181,7 @@ class SkipRuleEngine(
 
         // 冷却检查
         val cooldownEnd = skipCooldowns[packageName] ?: 0L
-        if (System.currentTimeMillis() < cooldownEnd) {
+        if (currentTimeMillis() < cooldownEnd) {
             DebugConfig.log("SkipEngine: $packageName 跳过冷却中")
             return false
         }
@@ -212,7 +225,7 @@ class SkipRuleEngine(
         for (interceptor in fullInterceptors) {
             DebugConfig.log("  执行: ${interceptor::class.simpleName}")
             if (interceptor.intercept(ctx)) {
-                skipCooldowns[packageName] = System.currentTimeMillis() + SKIP_COOLDOWN_MS
+                skipCooldowns[packageName] = currentTimeMillis() + SKIP_COOLDOWN_MS
                 Log.d(TAG, "✅ 拦截器 ${interceptor::class.simpleName} 跳过成功: $packageName")
                 return true
             }
@@ -476,6 +489,40 @@ class SkipRuleEngine(
     // ========== 持续监控 ==========
 
     /**
+     * 处理窗口内容变化事件（事件驱动加速）。
+     *
+     * 开屏广告的跳过按钮通常在广告加载完成后才出现（倒计时结束/广告渲染完成），
+     * 此时节点树必然变化并产生 TYPE_WINDOW_CONTENT_CHANGED 事件。
+     * 在监控窗口内收到该事件时立即执行一次扫描，替代纯轮询等待：
+     * 按钮一出现即可点击，响应更快且无需持续高频轮询。
+     *
+     * 限制（防误触/防风暴）：
+     * - 仅响应正在监控的包名（watchPackage）
+     * - 节流 CONTENT_TRIGGER_INTERVAL_MS，事件风暴只取首个
+     * - 监控超时（WATCH_TIMEOUT_MS）后忽略并停止监控
+     */
+    fun onContentChanged(packageName: String) {
+        val pkg = watchPackage ?: return
+        if (packageName != pkg) return
+
+        // 超时检查：窗口已结束则停止监控
+        if (currentTimeMillis() - watchStartTime >= WATCH_TIMEOUT_MS) {
+            Log.d(TAG, "CONTENT_CHANGED 到达但监控已超时，停止监控: $pkg")
+            stopWatching()
+            return
+        }
+
+        // 节流：系统每 ~100ms 合并一批 CONTENT_CHANGED，只取首个触发扫描
+        val now = currentTimeMillis()
+        if (now - lastContentTriggerMs < CONTENT_TRIGGER_INTERVAL_MS) return
+        lastContentTriggerMs = now
+
+        // 清除挂起的兜底轮询任务，立即扫描（事件已位于主线程，同步执行）
+        watchHandler.removeCallbacks(watchScanTask)
+        performWatchScan()
+    }
+
+    /**
      * 设置根节点提供器。
      */
     fun setRootNodeProvider(provider: () -> AccessibilityNodeInfo?) {
@@ -513,7 +560,7 @@ class SkipRuleEngine(
 
         // 跳过冷却期内不重复扫描
         val cooldownEnd = skipCooldowns[packageName] ?: 0L
-        if (System.currentTimeMillis() < cooldownEnd) {
+        if (currentTimeMillis() < cooldownEnd) {
             Log.d(TAG, "跳过冷却中，不启动监控: $packageName")
             return
         }
@@ -546,7 +593,9 @@ class SkipRuleEngine(
 
         watchPackage = packageName
         watchClassName = className
-        watchStartTime = System.currentTimeMillis()
+        watchStartTime = currentTimeMillis()
+        // 上次事件触发时间初始化为监控开始前一个节流间隔，保证首个事件必然放行
+        lastContentTriggerMs = watchStartTime - CONTENT_TRIGGER_INTERVAL_MS
         Log.d(TAG, "🔄 启动持续监控: $packageName (最长 ${WATCH_TIMEOUT_MS / 1000}秒)")
 
         // 首次扫描立即执行
@@ -567,6 +616,7 @@ class SkipRuleEngine(
         watchPackage = null
         watchClassName = null
         watchStartTime = 0L
+        lastContentTriggerMs = 0L
         pendingConfirmPkg = null
         verifyMissCount = 0
         verifyRetryCount = 0
@@ -581,7 +631,7 @@ class SkipRuleEngine(
         val pkg = watchPackage ?: return
 
         // 超时检查
-        if (System.currentTimeMillis() - watchStartTime >= WATCH_TIMEOUT_MS) {
+        if (currentTimeMillis() - watchStartTime >= WATCH_TIMEOUT_MS) {
             Log.d(TAG, "⏰ 监控超时（${WATCH_TIMEOUT_MS / 1000}秒），停止监控: $pkg")
             DebugConfig.log("监控超时停止: $pkg")
             stopWatching()
@@ -664,8 +714,9 @@ class SkipRuleEngine(
             freshRoot.recycle()
         }
 
-        // 未匹配，继续下次扫描（静默，不输出日志）
-        watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
+        // 未匹配，继续等待：事件驱动为主（CONTENT_CHANGED 到达会立即扫描），
+        // 兜底轮询防事件丢失（静默，不输出日志）
+        watchHandler.postDelayed(watchScanTask, WATCH_BACKUP_INTERVAL_MS)
     }
 
     /**
@@ -823,7 +874,7 @@ class SkipRuleEngine(
 
     /** 记录 App 跳过冷却时间，防止短时间内重复触发 */
     fun recordSkipCooldown(packageName: String) {
-        skipCooldowns[packageName] = System.currentTimeMillis() + SKIP_COOLDOWN_MS
+        skipCooldowns[packageName] = currentTimeMillis() + SKIP_COOLDOWN_MS
     }
 
     /**
