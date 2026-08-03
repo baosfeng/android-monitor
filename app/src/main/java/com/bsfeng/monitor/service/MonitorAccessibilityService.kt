@@ -55,10 +55,20 @@ class MonitorAccessibilityService : AccessibilityService() {
     private val foregroundHandler: android.os.Handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val foregroundPoller = object : Runnable {
         override fun run() {
-            try { pollForegroundApp() } catch (_: Exception) {}
-            foregroundHandler.postDelayed(this, 1_000L)
+            try {
+                pollForegroundApp()
+            } catch (e: Exception) {
+                Log.w("MonitorService", "pollForegroundApp 异常", e)
+            }
+            // 仅当服务仍存活时继续调度，防止服务重建后产生多条轮询链
+            if (pollerActive) {
+                foregroundHandler.postDelayed(this, 1_000L)
+            }
         }
     }
+
+    /** 轮询链运行标志：onServiceConnected 启动，onDestroy 停止（防叠加） */
+    private var pollerActive: Boolean = false
 
     private fun pollForegroundApp() {
         val now = System.currentTimeMillis()
@@ -394,7 +404,18 @@ class MonitorAccessibilityService : AccessibilityService() {
             SkipEventRecorder.recordSkip(pkg, name, "", null)
             showSkipDanmaku(name)
         }
-        // 启动前台 App 轮询（兜底监测）
-        foregroundHandler.postDelayed(foregroundPoller, 10_000L)
+        // 启动前台 App 轮询（兜底监测）；已运行则跳过，防止服务重建后叠加轮询链
+        if (!pollerActive) {
+            pollerActive = true
+            foregroundHandler.postDelayed(foregroundPoller, 10_000L)
+        }
+    }
+
+    override fun onDestroy() {
+        // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
+        pollerActive = false
+        foregroundHandler.removeCallbacks(foregroundPoller)
+        removeCurrentDanmaku()
+        super.onDestroy()
     }
 }
