@@ -151,11 +151,13 @@ class FinanceManager private constructor(context: Context) {
         @Volatile
         private var INSTANCE: FinanceManager? = null
 
+        /**
+         * 获取单例。注意：种子数据初始化（[ensureInitialized]）由调用方在协程中
+         * 显式执行，不在主线程同步建库，避免首次进入记账页卡顿。
+         */
         fun getInstance(context: Context): FinanceManager =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: FinanceManager(context.applicationContext).also {
-                    kotlinx.coroutines.runBlocking { it.ensureInitialized() }
-                }
+                INSTANCE ?: FinanceManager(context.applicationContext)
             }
     }
 }
