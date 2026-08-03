@@ -47,6 +47,8 @@ class EventReporter(private val context: Context) {
                 },
                 onFailure = { Result.failure(it) }
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e  // 保持结构化并发,取消必须向上传播
         } catch (e: Exception) {
             Result.failure(e)
         }

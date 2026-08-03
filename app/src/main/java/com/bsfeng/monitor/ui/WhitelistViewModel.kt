@@ -3,6 +3,7 @@ package com.bsfeng.monitor.ui
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
@@ -84,7 +85,11 @@ class WhitelistViewModel : ViewModel() {
                     }
                 _apps.value = installedApps
                 filterApps()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("WhitelistViewModel", "加载已安装应用失败", e)
+            }
         }
     }
 
