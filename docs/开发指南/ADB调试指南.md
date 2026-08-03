@@ -35,7 +35,7 @@ rm ~/android-platform-tools-latest-darwin.zip
 ADB 路径已写入 `~/.zshrc`，内容如下：
 
 ```bash
-export PATH="$HOME/Downloads/platform-tools:$PATH"
+export PATH="$HOME/android-platform-tools:$PATH"
 ```
 
 **新终端**直接使用 `adb` 命令即可；**当前会话**请使用全路径 `~/android-platform-tools/adb`。
