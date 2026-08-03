@@ -118,11 +118,32 @@ class MonitorAccessibilityService : AccessibilityService() {
         DiagnosticCounters.accessibilityEventCount++
         DiagnosticCounters.lastAccessibilityEventType = event.eventType.toString()
         DiagnosticCounters.lastAccessibilityPackage = event.packageName?.toString() ?: ""
-        Log.d("MonitorService", "onAccessibilityEvent: type=${event.eventType}, pkg=${event.packageName}")
+        // CONTENT_CHANGED 事件频率极高（每 100ms 一批），仅用调试开关输出，避免刷屏
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            Log.d("MonitorService", "onAccessibilityEvent: type=${event.eventType}, pkg=${event.packageName}")
+        }
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleContentChanged(event)
         }
+    }
+
+    // ========== Content Change（开屏跳过事件驱动加速） ==========
+
+    /**
+     * 处理窗口内容变化事件。
+     *
+     * 开屏广告的跳过按钮通常在广告加载完成后才出现（倒计时结束/广告渲染），
+     * 此时节点树必然发生变化产生 CONTENT_CHANGED 事件。
+     * 将该事件转发给 SkipRuleEngine，使其能在监控窗口内立即扫描而非等待轮询。
+     *
+     * 系统 UI/桌面事件直接丢弃（监控目标仅限应用窗口）。
+     */
+    private fun handleContentChanged(event: AccessibilityEvent) {
+        val pkg = event.packageName?.toString() ?: return
+        if (isSystemUi(pkg) || isHomeApp(pkg)) return
+        skipEngine.onContentChanged(pkg)
     }
 
     // ========== Window Change ==========

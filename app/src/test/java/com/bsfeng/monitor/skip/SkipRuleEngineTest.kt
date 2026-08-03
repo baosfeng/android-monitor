@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Looper
 import android.view.accessibility.AccessibilityNodeInfo
 import com.bsfeng.monitor.domain.model.MatchRule
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -26,18 +27,24 @@ class SkipRuleEngineTest {
 
     private lateinit var engine: SkipRuleEngine
 
+    /** 虚拟时钟（注入 SkipRuleEngine，控制监控超时/事件节流判断） */
+    private var virtualClockMs = 0L
+
     @Before
     fun setup() {
         val context = RuntimeEnvironment.getApplication() as Context
         engine = SkipRuleEngine(SkipRuleManager(context))
+        virtualClockMs = 0L
+        engine.currentTimeMillis = { virtualClockMs }
     }
 
     private fun matchRule(matchDelay: Long = 0L, matches: List<String> = listOf("[text=\"跳过\"]")) =
         MatchRule(matchDelay = matchDelay, actionCd = 0L, matches = matches)
 
-    /** 推进主线程虚拟时钟 */
+    /** 推进主线程虚拟时钟 + 引擎时钟 */
     private fun advance(ms: Long) {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
+        virtualClockMs += ms
     }
 
     @Test
@@ -104,4 +111,89 @@ class SkipRuleEngineTest {
         // actionCd=0 → 无冷却,isOnCooldown 始终 false
         assertFalse(engine.isOnCooldown(rule))
     }
+
+    // ========== CONTENT_CHANGED 事件驱动扫描 ==========
+
+    /**
+     * 启动监控：rootNodeProvider 返回 null，performWatchScan 走最短路径
+     * （freshRoot 为 null → 重新安排下一次扫描），以 provider 调用次数观测扫描触发。
+     */
+    private fun startWatchingWithNullProvider(): Int {
+        providerCallCount = 0
+        engine.setRootNodeProvider {
+            providerCallCount++
+            null
+        }
+        engine.startWatching("com.test.app", "com.test.app.SplashActivity")
+        advance(0)  // 执行 startWatching post 的首次扫描
+        return providerCallCount
+    }
+
+    @Test
+    fun `监控中收到 CONTENT_CHANGED 立即触发扫描`() {
+        val callsBefore = startWatchingWithNullProvider()
+        assertTrue("startWatching 应立即触发一次扫描", callsBefore >= 1)
+
+        engine.onContentChanged("com.test.app")
+        assertTrue("CONTENT_CHANGED 应触发一次新扫描", providerCalls() > callsBefore)
+    }
+
+    @Test
+    fun `非监控包名的 CONTENT_CHANGED 被忽略`() {
+        startWatchingWithNullProvider()
+        val callsBefore = providerCalls()
+
+        engine.onContentChanged("com.other.app")
+        assertFalse("非监控包名事件不得触发扫描", providerCalls() > callsBefore)
+    }
+
+    @Test
+    fun `CONTENT_CHANGED 节流_节流窗口内重复事件不触发`() {
+        startWatchingWithNullProvider()
+        engine.onContentChanged("com.test.app")
+        val callsAfterFirst = providerCalls()
+
+        // 时间未推进，紧接的第二次事件应被节流拦截
+        engine.onContentChanged("com.test.app")
+        assertEquals("节流窗口内重复事件不得触发扫描", callsAfterFirst, providerCalls())
+
+        // 推进 50ms（仍 < 100ms 节流窗口），仍应拦截
+        advance(50)
+        engine.onContentChanged("com.test.app")
+        assertEquals("50ms 后仍处于节流窗口，不得触发扫描", callsAfterFirst, providerCalls())
+
+        // 再推进 60ms（累计 110ms > 100ms），应触发
+        advance(60)
+        engine.onContentChanged("com.test.app")
+        assertTrue("超过节流窗口后事件应触发扫描", providerCalls() > callsAfterFirst)
+    }
+
+    @Test
+    fun `监控超时后 CONTENT_CHANGED 停止监控且不再扫描`() {
+        startWatchingWithNullProvider()
+
+        // 推进超过 WATCH_TIMEOUT_MS(5s)，期间挂起的扫描任务会自行触发并超时停止
+        advance(5_100)
+        val callsAtTimeout = providerCalls()
+
+        engine.onContentChanged("com.test.app")
+        advance(1_000)
+        assertEquals("超时停止监控后事件不得再触发扫描", callsAtTimeout, providerCalls())
+    }
+
+    @Test
+    fun `stopWatching 后 CONTENT_CHANGED 被忽略`() {
+        startWatchingWithNullProvider()
+        engine.stopWatching()
+        val callsBefore = providerCalls()
+
+        engine.onContentChanged("com.test.app")
+        advance(1_000)
+        assertEquals("停止监控后事件不得触发扫描", callsBefore, providerCalls())
+    }
+
+    private fun providerCalls(): Int = providerCallCount
+
+    private var providerCallCount: Int = 0
+
 }
