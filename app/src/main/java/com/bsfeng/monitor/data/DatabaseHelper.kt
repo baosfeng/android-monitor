@@ -27,8 +27,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onCreate(db: SQLiteDatabase) {
+        // 使用 IF NOT EXISTS：onUpgrade 可能对已存在 records 表的旧库调用 onCreate
         db.execSQL("""
-            CREATE TABLE $TABLE_RECORDS (
+            CREATE TABLE IF NOT EXISTS $TABLE_RECORDS (
                 id          TEXT PRIMARY KEY,
                 type        TEXT NOT NULL,
                 action      TEXT NOT NULL,
@@ -39,12 +40,13 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
                 owner       TEXT DEFAULT ''
             )
         """)
-        db.execSQL("CREATE INDEX idx_records_ts ON $TABLE_RECORDS(timestamp)")
-        db.execSQL("CREATE INDEX idx_records_type ON $TABLE_RECORDS(type)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_records_ts ON $TABLE_RECORDS(timestamp)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_records_type ON $TABLE_RECORDS(type)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 3) {
+            // 丢弃旧架构的 events 表；records 表幂等创建，已存在时不会崩溃
             db.execSQL("DROP TABLE IF EXISTS events")
             onCreate(db)
         }
