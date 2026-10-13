@@ -64,7 +64,7 @@
 | 网络通信 | HttpURLConnection + org.json:设备注册、心跳、事件批量上报(上传为二期桩实现)、ApiService → [文档](docs/网络通信/概述.md) | `com.bsfeng.monitor.network` |
 | 数据持久化 | SQLiteOpenHelper 本地数据库(records 表,版本 3),Repository 实现 → [文档](docs/数据持久化/概述.md) | `com.bsfeng.monitor.data` |
 | 后台服务 | 无障碍服务(前台轮询+开屏跳过)、健康检查、AlarmReceiver 定时保活(每分钟) → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
-| 开屏跳过 | CSS 风格选择器 DSL、节点匹配器、规则引擎、内置规则库、规则管理、坐标点击降级 → [设计](docs/开屏跳过/设计.md) · [后续计划](docs/开屏跳过/后续计划.md) · [业界调研与改进方案](docs/开屏跳过/业界调研与改进方案.md)（改跳过代码/规则前必读） · [兜底方案调研](docs/开屏跳过/兜底方案调研.md)（无文本/无稳定 ID 场景与 OCR 决策） | `com.bsfeng.monitor.skip` |
+| 开屏跳过 | CSS 风格选择器 DSL、节点匹配器、规则引擎、内置规则库、规则管理、坐标点击降级 → [设计](docs/开屏跳过/设计.md) · [后续计划](docs/开屏跳过/后续计划.md) · [业界调研与改进方案](docs/开屏跳过/业界调研与改进方案.md)（改跳过代码/规则前必读） · [兜底方案调研](docs/开屏跳过/兜底方案调研.md)（无文本/无稳定 ID 场景与 OCR 决策） · [规则实测记录](docs/开屏跳过/规则实测记录.md)（逐 App 调优产出与快照工具用法） | `com.bsfeng.monitor.skip` |
 | 记账模块 | 账目分类/账户/交易/预算、FinanceDao、熊猫记账导入、统计 → [文档](docs/UI界面/概述.md) | `com.bsfeng.monitor.finance` |
 | UI 界面 | Jetpack Compose 四标签界面:实时事件流、广告跳过、记账、设置 | `com.bsfeng.monitor.ui` |
 | 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 | `com.bsfeng.monitor.util` |
@@ -116,6 +116,8 @@
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` |
 | 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` |
 | 修改无障碍服务状态判定 | `app/src/main/java/com/bsfeng/monitor/util/AccessibilityStatus.kt` |
+| 修改「当前 Activity」判定 | `app/src/main/java/com/bsfeng/monitor/util/ActivityNames.kt` |
+| 修改快照导出请求/时机 | `app/src/main/java/com/bsfeng/monitor/skip/SnapshotRequest.kt` |
 | 修改诊断计数器 | `app/src/main/java/com/bsfeng/monitor/util/DiagnosticCounters.kt` |
 | 修改 Application 入口 | `app/src/main/java/com/bsfeng/monitor/MonitorApp.kt` |
 | 修改 MainActivity | `app/src/main/java/com/bsfeng/monitor/MainActivity.kt` |
