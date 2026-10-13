@@ -7,6 +7,8 @@ import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.record.AppUsageStat
+import com.bsfeng.monitor.service.MonitorAccessibilityService
+import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,8 @@ data class MonitorState(
     /** 是否还有更多数据可加载 */
     val hasMore: Boolean = false,
     val accessibilityEnabled: Boolean = false,
+    /** 无障碍服务实例是否已连接（用于区分"已勾选但未连接"） */
+    val accessibilityServiceRunning: Boolean = false,
     val appUsageStats: List<AppUsageStat> = emptyList(),
     val screenEvents: List<Record> = emptyList(),
     /** 当前正在使用的 App 名称（没有 CLOSED 的 OPENED） */
@@ -231,19 +235,22 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private fun checkAccessibilityStatus() {
-        val enabled = try {
-            val am = app.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
-                    as android.view.accessibility.AccessibilityManager
-            val services = am.getEnabledAccessibilityServiceList(
-                android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC
-            )
-            services.any { it.resolveInfo?.serviceInfo?.packageName == app.packageName }
-        } catch (_: Exception) {
-            false
-        }
-        _state.value = _state.value.copy(accessibilityEnabled = enabled)
+    /**
+     * 刷新无障碍服务状态。
+     *
+     * 判定逻辑见 [AccessibilityStatus]：系统设置项 / [android.view.accessibility.AccessibilityManager]
+     * 列表 / 服务实例三者任一命中即视为已开启（HyperOS 上单个来源会误报"未开启"）。
+     */
+    fun refreshAccessibilityStatus() {
+        val running = MonitorAccessibilityService.isRunning
+        val enabled = AccessibilityStatus.isEnabled(app, running)
+        _state.value = _state.value.copy(
+            accessibilityEnabled = enabled,
+            accessibilityServiceRunning = running
+        )
     }
+
+    private fun checkAccessibilityStatus() = refreshAccessibilityStatus()
 
     fun togglePause() {
         val newPaused = !_isPaused.value

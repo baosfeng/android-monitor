@@ -315,6 +315,16 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val DANMAKU_DURATION_MS = 1200L
+
+        /**
+         * 服务实例是否已连接（[onServiceConnected] 置 true，[onDestroy] 置 false）。
+         *
+         * 系统 API（[AccessibilityManager] 列表）在部分 ROM 上会滞后，
+         * 该标志用于兜底判定"用户已开启无障碍服务"（见 `AccessibilityStatus`）。
+         */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
     }
 
     /**
@@ -418,6 +428,7 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        isRunning = true
         ActionExecutor.accessibilityService = this
         skipEngine.setRootNodeProvider { rootInActiveWindow }
         skipEngine.onSkipSuccess = { result ->
@@ -434,6 +445,7 @@ class MonitorAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
