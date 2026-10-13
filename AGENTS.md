@@ -98,7 +98,9 @@
 | 修改规则引擎核心 | `app/src/main/java/com/bsfeng/monitor/skip/SkipRuleEngine.kt` |
 | 修改规则管理器 | `app/src/main/java/com/bsfeng/monitor/skip/SkipRuleManager.kt` |
 | 修改内置规则库 | `app/src/main/java/com/bsfeng/monitor/skip/BuiltInRules.kt` |
-| 修改拦截器链 | `app/src/main/java/com/bsfeng/monitor/skip/AdInterceptors.kt` |
+| 修改监控窗口/跳过配置 | `app/src/main/java/com/bsfeng/monitor/skip/SkipConfig.kt` |
+| 修改订阅拉取 | `app/src/main/java/com/bsfeng/monitor/skip/GkdSubscription.kt` |
+| 修改页面快照导出 | `app/src/main/java/com/bsfeng/monitor/skip/SnapshotExporter.kt` |
 | 修改跳过事件记录器 | `app/src/main/java/com/bsfeng/monitor/skip/SkipEventRecorder.kt` |
 | 修改规则管理页面 | `app/src/main/java/com/bsfeng/monitor/ui/SkipRuleScreen.kt` |
 | 修改规则管理 ViewModel | `app/src/main/java/com/bsfeng/monitor/ui/SkipRuleViewModel.kt` |
@@ -113,6 +115,7 @@
 | 修改应用配置 | `app/src/main/java/com/bsfeng/monitor/AppConfig.kt` |
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` |
 | 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` |
+| 修改无障碍服务状态判定 | `app/src/main/java/com/bsfeng/monitor/util/AccessibilityStatus.kt` |
 | 修改诊断计数器 | `app/src/main/java/com/bsfeng/monitor/util/DiagnosticCounters.kt` |
 | 修改 Application 入口 | `app/src/main/java/com/bsfeng/monitor/MonitorApp.kt` |
 | 修改 MainActivity | `app/src/main/java/com/bsfeng/monitor/MainActivity.kt` |
@@ -132,3 +135,6 @@
 ## 踩坑记录
 → [踩坑记录](docs/踩坑/)
   - [MIUI force-stop 导致无障碍服务被自动移除](docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md) — ⚠️ 禁止 force-stop
+  - [install 覆盖安装后无障碍服务短暂显示「未开启」](docs/踩坑/install覆盖安装后无障碍服务短暂未开启.md) — 状态判定要用三重来源
+  - [GKD 订阅源在真机上的可用性](docs/踩坑/GKD订阅源在真机上的可用性.md) — 用 npm 镜像，注意 URL 里包内路径
+  - [adb 输入被中文输入法转成汉字](docs/踩坑/adb输入被中文输入法转成汉字.md) — 自动化填网址前先切英文
