@@ -87,6 +87,17 @@ class BuiltInRulesTest {
     }
 
     @Test
+    fun `QQ阅读规则限定开屏 Activity 且使用精确选择器`() {
+        val rule = rules.firstOrNull { it.id == "qq_reader_splash" }
+        assertNotNull("QQ阅读规则应存在（真机快照实测新增）", rule)
+        assertTrue("必须限定开屏 Activity，避免在阅读页误点", rule!!.groups.all { it.activityIds.isNotEmpty() })
+        val selectors = rule.groups.flatMap { it.rules }.flatMap { it.matches }
+        assertTrue("应使用 splash_root 做精确限定：$selectors", selectors.any { it.contains("splash_root") })
+        assertTrue("必须保留可见性与短文本约束：$selectors",
+            selectors.all { it.contains("visibleToUser=true") && it.contains("text.length<") })
+    }
+
+    @Test
     fun `全局排除包名不影响应用规则`() {
         assertTrue(BuiltInRules.GLOBAL_EXCLUDED_PACKAGES.contains("com.bsfeng.monitor"))
         assertFalse(rules.filter { !it.isGlobal }.any { it.app in BuiltInRules.GLOBAL_EXCLUDED_PACKAGES })
