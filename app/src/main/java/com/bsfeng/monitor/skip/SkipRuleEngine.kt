@@ -1,907 +1,444 @@
 package com.bsfeng.monitor.skip
 
+import android.content.Context
+import android.graphics.Rect
 import android.os.Handler
-import com.bsfeng.monitor.domain.model.MatchRule
-import com.bsfeng.monitor.domain.model.RuleGroup
-import com.bsfeng.monitor.domain.model.SkipRule
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
-import com.bsfeng.monitor.util.DebugConfig
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.ResetMatch
+import com.bsfeng.monitor.domain.model.RuleGroup
+import com.bsfeng.monitor.domain.model.SkipRule
+import com.bsfeng.monitor.util.DebugConfig
 
 /**
- * 规则引擎核心。
+ * 开屏跳过规则引擎（GKD 语义）。
  *
- * 在无障碍服务收到 WINDOW_STATE_CHANGED 事件时：
- * 1. 匹配当前前台 App 的规则
- * 2. 在无障碍树中定位目标节点（使用选择器）
- * 3. 执行点击操作跳过广告
+ * ## 触发模型
+ * `MonitorAccessibilityService` 在窗口/内容变化时调用本引擎；引擎以 **App 切换时刻** 为锚点
+ * 开启一个匹配窗口（[WATCH_WINDOW_MS]），窗口内：
+ * - `TYPE_WINDOW_CONTENT_CHANGED` 事件到达即扫描（100ms 节流）——广告渲染完成的第一时间命中
+ * - 兜底轮询每 [BACKUP_SCAN_INTERVAL_MS] 一次，防止事件丢失
+ * - 根节点为 null（启动瞬间很常见）时不放弃，等下轮扫描重试
  *
- * 如果首次匹配未命中（广告尚未加载），自动启动持续监控模式：
- * 以 TYPE_WINDOW_CONTENT_CHANGED 事件驱动扫描（100ms 节流），
- * 同时保留 500ms 兜底轮询，一旦检测到跳过按钮立即点击。
- * 监控最长持续 5 秒后自动停止。
+ * ## 防误触
+ * - 只执行规则命中的节点动作，**不再有"坐标连点"或"返回键"兜底**（业界调研结论见
+ *   `docs/开屏跳过/业界调研与改进方案.md` §4 P0-2）
+ * - `matchTime` 限定规则参与匹配的时间窗口；`actionMaximum` + `resetMatch` 限定执行次数；
+ *   `actionCd` 限制最小间隔；`excludeMatches` 排除误触场景
+ * - 熄屏（Dozing）时不做任何点击
+ * - 白名单 App 完全不处理
  *
- * 内置防误触机制：
- * - matchDelay：页面打开后延迟匹配
- * - actionCd：执行后冷却期
- * - actionMaximum：规则生命周期内最大执行次数
+ * ## 与旧实现的差异（修复的缺陷）
+ * - `matchDelay` 改为"到期标记"（[pendingDelays]），不再用 Handler 取消/重投，避免被
+ *   CONTENT_CHANGED 风暴无限推迟导致规则永不执行
+ * - 匹配起点固定为当前活动窗口根节点，选择器快速查询由 [SelectorCache]/[NodeMatcher] 完成
  */
-class SkipRuleEngine(
-    private val ruleManager: SkipRuleManager
-) {
-    private var currentPackageName: String? = null
-    private val actionCounters = mutableMapOf<String, Int>()
-    private val actionCooldowns = mutableMapOf<String, Long>()
+class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
+
+    /** 一次成功跳过 */
+    data class SkipResult(
+        val packageName: String,
+        val ruleName: String,
+        val selector: String,
+        val action: String
+    )
+
     private val handler = Handler(Looper.getMainLooper())
-
-    /** matchDelay 延迟匹配任务句柄,停止监控/切包时清理,防止对错误前台 App 误点击 */
-    private var pendingDelayedTask: Runnable? = null
-
-    /** 通用兜底：每个 App 的最近执行时间 */
-    /** 跳过成功后冷却：包名 → 上次成功跳过时间 */
-    private val skipCooldowns = mutableMapOf<String, Long>()
-
-    /** 坐标点击已尝试记录（每个包名每个 session 只尝试一次） */
-    private val coordinateClickAttempted = mutableSetOf<String>()
-
-    /** 根节点提供器（监控时获取新鲜无障碍树） */
     private var rootNodeProvider: (() -> AccessibilityNodeInfo?)? = null
-    /** 跳过成功回调（供服务层显示通知） */
-    var onSkipSuccess: ((packageName: String) -> Unit)? = null
 
-    /**
-     * 时钟提供器（默认系统时间）。
-     * 测试注入虚拟时钟以控制监控超时/事件节流判断。
-     */
-    internal var currentTimeMillis: () -> Long = { System.currentTimeMillis() }
+    /** 跳过成功回调（服务层用于记录事件与提示） */
+    var onSkipSuccess: ((SkipResult) -> Unit)? = null
 
-    // ========== 持续监控（白屏→广告延迟加载场景） ==========
+    // ==================== 运行状态 ====================
 
-    /** 监控 Handler（独立实例，避免与 matchDelay 冲突） */
-    private val watchHandler = Handler(Looper.getMainLooper())
-    /** 当前正在监控的包名 */
-    private var watchPackage: String? = null
-    /** 当前正在监控的 Activity 类名 */
-    private var watchClassName: String? = null
-    /** 监控开始时间 */
-    private var watchStartTime = 0L
-    /** 上次事件驱动扫描时间（用于节流 CONTENT_CHANGED 风暴） */
+    private var currentPackage: String? = null
+    private var currentClassName: String = ""
+    private var enterTimeMs = 0L
+    private var watching = false
+    private var scanCount = 0
     private var lastContentTriggerMs = 0L
-    /** 监控扫描任务 */
-    private val watchScanTask = Runnable { performWatchScan() }
 
-    // ========== 点击后验证（扫描确认，不依赖 GestureResultCallback） ==========
+    /** 规则计数（key = ruleId#groupKey#ruleKey）→ 已执行次数 */
+    private val counters = mutableMapOf<String, Int>()
 
-    /** 等待验证的包名（非空 = 刚刚执行了点击，正在验证是否生效） */
-    private var pendingConfirmPkg: String? = null
-    /** 验证中连续未匹配次数（达到阈值视为跳过成功） */
-    private var verifyMissCount: Int = 0
-    /** 验证中重试次数（达到上限则放弃） */
-    private var verifyRetryCount: Int = 0
-    /** 点击后记录当前选择器，用于验证时对比 */
-    private var lastClickSelector: String? = null
-    /** 点击后记录当前 matchRule key，用于验证失败后加冷却 */
-    private var lastMatchRuleKey: Int = 0
+    /** 规则冷却（key 同上）→ 允许执行的时间点 */
+    private val cooldowns = mutableMapOf<String, Long>()
 
-    companion object {
-        private const val TAG = "SkipRuleEngine"
-        /** 通用兜底冷却期（毫秒，防止重复尝试失败） */
-        /** 手势确认超时（毫秒，dispatchGesture 回调超时后视为失败） */
-        private const val PENDING_CONFIRM_TIMEOUT_MS = 2000L
-        /** 验证阶段：连续几次未匹配到跳过按钮即视为成功 */
-        private const val VERIFY_SUCCESS_MISSES = 3
-        /** 验证阶段：最大重试点击次数 */
-        private const val VERIFY_MAX_RETRIES = 3
-        /** 验证阶段扫描间隔（毫秒，需快速确认广告是否已关闭） */
-        private const val WATCH_INTERVAL_MS = 100L
-        /** 普通扫描兜底轮询间隔（毫秒；主驱动为 CONTENT_CHANGED 事件） */
-        private const val WATCH_BACKUP_INTERVAL_MS = 500L
-        /** CONTENT_CHANGED 事件触发扫描的节流间隔（毫秒） */
-        private const val CONTENT_TRIGGER_INTERVAL_MS = 100L
-        /** 监控超时（毫秒，超过此时间仍未检测到广告则停止） */
-        private const val WATCH_TIMEOUT_MS = 5_000L
-        /** 同一 App 跳过成功后冷却期（避免后续窗口事件重复触发） */
-        private const val SKIP_COOLDOWN_MS = 30_000L
-        /** 通用兜底选择器（按优先级排序）。
-         *
-         * 仅保留 ID 类匹配，避免误触正常页面中的"跳过""关闭"等文本。
-         * 纯文本匹配（[text*=]、[desc*=]）已移除——它们在正常页面中误触率极高。
-         * 只有广告 SDK 留下的 View ID 模式（tt_splash、skip）才是可靠的通用信号。
-         */
-        val GENERIC_SELECTORS = listOf(
-            "[id$=\"tt_splash_skip_btn\"]",
-            "[vid*=\"skip\"]",
-            "[id*=\"skip_btn\"]",
-            "[id$=\"tt_splash_ad_close\"]"
-        )
+    /** matchDelay 到期时间（key 同上）：到期前该规则不参与执行 */
+    private val pendingDelays = mutableMapOf<String, Long>()
 
-        /** 文本兜底选择器（仅在确认是开屏页时使用）。
-         *
-         * 匹配常见的"跳过""关闭"等文本和内容描述。
-         * 这些选择器在正常页面中误触率很高，因此只能通过 [isSplashPage] 守卫后使用。
-         */
-        val TEXT_SELECTORS = listOf(
-            "[clickable=true][text*=\"跳过\"]",
-            "[text*=\"跳过\"][visibleToUser=true]",
-            "[text*=\"跳过广告\"]",
-            "[text*=\"关闭广告\"]",
-            "[text*=\"关闭\"][visibleToUser=true]",
-            "[clickable=true][desc*=\"跳过\"]",
-            "[desc*=\"跳过\"][visibleToUser=true]",
-            "[text*=\"skip\"][visibleToUser=true]",
-            "[clickable=true][text*=\"close\"]",
-            "[clickable=true][desc*=\"close\"]"
-        )
+    /** 时钟与屏幕状态提供器（测试注入） */
+    internal var currentTimeMillis: () -> Long = { System.currentTimeMillis() }
+    internal var screenInteractive: () -> Boolean = { defaultScreenInteractive() }
 
-        /** 策略链执行的最大延迟（总超时）。单次执行超过此时间则中断。 */
-        private const val STRATEGY_CHAIN_TIMEOUT_MS = 2000L
+    private val scanTask = Runnable { performScan() }
 
-        /** 开屏/广告页面关键词列表（className 包含任一关键词即视为开屏页） */
-        private val SPLASH_KEYWORDS = listOf(
-            "splash",
-            "AdActivity",
-            "开屏", "广告"
-        )
-    }
+    // ==================== 外部接口 ====================
 
-    /** 拦截器链（初始窗口变化时使用，包含所有策略） */
-    private val fullInterceptors: List<AdInterceptor> = listOf(
-        ExactRuleInterceptor(),
-        GenericIdInterceptor(),
-        TextMatchInterceptor(),
-        CoordinateClickInterceptor(),
-        GlobalBackInterceptor()
-    )
-
-    /** 拦截器链（监控扫描时使用，仅安全的匹配策略，不含坐标点击和全局返回） */
-    private val monitoringInterceptors: List<AdInterceptor> = listOf(
-        ExactRuleInterceptor(),
-        GenericIdInterceptor(),
-        TextMatchInterceptor()
-    )
-
-    /**
-     * 处理窗口变化事件。
-     *
-     * 使用拦截器链逐个尝试关闭广告。
-     *
-     * @return true 表示已执行跳过操作
-     */
-    fun onWindowChanged(
-        packageName: String,
-        className: String,
-        rootNode: AccessibilityNodeInfo?
-    ): Boolean {
-        DebugConfig.log("onWindowChanged: $packageName / $className")
-
-        // 白名单检查
-        if (isPackageWhitelisted(packageName)) return false
-
-        // 冷却检查
-        val cooldownEnd = skipCooldowns[packageName] ?: 0L
-        if (currentTimeMillis() < cooldownEnd) {
-            DebugConfig.log("SkipEngine: $packageName 跳过冷却中")
-            return false
-        }
-
-        // 包名变化时重置
-        if (packageName != currentPackageName) {
-            resetAppState(packageName)
-            currentPackageName = packageName
-        }
-
-        if (rootNode == null) return false
-
-        // ====== 执行拦截器链 ======
-        val isSplash = isSplashPage(className)
-        val skipRule = ruleManager.findEnabledRule(packageName)
-        val hasMatchingRuleGroup = skipRule?.groups?.any { group ->
-            group.activityIds.isEmpty() || group.activityIds.any { className.contains(it) }
-        } == true
-        // canRunFullChain: 仅当确定是开屏页时才允许文本匹配/坐标点击等高危策略
-        // activityIds 为空的规则组（50+ 个内置 App 中绝大多数）不能触发高危策略
-        val hasExplicitMatch = skipRule?.groups?.any { group ->
-            group.activityIds.isNotEmpty() && group.activityIds.any { className.contains(it) }
-        } == true
-        val canRunFullChain = isSplash || hasExplicitMatch
-
-        val ctx = AdContext(
-            packageName = packageName,
-            className = className,
-            rootNode = rootNode,
-            isSplash = isSplash,
-            hasMatchingRuleGroup = hasMatchingRuleGroup,
-            canRunFullChain = canRunFullChain,
-            ruleManager = ruleManager,
-            engine = this,
-            actionCounters = actionCounters,
-            actionCooldowns = actionCooldowns
-        )
-
-        DebugConfig.log("拦截器链: $packageName splash=$isSplash canRunFullChain=$canRunFullChain")
-
-        for (interceptor in fullInterceptors) {
-            DebugConfig.log("  执行: ${interceptor::class.simpleName}")
-            if (interceptor.intercept(ctx)) {
-                skipCooldowns[packageName] = currentTimeMillis() + SKIP_COOLDOWN_MS
-                Log.d(TAG, "✅ 拦截器 ${interceptor::class.simpleName} 跳过成功: $packageName")
-                return true
-            }
-        }
-
-        DebugConfig.log("拦截器链: 所有拦截器均未命中")
-        NodeMatcher.diagnosePageStructure(rootNode)
-        return false
-    }
-
-    /**
-     * 执行单条规则：尝试匹配选择器中的任意一个表达式，匹配成功则点击。
-     */
-    fun executeRule(
-        ruleId: String,
-        matchRule: MatchRule,
-        rootNode: AccessibilityNodeInfo?
-    ): Boolean {
-        if (rootNode == null) return false
-
-        // matchDelay：延迟 matchDelay 毫秒后使用新鲜根节点执行匹配
-        if (matchRule.matchDelay > 0) {
-            // 清理旧的延迟任务，防止切包/停止后对错误前台 App 误点击
-            pendingDelayedTask?.let { handler.removeCallbacks(it) }
-            val delayedTask = Runnable {
-                pendingDelayedTask = null
-                val freshRoot = rootNodeProvider?.invoke() ?: return@Runnable
-                try {
-                    if (performMatchAndClick(ruleId, matchRule, freshRoot)) {
-                        updateCooldown(matchRule)
-                        incrementCounter(matchRule, ruleId)
-                        Log.d(TAG, "✅ 延迟匹配跳过广告成功: $ruleId <- ${matchRule.matches.firstOrNull()}")
-                    }
-                } finally {
-                    freshRoot.recycle()
-                }
-            }
-            pendingDelayedTask = delayedTask
-            handler.postDelayed(delayedTask, matchRule.matchDelay)
-            return false
-        }
-
-        return performMatchAndClick(ruleId, matchRule, rootNode)
-    }
-
-    /**
-     * 执行匹配和点击。
-     */
-    private fun performMatchAndClick(
-        ruleId: String,
-        matchRule: MatchRule,
-        rootNode: AccessibilityNodeInfo
-    ): Boolean {
-        // 依次尝试每个选择器表达式
-        for (selectorExpr in matchRule.matches) {
-            try {
-                val selector = SelectorParser.parse(selectorExpr)
-                val nodes = NodeMatcher.find(rootNode, selector)
-                try {
-                    DebugConfig.log("规则 $ruleId 尝试选择器: $selectorExpr → 找到 ${nodes.size} 个节点")
-
-                    // 过滤不可见的节点
-                    val visibleNodes = nodes.filter { it.isVisibleToUser }
-
-                    if (visibleNodes.isNotEmpty()) {
-                        // 取第一个可见节点执行点击
-                        val target = visibleNodes.first()
-                        val targetText = target.text
-                        val targetId = target.viewIdResourceName
-                        val bounds = android.graphics.Rect().also { target.getBoundsInScreen(it) }
-                        DebugConfig.log("点击目标: text=$targetText id=$targetId bounds=$bounds")
-
-                        if (ActionExecutor.perform(target, matchRule.action)) {
-                            Log.d(TAG, "✅ 点击成功: $selectorExpr")
-                            return true
-                        } else {
-                            DebugConfig.log("点击失败: $selectorExpr — perform 返回 false")
-                        }
-                    } else if (nodes.isNotEmpty()) {
-                        val first = nodes.first()
-                        DebugConfig.log("找到 ${nodes.size} 个节点但全部不可见，示例: text=${first.text} id=${first.viewIdResourceName}")
-                    } else {
-                        DebugConfig.log("选择器无匹配: $selectorExpr")
-                    }
-                } finally {
-                    NodeMatcher.recycleAll(nodes)
-                }
-            } catch (e: Exception) {
-                DebugConfig.log("选择器解析/匹配异常: $selectorExpr → ${e.message}")
-                Log.w(TAG, "选择器匹配失败: $selectorExpr", e)
-            }
-        }
-        DebugConfig.log("规则 $ruleId 所有选择器均未命中")
-        return false
-    }
-
-    /**
-     * 检查规则是否在冷却中。
-     */
-    fun isOnCooldown(matchRule: MatchRule): Boolean {
-        val cooldownEnd = actionCooldowns[matchRule.toCooldownKey()] ?: return false
-        return System.currentTimeMillis() < cooldownEnd
-    }
-
-    /**
-     * 更新冷却时间。
-     */
-    fun updateCooldown(matchRule: MatchRule) {
-        if (matchRule.actionCd > 0) {
-            actionCooldowns[matchRule.toCooldownKey()] =
-                System.currentTimeMillis() + matchRule.actionCd
-        }
-    }
-
-    /**
-     * 增加执行计数器。
-     */
-    fun incrementCounter(matchRule: MatchRule, ruleId: String) {
-        val key = matchRule.toCounterKey(ruleId)
-        actionCounters[key] = (actionCounters[key] ?: 0) + 1
-    }
-
-    // ========== 策略链辅助方法 ==========
-
-    /**
-     * 尝试用一组选择器匹配并点击节点。
-     * 对每个选择器：先找可见节点，失败后再试不可见节点。
-     *
-     * @return 是否成功点击
-     */
-    fun matchSelectors(
-        packageName: String,
-        rootNode: AccessibilityNodeInfo,
-        selectors: List<String>
-    ): Boolean {
-        for (selectorExpr in selectors) {
-            try {
-                val selector = SelectorParser.parse(selectorExpr)
-                val nodes = NodeMatcher.find(rootNode, selector)
-                try {
-                    if (nodes.isEmpty()) continue
-
-                    // 第一轮：可见节点
-                    val visibleNodes = nodes.filter { it.isVisibleToUser }
-                    if (visibleNodes.isNotEmpty()) {
-                        val target = visibleNodes.first()
-                        if (ActionExecutor.perform(target, "click")) {
-                            DebugConfig.log("  ✅ 匹配成功: $selectorExpr → ${target.text}")
-                            return true
-                        }
-                    }
-
-                    // 第二轮：不可见节点
-                    val invisibleNodes = nodes.filter { !it.isVisibleToUser }
-                    if (invisibleNodes.isNotEmpty()) {
-                        val target = invisibleNodes.first()
-                        if (ActionExecutor.perform(target, "click")) {
-                            DebugConfig.log("  ✅ 匹配成功(不可见): $selectorExpr → ${target.text}")
-                            return true
-                        }
-                    }
-                } finally {
-                    NodeMatcher.recycleAll(nodes)
-                }
-            } catch (e: Exception) {
-                DebugConfig.log("  $selectorExpr → 异常: ${e.message}")
-            }
-        }
-        return false
-    }
-
-    /**
-     * 右上角坐标点击（处理 WebView / Flutter 等无障碍树不暴露内部元素的场景）。
-     *
-     * 在屏幕右侧 10% 范围内从上到下依次点击，模拟用户点击跳过按钮。
-     * 仅当确认是开屏页时使用，且是最后几种策略之一。
-     */
-    fun tryCoordinateClick(rootNode: AccessibilityNodeInfo): Boolean {
-        val pkg = watchPackage ?: currentPackageName ?: return false
-        if (pkg in coordinateClickAttempted) return false  // 每个 session 只尝试一次
-        coordinateClickAttempted.add(pkg)
-
-        val service = ActionExecutor.accessibilityService ?: return false
-        val displayMetrics = service.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-
-        // 跳过按钮常见位置（右上角 + 右下角 + 中间靠右）
-        val xTop = (screenWidth * 0.92).toInt()       // 右上角
-        val xBottom = (screenWidth * 0.50).toInt()     // 底部中间（跳过按钮有时居中）
-        val xCenterRight = (screenWidth * 0.70).toInt() // 中间靠右
-
-        // 分三组位置：右上角纵向、底部横向、中间靠右纵向
-        val topRightPoints = listOf(
-            screenHeight * 0.04,
-            screenHeight * 0.07,
-            screenHeight * 0.10,
-            screenHeight * 0.13,
-            screenHeight * 0.16,
-            screenHeight * 0.20
-        )
-        val bottomPoints = listOf(
-            screenHeight * 0.75,
-            screenHeight * 0.80,
-            screenHeight * 0.85,
-            screenHeight * 0.90,
-            screenHeight * 0.95
-        )
-        val centerRightPoints = listOf(
-            screenHeight * 0.25,
-            screenHeight * 0.30,
-            screenHeight * 0.35,
-            screenHeight * 0.40,
-            screenHeight * 0.45,
-            screenHeight * 0.50
-        )
-
-        DebugConfig.log("坐标点击: 屏幕 ${screenWidth}x$screenHeight, 尝试多位置")
-
-        // 组1: 右上角（最常见）
-        for (y in topRightPoints) {
-            dispatchClick(service, xTop, y.toInt())
-        }
-        // 组2: 右下角到底部中间
-        for (y in bottomPoints) {
-            dispatchClick(service, xBottom, y.toInt())
-        }
-        // 组3: 中间靠右
-        for (y in centerRightPoints) {
-            dispatchClick(service, xCenterRight, y.toInt())
-        }
-
-        Log.d(TAG, "坐标点击已执行: 16个位置")
-        return true  // 已发送手势，返回 true 防止全局返回误触
-    }
-
-    /** 发送一次坐标点击手势 */
-    private fun dispatchClick(service: android.accessibilityservice.AccessibilityService, x: Int, y: Int) {
-        val path = android.graphics.Path().apply {
-            moveTo(x.toFloat(), y.toFloat())
-            lineTo(x.toFloat(), y.toFloat())
-        }
-        val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 80L)
-        val gesture = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(stroke)
-            .build()
-        service.dispatchGesture(gesture, null, null)
-    }
-
-    /**
-     * 重置某个 App 的状态（包名变化时或 Activity 重置时）。
-     */
-    fun resetAppState(packageName: String) {
-        actionCounters.clear()
-        actionCooldowns.clear()
-        stopWatching()
-        skipCooldowns.remove(packageName)
-        DebugConfig.log("SkipEngine: 状态已重置 for $packageName")
-    }
-
-    // ========== 持续监控 ==========
-
-    /**
-     * 处理窗口内容变化事件（事件驱动加速）。
-     *
-     * 开屏广告的跳过按钮通常在广告加载完成后才出现（倒计时结束/广告渲染完成），
-     * 此时节点树必然变化并产生 TYPE_WINDOW_CONTENT_CHANGED 事件。
-     * 在监控窗口内收到该事件时立即执行一次扫描，替代纯轮询等待：
-     * 按钮一出现即可点击，响应更快且无需持续高频轮询。
-     *
-     * 限制（防误触/防风暴）：
-     * - 仅响应正在监控的包名（watchPackage）
-     * - 节流 CONTENT_TRIGGER_INTERVAL_MS，事件风暴只取首个
-     * - 监控超时（WATCH_TIMEOUT_MS）后忽略并停止监控
-     */
-    fun onContentChanged(packageName: String) {
-        val pkg = watchPackage ?: return
-        if (packageName != pkg) return
-
-        // 超时检查：窗口已结束则停止监控
-        if (currentTimeMillis() - watchStartTime >= WATCH_TIMEOUT_MS) {
-            Log.d(TAG, "CONTENT_CHANGED 到达但监控已超时，停止监控: $pkg")
-            stopWatching()
-            return
-        }
-
-        // 节流：系统每 ~100ms 合并一批 CONTENT_CHANGED，只取首个触发扫描
-        val now = currentTimeMillis()
-        if (now - lastContentTriggerMs < CONTENT_TRIGGER_INTERVAL_MS) return
-        lastContentTriggerMs = now
-
-        // 清除挂起的兜底轮询任务，立即扫描（事件已位于主线程，同步执行）
-        watchHandler.removeCallbacks(watchScanTask)
-        performWatchScan()
-    }
-
-    /**
-     * 设置根节点提供器。
-     */
+    /** 设置根节点提供器（服务层提供 `rootInActiveWindow`） */
     fun setRootNodeProvider(provider: () -> AccessibilityNodeInfo?) {
         rootNodeProvider = provider
     }
 
     /**
-     * 启动屏幕内容持续监控。
+     * 窗口状态变化（前台 App 或 Activity 变化）。
      *
-     * 当 [onWindowChanged] 首次未命中时调用（广告尚未渲染出来）。
-     * 每 500ms 扫描一次屏幕无障碍树。
-     * 最多监控 5 秒后自动停止。
-     *
-     * 无内置规则的 App，仅在当前页面疑似开屏页时才启动监控。
-     *
-     * @param packageName 当前前台 App 包名
+     * 新 App：重置计数/冷却并开启匹配窗口；同 App 内 Activity 变化：按 [ResetMatch.ACTIVITY] 重置计数。
      */
-    /**
-     * 启动屏幕内容持续监控。
-     *
-     * 当 [onWindowChanged] 首次未命中时调用（广告尚未渲染出来）。
-     * 每 500ms 扫描一次屏幕无障碍树。
-     * 最多监控 5 秒后自动停止。
-     *
-     * 无内置规则的 App，仅在当前页面疑似开屏页时才启动监控。
-     * 有内置规则的 App 不受此限制（由精确选择器自身保证准确性）。
-     *
-     * @param packageName 当前前台 App 包名
-     */
-    fun startWatching(packageName: String, className: String = "") {
-        // 白名单检查：在白名单中的 App 不做任何处理
-        if (isPackageWhitelisted(packageName)) {
-            return
-        }
-
-        // 跳过冷却期内不重复扫描
-        val cooldownEnd = skipCooldowns[packageName] ?: 0L
-        if (currentTimeMillis() < cooldownEnd) {
-            Log.d(TAG, "跳过冷却中，不启动监控: $packageName")
-            return
-        }
-
-        // 无内置规则的 App，仅当页面疑似开屏页时才启动监控
-        // className="" 时 isSplashPage 返回 false，确保默认不启动
-        val hasBuiltInRule = ruleManager.findEnabledRule(packageName) != null
-        if (!hasBuiltInRule && !isSplashPage(className)) {
-            Log.d(TAG, "无内置规则且非开屏页，不启动监控: $packageName ($className)")
-            return
-        }
-
-        // 相同包名不重复启动，但更新 className（App 内页面变化，如微信→小程序）
-        if (watchPackage == packageName) {
-            if (className.isNotEmpty() && className != watchClassName) {
-                watchClassName = className
-                // 进入小程序时暂停扫描，给广告加载时间
-                if (MiniProgramSkipHandler.isMiniProgram(className)) {
-                    watchHandler.removeCallbacks(watchScanTask)
-                    watchHandler.postDelayed(watchScanTask, 2000L)
-                    Log.d(TAG, "监控进入小程序，延迟2秒后扫描: $packageName <- $className")
-                } else {
-                    Log.d(TAG, "监控更新 className: $packageName <- $className")
-                }
-            }
-            Log.d(TAG, "监控已在运行: $packageName")
-            return
-        }
-        stopWatching()
-
-        watchPackage = packageName
-        watchClassName = className
-        watchStartTime = currentTimeMillis()
-        // 上次事件触发时间初始化为监控开始前一个节流间隔，保证首个事件必然放行
-        lastContentTriggerMs = watchStartTime - CONTENT_TRIGGER_INTERVAL_MS
-        Log.d(TAG, "🔄 启动持续监控: $packageName (最长 ${WATCH_TIMEOUT_MS / 1000}秒)")
-
-        // 首次扫描立即执行
-        watchHandler.post(watchScanTask)
-    }
-
-    /**
-     * 停止持续监控。
-     */
-    fun stopWatching() {
-        if (watchPackage != null) {
-            Log.d(TAG, "⏹ 停止监控: $watchPackage")
-        }
-        watchHandler.removeCallbacks(watchScanTask)
-        // 清理 matchDelay 延迟匹配任务,防止切包后对错误前台 App 误点击
-        pendingDelayedTask?.let { handler.removeCallbacks(it) }
-        pendingDelayedTask = null
-        watchPackage = null
-        watchClassName = null
-        watchStartTime = 0L
-        lastContentTriggerMs = 0L
-        pendingConfirmPkg = null
-        verifyMissCount = 0
-        verifyRetryCount = 0
-        lastClickSelector = null
-        lastMatchRuleKey = 0
-    }
-
-    /**
-     * 执行一次监控扫描：获取新鲜根节点，尝试匹配规则。
-     */
-    private fun performWatchScan() {
-        val pkg = watchPackage ?: return
-
-        // 超时检查
-        if (currentTimeMillis() - watchStartTime >= WATCH_TIMEOUT_MS) {
-            Log.d(TAG, "⏰ 监控超时（${WATCH_TIMEOUT_MS / 1000}秒），停止监控: $pkg")
-            DebugConfig.log("监控超时停止: $pkg")
+    fun onWindowChanged(packageName: String, className: String) {
+        if (packageName == MonitorApp.instance.packageName) {
             stopWatching()
             return
         }
-
-        // ======== 阶段1：点击后验证 ========
-        if (pendingConfirmPkg != null) {
-            DebugConfig.log("监控验证阶段: pending=$pendingConfirmPkg retry=$verifyRetryCount/$VERIFY_MAX_RETRIES miss=$verifyMissCount/$VERIFY_SUCCESS_MISSES")
-            val freshRoot = rootNodeProvider?.invoke()
-            if (freshRoot != null) {
-                try {
-                    val stillHasAd = checkAdStillPresent(freshRoot)
-                    if (stillHasAd) {
-                        // 广告还在 → 重试或放弃
-                        verifyMissCount = 0
-                        verifyRetryCount++
-                        if (verifyRetryCount >= VERIFY_MAX_RETRIES) {
-                            Log.w(TAG, "验证重试已达上限($VERIFY_MAX_RETRIES)，放弃验证: $pkg")
-                            pendingConfirmPkg = null
-                            verifyMissCount = 0
-                            verifyRetryCount = 0
-                            lastClickSelector = null
-                            // 进入短暂冷却，避免立即重试同一个无效选择器
-                            actionCooldowns["cd_$lastMatchRuleKey"] = System.currentTimeMillis() + 3000
-                            // 继续下面的正常扫描
-                        } else {
-                            Log.d(TAG, "广告仍在，重试点击(${verifyRetryCount}/$VERIFY_MAX_RETRIES): $pkg")
-                            // 不进入扫描阶段，直接继续轮询（下次扫描会重试匹配）
-                            watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
-                            return
-                        }
-                    } else {
-                        // 广告消失 → 确认跳过成功
-                        verifyMissCount++
-                        if (verifyMissCount >= VERIFY_SUCCESS_MISSES) {
-                            Log.d(TAG, "✅ 连续${VERIFY_SUCCESS_MISSES}次未检测到广告，确认跳过成功: $pkg")
-                            pendingConfirmPkg = null
-                            verifyMissCount = 0
-                            verifyRetryCount = 0
-                            lastClickSelector = null
-                            stopWatching()
-                            onSkipSuccess?.invoke(pkg)
-                            return
-                        } else {
-                            Log.d(TAG, "广告未检测到(${verifyMissCount}/$VERIFY_SUCCESS_MISSES)，继续确认: $pkg")
-                            watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
-                            return
-                        }
-                    }
-                } finally {
-                    freshRoot.recycle()
-                }
-            } else {
-                // 根节点不可用，继续等待
-                Log.v(TAG, "验证阶段: freshRoot 为 null，继续等待: $pkg")
-                watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
-                return
-            }
-        }
-
-        // ======== 阶段2：正常扫描匹配（静默模式，仅在有发现时记录日志）=======
-        val freshRoot = rootNodeProvider?.invoke()
-        if (freshRoot == null) {
-            Log.v(TAG, "监控扫描: freshRoot 为 null，等待下次扫描: $pkg")
-            watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
+        if (isWhitelisted(packageName)) {
+            DebugConfig.log("SkipEngine: 白名单跳过 " + packageName)
             return
         }
-
-        try {
-            if (runMonitoringStrategyChain(pkg, freshRoot)) {
-                // 进入验证阶段：后续扫描确认广告是否消失
-                pendingConfirmPkg = pkg
-                verifyMissCount = 0
-                verifyRetryCount = 0
-                watchHandler.postDelayed(watchScanTask, WATCH_INTERVAL_MS)
-                return
-            }
-        } finally {
-            freshRoot.recycle()
+        if (!screenInteractive()) {
+            DebugConfig.log("SkipEngine: 屏幕未点亮，忽略窗口变化 " + packageName)
+            return
         }
-
-        // 未匹配，继续等待：事件驱动为主（CONTENT_CHANGED 到达会立即扫描），
-        // 兜底轮询防事件丢失（静默，不输出日志）
-        watchHandler.postDelayed(watchScanTask, WATCH_BACKUP_INTERVAL_MS)
+        val now = currentTimeMillis()
+        if (packageName != currentPackage) {
+            resetAppState(packageName)
+            currentPackage = packageName
+            enterTimeMs = now
+            DebugConfig.log("SkipEngine: 进入 App " + packageName + " / " + className)
+        } else if (className != currentClassName) {
+            resetActivityScopedCounters(packageName)
+            DebugConfig.log("SkipEngine: Activity 变化 " + className)
+        }
+        currentClassName = className
+        startWatching(now)
     }
 
     /**
-     * 监控扫描中的拦截器链（与 [onWindowChanged] 共享相同逻辑）。
+     * 窗口内容变化（事件驱动扫描）。
+     *
+     * 仅处理正在监控的 App；100ms 节流以吸收 CONTENT_CHANGED 风暴。
      */
-    private fun runMonitoringStrategyChain(
-        packageName: String,
-        rootNode: AccessibilityNodeInfo
+    fun onContentChanged(packageName: String) {
+        val pkg = currentPackage ?: return
+        if (!watching || packageName != pkg) return
+        if (!screenInteractive()) return
+        val now = currentTimeMillis()
+        if (now - lastContentTriggerMs < CONTENT_TRIGGER_INTERVAL_MS) return
+        lastContentTriggerMs = now
+        handler.removeCallbacks(scanTask)
+        performScan()
+    }
+
+    /** 停止监控并清理规则状态 */
+    fun stopWatching() {
+        watching = false
+        handler.removeCallbacks(scanTask)
+        scanCount = 0
+    }
+
+    /** 当前是否处于匹配窗口内 */
+    fun isWatching(): Boolean = watching
+
+    /** 正在监控的包名 */
+    fun watchingPackage(): String? = if (watching) currentPackage else null
+
+    /** 重置某个 App 的状态（进入本 App 或用户手动重置时调用） */
+    fun resetAppState(packageName: String?) {
+        counters.clear()
+        cooldowns.clear()
+        pendingDelays.clear()
+        stopWatching()
+        if (packageName != null && packageName != currentPackage) {
+            currentPackage = null
+        }
+    }
+
+    // ==================== 匹配窗口 ====================
+
+    private fun startWatching(now: Long) {
+        watching = true
+        scanCount = 0
+        handler.removeCallbacks(scanTask)
+        handler.post(scanTask)
+        DebugConfig.log("SkipEngine: 开启匹配窗口 " + WATCH_WINDOW_MS + "ms, 当前 " + currentPackage +
+            " / " + currentClassName + ", now=" + now)
+    }
+
+    private fun schedule(delayMs: Long) {
+        if (!watching) return
+        handler.removeCallbacks(scanTask)
+        handler.postDelayed(scanTask, delayMs)
+    }
+
+    // ==================== 扫描 ====================
+
+    private fun performScan() {
+        val pkg = currentPackage ?: return
+        if (!watching) return
+        val now = currentTimeMillis()
+        if (!screenInteractive()) {
+            DebugConfig.log("SkipEngine: 屏幕未点亮，停止扫描 " + pkg)
+            stopWatching()
+            return
+        }
+        if (now - enterTimeMs > WATCH_WINDOW_MS || scanCount >= MAX_SCANS) {
+            DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描 " + scanCount + " 次)")
+            stopWatching()
+            return
+        }
+        scanCount++
+        val root = rootNodeProvider?.invoke()
+        if (root == null) {
+            DebugConfig.log("SkipEngine: 根节点未就绪，稍后重试 " + pkg)
+            schedule(BACKUP_SCAN_INTERVAL_MS)
+            return
+        }
+        val result = try {
+            applyRules(pkg, root, now)
+        } finally {
+            root.recycle()
+        }
+        if (result != null) {
+            Log.d(TAG, "✅ 跳过成功: " + pkg + " ← " + result.selector)
+            onSkipSuccess?.invoke(result)
+            stopWatching()
+            return
+        }
+        schedule(BACKUP_SCAN_INTERVAL_MS)
+    }
+
+    /** 依次尝试匹配规则；返回命中的结果 */
+    private fun applyRules(packageName: String, root: AccessibilityNodeInfo, now: Long): SkipResult? {
+        val rules = ruleManager.findRulesFor(packageName)
+            .sortedWith(compareBy({ if (it.isGlobal) 1 else 0 }, { it.id }))
+        for (rule in rules) {
+            val hit = applyRule(rule, packageName, root, now) ?: continue
+            return hit
+        }
+        DebugConfig.log("SkipEngine: 未命中任何规则 " + packageName + " / " + currentClassName)
+        return null
+    }
+
+    private fun applyRule(rule: SkipRule, packageName: String, root: AccessibilityNodeInfo, now: Long): SkipResult? {
+        for (group in rule.groups.sortedBy { it.order }) {
+            if (!group.enabled || !activityMatches(group, packageName)) continue
+            for (matchRule in group.rules) {
+                val key = rule.id + "#" + group.key + "#" + matchRule.key
+                val selector = applyMatchRule(group, matchRule, key, root, now) ?: continue
+                val ruleName = matchRule.name.ifEmpty { group.name }
+                return SkipResult(packageName, rule.name + "/" + ruleName, selector, matchRule.action.value)
+            }
+        }
+        return null
+    }
+
+    /** 执行单条匹配规则；返回命中的选择器 */
+    private fun applyMatchRule(
+        group: RuleGroup,
+        matchRule: MatchRule,
+        key: String,
+        root: AccessibilityNodeInfo,
+        now: Long
+    ): String? {
+        if (!ruleAllowed(group, matchRule, key, now)) return null
+        if (matchRule.action.value == "none") return null
+        if (anySelectorMatches(matchRule.excludeMatches, matchRule, root)) return null
+        val target = findTarget(matchRule, root) ?: return null
+        if (!delaySatisfied(matchRule, key, now)) {
+            NodeMatcher.recycleAll(target.nodes)
+            return null
+        }
+        val executed = try {
+            ActionExecutor.perform(target.node, matchRule.action, matchRule.position)
+        } finally {
+            NodeMatcher.recycleAll(target.nodes)
+        }
+        if (!executed) {
+            DebugConfig.log("SkipEngine: 动作执行失败 " + key + " → " + target.selector)
+            return null
+        }
+        counters[key] = (counters[key] ?: 0) + 1
+        val cooldown = matchRule.actionCd ?: group.actionCd
+        if (cooldown > 0) cooldowns[key] = now + cooldown
+        return target.selector
+    }
+
+    /** 规则是否可执行（窗口/次数/冷却/matchDelay） */
+    private fun ruleAllowed(group: RuleGroup, matchRule: MatchRule, key: String, now: Long): Boolean {
+        val window = matchRule.matchTime ?: group.matchTime
+        if (window > 0 && now - enterTimeMs > window) return false
+        val limit = matchRule.actionMaximum ?: group.actionMaximum
+        if (limit > 0 && (counters[key] ?: 0) >= limit) return false
+        val cooldown = matchRule.actionCd ?: group.actionCd
+        if (cooldown > 0 && now < (cooldowns[key] ?: 0L)) return false
+        return true
+    }
+
+    /**
+     * matchDelay 语义：首次命中后挂起 [MatchRule.matchDelay]，到期后重新命中才执行。
+     * 用"到期时间戳"实现，避免被后续扫描取消（旧实现在 CONTENT_CHANGED 风暴下永不执行）。
+     */
+    private fun delaySatisfied(matchRule: MatchRule, key: String, now: Long): Boolean {
+        if (matchRule.matchDelay <= 0) return true
+        val readyAt = pendingDelays[key]
+        if (readyAt == null) {
+            pendingDelays[key] = now + matchRule.matchDelay
+            DebugConfig.log("SkipEngine: 规则挂起等待 matchDelay=" + matchRule.matchDelay + "ms " + key)
+            return false
+        }
+        return now >= readyAt
+    }
+
+    // ==================== 选择器匹配 ====================
+
+    /** 命中的目标节点与用于命中的选择器 */
+    private class Target(
+        val node: AccessibilityNodeInfo,
+        val selector: String,
+        val nodes: List<AccessibilityNodeInfo>
+    )
+
+    private fun findTarget(matchRule: MatchRule, root: AccessibilityNodeInfo): Target? {
+        if (matchRule.matches.isNotEmpty()) return findByAll(matchRule, root)
+        for (expr in matchRule.anyMatches) {
+            val nodes = query(expr, matchRule, root) ?: continue
+            val target = pickTarget(nodes, root)
+            if (target != null) return Target(target, expr, nodes)
+            NodeMatcher.recycleAll(nodes)
+        }
+        return null
+    }
+
+    /** matches：全部选择器都要命中，点击最后一个选择器的目标节点 */
+    private fun findByAll(matchRule: MatchRule, root: AccessibilityNodeInfo): Target? {
+        var lastNodes: List<AccessibilityNodeInfo> = emptyList()
+        var lastSelector: String? = null
+        for (expr in matchRule.matches) {
+            val nodes = query(expr, matchRule, root) ?: return null
+            if (nodes.isEmpty()) {
+                NodeMatcher.recycleAll(nodes)
+                NodeMatcher.recycleAll(lastNodes)
+                return null
+            }
+            NodeMatcher.recycleAll(lastNodes)
+            lastNodes = nodes
+            lastSelector = expr
+        }
+        val target = pickTarget(lastNodes, root)
+        if (target == null || lastSelector == null) {
+            NodeMatcher.recycleAll(lastNodes)
+            return null
+        }
+        return Target(target, lastSelector, lastNodes)
+    }
+
+    private fun query(expr: String, matchRule: MatchRule, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? {
+        val selector = SelectorCache.get(expr, matchRule.fastQuery) ?: return null
+        return NodeMatcher.find(root, selector)
+    }
+
+    private fun anySelectorMatches(
+        exprs: List<String>,
+        matchRule: MatchRule,
+        root: AccessibilityNodeInfo
     ): Boolean {
-        val cls = watchClassName ?: ""
-        val isSplash = isSplashPage(cls)
-        val skipRule = ruleManager.findEnabledRule(packageName)
-        val hasMatchingRuleGroup = skipRule?.groups?.any { group ->
-            group.activityIds.isEmpty() || group.activityIds.any { cls.contains(it) }
-        } == true
-        // canRunFullChain: 仅当明确是开屏页时才允许文本匹配等高危策略
-        val hasExplicitMatch = skipRule?.groups?.any { group ->
-            group.activityIds.isNotEmpty() && group.activityIds.any { cls.contains(it) }
-        } == true
-        val canRunFullChain = isSplash || hasExplicitMatch
-
-        val ctx = AdContext(
-            packageName = packageName,
-            className = cls,
-            rootNode = rootNode,
-            isSplash = isSplash,
-            hasMatchingRuleGroup = hasMatchingRuleGroup,
-            canRunFullChain = canRunFullChain,
-            ruleManager = ruleManager,
-            engine = this,
-            actionCounters = actionCounters,
-            actionCooldowns = actionCooldowns
-        )
-
-        for (interceptor in monitoringInterceptors) {
-            if (interceptor.intercept(ctx)) {
-                Log.d(TAG, "✅ 监控-${interceptor::class.simpleName} 跳过成功: $packageName")
+        for (expr in exprs) {
+            val nodes = query(expr, matchRule, root) ?: continue
+            val hit = nodes.isNotEmpty()
+            NodeMatcher.recycleAll(nodes)
+            if (hit) {
+                DebugConfig.log("SkipEngine: 命中排除选择器，放弃规则 → " + expr)
                 return true
             }
         }
-
-        NodeMatcher.diagnosePageStructure(rootNode)
         return false
     }
 
     /**
-     * 直接执行规则（不经过 matchDelay 的同步等待，监控场景已有时机）。
+     * 选出可点击的目标节点。
+     *
+     * **面积守卫**：跳过按钮只可能是小块节点；面积超过根节点 1/3 的命中通常是
+     * "整屏广告容器"（点中心会进落地页），必须丢弃（业界调研结论，见
+     * `docs/开屏跳过/业界调研与改进方案.md` §2.4）。
      */
-    private fun executeRuleDirect(
-        ruleId: String,
-        matchRule: MatchRule,
-        rootNode: AccessibilityNodeInfo
-    ): Boolean {
-        for (selectorExpr in matchRule.matches) {
-            try {
-                val selector = SelectorParser.parse(selectorExpr)
-                val nodes = NodeMatcher.find(rootNode, selector)
-                try {
-                    val visibleNodes = nodes.filter { it.isVisibleToUser }
-                    if (visibleNodes.isNotEmpty()) {
-                        val target = visibleNodes.first()
+    private fun pickTarget(nodes: List<AccessibilityNodeInfo>, root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val rootArea = areaOf(root)
+        val usable = nodes.filter { !isOversized(it, rootArea) }
+        return usable.firstOrNull { it.isVisibleToUser } ?: usable.firstOrNull()
+    }
 
-                        // 过滤空边界节点
-                        val bounds = android.graphics.Rect()
-                        target.getBoundsInScreen(bounds)
-                        if (bounds.isEmpty) {
-                            Log.d(TAG, "跳过空边界节点: ${target.text} (${target.viewIdResourceName})")
-                            continue
-                        }
+    private fun areaOf(node: AccessibilityNodeInfo): Int {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        return if (rect.isEmpty) 0 else rect.width() * rect.height()
+    }
 
-                        Log.d(TAG, "监控找到匹配节点: ${target.text} (${target.viewIdResourceName}) " +
-                                "bounds=[${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]")
+    private fun isOversized(node: AccessibilityNodeInfo, rootArea: Int): Boolean {
+        if (rootArea <= 0) return false
+        val area = areaOf(node)
+        // 边界为空的节点交给动作执行器判断（部分可点击节点不暴露 bounds）
+        if (area <= 0) return false
+        return area * 3 > rootArea
+    }
 
-                        // 小程序广告用坐标点击命中覆盖层，普通 App 用规则默认动作
-                        val clickAction = if (MiniProgramSkipHandler.isMiniProgram(watchClassName))
-                            MiniProgramSkipHandler.getClickAction() else matchRule.action
-                        ActionExecutor.perform(target, clickAction)
-                        Log.d(TAG, "⏳ 规则点击已执行，进入验证: $ruleId <- $selectorExpr")
-                        val pkg = watchPackage ?: return false
-                        pendingConfirmPkg = pkg
-                        verifyMissCount = 0
-                        verifyRetryCount = 0
-                        lastClickSelector = selectorExpr
-                        lastMatchRuleKey = matchRule.key
-                        return true
-                    }
-                } finally {
-                    NodeMatcher.recycleAll(nodes)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "监控选择器匹配失败: $selectorExpr", e)
+    // ==================== 作用域与状态 ====================
+
+    /** Activity 是否匹配规则组（前缀匹配，`.` 开头自动补包名；exclude 优先） */
+    private fun activityMatches(group: RuleGroup, packageName: String): Boolean {
+        val className = currentClassName
+        if (className.isEmpty()) return group.excludeActivityIds.isEmpty()
+        if (group.excludeActivityIds.any { matchesActivity(it, className, packageName) }) return false
+        if (group.activityIds.isEmpty()) return true
+        return group.activityIds.any { matchesActivity(it, className, packageName) }
+    }
+
+    private fun matchesActivity(pattern: String, className: String, packageName: String): Boolean {
+        val full = if (pattern.startsWith(".")) packageName + pattern else pattern
+        return className == full || className.startsWith(full)
+    }
+
+    /** Activity 变化时，重置 [ResetMatch.ACTIVITY] 的作用域计数 */
+    private fun resetActivityScopedCounters(packageName: String) {
+        val keys = ruleManager.findRulesFor(packageName).flatMap { rule ->
+            rule.groups.filter { it.resetMatch == ResetMatch.ACTIVITY }.flatMap { group ->
+                group.rules.map { rule.id + "#" + group.key + "#" + it.key }
             }
         }
-        return false
+        keys.forEach { counters.remove(it); pendingDelays.remove(it) }
     }
 
-    /**
-     * 判断当前上下文是否无法可靠跳过广告。
-     */
-    /**
-     * 判断当前 className 是否是一个开屏/广告页面。
-     *
-     * 当 className（通常形如 "com.example.MainActivity"）包含以下关键词时视为开屏页：
-     * - Splash / splash（标准开屏页命名）
-     * - AdActivity / Advertisement（广告 Activity）
-     * - "开屏" / "广告"（中文关键词）
-     */
-    private fun isSplashPage(className: String): Boolean {
-        if (className.isBlank()) return false
-        return SPLASH_KEYWORDS.any { keyword ->
-            className.contains(keyword, ignoreCase = true)
-        }
+    private fun isWhitelisted(packageName: String): Boolean = try {
+        val prefs = MonitorApp.instance.getSharedPreferences(WHITELIST_PREFS, Context.MODE_PRIVATE)
+        packageName in (prefs.getStringSet(WHITELIST_KEY, emptySet()) ?: emptySet())
+    } catch (_: Exception) {
+        false
     }
 
-    /**
-     * 检查指定包名是否在用户白名单中。
-     * 白名单中的 App 完全跳过所有开屏广告检测。
-     */
-    private fun isPackageWhitelisted(packageName: String): Boolean {
-        return try {
-            val prefs = MonitorApp.instance.getSharedPreferences("skip_whitelist", android.content.Context.MODE_PRIVATE)
-            val whitelist = prefs.getStringSet("whitelist", emptySet()) ?: emptySet()
-            val result = packageName in whitelist
-            if (result) Log.d(TAG, "白名单命中，跳过: $packageName")
-            result
-        } catch (_: Exception) {
-            false
-        }
+    private fun defaultScreenInteractive(): Boolean = try {
+        val manager = MonitorApp.instance.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        manager?.isInteractive ?: true
+    } catch (_: Exception) {
+        true
     }
 
-    private fun isUnskippableContext(packageName: String): Boolean {
-        return false
+    private companion object {
+        const val TAG = "SkipRuleEngine"
+        const val WHITELIST_PREFS = "skip_whitelist"
+        const val WHITELIST_KEY = "whitelist"
+
+        /** 匹配窗口上限（毫秒，自 App 切换起算；GKD 开屏规则为 10 秒） */
+        const val WATCH_WINDOW_MS = 10_000L
+
+        /** 兜底轮询间隔（毫秒；主驱动为 CONTENT_CHANGED 事件） */
+        const val BACKUP_SCAN_INTERVAL_MS = 300L
+
+        /** CONTENT_CHANGED 触发扫描的节流间隔 */
+        const val CONTENT_TRIGGER_INTERVAL_MS = 100L
+
+        /** 单次窗口内的扫描次数上限（护栏，防止异常场景空转） */
+        const val MAX_SCANS = 80
     }
-
-    /**
-     * 检查当前屏幕是否仍存在广告跳过按钮。
-     * 使用通用选择器匹配，找到一个即视为广告仍在。
-     */
-    private fun checkAdStillPresent(rootNode: AccessibilityNodeInfo): Boolean {
-        for (selectorExpr in GENERIC_SELECTORS) {
-            try {
-                val selector = SelectorParser.parse(selectorExpr)
-                val nodes = NodeMatcher.find(rootNode, selector)
-                try {
-                    if (nodes.isEmpty()) continue
-                    // 只要有一个匹配节点（无论是否可见）就认为广告还在
-                    return true
-                } finally {
-                    NodeMatcher.recycleAll(nodes)
-                }
-            } catch (_: Exception) {}
-        }
-        return false
-    }
-
-    /** 记录 App 跳过冷却时间，防止短时间内重复触发 */
-    fun recordSkipCooldown(packageName: String) {
-        skipCooldowns[packageName] = currentTimeMillis() + SKIP_COOLDOWN_MS
-    }
-
-    /**
-     * 执行精确规则匹配：遍历规则组和规则，检查冷却和最大执行次数，执行匹配和点击。
-     *
-     * @param ruleId 规则 ID
-     * @param skipRule 要执行的规则
-     * @param rootNode 无障碍树根节点
-     * @return 是否成功跳过
-     */
-    fun executeExactRules(ruleId: String, skipRule: com.bsfeng.monitor.domain.model.SkipRule, rootNode: AccessibilityNodeInfo): Boolean {
-        for (group in skipRule.groups) {
-            for (matchRule in group.rules) {
-                if (isOnCooldown(matchRule)) continue
-                if (matchRule.actionMaximum > 0 &&
-                    (actionCounters[matchRule.toCounterKey(ruleId)] ?: 0) >= matchRule.actionMaximum) continue
-
-                if (executeRule(ruleId, matchRule, rootNode)) {
-                    updateCooldown(matchRule)
-                    incrementCounter(matchRule, ruleId)
-                    return true
-                }
-            }
-        }
-        return false
-    }
-
-    private fun MatchRule.toCooldownKey(): String = "cd_${key}"
-    private fun MatchRule.toCounterKey(ruleId: String): String = "${ruleId}_${key}"
 }

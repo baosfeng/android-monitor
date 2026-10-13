@@ -13,7 +13,8 @@ class SkipRuleRepositoryImpl(
 
     override fun getAllRules(): List<SkipRule> = ruleManager.getAllRules()
 
-    override fun getRuleByApp(packageName: String): SkipRule? = ruleManager.findEnabledRule(packageName)
+    override fun getRuleByApp(packageName: String): SkipRule? =
+        ruleManager.findRulesFor(packageName).firstOrNull { !it.isGlobal }
 
     override fun saveRule(rule: SkipRule) = ruleManager.addRule(rule)
 
