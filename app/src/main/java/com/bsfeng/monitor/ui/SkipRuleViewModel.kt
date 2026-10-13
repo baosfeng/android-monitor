@@ -13,6 +13,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** 一个订阅源的展示信息 */
+data class SubscriptionUi(
+    val url: String,
+    val version: Long,
+    val ruleCount: Int
+)
+
 /**
  * 开屏跳过规则管理页面的状态。
  */
@@ -20,14 +27,10 @@ data class SkipRuleUiState(
     val rules: List<SkipRule> = emptyList(),
     val enabledCount: Int = 0,
     val isLoading: Boolean = false,
-    /** 订阅地址（未订阅为 null） */
-    val subscriptionUrl: String? = null,
-    /** 订阅版本号 */
-    val subscriptionVersion: Long = 0L,
-    /** 订阅规则条数 */
-    val subscriptionRuleCount: Int = 0,
-    /** 正在更新订阅 */
-    val subscriptionUpdating: Boolean = false,
+    /** 已添加的订阅源（可多个，各自独立存储） */
+    val subscriptions: List<SubscriptionUi> = emptyList(),
+    /** 正在更新的订阅地址（null 表示当前没有更新任务） */
+    val updatingUrl: String? = null,
     /** 最近一次导出快照的文件路径 */
     val snapshotPath: String? = null,
     /** 操作提示（一次性） */
@@ -37,7 +40,8 @@ data class SkipRuleUiState(
 /**
  * 开屏跳过规则管理 ViewModel。
  *
- * 除规则列表外还负责：GKD 订阅拉取（[GkdSubscription]）与页面快照导出请求（[SnapshotRequest]）。
+ * 除规则列表外还负责：GKD 订阅拉取（[GkdSubscription]，支持多个订阅源）与
+ * 页面快照导出请求（[SnapshotRequest]）。
  */
 class SkipRuleViewModel : ViewModel() {
 
@@ -52,14 +56,13 @@ class SkipRuleViewModel : ViewModel() {
 
     fun refresh() {
         val rules = ruleManager.getAllRules()
-        val meta = ruleManager.subscriptionMeta()
         _state.value = _state.value.copy(
             rules = rules,
             enabledCount = rules.count { it.enabled },
             isLoading = false,
-            subscriptionUrl = meta?.url,
-            subscriptionVersion = meta?.version ?: 0L,
-            subscriptionRuleCount = meta?.ruleCount ?: 0,
+            subscriptions = ruleManager.subscriptionMetas().map {
+                SubscriptionUi(url = it.url, version = it.version, ruleCount = it.ruleCount)
+            },
             snapshotPath = SnapshotRequest.lastPath
         )
     }
@@ -77,21 +80,26 @@ class SkipRuleViewModel : ViewModel() {
 
     fun resetToBuiltIn() {
         ruleManager.resetToBuiltIn()
+        _state.value = _state.value.copy(message = "已重置为内置规则（订阅已清空）")
         refresh()
     }
 
     fun getRule(ruleId: String): SkipRule? = ruleManager.getAllRules().find { it.id == ruleId }
 
-    // ==================== 订阅规则 ====================
+    // ==================== 订阅规则（多订阅源） ====================
 
-    /** 拉取并应用订阅（IO 线程执行，结果写入一次性提示） */
+    /**
+     * 拉取并应用**一个**订阅源（IO 线程执行，结果写入一次性提示）。
+     *
+     * 地址已存在时视为"更新该源"，不会重复添加；新地址则新增一个订阅源。
+     */
     fun updateSubscription(url: String) {
         val target = url.trim()
         if (target.isEmpty()) {
             _state.value = _state.value.copy(message = "订阅地址不能为空")
             return
         }
-        _state.value = _state.value.copy(subscriptionUpdating = true, message = null)
+        _state.value = _state.value.copy(updatingUrl = target, message = null)
         viewModelScope.launch(Dispatchers.IO) {
             val outcome = GkdSubscription.update(ruleManager, target)
             val message = when (outcome) {
@@ -100,15 +108,15 @@ class SkipRuleViewModel : ViewModel() {
                 GkdSubscription.Outcome.UpToDate -> "订阅已是最新版本"
                 is GkdSubscription.Outcome.Failed -> "订阅更新失败：" + outcome.reason
             }
-            _state.value = _state.value.copy(subscriptionUpdating = false, message = message)
+            _state.value = _state.value.copy(updatingUrl = null, message = message)
             refresh()
         }
     }
 
-    /** 清空订阅（保留自定义与内置规则） */
-    fun clearSubscription() {
-        ruleManager.clearSubscription()
-        _state.value = _state.value.copy(message = "已清除订阅规则")
+    /** 删除指定订阅源（保留其它订阅源、自定义与内置规则） */
+    fun removeSubscription(url: String) {
+        ruleManager.clearSubscription(url)
+        _state.value = _state.value.copy(message = "已删除该订阅源的规则")
         refresh()
     }
 
