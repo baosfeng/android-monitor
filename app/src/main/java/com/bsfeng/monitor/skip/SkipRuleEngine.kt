@@ -1,7 +1,6 @@
 package com.bsfeng.monitor.skip
 
 import android.content.Context
-import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -284,12 +283,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         var confirmed: Boolean? = null
         if (root != null) {
             try {
-                val nodes = query(pv.selector, pv.fastQuery, root)
-                if (nodes != null) {
-                    val stillMatched = nodes.isNotEmpty()
-                    NodeMatcher.recycleAll(nodes)
-                    confirmed = !stillMatched
-                }
+                confirmed = RuleNodeFinder.matches(pv.selector, pv.fastQuery, root)?.not()
             } finally {
                 root.recycle()
             }
@@ -356,8 +350,8 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         val key = ruleKey(rule.id, group.key, matchRule.key)
         if (!ruleAllowed(rule.id, group, matchRule, now)) return null
         if (matchRule.action == MatchAction.NONE) return null
-        if (anySelectorMatches(matchRule.excludeMatches, matchRule, root)) return null
-        val target = findTarget(matchRule, root) ?: return null
+        if (RuleNodeFinder.anySelectorMatches(matchRule.excludeMatches, matchRule.fastQuery, root)) return null
+        val target = RuleNodeFinder.findTarget(matchRule, root) ?: return null
         if (!delaySatisfied(matchRule, key, now) || !actionDelaySatisfied(matchRule, key, now)) {
             NodeMatcher.recycleAll(target.nodes)
             return null
@@ -458,101 +452,10 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         }
         return now >= readyAt
     }
-
     // ==================== 选择器匹配 ====================
 
-    /** 命中的目标节点与用于命中的选择器 */
-    private class Target(
-        val node: AccessibilityNodeInfo,
-        val selector: String,
-        val nodes: List<AccessibilityNodeInfo>
-    )
-
-    private fun findTarget(matchRule: MatchRule, root: AccessibilityNodeInfo): Target? {
-        if (matchRule.matches.isNotEmpty()) return findByAll(matchRule, root)
-        for (expr in matchRule.anyMatches) {
-            val nodes = query(expr, matchRule, root) ?: continue
-            val target = pickTarget(nodes, root)
-            if (target != null) return Target(target, expr, nodes)
-            NodeMatcher.recycleAll(nodes)
-        }
-        return null
-    }
-
-    /** matches：全部选择器都要命中，点击最后一个选择器的目标节点 */
-    private fun findByAll(matchRule: MatchRule, root: AccessibilityNodeInfo): Target? {
-        var lastNodes: List<AccessibilityNodeInfo> = emptyList()
-        var lastSelector: String? = null
-        for (expr in matchRule.matches) {
-            val nodes = query(expr, matchRule, root) ?: return null
-            if (nodes.isEmpty()) {
-                NodeMatcher.recycleAll(nodes)
-                NodeMatcher.recycleAll(lastNodes)
-                return null
-            }
-            NodeMatcher.recycleAll(lastNodes)
-            lastNodes = nodes
-            lastSelector = expr
-        }
-        val target = pickTarget(lastNodes, root)
-        if (target == null || lastSelector == null) {
-            NodeMatcher.recycleAll(lastNodes)
-            return null
-        }
-        return Target(target, lastSelector, lastNodes)
-    }
-
-    private fun query(expr: String, matchRule: MatchRule, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? =
-        query(expr, matchRule.fastQuery, root)
-
-    private fun query(expr: String, fastQuery: Boolean, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? {
-        val selector = SelectorCache.get(expr, fastQuery) ?: return null
-        return NodeMatcher.find(root, selector)
-    }
-
-    private fun anySelectorMatches(
-        exprs: List<String>,
-        matchRule: MatchRule,
-        root: AccessibilityNodeInfo
-    ): Boolean {
-        for (expr in exprs) {
-            val nodes = query(expr, matchRule, root) ?: continue
-            val hit = nodes.isNotEmpty()
-            NodeMatcher.recycleAll(nodes)
-            if (hit) {
-                DebugConfig.log("SkipEngine: 命中排除选择器，放弃规则 → " + expr)
-                return true
-            }
-        }
-        return false
-    }
-
-    /**
-     * 选出可点击的目标节点。
-     *
-     * **面积守卫**：跳过按钮只可能是小块节点；面积超过根节点 1/3 的命中通常是
-     * "整屏广告容器"（点中心会进落地页），必须丢弃（业界调研结论，见
-     * `docs/开屏跳过/业界调研与改进方案.md` §2.4）。
-     */
-    private fun pickTarget(nodes: List<AccessibilityNodeInfo>, root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val rootArea = areaOf(root)
-        val usable = nodes.filter { !isOversized(it, rootArea) }
-        return usable.firstOrNull { it.isVisibleToUser } ?: usable.firstOrNull()
-    }
-
-    private fun areaOf(node: AccessibilityNodeInfo): Int {
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        return if (rect.isEmpty) 0 else rect.width() * rect.height()
-    }
-
-    private fun isOversized(node: AccessibilityNodeInfo, rootArea: Int): Boolean {
-        if (rootArea <= 0) return false
-        val area = areaOf(node)
-        // 边界为空的节点交给动作执行器判断（部分可点击节点不暴露 bounds）
-        if (area <= 0) return false
-        return area * 3 > rootArea
-    }
+    // 命中节点的查找与筛选（选择器求值 + 面积守卫）抽到 RuleNodeFinder，
+    // 本类只负责「什么时候允许动作」与「动作之后如何确认」。
 
     // ==================== 作用域与状态 ====================
 
