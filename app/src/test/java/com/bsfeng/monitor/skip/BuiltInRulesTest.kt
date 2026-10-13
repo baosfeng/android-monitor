@@ -70,6 +70,23 @@ class BuiltInRulesTest {
     }
 
     @Test
+    fun `内置规则时间闸门跟随传入的监控窗口`() {
+        val custom = BuiltInRules.getRules(5_000L)
+        custom.forEach { rule ->
+            rule.groups.forEach { group ->
+                assertEquals("规则 " + rule.id + " 组 " + group.key + " 的 matchTime 应等于监控窗口",
+                    5_000L, group.matchTime)
+            }
+        }
+    }
+
+    @Test
+    fun `默认时间闸门与默认监控窗口一致`() {
+        val global = rules.first { it.isGlobal }
+        global.groups.forEach { assertEquals(SkipConfig.DEFAULT_WATCH_WINDOW_MS, it.matchTime) }
+    }
+
+    @Test
     fun `全局排除包名不影响应用规则`() {
         assertTrue(BuiltInRules.GLOBAL_EXCLUDED_PACKAGES.contains("com.bsfeng.monitor"))
         assertFalse(rules.filter { !it.isGlobal }.any { it.app in BuiltInRules.GLOBAL_EXCLUDED_PACKAGES })

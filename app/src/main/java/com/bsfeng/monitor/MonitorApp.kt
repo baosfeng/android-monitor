@@ -11,6 +11,7 @@ import com.bsfeng.monitor.core.di.ServiceContainer
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
 import com.bsfeng.monitor.skip.GkdSubscription
+import com.bsfeng.monitor.skip.SkipConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +33,8 @@ class MonitorApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 跳过配置需在规则管理器创建（读取内置规则时间闸门）之前装载
+        SkipConfig.init(this)
         container = ServiceContainer(this)
         registerRecordReceiver()
         registerWifiNetworkCallback()

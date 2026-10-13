@@ -39,7 +39,8 @@ class SkipRuleManager(private val context: Context) {
     /** 重新加载全部规则（订阅更新后调用） */
     fun load() {
         migrateLegacyRulesIfNeeded()
-        builtInRules = BuiltInRules.getRules()
+        // 内置规则的时间闸门跟随监控窗口（两者必须一致，否则调大窗口不生效）
+        builtInRules = BuiltInRules.getRules(SkipConfig.watchWindowMs)
         customRules = readRules(customRulesFile)
         subscriptionRules = readRules(subscriptionFile)
         disabledIds = (prefs.getStringSet(KEY_DISABLED_IDS, emptySet()) ?: emptySet()).toMutableSet()
@@ -75,6 +76,17 @@ class SkipRuleManager(private val context: Context) {
 
     /** 按 ID 查找规则 */
     fun getRule(ruleId: String): SkipRule? = getAllRules().find { it.id == ruleId }
+
+    /**
+     * 设置监控窗口（毫秒）并重载内置规则的时间闸门。
+     *
+     * 订阅/自定义规则保留各自声明的 `matchTime`（尊重规则作者意图），只有内置规则跟随该配置。
+     */
+    fun setWatchWindowMs(ms: Long) {
+        SkipConfig.setWatchWindowMs(ms)
+        load()
+        Log.i(TAG, "监控窗口已更新: " + SkipConfig.watchWindowMs + "ms")
+    }
 
     // ==================== 启停与增删 ====================
 

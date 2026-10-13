@@ -8,6 +8,7 @@ import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.record.AppUsageStat
 import com.bsfeng.monitor.service.MonitorAccessibilityService
+import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DebugConfig
@@ -52,6 +53,10 @@ class MainViewModel : ViewModel() {
 
     private val _debugEnabled = MutableStateFlow(DebugConfig.enabled)
     val debugEnabled: StateFlow<Boolean> = _debugEnabled.asStateFlow()
+
+    /** 开屏跳过监控窗口（毫秒） */
+    private val _watchWindowMs = MutableStateFlow(SkipConfig.watchWindowMs)
+    val watchWindowMs: StateFlow<Long> = _watchWindowMs.asStateFlow()
 
     companion object {
         private const val PAGE_SIZE = 20
@@ -257,6 +262,14 @@ class MainViewModel : ViewModel() {
         _isPaused.value = newPaused
         if (!newPaused) {
             loadData()
+        }
+    }
+
+    /** 设置开屏跳过的监控窗口（毫秒）：落库并重载内置规则的时间闸门 */
+    fun setWatchWindowMs(windowMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            app.container.skipRuleManager.setWatchWindowMs(windowMs)
+            _watchWindowMs.value = SkipConfig.watchWindowMs
         }
     }
 

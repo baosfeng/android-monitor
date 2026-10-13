@@ -20,7 +20,7 @@ import com.bsfeng.monitor.util.DebugConfig
  *
  * ## 触发模型
  * `MonitorAccessibilityService` 在窗口/内容变化时调用本引擎；引擎以 **App 切换时刻** 为锚点
- * 开启一个匹配窗口（[WATCH_WINDOW_MS]），窗口内：
+ * 开启一个匹配窗口（[SkipConfig.watchWindowMs]，默认 10 秒，设置页可选 5/10/15 秒），窗口内：
  * - `TYPE_WINDOW_CONTENT_CHANGED` 事件到达即扫描（100ms 节流）——广告渲染完成的第一时间命中
  * - 兜底轮询每 [BACKUP_SCAN_INTERVAL_MS] 一次，防止事件丢失
  * - 根节点为 null（启动瞬间很常见）时不放弃，等下轮扫描重试
@@ -81,6 +81,9 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
     /** 时钟与屏幕状态提供器（测试注入） */
     internal var currentTimeMillis: () -> Long = { System.currentTimeMillis() }
     internal var screenInteractive: () -> Boolean = { defaultScreenInteractive() }
+
+    /** 匹配窗口提供器（毫秒；默认取用户配置 [SkipConfig.watchWindowMs]，测试可注入） */
+    internal var watchWindowProvider: () -> Long = { SkipConfig.watchWindowMs }
 
     private val scanTask = Runnable { performScan() }
 
@@ -172,7 +175,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         scanCount = 0
         handler.removeCallbacks(scanTask)
         handler.post(scanTask)
-        DebugConfig.log("SkipEngine: 开启匹配窗口 " + WATCH_WINDOW_MS + "ms, 当前 " + currentPackage +
+        DebugConfig.log("SkipEngine: 开启匹配窗口 " + watchWindowProvider() + "ms, 当前 " + currentPackage +
             " / " + currentClassName + ", now=" + now)
     }
 
@@ -193,7 +196,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             stopWatching()
             return
         }
-        if (now - enterTimeMs > WATCH_WINDOW_MS || scanCount >= MAX_SCANS) {
+        if (now - enterTimeMs > watchWindowProvider() || scanCount >= MAX_SCANS) {
             DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描 " + scanCount + " 次)")
             stopWatching()
             return
@@ -497,9 +500,6 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         const val TAG = "SkipRuleEngine"
         const val WHITELIST_PREFS = "skip_whitelist"
         const val WHITELIST_KEY = "whitelist"
-
-        /** 匹配窗口上限（毫秒，自 App 切换起算；GKD 开屏规则为 10 秒） */
-        const val WATCH_WINDOW_MS = 10_000L
 
         /** 兜底轮询间隔（毫秒；主驱动为 CONTENT_CHANGED 事件） */
         const val BACKUP_SCAN_INTERVAL_MS = 300L
