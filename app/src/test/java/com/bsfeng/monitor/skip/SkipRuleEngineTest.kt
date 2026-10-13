@@ -8,6 +8,7 @@ import com.bsfeng.monitor.domain.model.MatchRule
 import com.bsfeng.monitor.domain.model.ResetMatch
 import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
+import com.bsfeng.monitor.util.DebugConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -20,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.time.Duration
 
 /**
@@ -30,6 +32,8 @@ import java.time.Duration
  * - P0-2：只执行规则命中的节点，且带面积守卫
  * - P0-3：matchDelay 不会被后续扫描取消（旧实现下规则永不执行）
  * 以及白名单/熄屏/窗口/matchTime/actionMaximum/excludeMatches/activityIds 等防误触闸门。
+ * - P2-2 增强「弱网顺延」：窗口末尾仍在渲染时顺延（有硬上限）、页面静止/熄屏/切 App 不顺延、
+ *   复核优先且不受顺延影响、命中后不再顺延、顺延写调试日志。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -44,6 +48,13 @@ class SkipRuleEngineTest {
     private val results = mutableListOf<SkipRuleEngine.SkipResult>()
     private var rootProvider: () -> AccessibilityNodeInfo? = { null }
 
+    /** 最近一次上报发生的虚拟时刻（-1 = 未上报） */
+    private var lastSkipAtMs = -1L
+
+    /** 根节点被读取的次数与最近一次时刻（用于判断"窗口是否还在扫描"） */
+    private var rootCalls = 0
+    private var lastRootCallAtMs = -1L
+
     private val testPackage = "com.test.app"
 
     @Before
@@ -56,12 +67,22 @@ class SkipRuleEngineTest {
         clock = 0L
         interactive = true
         results.clear()
+        lastSkipAtMs = -1L
+        rootCalls = 0
+        lastRootCallAtMs = -1L
         rootProvider = { null }
         engine = SkipRuleEngine(manager).apply {
             currentTimeMillis = { clock }
             screenInteractive = { interactive }
-            setRootNodeProvider { rootProvider() }
-            onSkipSuccess = { results.add(it) }
+            setRootNodeProvider {
+                rootCalls++
+                lastRootCallAtMs = clock
+                rootProvider()
+            }
+            onSkipSuccess = {
+                results.add(it)
+                lastSkipAtMs = clock
+            }
             // 默认关闭「点击后确认」，否则每个用例都要多等复核延时；
             // 复核行为由「点击后确认」小节里的专门用例覆盖
             verifyDelaysMs = emptyList()
@@ -586,5 +607,288 @@ class SkipRuleEngineTest {
             engine.onContentChanged(testPackage)
         }
         assertEquals("共享冷却过期后应放行", 2, results.size)
+    }
+
+    // ==================== 弱网顺延（P2-2 增强） ====================
+
+    /**
+     * 模拟弱网页面持续渲染：[totalMs] 内每 [intervalMs] 触发一次 CONTENT_CHANGED。
+     * [onTick] 收到累计毫秒数，可在中途改变页面状态（例如"广告此刻才渲染出来"）。
+     */
+    private fun render(totalMs: Long, intervalMs: Long = 250L, onTick: (Long) -> Unit = {}) {
+        var elapsed = 0L
+        while (elapsed < totalMs) {
+            val step = minOf(intervalMs, totalMs - elapsed)
+            advance(step)
+            elapsed += step
+            onTick(elapsed)
+            engine.onContentChanged(testPackage)
+        }
+    }
+
+    /** 顺延日志只在 [DebugConfig] 开关打开时输出；用完立刻关掉，避免影响其它用例 */
+    private fun withDebugLog(block: () -> Unit) {
+        DebugConfig.setEnabled(true)
+        ShadowLog.clear()
+        try {
+            block()
+        } finally {
+            DebugConfig.setEnabled(false)
+        }
+    }
+
+    private fun extendLogs(): List<String> = ShadowLog.getLogs()
+        .filter { it.tag == "MonitorDebug" && it.msg.contains("弱网顺延") }
+        .map { it.msg }
+
+    @Test
+    fun `窗口末尾仍在渲染时顺延并命中晚到的广告`() {
+        // 规则自身的时间闸门 = 监控窗口 = 5 秒：顺延必须同时放宽闸门，否则扫到也不允许执行
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        // 弱网：页面一直在渲染（连续 CONTENT_CHANGED），广告 5.5 秒才渲染出来
+        render(6_000) { elapsed -> if (elapsed >= 5_500) adVisible = true }
+
+        assertEquals(1, results.size)
+        assertTrue("必须在基础窗口(5s)之后才命中，说明顺延生效", lastSkipAtMs >= 5_500L)
+        assertEquals(1, engine.extensionCount())
+        assertEquals(2_000L, engine.extensionGrantedMs())
+    }
+
+    @Test
+    fun `顺延期间规则时间闸门按顺延额度一起放宽`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(5_250)   // 到点顺延 1 次，额度 +2000ms
+        assertEquals(2_000L, engine.extensionGrantedMs())
+
+        // 此刻已超过规则自身的 matchTime(5000)，闸门须按顺延额度放宽到 7000 才允许执行。
+        // 注意 CONTENT_CHANGED 有 100ms 节流，需先推进时钟再触发事件。
+        adVisible = true
+        advance(150)
+        engine.onContentChanged(testPackage)
+        advance(300)
+
+        assertEquals("顺延额度应同时放宽 matchTime 闸门", 1, results.size)
+        assertTrue("命中发生在规则自身 matchTime 之后", lastSkipAtMs > 5_000L)
+    }
+
+    @Test
+    fun `顺延达到上限后窗口结束不再顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        rootProvider = { null }
+        engine.watchWindowProvider = { 5_000L }
+        val policy = WindowExtendPolicy()
+        engine.windowExtendPolicy = policy
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(10_000)   // 持续渲染 10 秒，但广告始终没来
+        val callsAtEnd = rootCalls
+
+        assertNull("顺延用尽后窗口必须结束", engine.watchingPackage())
+        assertEquals("最多顺延 " + policy.maxExtensions + " 次", policy.maxExtensions, engine.extensionCount())
+        assertEquals(policy.maxExtensionMs, engine.extensionGrantedMs())
+        assertTrue(
+            "窗口必须在 基础窗口+顺延上限 内结束，实际最后一次扫描=" + lastRootCallAtMs,
+            lastRootCallAtMs <= 5_000L + policy.maxExtensionMs
+        )
+
+        // 到点之后的内容变化不会再重新开窗
+        engine.onContentChanged(testPackage)
+        advanceSteps(1_000)
+        assertEquals(callsAtEnd, rootCalls)
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `页面静止时窗口到点即结束不顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advanceSteps(5_500)   // 窗口内没有任何 CONTENT_CHANGED → 页面静止
+        assertNull("静止页面不得顺延窗口", engine.watchingPackage())
+        assertEquals(0, engine.extensionCount())
+
+        // 窗口结束后广告才出现 → 不再扫描、不命中（与旧版行为一致）
+        val callsAtEnd = rootCalls
+        adVisible = true
+        engine.onContentChanged(testPackage)
+        advanceSteps(1_000)
+        assertEquals(callsAtEnd, rootCalls)
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `关闭顺延时窗口末尾的渲染不再延长窗口`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+        engine.windowExtendPolicy = WindowExtendPolicy(maxExtensions = 0)   // 对照：旧版行为
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(6_000) { elapsed -> if (elapsed >= 5_500) adVisible = true }
+
+        assertEquals("关闭顺延后晚到 500ms 的广告点不到（旧版行为）", 0, results.size)
+        assertEquals(0, engine.extensionCount())
+        assertNull(engine.watchingPackage())
+    }
+
+    @Test
+    fun `窗口末尾熄屏立即终止且不顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(6_000) { elapsed ->
+            // 第 4.75 秒熄屏，广告恰好在同一刻渲染出来
+            if (elapsed >= 4_750) {
+                interactive = false
+                adVisible = true
+            }
+        }
+
+        assertTrue("熄屏后不得执行任何动作", results.isEmpty())
+        assertNull("熄屏必须立即终止监控", engine.watchingPackage())
+        assertEquals("熄屏属于立即终止，不得顺延", 0, engine.extensionCount())
+    }
+
+    @Test
+    fun `窗口末尾切换 App 时旧窗口终止并重建顺延计数`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(5_250)   // 旧 App 页面上一直在渲染 → 到点顺延过 1 次
+        assertEquals(1, engine.extensionCount())
+
+        engine.onWindowChanged("com.other.app", "com.other.app.MainActivity")
+        assertEquals("com.other.app", engine.watchingPackage())
+        assertEquals("切换 App 重建窗口，已顺延次数归零", 0, engine.extensionCount())
+        assertEquals("新窗口从切换时刻重新计时", 5_250L + 5_000L, engine.windowDeadlineMs())
+
+        // 旧包名的内容变化不再受理，旧窗口的顺延不会延续到新 App
+        adVisible = true
+        engine.onContentChanged(testPackage)
+        advanceSteps(500)
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `复核期间到点照常上报且不被顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        engine.verifyDelaysMs = listOf(500L)
+        var adVisible = false
+        rootProvider = {
+            // 广告消失后仍要能拿到根节点，否则复核会因"根节点不可用"判不出结果
+            if (adVisible) tree(listOf(node(text = "跳过广告"))) else tree(listOf(node(text = "首页")))
+        }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(4_750) { elapsed -> if (elapsed >= 4_750) adVisible = true }   // 窗口末尾才命中
+        assertEquals("命中后立即进入复核，不上报", 0, results.size)
+
+        adVisible = false               // 广告消失
+        advanceSteps(1_500)             // 越过基础窗口截止时间(5s)后复核到点
+
+        assertEquals(1, results.size)
+        assertEquals(true, results.first().confirmed)
+        assertTrue("复核在窗口截止之后完成（复核不受窗口/顺延影响）", lastSkipAtMs > 5_000L)
+        assertEquals("复核流程不触发顺延", 0, engine.extensionCount())
+    }
+
+    @Test
+    fun `命中之后不再顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        render(5_250) { elapsed -> if (elapsed >= 4_750) adVisible = true }
+
+        assertEquals(1, results.size)
+        assertEquals(4_750L, lastSkipAtMs)
+        assertEquals("命中后窗口已结束，不得顺延", 0, engine.extensionCount())
+        assertNull(engine.watchingPackage())
+
+        val callsAtEnd = rootCalls
+        engine.onContentChanged(testPackage)
+        advance(1_000)
+        assertEquals(callsAtEnd, rootCalls)
+        assertEquals(1, results.size)
+    }
+
+    @Test
+    fun `引擎长时间未扫描（时间跳变）时到点不顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var calls = 0
+        rootProvider = { calls++; null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        // 大跳虚拟时钟：idle 期间引擎看到的 now 一直是 0（等价于进程被冻结/系统时间跳变）
+        advance(6_000)
+        val before = calls
+
+        engine.onContentChanged(testPackage)   // 内容变化在"窗口早已过期"之后才被引擎看到
+        advanceSteps(1_000)
+
+        assertEquals("窗口已过期，不得靠顺延复活", before, calls)
+        assertEquals("到点判定拒绝顺延", 0, engine.extensionCount())
+        assertNull(engine.watchingPackage())
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `到点判定晚于截止时间但在连续扫描范围内仍顺延`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 5_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        // 弱网页面每 700ms 才刷出一次内容变化：到点判定发生在截止时间之后，但引擎仍在连续扫描
+        render(7_000, intervalMs = 700L) { elapsed -> if (elapsed >= 6_000) adVisible = true }
+
+        assertTrue("到点判定略有延迟时仍应顺延并命中晚到的广告", results.isNotEmpty())
+        assertEquals(1, engine.extensionCount())
+        assertTrue(lastSkipAtMs > 5_000L)
+    }
+
+    @Test
+    fun `顺延写调试日志含触发原因新截止时间与已顺延次数`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        rootProvider = { null }
+        engine.watchWindowProvider = { 5_000L }
+
+        withDebugLog {
+            engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+            render(5_250)   // 页面仍在渲染，到点顺延第 1 次
+
+            val logs = extendLogs()
+            assertEquals(1, logs.size)
+            assertTrue("日志需说明触发原因: " + logs, logs.first().contains("触发原因=页面仍在渲染"))
+            assertTrue("日志需给出新的截止时间: " + logs, logs.first().contains("新截止=7000"))
+            assertTrue("日志需给出已顺延次数: " + logs, logs.first().contains("#1/2"))
+            assertTrue("日志需给出累计顺延时长: " + logs, logs.first().contains("累计顺延=2000ms"))
+            assertEquals(1, engine.extensionCount())
+        }
     }
 }
