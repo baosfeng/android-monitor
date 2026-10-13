@@ -83,7 +83,8 @@ class MonitorAccessibilityService : AccessibilityService() {
         root.recycle()
         if (pkg == null) return
 
-        // ===== 页面快照导出（UI 请求 → 延迟到期后对"当时的前台页面"导出）=====
+        // ===== 页面快照导出（UI 请求 → 切到目标 App 后延迟导出"当时的前台页面"）=====
+        SnapshotRequest.onForegroundPackage(pkg, now)
         if (SnapshotRequest.consumeIfDue(now)) {
             val snapshotRoot = rootInActiveWindow
             val path = SnapshotExporter.exportCurrentPage(this, snapshotRoot, pkg, lastActivityClass ?: "")

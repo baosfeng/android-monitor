@@ -122,11 +122,16 @@ class SkipRuleViewModel : ViewModel() {
 
     // ==================== 页面快照 ====================
 
-    /** 请求导出当前前台页面快照（延迟几秒，便于用户切到目标 App） */
+    /**
+     * 请求导出目标 App 的页面快照。
+     *
+     * 用「切到目标 App 后自动导出」而不是固定延时：真机实测固定延时常导到 App 首页（开屏页已消失），
+     * 而开屏广告页在切过去约 2.5 秒时通常正显示跳过按钮。
+     */
     fun requestSnapshot() {
-        SnapshotRequest.request()
+        SnapshotRequest.requestOnAppSwitch(MonitorApp.instance.packageName)
         _state.value = _state.value.copy(
-            message = "已在 " + (SnapshotRequest.DEFAULT_DELAY_MS / 1000) + " 秒后导出当前页面快照，请先切到目标 App"
+            message = "已请求快照：请切到目标 App，约 " + (SnapshotRequest.SWITCH_SETTLE_MS / 1000.0) + " 秒后自动导出"
         )
     }
 

@@ -108,7 +108,7 @@ fun SkipRuleScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             SettingsRow(
                 title = "页面快照",
-                subtitle = state.snapshotPath ?: "导出当前前台页面的无障碍树，便于编写精确规则",
+                subtitle = state.snapshotPath ?: "切到目标 App 后自动导出该页面的无障碍树，便于编写精确规则",
                 trailing = {
                     TextButton(onClick = {
                         viewModel.requestSnapshot()

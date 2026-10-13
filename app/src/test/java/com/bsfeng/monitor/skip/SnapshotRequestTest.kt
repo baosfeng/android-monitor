@@ -63,4 +63,50 @@ class SnapshotRequestTest {
         SnapshotRequest.record("/data/user/0/com.bsfeng.monitor/files/snapshots/1.json")
         assertEquals("/data/user/0/com.bsfeng.monitor/files/snapshots/1.json", SnapshotRequest.lastPath)
     }
+
+    // ==================== 切到目标 App 后导出（推荐用法） ====================
+
+    @Test
+    fun `切走之后才开始倒计时`() {
+        val origin = "com.bsfeng.monitor"
+        SnapshotRequest.requestOnAppSwitch(origin, delayMs = 2_500L)
+        val t0 = 1_000_000L
+
+        // 仍停留在发起请求的 App：不安排导出
+        SnapshotRequest.onForegroundPackage(origin, t0)
+        assertFalse("没切走时不应到期", SnapshotRequest.consumeIfDue(t0 + 60_000L))
+        assertTrue("应仍处于待处理", SnapshotRequest.isPending())
+
+        // 切到目标 App：从这一刻起算 2.5 秒
+        SnapshotRequest.onForegroundPackage("com.qq.reader", t0)
+        assertFalse("切过去但未到 2.5 秒", SnapshotRequest.consumeIfDue(t0 + 2_000L))
+        assertTrue("切过去 2.5 秒后应到期", SnapshotRequest.consumeIfDue(t0 + 2_500L))
+    }
+
+    @Test
+    fun `切到目标 App 后只安排一次导出`() {
+        SnapshotRequest.requestOnAppSwitch("com.bsfeng.monitor", delayMs = 1_000L)
+        SnapshotRequest.onForegroundPackage("com.qq.reader", 0L)
+        assertTrue(SnapshotRequest.consumeIfDue(1_000L))
+        // 目标 App 内继续变化的包名不再触发新的导出
+        SnapshotRequest.onForegroundPackage("com.qq.reader", 2_000L)
+        assertFalse("同一请求只能导出一次", SnapshotRequest.consumeIfDue(9_999_999L))
+    }
+
+    @Test
+    fun `非正延时回落为默认切换等待时间`() {
+        SnapshotRequest.requestOnAppSwitch("com.bsfeng.monitor", delayMs = 0L)
+        SnapshotRequest.onForegroundPackage("com.other.app", 0L)
+        assertFalse(SnapshotRequest.consumeIfDue(SnapshotRequest.SWITCH_SETTLE_MS - 1L))
+        assertTrue(SnapshotRequest.consumeIfDue(SnapshotRequest.SWITCH_SETTLE_MS))
+    }
+
+    @Test
+    fun `cancel 同时取消等待切换的请求`() {
+        SnapshotRequest.requestOnAppSwitch("com.bsfeng.monitor", delayMs = 1_000L)
+        SnapshotRequest.cancel()
+        assertFalse(SnapshotRequest.isPending())
+        SnapshotRequest.onForegroundPackage("com.qq.reader", 0L)
+        assertFalse("取消后切 App 也不应导出", SnapshotRequest.consumeIfDue(9_999_999L))
+    }
 }
