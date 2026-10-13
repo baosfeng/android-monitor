@@ -349,4 +349,114 @@ class SkipRuleEngineTest {
         engine.onWindowChanged("com.bsfeng.monitor", "com.bsfeng.monitor.MainActivity")
         assertNull(engine.watchingPackage())
     }
+
+    // ==================== 跨规则闸门（GKD 兼容） ====================
+
+    /** 一条规则下挂多个匹配规则，用于验证 actionDelay / preKeys / 共享 Key 语义 */
+    private fun addRuleWithRules(rules: List<MatchRule>, ruleId: String = "test_rule") {
+        manager.addRule(
+            SkipRule(
+                id = ruleId,
+                app = testPackage,
+                name = "测试规则",
+                groups = listOf(
+                    RuleGroup(
+                        key = 0,
+                        name = "开屏广告",
+                        matchTime = 10_000L,
+                        actionMaximum = 1,
+                        actionCd = 0L,
+                        resetMatch = ResetMatch.APP,
+                        rules = rules
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `actionDelay 到期且仍命中才执行`() {
+        addRuleWithRules(listOf(MatchRule(key = 0, matches = listOf("[text=\"跳过广告\"]"), actionDelay = 500L)))
+        rootProvider = { tree(listOf(node(text = "跳过广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(200)
+        assertTrue("actionDelay 等待期内不得执行", results.isEmpty())
+
+        advance(500)
+        engine.onContentChanged(testPackage)
+        advance(100)
+        assertEquals("到期且仍命中应执行", 1, results.size)
+    }
+
+    @Test
+    fun `actionDelay 期间目标消失则不执行`() {
+        var visible = true
+        addRuleWithRules(listOf(MatchRule(key = 0, matches = listOf("[text=\"跳过广告\"]"), actionDelay = 500L)))
+        rootProvider = { if (visible) tree(listOf(node(text = "跳过广告"))) else null }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(100)   // 首次命中，挂起等待复核
+        visible = false
+        advance(1_000)
+        engine.onContentChanged(testPackage)
+        advance(200)
+        assertTrue("复核时目标已消失，不得执行", results.isEmpty())
+    }
+
+    @Test
+    fun `preKeys 前置未执行时阻止规则`() {
+        addRuleWithRules(listOf(MatchRule(key = 1, matches = listOf("[text=\"关闭广告\"]"), preKeys = listOf(0))))
+        rootProvider = { tree(listOf(node(text = "关闭广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(1_000)
+        assertTrue("前置 key 未执行过时不得触发", results.isEmpty())
+    }
+
+    @Test
+    fun `preKeys 前置执行过后放行`() {
+        addRuleWithRules(
+            listOf(
+                MatchRule(key = 0, matches = listOf("[text=\"跳过广告\"]")),
+                MatchRule(key = 1, matches = listOf("[text=\"关闭广告\"]"), preKeys = listOf(0))
+            )
+        )
+        rootProvider = { tree(listOf(node(text = "跳过广告"), node(text = "关闭广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(300)
+        assertEquals("窗口内只应执行第一条", 1, results.size)
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(300)
+        assertEquals("前置 key 执行过后应放行第二条", 2, results.size)
+    }
+
+    @Test
+    fun `actionCdKey 共享冷却`() {
+        addRuleWithRules(
+            listOf(
+                MatchRule(key = 0, matches = listOf("[text=\"跳过广告\"]"), actionCd = 5_000L),
+                MatchRule(key = 1, matches = listOf("[text=\"关闭广告\"]"), actionCd = 5_000L, actionCdKey = 0)
+            )
+        )
+        rootProvider = { tree(listOf(node(text = "跳过广告"), node(text = "关闭广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(300)
+        assertEquals(1, results.size)
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(1_000)
+        assertEquals("共享冷却期内不得执行同 Key 规则", 1, results.size)
+
+        // 注：虚拟时钟只在 advance() 内推进，因此按步行进才能让引擎"看到"时间流逝
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        repeat(18) {
+            advance(300)
+            engine.onContentChanged(testPackage)
+        }
+        assertEquals("共享冷却过期后应放行", 2, results.size)
+    }
 }

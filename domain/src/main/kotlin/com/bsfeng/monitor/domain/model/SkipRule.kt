@@ -15,6 +15,11 @@ data class SkipRule(
     val name: String,
     /** 是否启用 */
     val enabled: Boolean = true,
+    /**
+     * 按应用排除名单（仅全局规则使用，对应 GKD `globalGroups[].apps[{id, enable:false}]`）。
+     * 命中名单的 App 不应用该全局规则，避免误点系统界面/浏览器等场景中的"跳过"。
+     */
+    val excludedApps: List<String> = emptyList(),
     /** 规则组列表 */
     val groups: List<RuleGroup> = emptyList()
 ) {
@@ -84,6 +89,15 @@ data class MatchRule(
     val actionMaximum: Int? = null,
     /** 冷却时间（毫秒，null 表示继承组配置） */
     val actionCd: Long? = null,
+    /** 与同组内该 key 的规则共享冷却（GKD `actionCdKey`） */
+    val actionCdKey: Int? = null,
+    /** 与同组内该 key 的规则共享执行次数（GKD `actionMaximumKey`） */
+    val actionMaximumKey: Int? = null,
+    /**
+     * 要求同组内该 key 的规则**刚刚执行过**本规则才允许触发（GKD `preKeys`）。
+     * 用于"点击关闭按钮 → 选择原因 → 确认关闭"这类多步流程防止误触。
+     */
+    val preKeys: List<Int> = emptyList(),
     /** 是否启用快速查询（false 时强制深度优先遍历，保证匹配顺序） */
     val fastQuery: Boolean = true,
     /** 自定义点击位置（归一化 0..1，相对屏幕；仅 [MatchAction.CLICK_CENTER] 生效） */

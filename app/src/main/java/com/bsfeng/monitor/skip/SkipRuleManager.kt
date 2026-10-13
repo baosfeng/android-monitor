@@ -63,11 +63,11 @@ class SkipRuleManager(private val context: Context) {
      * @param packageName 前台包名
      */
     fun findRulesFor(packageName: String): List<SkipRule> {
-        if (isGloballyExcluded(packageName)) {
-            return getAllRules().filter { it.enabled && !it.isGlobal && it.app == packageName }
-        }
         val enabled = getEnabledRules()
-        return enabled.filter { !it.isGlobal && it.app == packageName } + enabled.filter { it.isGlobal }
+        val appRules = enabled.filter { !it.isGlobal && it.app == packageName }
+        if (isGloballyExcluded(packageName)) return appRules
+        // 全局规则可由订阅用 excludedApps 逐 App 禁用（GKD globalGroups[].apps[{enable:false}]）
+        return appRules + enabled.filter { it.isGlobal && packageName !in it.excludedApps }
     }
 
     /** 全局规则是否对该包名生效（系统 UI/桌面/浏览器等默认排除） */
@@ -135,6 +135,14 @@ class SkipRuleManager(private val context: Context) {
         prefs.edit().putString(KEY_SUBSCRIPTION_META, subscriptionMeta!!.toJson().toString()).apply()
         SelectorCache.clear()
         Log.i(TAG, "订阅已更新: " + url + " version=" + version + " 规则=" + rules.size)
+    }
+
+    /** 上次订阅自动检查时间（毫秒；0 表示从未检查） */
+    fun lastSubscriptionCheckAt(): Long = prefs.getLong(KEY_SUBSCRIPTION_CHECK_AT, 0L)
+
+    /** 记录订阅自动检查时间 */
+    fun markSubscriptionChecked(atMs: Long) {
+        prefs.edit().putLong(KEY_SUBSCRIPTION_CHECK_AT, atMs).apply()
     }
 
     /** 清空订阅 */
@@ -238,5 +246,6 @@ class SkipRuleManager(private val context: Context) {
         const val KEY_DISABLED_IDS = "disabled_ids"
         const val KEY_BUILT_IN_VERSION = "built_in_version"
         const val KEY_SUBSCRIPTION_META = "subscription_meta"
+        const val KEY_SUBSCRIPTION_CHECK_AT = "subscription_check_at"
     }
 }
