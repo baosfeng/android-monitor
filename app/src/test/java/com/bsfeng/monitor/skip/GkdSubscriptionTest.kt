@@ -73,7 +73,7 @@ class GkdSubscriptionTest {
     @Test
     fun `未订阅时自动检查直接返回`() {
         manager.resetToBuiltIn()
-        assertNull(GkdSubscription.autoCheck(manager, now = Long.MAX_VALUE))
+        assertTrue(GkdSubscription.autoCheck(manager, now = Long.MAX_VALUE).isEmpty())
     }
 
     @Test
@@ -84,7 +84,7 @@ class GkdSubscriptionTest {
             rules = emptyList()
         )
         manager.markSubscriptionChecked(1_000L)
-        assertNull("距上次检查不足 24 小时应跳过", GkdSubscription.autoCheck(manager, now = 2_000L))
+        assertTrue("距上次检查不足 24 小时应跳过", GkdSubscription.autoCheck(manager, now = 2_000L).isEmpty())
         assertEquals(1_000L, manager.lastSubscriptionCheckAt())
     }
 

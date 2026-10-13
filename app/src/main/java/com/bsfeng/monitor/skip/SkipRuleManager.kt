@@ -12,23 +12,30 @@ import java.io.File
  *
  * 规则来源（按匹配优先级从高到低）：
  * 1. **用户自定义规则**：`files/skip_rules.json`（仅存用户新增/修改的规则）
- * 2. **订阅规则**：`files/skip_subscription.json`（由 [GkdSubscription] 拉取写入，GKD 订阅格式）
+ * 2. **订阅规则**：`files/subscriptions/sub_<hash>.json`，**每个订阅地址一个文件**，
+ *    由 [GkdSubscription] 拉取写入（GKD 订阅格式）；可同时添加多个订阅源
  * 3. **内置规则**：见 [BuiltInRules]（全局开屏规则 + 少量应用规则）
  *
  * 启停状态**不复制规则副本**，而是把被禁用的规则 ID 存进 SharedPreferences
  * （`disabled_ids`），这样内置规则升级时不会丢用户设置。
+ *
+ * 订阅源清单存在 prefs 的 `subscription_metas`（JSON 数组），规则文件与清单一一对应：
+ * 更新/删除某个订阅只动它自己的文件，不会影响其它订阅源。
  */
 class SkipRuleManager(private val context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val customRulesFile = File(context.filesDir, CUSTOM_RULES_FILE_NAME)
-    private val subscriptionFile = File(context.filesDir, SUBSCRIPTION_FILE_NAME)
+    private val subscriptionsDir = File(context.filesDir, SUBSCRIPTIONS_DIR_NAME)
+
+    /** v2 早期版本的单订阅文件（多订阅迁移用，迁移后删除） */
+    private val legacySubscriptionFile = File(context.filesDir, LEGACY_SUBSCRIPTION_FILE_NAME)
 
     private var builtInRules: List<SkipRule> = emptyList()
     private var subscriptionRules: List<SkipRule> = emptyList()
     private var customRules: List<SkipRule> = emptyList()
     private var disabledIds: MutableSet<String> = mutableSetOf()
-    private var subscriptionMeta: SubscriptionMeta? = null
+    private var subscriptionMetas: MutableList<SubscriptionMeta> = mutableListOf()
 
     init {
         load()
@@ -39,16 +46,17 @@ class SkipRuleManager(private val context: Context) {
     /** 重新加载全部规则（订阅更新后调用） */
     fun load() {
         migrateLegacyRulesIfNeeded()
+        customRules = readRules(customRulesFile)
+        subscriptionMetas = readSubscriptionMetas().toMutableList()
+        migrateSingleSubscriptionIfNeeded()
         // 内置规则的时间闸门跟随监控窗口（两者必须一致，否则调大窗口不生效）
         builtInRules = BuiltInRules.getRules(SkipConfig.watchWindowMs)
-        customRules = readRules(customRulesFile)
-        subscriptionRules = readRules(subscriptionFile)
+        subscriptionRules = readAllSubscriptionRules()
         disabledIds = (prefs.getStringSet(KEY_DISABLED_IDS, emptySet()) ?: emptySet()).toMutableSet()
-        subscriptionMeta = readSubscriptionMeta()
         prefs.edit().putInt(KEY_BUILT_IN_VERSION, BuiltInRules.BUILT_IN_VERSION).apply()
         SelectorCache.clear()
         Log.d(TAG, "规则加载完成: 内置 " + builtInRules.size + " 条, 订阅 " + subscriptionRules.size +
-            " 条, 自定义 " + customRules.size + " 条, 禁用 " + disabledIds.size + " 条")
+            " 条（" + subscriptionMetas.size + " 个订阅源）, 自定义 " + customRules.size + " 条, 禁用 " + disabledIds.size + " 条")
     }
 
     /** 全部规则（含用户启停状态），自定义 → 订阅 → 内置 */
@@ -122,31 +130,67 @@ class SkipRuleManager(private val context: Context) {
         }
     }
 
-    /** 重置为内置规则：清空自定义规则与订阅缓存，恢复全部内置规则启用 */
+    /** 重置为内置规则：清空自定义规则与全部订阅，恢复全部内置规则启用 */
     fun resetToBuiltIn() {
         customRules = emptyList()
         customRulesFile.delete()
+        subscriptionsDir.listFiles()?.forEach { it.delete() }
+        legacySubscriptionFile.delete()
         subscriptionRules = emptyList()
-        subscriptionFile.delete()
-        subscriptionMeta = null
-        prefs.edit().remove(KEY_DISABLED_IDS).remove(KEY_SUBSCRIPTION_META).apply()
+        subscriptionMetas = mutableListOf()
+        prefs.edit().remove(KEY_DISABLED_IDS)
+            .remove(KEY_SUBSCRIPTION_METAS)
+            .remove(LEGACY_KEY_SUBSCRIPTION_META)
+            .apply()
         disabledIds = mutableSetOf()
         load()
     }
 
-    // ==================== 订阅 ====================
+    // ==================== 订阅（支持多个订阅源） ====================
 
-    /** 当前订阅元信息（未添加订阅时为 null） */
-    fun subscriptionMeta(): SubscriptionMeta? = subscriptionMeta
+    /** 全部订阅源（按更新时间排序，未订阅时为空列表） */
+    fun subscriptionMetas(): List<SubscriptionMeta> = subscriptionMetas.sortedBy { it.updatedAt }
 
-    /** 保存订阅结果（拉取成功后调用） */
+    /** 指定地址的订阅源 */
+    fun subscriptionMeta(url: String): SubscriptionMeta? = subscriptionMetas.find { it.url == url }
+
+    /**
+     * 保存某个订阅源的拉取结果。
+     *
+     * 每个订阅源独立一个文件（[SubscriptionMeta.fileName]）——更新订阅 A 不会覆盖订阅 B 的规则。
+     */
     fun saveSubscription(url: String, version: Long, rules: List<SkipRule>) {
-        subscriptionRules = rules
-        saveRules(subscriptionFile, rules)
-        subscriptionMeta = SubscriptionMeta(url = url, version = version, ruleCount = rules.size, updatedAt = System.currentTimeMillis())
-        prefs.edit().putString(KEY_SUBSCRIPTION_META, subscriptionMeta!!.toJson().toString()).apply()
+        subscriptionsDir.mkdirs()
+        val fileName = fileNameOf(url)
+        saveRules(File(subscriptionsDir, fileName), rules)
+        val meta = SubscriptionMeta(
+            url = url,
+            version = version,
+            ruleCount = rules.size,
+            updatedAt = System.currentTimeMillis(),
+            fileName = fileName
+        )
+        subscriptionMetas = (subscriptionMetas.filter { it.url != url } + meta).toMutableList()
+        persistSubscriptionMetas()
+        subscriptionRules = readAllSubscriptionRules()
         SelectorCache.clear()
-        Log.i(TAG, "订阅已更新: " + url + " version=" + version + " 规则=" + rules.size)
+        Log.i(TAG, "订阅已更新: " + url + " version=" + version + " 规则=" + rules.size +
+            "（共 " + subscriptionMetas.size + " 个订阅源）")
+    }
+
+    /**
+     * 清空订阅。
+     *
+     * @param url 指定订阅地址；null 表示清空全部订阅源
+     */
+    fun clearSubscription(url: String? = null) {
+        val targets = if (url == null) subscriptionMetas.toList() else subscriptionMetas.filter { it.url == url }
+        targets.forEach { File(subscriptionsDir, it.fileName).delete() }
+        subscriptionMetas = subscriptionMetas.filter { meta -> targets.none { it.url == meta.url } }.toMutableList()
+        persistSubscriptionMetas()
+        subscriptionRules = readAllSubscriptionRules()
+        SelectorCache.clear()
+        Log.i(TAG, if (url == null) "已清空全部订阅" else "已清除订阅: " + url)
     }
 
     /** 上次订阅自动检查时间（毫秒；0 表示从未检查） */
@@ -157,28 +201,80 @@ class SkipRuleManager(private val context: Context) {
         prefs.edit().putLong(KEY_SUBSCRIPTION_CHECK_AT, atMs).apply()
     }
 
-    /** 清空订阅 */
-    fun clearSubscription() {
-        subscriptionRules = emptyList()
-        subscriptionFile.delete()
-        subscriptionMeta = null
-        prefs.edit().remove(KEY_SUBSCRIPTION_META).apply()
-        SelectorCache.clear()
+    /**
+     * 订阅地址 → 稳定的文件名。
+     *
+     * 同一地址总是映射到同一文件，便于"更新"直接覆盖；不同地址不会互相覆盖。
+     */
+    internal fun fileNameOf(url: String): String =
+        SUBSCRIPTION_FILE_PREFIX + Integer.toHexString(url.hashCode()) + ".json"
+
+    private fun readAllSubscriptionRules(): List<SkipRule> = subscriptionMetas.flatMap { meta ->
+        readRules(File(subscriptionsDir, meta.fileName))
     }
 
-    private fun readSubscriptionMeta(): SubscriptionMeta? {
-        val text = prefs.getString(KEY_SUBSCRIPTION_META, null) ?: return null
+    private fun persistSubscriptionMetas() {
+        val array = JSONArray()
+        subscriptionMetas.forEach { array.put(it.toJson()) }
+        prefs.edit().putString(KEY_SUBSCRIPTION_METAS, array.toString()).apply()
+    }
+
+    private fun readSubscriptionMetas(): List<SubscriptionMeta> {
+        val text = prefs.getString(KEY_SUBSCRIPTION_METAS, null) ?: return emptyList()
         return try {
-            val json = JSONObject(text)
-            SubscriptionMeta(
-                url = json.getString("url"),
-                version = json.optLong("version", 0L),
-                ruleCount = json.optInt("ruleCount", 0),
-                updatedAt = json.optLong("updatedAt", 0L)
-            )
+            val array = JSONArray(text)
+            (0 until array.length()).mapNotNull { index ->
+                val json = array.optJSONObject(index) ?: return@mapNotNull null
+                val url = json.optString("url")
+                if (url.isBlank()) {
+                    null
+                } else {
+                    SubscriptionMeta(
+                        url = url,
+                        version = json.optLong("version", 0L),
+                        ruleCount = json.optInt("ruleCount", 0),
+                        updatedAt = json.optLong("updatedAt", 0L),
+                        fileName = json.optString("fileName").ifBlank { fileNameOf(url) }
+                    )
+                }
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "读取订阅元信息失败", e)
-            null
+            Log.w(TAG, "读取订阅清单失败", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 单订阅 → 多订阅迁移。
+     *
+     * v2 早期版本把订阅规则写在 `files/skip_subscription.json`、元信息写在 prefs
+     * `subscription_meta`；升级后搬进多订阅目录，用户不必重新添加订阅地址。
+     */
+    private fun migrateSingleSubscriptionIfNeeded() {
+        val legacyMetaText = prefs.getString(LEGACY_KEY_SUBSCRIPTION_META, null)
+        if (legacyMetaText == null && !legacySubscriptionFile.exists()) return
+        try {
+            val url = legacyMetaText?.let { runCatching { JSONObject(it).optString("url") }.getOrNull() }
+                ?.takeIf { it.isNotBlank() }
+            if (url != null && legacySubscriptionFile.exists() && subscriptionMetas.none { it.url == url }) {
+                val legacyMeta = JSONObject(legacyMetaText!!)
+                val fileName = fileNameOf(url)
+                subscriptionsDir.mkdirs()
+                legacySubscriptionFile.copyTo(File(subscriptionsDir, fileName), overwrite = true)
+                subscriptionMetas = (subscriptionMetas + SubscriptionMeta(
+                    url = url,
+                    version = legacyMeta.optLong("version", 0L),
+                    ruleCount = legacyMeta.optInt("ruleCount", 0),
+                    updatedAt = legacyMeta.optLong("updatedAt", 0L),
+                    fileName = fileName
+                )).toMutableList()
+                persistSubscriptionMetas()
+                Log.i(TAG, "已迁移单订阅数据: " + url)
+            }
+            legacySubscriptionFile.delete()
+            prefs.edit().remove(LEGACY_KEY_SUBSCRIPTION_META).apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "迁移单订阅数据失败，保留原文件", e)
         }
     }
 
@@ -218,6 +314,7 @@ class SkipRuleManager(private val context: Context) {
 
     private fun saveRules(file: File, rules: List<SkipRule>) {
         try {
+            file.parentFile?.mkdirs()
             val array = JSONArray()
             rules.forEach { array.put(it.toJson()) }
             file.writeText(array.toString(2))
@@ -231,13 +328,16 @@ class SkipRuleManager(private val context: Context) {
         val url: String,
         val version: Long,
         val ruleCount: Int,
-        val updatedAt: Long
+        val updatedAt: Long,
+        /** 该订阅规则所在的文件名（位于 `files/subscriptions/`） */
+        val fileName: String
     ) {
         fun toJson(): JSONObject = JSONObject().apply {
             put("url", url)
             put("version", version)
             put("ruleCount", ruleCount)
             put("updatedAt", updatedAt)
+            put("fileName", fileName)
         }
     }
 
@@ -245,7 +345,15 @@ class SkipRuleManager(private val context: Context) {
         const val TAG = "SkipRuleManager"
         const val PREFS_NAME = "skip_rule_prefs"
         const val CUSTOM_RULES_FILE_NAME = "skip_rules.json"
-        const val SUBSCRIPTION_FILE_NAME = "skip_subscription.json"
+
+        /** 多订阅存放目录 */
+        const val SUBSCRIPTIONS_DIR_NAME = "subscriptions"
+
+        /** 订阅规则文件名前缀 */
+        const val SUBSCRIPTION_FILE_PREFIX = "sub_"
+
+        /** v2 早期版本的单订阅文件名（迁移用） */
+        const val LEGACY_SUBSCRIPTION_FILE_NAME = "skip_subscription.json"
 
         /** v1 规则文件备份名（迁移时生成） */
         const val LEGACY_BACKUP_FILE_NAME = "skip_rules_v1_backup.json"
@@ -257,7 +365,12 @@ class SkipRuleManager(private val context: Context) {
         const val LEGACY_RULE_THRESHOLD = 20
         const val KEY_DISABLED_IDS = "disabled_ids"
         const val KEY_BUILT_IN_VERSION = "built_in_version"
-        const val KEY_SUBSCRIPTION_META = "subscription_meta"
+
+        /** 订阅源清单（JSON 数组） */
+        const val KEY_SUBSCRIPTION_METAS = "subscription_metas"
+
+        /** 单订阅时代的元信息键（迁移用） */
+        const val LEGACY_KEY_SUBSCRIPTION_META = "subscription_meta"
         const val KEY_SUBSCRIPTION_CHECK_AT = "subscription_check_at"
     }
 }

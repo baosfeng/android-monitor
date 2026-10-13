@@ -47,25 +47,30 @@ object GkdSubscription {
     /** 自动检查周期（毫秒，默认 1 天） */
     const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
+    /** 单个订阅源的自动检查结果 */
+    data class CheckResult(val url: String, val outcome: Outcome)
+
     /**
-     * 定时检查并更新订阅（App 启动时调用）。
+     * 定时检查并更新**全部**订阅源（App 启动时调用）。
      *
-     * 未添加订阅、或距上次检查不足 [CHECK_INTERVAL_MS] 时返回 null（不做任何网络请求）。
+     * 未添加任何订阅、或距上次检查不足 [CHECK_INTERVAL_MS] 时返回空列表（不做任何网络请求）。
      *
      * @param manager 规则管理器
      * @param now 当前时间（毫秒，便于测试）
      */
-    fun autoCheck(manager: SkipRuleManager, now: Long = System.currentTimeMillis()): Outcome? {
-        val meta = manager.subscriptionMeta() ?: return null
-        if (now - manager.lastSubscriptionCheckAt() < CHECK_INTERVAL_MS) return null
+    fun autoCheck(manager: SkipRuleManager, now: Long = System.currentTimeMillis()): List<CheckResult> {
+        val metas = manager.subscriptionMetas()
+        if (metas.isEmpty()) return emptyList()
+        if (now - manager.lastSubscriptionCheckAt() < CHECK_INTERVAL_MS) return emptyList()
         manager.markSubscriptionChecked(now)
-        val outcome = update(manager, meta.url)
-        Log.i(TAG, "订阅自动检查: " + outcome)
-        return outcome
+        val results = metas.map { CheckResult(it.url, update(manager, it.url)) }
+        Log.i(TAG, "订阅自动检查(" + results.size + " 个订阅源): " +
+            results.joinToString(", ") { it.url + " → " + it.outcome })
+        return results
     }
 
     /**
-     * 拉取并更新订阅。
+     * 拉取并更新**指定**订阅源（多订阅源互不影响）。
      *
      * @param manager 规则管理器（负责落库与版本比对）
      * @param url 订阅地址（必须为 https）
@@ -74,8 +79,8 @@ object GkdSubscription {
         if (!url.startsWith("https://")) return Outcome.Failed("仅支持 https 订阅地址")
         val text = fetchRulesText(url) ?: return Outcome.Failed("下载失败或订阅格式不支持")
         val version = readVersion(text) ?: 0L
-        val existing = manager.subscriptionMeta()
-        if (existing != null && existing.url == url && version in 1..existing.version) {
+        val existing = manager.subscriptionMeta(url)
+        if (existing != null && version in 1..existing.version) {
             return Outcome.UpToDate
         }
         val rules = parseRules(text)
