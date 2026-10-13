@@ -24,6 +24,25 @@ import com.bsfeng.monitor.util.DebugConfig
  * - 兜底轮询每 [BACKUP_SCAN_INTERVAL_MS] 一次，防止事件丢失
  * - 根节点为 null（启动瞬间很常见）时不放弃，等下轮扫描重试
  *
+ * ## 弱网顺延（P2-2 增强）
+ * 弱网/慢页面下跳过按钮可能在窗口结束后才渲染出来（窗口一到就停止扫描 → 规则再准也点不到）。
+ * 因此窗口**到点**时若仍满足：①未命中任何规则 ②页面仍在变化（距最近一次 CONTENT_CHANGED
+ * < [WindowExtendPolicy.stillRenderingMs]，默认 1 秒）③顺延次数未达上限，就把截止时间往后推
+ * [WindowExtendPolicy.stepMs]（默认 2 秒，最多 [WindowExtendPolicy.maxExtensions] 次，即最多 +4 秒）。
+ *
+ * - **与 `matchTime` 的关系**：规则的时间闸门按**已顺延的额度**一起放宽
+ *   （`now - enterTime > matchTime + extensionGrantedMs` 才算过期）。理由：内置规则的
+ *   `matchTime` 就等于监控窗口（见 [SkipConfig]），若只延长"扫描"而不放宽闸门，顺延期间扫到了也
+ *   不允许执行，这个增强就是死代码；宽限额度受顺延上限（默认 +4 秒）硬约束，且只在"页面仍在渲染"
+ *   这个弱网证据下发放，不会无限外扩。
+ * - **只在未命中时顺延**：命中后走点击后确认（[verifyDelaysMs]）流程，复核期间不再顺延；
+ *   复核到点照常上报，不受窗口截止时间影响。
+ * - **不顺延的情况**：熄屏、切 App、扫描次数达到 [MAX_SCANS] 护栏、页面已静止（距上次内容变化 ≥
+ *   [WindowExtendPolicy.stillRenderingMs]）、到点判定时引擎已长时间未扫描（距上次扫描 >
+ *   [WindowExtendPolicy.maxScanGapMs]，用于排除进程冻结/系统时间跳变导致的"复活过期窗口"）、
+ *   顺延次数用尽——以上任一条件成立即结束窗口（护栏优先于顺延）。
+ * - 每次顺延都写 [DebugConfig.log]（触发原因 + 新的截止时间 + 已顺延次数）。
+ *
  * ## 防误触
  * - 只执行规则命中的节点动作，**不再有"坐标连点"或"返回键"兜底**（业界调研结论见
  *   `docs/开屏跳过/业界调研与改进方案.md` §4 P0-2）
@@ -68,7 +87,21 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
     private var enterTimeMs = 0L
     private var watching = false
     private var scanCount = 0
-    private var lastContentTriggerMs = 0L
+
+    /** 最近一次 CONTENT_CHANGED 触发时刻；null = 本窗口内还没有内容变化（弱网顺延的判定依据） */
+    private var lastContentTriggerMs: Long? = null
+
+    /** 本次窗口的截止时刻（绝对毫秒；弱网顺延会把它往后推） */
+    private var windowDeadlineMs = 0L
+
+    /** 本次窗口已顺延次数（随窗口重建重置，见 [startWatching]） */
+    private var extensionCount = 0
+
+    /** 本次窗口累计顺延时长（毫秒）：同时是规则时间闸门 `matchTime` 的宽限额度 */
+    private var extensionGrantedMs = 0L
+
+    /** 上一次扫描时的引擎时间（毫秒）：用于确认"引擎一直在连续扫描"（见 [tryExtendWindow]） */
+    private var lastScanAtMs: Long? = null
 
     /** 规则计数（key = ruleId#groupKey#ruleKey）→ 已执行次数 */
     private val counters = mutableMapOf<String, Int>()
@@ -91,6 +124,12 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
     /** 匹配窗口提供器（毫秒；默认取用户配置 [SkipConfig.watchWindowMs]，测试可注入） */
     internal var watchWindowProvider: () -> Long = { SkipConfig.watchWindowMs }
+
+    /**
+     * 弱网顺延策略（默认取 [SkipConfig] 中的常量，测试可注入替换步长/上限）。
+     * 语义与上限理由见 [WindowExtendPolicy] 与 [SkipConfig.WINDOW_MAX_EXTENSIONS]。
+     */
+    internal var windowExtendPolicy: WindowExtendPolicy = WindowExtendPolicy()
 
     /**
      * 点击后确认的复核延时表（毫秒）：第 i 项是第 i 次复核前的等待时间。
@@ -161,13 +200,18 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         if (!watching || packageName != pkg) return
         if (!screenInteractive()) return
         val now = currentTimeMillis()
-        if (now - lastContentTriggerMs < CONTENT_TRIGGER_INTERVAL_MS) return
+        if (lastContentTriggerMs?.let { now - it < CONTENT_TRIGGER_INTERVAL_MS } == true) return
         lastContentTriggerMs = now
         handler.removeCallbacks(scanTask)
         performScan()
     }
 
-    /** 停止监控并清理规则状态 */
+    /**
+     * 停止监控并清理规则状态。
+     *
+     * 顺延计数（[extensionCount]/[extensionGrantedMs]）**不在这里清零**：它们随下一次
+     * [startWatching] 重置，停窗后保留最后一次的取值便于诊断与单测断言。
+     */
     fun stopWatching() {
         watching = false
         handler.removeCallbacks(scanTask)
@@ -177,6 +221,15 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
     /** 当前是否处于匹配窗口内 */
     fun isWatching(): Boolean = watching
+
+    /** 本次（或最近一次）窗口已顺延的次数（诊断/单测） */
+    internal fun extensionCount(): Int = extensionCount
+
+    /** 本次（或最近一次）窗口累计顺延时长（毫秒，诊断/单测） */
+    internal fun extensionGrantedMs(): Long = extensionGrantedMs
+
+    /** 本次（或最近一次）窗口的截止时刻（绝对毫秒，诊断/单测） */
+    internal fun windowDeadlineMs(): Long = windowDeadlineMs
 
     /** 正在监控的包名 */
     fun watchingPackage(): String? = if (watching) currentPackage else null
@@ -199,10 +252,22 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
     private fun startWatching(now: Long) {
         watching = true
         scanCount = 0
+        val windowMs = watchWindowProvider()
+        windowDeadlineMs = now + windowMs
+        extensionCount = 0
+        extensionGrantedMs = 0
+        lastContentTriggerMs = null
+        lastScanAtMs = null
         handler.removeCallbacks(scanTask)
         handler.post(scanTask)
-        DebugConfig.log("SkipEngine: 开启匹配窗口 " + watchWindowProvider() + "ms, 当前 " + currentPackage +
-            " / " + currentClassName + ", now=" + now)
+        val policy = windowExtendPolicy
+        val extendHint = if (policy.enabled) {
+            "（弱网下页面仍在渲染时最多顺延 " + policy.maxExtensions + " 次 × " + policy.stepMs + "ms）"
+        } else {
+            "（弱网顺延已关闭）"
+        }
+        DebugConfig.log("SkipEngine: 开启匹配窗口 " + windowMs + "ms" + extendHint + ", 当前 " + currentPackage +
+            " / " + currentClassName + ", now=" + now + ", 截止=" + windowDeadlineMs)
     }
 
     private fun schedule(delayMs: Long) {
@@ -217,6 +282,9 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         val pkg = currentPackage ?: return
         if (!watching) return
         val now = currentTimeMillis()
+        // 到点判定要确认引擎一直在连续扫描：先取"距上次扫描"的间隔，再刷新（见 [tryExtendWindow]）
+        val sinceLastScanMs = lastScanAtMs?.let { now - it }
+        lastScanAtMs = now
         if (!screenInteractive()) {
             DebugConfig.log("SkipEngine: 屏幕未点亮，停止扫描 " + pkg)
             stopWatching()
@@ -231,8 +299,15 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             verifyAndFinish(pv, now)
             return
         }
-        if (now - enterTimeMs > watchWindowProvider() || scanCount >= MAX_SCANS) {
-            DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描 " + scanCount + " 次)")
+        // 护栏优先：扫描次数用尽直接结束（密集 CONTENT_CHANGED 场景下先于顺延上限生效）
+        if (scanCount >= MAX_SCANS) {
+            DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描次数到达护栏 " + MAX_SCANS + ")")
+            stopWatching()
+            return
+        }
+        if (now >= windowDeadlineMs && !tryExtendWindow(pkg, now, sinceLastScanMs)) {
+            DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描 " + scanCount + " 次，顺延 " +
+                extensionCount + " 次)")
             stopWatching()
             return
         }
@@ -253,6 +328,52 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             return
         }
         schedule(BACKUP_SCAN_INTERVAL_MS)
+    }
+
+    /**
+     * 弱网顺延（P2-2 增强）：窗口**到点**时判断是否还值得继续扫描。
+     *
+     * 四个条件同时成立才顺延：①策略启用且顺延次数未用尽；②页面仍在渲染
+     * （距最近一次 CONTENT_CHANGED < [WindowExtendPolicy.stillRenderingMs]）；③引擎一直在连续扫描
+     * （距上次扫描 ≤ [WindowExtendPolicy.maxScanGapMs]，排除进程被冻结/时间跳变导致的"复活过期窗口"）；
+     * ④调用方已保证当前**未命中**任何规则、也没有待复核动作（[performScan] 里的前置分支已排除）。
+     *
+     * 截止时间取「原截止时间 + stepMs」而不是「now + stepMs」：这样"基础窗口 + 步长×次数"就是
+     * **精确**的硬上限（默认 10s + 4s），不会被到点检测延迟（正常 ≤ 一个兜底轮询周期）叠加放大；
+     * 到点判定晚于截止时间时，顺延额度照样按原截止时间累加。
+     * 累计顺延额度 [extensionGrantedMs] 会被 [ruleAllowed] 用作 `matchTime` 的宽限额度。
+     *
+     * @return true = 已顺延（窗口继续）；false = 不顺延（调用方结束窗口）
+     */
+    private fun tryExtendWindow(packageName: String, now: Long, sinceLastScanMs: Long?): Boolean {
+        val policy = windowExtendPolicy
+        if (!policy.enabled) return false
+        if (extensionCount >= policy.maxExtensions) {
+            DebugConfig.log("SkipEngine: 窗口到点不顺延（顺延次数已达上限 " + extensionCount + "/" +
+                policy.maxExtensions + "）" + packageName)
+            return false
+        }
+        if (sinceLastScanMs != null && sinceLastScanMs > policy.maxScanGapMs) {
+            DebugConfig.log("SkipEngine: 窗口到点不顺延（距上次扫描 " + sinceLastScanMs + "ms > 连续扫描上限 " +
+                policy.maxScanGapMs + "ms，引擎长时间未运行/时间跳变，窗口已过期）" + packageName)
+            return false
+        }
+        val last = lastContentTriggerMs
+        val idleMs = if (last == null) Long.MAX_VALUE else now - last
+        if (idleMs > policy.stillRenderingMs) {
+            val idleText = if (last == null) "窗口内无内容变化" else "距上次内容变化 " + idleMs + "ms"
+            DebugConfig.log("SkipEngine: 窗口到点不顺延（页面已静止：" + idleText + "）" + packageName)
+            return false
+        }
+        val newDeadline = windowDeadlineMs + policy.stepMs
+        extensionCount++
+        extensionGrantedMs += policy.stepMs
+        windowDeadlineMs = newDeadline
+        DebugConfig.log("SkipEngine: 弱网顺延 #" + extensionCount + "/" + policy.maxExtensions +
+            " 触发原因=页面仍在渲染（距上次内容变化 " + idleMs + "ms < " + policy.stillRenderingMs + "ms, now=" +
+            now + "） → 窗口延长 " + policy.stepMs + "ms, 新截止=" + newDeadline +
+            ", 累计顺延=" + extensionGrantedMs + "ms, " + packageName)
+        return true
     }
 
     /**
@@ -375,7 +496,10 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
      */
     private fun ruleAllowed(ruleId: String, group: RuleGroup, matchRule: MatchRule, now: Long): Boolean {
         val window = matchRule.matchTime ?: group.matchTime
-        if (window > 0 && now - enterTimeMs > window) return false
+        // 弱网顺延联动：闸门按「本窗口已顺延的额度」一起放宽，额度上限 = 步长 × 次数（默认 +4 秒）。
+        // 理由见类 KDoc「与 matchTime 的关系」：内置规则的 matchTime 就等于监控窗口，
+        // 若只延长扫描而不放宽闸门，顺延期间扫到广告也不允许执行（增强失效）。
+        if (window > 0 && now - enterTimeMs > window + extensionGrantedMs) return false
         val limit = matchRule.actionMaximum ?: group.actionMaximum
         if (limit > 0) {
             val used = counterKeys(ruleId, group.key, matchRule).maxOf { counters[it] ?: 0 }
