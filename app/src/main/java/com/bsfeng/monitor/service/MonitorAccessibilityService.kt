@@ -10,6 +10,8 @@ import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
+import com.bsfeng.monitor.skip.SnapshotExporter
+import com.bsfeng.monitor.skip.SnapshotRequest
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DiagnosticCounters
 
@@ -76,6 +78,16 @@ class MonitorAccessibilityService : AccessibilityService() {
         val pkg = root.packageName?.toString()
         root.recycle()
         if (pkg == null) return
+
+        // ===== 页面快照导出（UI 请求 → 延迟到期后对"当时的前台页面"导出）=====
+        if (SnapshotRequest.consumeIfDue(now)) {
+            val snapshotRoot = rootInActiveWindow
+            val path = SnapshotExporter.exportCurrentPage(this, snapshotRoot, pkg, lastActivityClass ?: "")
+            snapshotRoot?.recycle()
+            SnapshotRequest.record(path)
+            Log.i("MonitorService", "页面快照导出: " + path)
+            timeline("📸", if (path == null) "快照导出失败" else "已导出页面快照")
+        }
 
         // 桌面
         if (isHomeApp(pkg)) {
@@ -167,38 +179,19 @@ class MonitorAccessibilityService : AccessibilityService() {
             return
         }
 
-        // ===== 开屏广告跳过（仅在真正进入 App 时检测）=====
-        // 条件：包名变化（切换 App）
-        // 同 App 内页面切换（Activity 跳转）不触发开屏检测，避免误拦截
-        val shouldCheckSplash = packageName != lastPackageName
-        if (shouldCheckSplash) {
-            // 进入新 App，清除上一条残留弹幕
-            removeCurrentDanmaku()
-            try {
-                val root = rootInActiveWindow
-                if (root != null) {
-                    if (packageName == "com.bsfeng.monitor") {
-                        // 进入本 App，停止所有外部监控和重置状态
-                        skipEngine.resetAppState(packageName)
-                    } else {
-                        val skipped = skipEngine.onWindowChanged(packageName, className, root)
-                        if (skipped) {
-                            val appNameShort = AppUtils.getAppName(packageName)
-                            timeline("⏭️", "跳过 $appNameShort 开屏广告")
-                            SkipEventRecorder.recordSkip(packageName, appNameShort, "", className)
-                            showSkipDanmaku(appNameShort)
-                        } else {
-                            // 首次尝试未命中，启动持续监控（处理白屏→广告延迟加载）
-                            skipEngine.startWatching(packageName, className)
-                        }
-                    }
-                    root.recycle()
-                } else {
-                    Log.w("MonitorService", "handleWindowChange: rootInActiveWindow is null for $packageName")
-                }
-            } catch (e: Exception) {
-                Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
+        // ===== 开屏广告跳过 =====
+        // 引擎以「App 切换时刻」为锚点开窗匹配：窗口内由 CONTENT_CHANGED 事件驱动扫描 +
+        // 兜底轮询，根节点未就绪时自行重试（旧实现在 root 为 null 时整次启动直接漏检）。
+        try {
+            if (packageName == "com.bsfeng.monitor") {
+                // 进入本 App：停止监控并重置状态
+                skipEngine.resetAppState(packageName)
+            } else {
+                if (packageName != lastPackageName) removeCurrentDanmaku()
+                skipEngine.onWindowChanged(packageName, className)
             }
+        } catch (e: Exception) {
+            Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)
         }
 
         lastSwitchTimeMs = now
@@ -427,11 +420,10 @@ class MonitorAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         ActionExecutor.accessibilityService = this
         skipEngine.setRootNodeProvider { rootInActiveWindow }
-        skipEngine.onSkipSuccess = { pkg ->
-            skipEngine.recordSkipCooldown(pkg)
-            val name = AppUtils.getAppName(pkg)
+        skipEngine.onSkipSuccess = { result ->
+            val name = AppUtils.getAppName(result.packageName)
             timeline("⏭️", "跳过 $name 开屏广告")
-            SkipEventRecorder.recordSkip(pkg, name, "", null)
+            SkipEventRecorder.recordSkip(result.packageName, name, result.selector, lastActivityClass)
             showSkipDanmaku(name)
         }
         // 启动前台 App 轮询（兜底监测）；已运行则跳过，防止服务重建后叠加轮询链
