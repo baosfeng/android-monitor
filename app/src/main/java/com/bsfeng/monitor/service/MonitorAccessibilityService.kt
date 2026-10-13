@@ -12,6 +12,7 @@ import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.skip.SnapshotExporter
 import com.bsfeng.monitor.skip.SnapshotRequest
+import com.bsfeng.monitor.util.ActivityNames
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.util.DiagnosticCounters
 
@@ -30,6 +31,9 @@ class MonitorAccessibilityService : AccessibilityService() {
 
     private var lastPackageName: String? = null
     private var lastActivityClass: String? = null
+
+    /** [lastActivityClass] 所属包名：换了 App 旧的 Activity 名就无意义，必须清空 */
+    private var lastActivityPackage: String? = null
     private var lastSwitchTimeMs: Long = System.currentTimeMillis()
     private var lastPageTitle: String? = null  // 上一级页面标题
     private var homePackage: String? = null  // 系统桌面包名（缓存）
@@ -195,7 +199,11 @@ class MonitorAccessibilityService : AccessibilityService() {
         }
 
         lastSwitchTimeMs = now
-        lastActivityClass = className
+        // 同引擎：widget 类名的窗口事件（Toast/弹窗）不能覆盖"当前 Activity"，
+        // 否则页面快照会记下错误的 Activity，写规则时按错误界面名写
+        val appSwitched = packageName != lastActivityPackage
+        lastActivityClass = ActivityNames.resolveActivityClass(lastActivityClass ?: "", className, appSwitched)
+        lastActivityPackage = packageName
 
         // 保留 updateKillDetectorTargets 为空调用（保持兼容）
         updateKillDetectorTargets(packageName)
