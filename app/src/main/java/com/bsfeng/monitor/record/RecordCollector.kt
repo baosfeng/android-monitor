@@ -130,11 +130,18 @@ class RecordCollector(
         emit(RecordType.PHONE_STATE, state, timestamp, detail = detail)
     }
 
-    fun onSkipAd(appName: String, packageName: String, selectorExpr: String) {
-        emit(RecordType.SCREEN, "AD_SKIPPED", System.currentTimeMillis(), detail = mapOf(
+    /**
+     * 记录一次广告跳过。
+     *
+     * @param confirmed 点击后确认结果（true 已确认广告消失 / false 未确认 / null 未复核）
+     */
+    fun onSkipAd(appName: String, packageName: String, selectorExpr: String, confirmed: Boolean? = null) {
+        val detail = mutableMapOf(
             "app_name" to appName,
             "package_name" to packageName,
             "selector" to selectorExpr
-        ))
+        )
+        confirmed?.let { detail["confirmed"] = it.toString() }
+        emit(RecordType.SCREEN, "AD_SKIPPED", System.currentTimeMillis(), detail = detail)
     }
 }

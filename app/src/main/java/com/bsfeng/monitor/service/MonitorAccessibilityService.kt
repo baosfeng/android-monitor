@@ -333,14 +333,19 @@ class MonitorAccessibilityService : AccessibilityService() {
      * 保证在任意 App 上方显示，且不需要额外权限。
      * 带有淡入淡出和上下滑入滑出的入场/退场动画。
      */
-    private fun showSkipDanmaku(appName: String) {
-        Log.d("MonitorService", "showSkipDanmaku: $appName")
+    private fun showSkipDanmaku(appName: String, confirmed: Boolean? = null) {
+        Log.d("MonitorService", "showSkipDanmaku: $appName confirmed=$confirmed")
         try {
             // 移除之前的弹幕
             removeCurrentDanmaku()
 
             val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-            val message = "⏭️ 已跳过 $appName 开屏广告"
+            // 未确认时如实提示，避免把"点了没反应"也说成跳过成功
+            val message = if (confirmed == false) {
+                "⏭️ 已点击 $appName 跳过按钮（未确认）"
+            } else {
+                "⏭️ 已跳过 $appName 开屏广告"
+            }
 
             val tv = android.widget.TextView(this).apply {
                 text = message
@@ -433,9 +438,16 @@ class MonitorAccessibilityService : AccessibilityService() {
         skipEngine.setRootNodeProvider { rootInActiveWindow }
         skipEngine.onSkipSuccess = { result ->
             val name = AppUtils.getAppName(result.packageName)
-            timeline("⏭️", "跳过 $name 开屏广告")
-            SkipEventRecorder.recordSkip(result.packageName, name, result.selector, lastActivityClass)
-            showSkipDanmaku(name)
+            val suffix = if (result.confirmed == false) "（未确认）" else ""
+            timeline("⏭️", "跳过 $name 开屏广告$suffix")
+            SkipEventRecorder.recordSkip(
+                packageName = result.packageName,
+                appName = name,
+                selectorExpr = result.selector,
+                className = lastActivityClass,
+                confirmed = result.confirmed
+            )
+            showSkipDanmaku(name, result.confirmed)
         }
         // 启动前台 App 轮询（兜底监测）；已运行则跳过，防止服务重建后叠加轮询链
         if (!pollerActive) {
