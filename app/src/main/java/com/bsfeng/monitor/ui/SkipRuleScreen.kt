@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -17,8 +18,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.model.SkipRule
+import com.bsfeng.monitor.ui.theme.InsetGroupedCard
 import com.bsfeng.monitor.ui.theme.IOSNavigationBar
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
+import com.bsfeng.monitor.ui.theme.SettingsRow
 
 /**
  * 开屏广告跳过规则管理页面。
@@ -45,6 +48,112 @@ fun SkipRuleScreen(
                 }
             },
         )
+
+        // ===== 订阅规则 + 页面快照 =====
+        var showUrlDialog by remember { mutableStateOf(false) }
+        var urlInput by remember { mutableStateOf(state.subscriptionUrl.orEmpty()) }
+        val hapticView = LocalView.current
+
+        InsetGroupedCard(
+            modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs)
+        ) {
+            SettingsRow(
+                title = "订阅规则",
+                subtitle = subscriptionSubtitle(state),
+                trailing = {
+                    TextButton(onClick = {
+                        urlInput = state.subscriptionUrl.orEmpty()
+                        showUrlDialog = true
+                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }) {
+                        Text(
+                            text = if (state.subscriptionUrl == null) "添加" else "更新",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            )
+            if (state.subscriptionUrl != null) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                SettingsRow(
+                    title = "清除订阅",
+                    subtitle = "删除已下载的订阅规则（保留内置与自定义规则）",
+                    trailing = {
+                        TextButton(onClick = {
+                            viewModel.clearSubscription()
+                            hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        }) {
+                            Text("清除", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            SettingsRow(
+                title = "页面快照",
+                subtitle = state.snapshotPath ?: "导出当前前台页面的无障碍树，便于编写精确规则",
+                trailing = {
+                    TextButton(onClick = {
+                        viewModel.requestSnapshot()
+                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }) {
+                        Text("导出", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            )
+        }
+
+        state.message?.let { message ->
+            LaunchedEffect(message) {
+                delay(4_000)
+                viewModel.consumeMessage()
+            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xxs)
+            )
+        }
+
+        if (showUrlDialog) {
+            AlertDialog(
+                onDismissRequest = { showUrlDialog = false },
+                title = { Text("GKD 订阅地址") },
+                text = {
+                    Column {
+                        Text(
+                            text = "支持 GKD 兼容订阅（JSON5，仅 https）。可填写社区订阅地址，例如 " +
+                                "https://fastly.jsdelivr.net/gh/Lin-arm/GKD_subscription@main/dist/gkd.json5",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = { urlInput = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MonitorSpacing.sm)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.updateSubscription(urlInput)
+                        showUrlDialog = false
+                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }) {
+                        Text("更新")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUrlDialog = false }) { Text("取消") }
+                }
+            )
+        }
 
         // 状态摘要
         Card(
@@ -121,6 +230,13 @@ fun SkipRuleScreen(
             }
         }
     }
+}
+
+/** 订阅状态摘要文案 */
+private fun subscriptionSubtitle(state: SkipRuleUiState): String = when {
+    state.subscriptionUpdating -> "正在更新…"
+    state.subscriptionUrl == null -> "未订阅：可添加 GKD 兼容订阅地址获取社区规则"
+    else -> state.subscriptionUrl + "（v" + state.subscriptionVersion + " · " + state.subscriptionRuleCount + " 条）"
 }
 
 @Composable
