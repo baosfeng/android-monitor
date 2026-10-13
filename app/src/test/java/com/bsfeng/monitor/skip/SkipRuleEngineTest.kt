@@ -258,6 +258,42 @@ class SkipRuleEngineTest {
         assertTrue("规则窗口过期后不得再执行", results.isEmpty())
     }
 
+    // ==================== P2-2 监控窗口可配置 ====================
+
+    @Test
+    fun `窗口调大后晚出现的广告仍能命中`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 15_000L)
+        var adVisible = false
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else null }
+        engine.watchWindowProvider = { 15_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        // 越过旧的硬编码 10 秒窗口后广告才渲染出来
+        advance(11_000)
+        adVisible = true
+        engine.onContentChanged(testPackage)
+        advance(600)
+
+        assertTrue("窗口调大后必须仍能命中晚到的广告", results.isNotEmpty())
+    }
+
+    @Test
+    fun `窗口调小后到点即停止扫描`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), matchTime = 30_000L)
+        var calls = 0
+        rootProvider = { calls++; null }
+        engine.watchWindowProvider = { 5_000L }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(6_000)
+        val before = calls
+
+        engine.onContentChanged(testPackage)
+        advance(1_000)
+        assertEquals("窗口结束后不得再扫描", before, calls)
+        assertTrue(results.isEmpty())
+    }
+
     @Test
     fun `excludeMatches 命中时放弃规则`() {
         addRule(matches = listOf("[text=\"跳过广告\"]"), excludeMatches = listOf("[text=\"跳过广告\"]"))

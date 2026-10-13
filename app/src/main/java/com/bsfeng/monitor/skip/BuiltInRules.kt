@@ -13,7 +13,7 @@ import com.bsfeng.monitor.domain.model.SkipRule
  * 1. **全局规则为主**：开屏跳过按钮的通用特征是「文本含 跳过/skip 的短文本可见叶子节点」
  *    或「广告 SDK 的固定 View ID」（字节系 `tt_splash_skip_btn`、倒计时 `count_down`）。
  *    一条全局规则即可覆盖绝大多数 App，避免为每个 App 维护易腐烂的选择器。
- * 2. **时间闸门防误触**：全局规则仅在「切换到 App 后的 [MATCH_TIME_MS] 毫秒内」参与匹配
+ * 2. **时间闸门防误触**：全局规则仅在「切换到 App 后的 [SkipConfig.watchWindowMs] 毫秒内」参与匹配
  *    （对应 GKD 的 `matchTime`），且每次进入 App 仅执行一次（`actionMaximum=1` + `resetMatch=APP`），
  *    因此正常页面里的"跳过"按钮不会被误点。
  * 3. **应用规则补充**：只对节点特征明确、且全局规则不够稳的 App 补规则。
@@ -27,13 +27,10 @@ import com.bsfeng.monitor.domain.model.SkipRule
 object BuiltInRules {
 
     /** 内置规则版本：内容有增删改时递增，触发本地规则合并（保留用户启停状态） */
-    const val BUILT_IN_VERSION = 7
+    const val BUILT_IN_VERSION = 8
 
     /** 全局规则 ID */
     const val GLOBAL_SPLASH_RULE_ID = "builtin_global_splash"
-
-    /** 全局规则参与匹配的时间窗口（毫秒，自 App 切换起算） */
-    private const val MATCH_TIME_MS = 8_000L
 
     /** 两次动作最小间隔（毫秒） */
     private const val ACTION_CD_MS = 1_000L
@@ -77,12 +74,19 @@ object BuiltInRules {
         "com.android.inputmethod.latin"
     )
 
-    /** 全部内置规则（全局规则在首位） */
-    fun getRules(): List<SkipRule> = listOf(globalSplashRule()) + appRules()
+    /**
+     * 全部内置规则（全局规则在首位）。
+     *
+     * @param matchTimeMs 规则参与匹配的时间窗口（毫秒，自 App 切换起算）。
+     *   由 [SkipRuleManager.load] 传入 [SkipConfig.watchWindowMs]，保证与引擎扫描窗口一致——
+     *   否则窗口调大后规则仍会在旧的时间闸门处失效。
+     */
+    fun getRules(matchTimeMs: Long = SkipConfig.DEFAULT_WATCH_WINDOW_MS): List<SkipRule> =
+        listOf(globalSplashRule(matchTimeMs)) + appRules(matchTimeMs)
 
     // ==================== 全局规则 ====================
 
-    private fun globalSplashRule(): SkipRule = SkipRule(
+    private fun globalSplashRule(matchTimeMs: Long): SkipRule = SkipRule(
         id = GLOBAL_SPLASH_RULE_ID,
         app = SkipRule.GLOBAL_APP,
         name = "开屏广告（全局）",
@@ -92,7 +96,7 @@ object BuiltInRules {
                 key = 0,
                 name = "开屏广告-跳过",
                 order = 0,
-                matchTime = MATCH_TIME_MS,
+                matchTime = matchTimeMs,
                 actionMaximum = 1,
                 actionCd = ACTION_CD_MS,
                 resetMatch = ResetMatch.APP,
@@ -106,7 +110,7 @@ object BuiltInRules {
                 key = 1,
                 name = "开屏广告-关闭广告",
                 order = 1,
-                matchTime = MATCH_TIME_MS,
+                matchTime = matchTimeMs,
                 actionMaximum = 1,
                 actionCd = ACTION_CD_MS,
                 resetMatch = ResetMatch.APP,
@@ -117,13 +121,14 @@ object BuiltInRules {
 
     // ==================== 应用规则 ====================
 
-    private fun appRules(): List<SkipRule> = listOf(
+    private fun appRules(matchTimeMs: Long): List<SkipRule> = listOf(
         appRule(
             id = "bilibili_splash",
             app = "tv.danmaku.bili",
             name = "哔哩哔哩",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     activityIds = listOf("tv.danmaku.bili.MainActivityV2"),
                     rules = listOf(
                         rule(0, "倒计时/跳过按钮", "[visibleToUser=true][vid=\"count_down\"||vid=\"skip\"||id$=\"tt_splash_skip_btn\"]"),
@@ -138,6 +143,7 @@ object BuiltInRules {
             name = "淘特",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     rules = listOf(
                         rule(0, "剩余秒数倒计时", "[visibleToUser=true][text^=\"还剩\"][text$=\"秒\"]"),
                         rule(1, "跳过文本", TEXT_SKIP_SMALL)
@@ -151,6 +157,7 @@ object BuiltInRules {
             name = "美团",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     rules = listOf(
                         rule(0, "可点击跳过文本", "TextView[text*=\"跳过\"][text.length<8][clickable=true][visibleToUser=true]"),
                         rule(1, "跳过文本", TEXT_SKIP_SMALL)
@@ -162,7 +169,7 @@ object BuiltInRules {
             id = "eleme_splash",
             app = "me.ele",
             name = "饿了么",
-            groups = listOf(splashGroup(rules = listOf(rule(0, "跳过文本", TEXT_SKIP_SMALL))))
+            groups = listOf(splashGroup(matchTimeMs = matchTimeMs, rules = listOf(rule(0, "跳过文本", TEXT_SKIP_SMALL))))
         ),
         appRule(
             id = "jd_splash",
@@ -170,6 +177,7 @@ object BuiltInRules {
             name = "京东",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     rules = listOf(
                         rule(0, "穿山甲跳过按钮", "[visibleToUser=true][id$=\"tt_splash_skip_btn\"]"),
                         rule(1, "小尺寸跳过文本", TEXT_SKIP_SMALL)
@@ -183,6 +191,7 @@ object BuiltInRules {
             name = "拼多多",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     rules = listOf(
                         rule(0, "穿山甲跳过按钮", "[visibleToUser=true][id$=\"tt_splash_skip_btn\"]"),
                         rule(1, "小尺寸跳过文本", TEXT_SKIP_SMALL)
@@ -196,6 +205,7 @@ object BuiltInRules {
             name = "抖音",
             groups = listOf(
                 splashGroup(
+                    matchTimeMs = matchTimeMs,
                     rules = listOf(
                         rule(0, "穿山甲跳过按钮", "[visibleToUser=true][id$=\"tt_splash_skip_btn\"]"),
                         rule(1, "小尺寸跳过文本", TEXT_SKIP_SMALL)
@@ -210,8 +220,9 @@ object BuiltInRules {
     private fun appRule(id: String, app: String, name: String, groups: List<RuleGroup>): SkipRule =
         SkipRule(id = id, app = app, name = name, enabled = true, groups = groups)
 
-    /** 开屏规则组：10 秒匹配窗口 + 每次进入 App 仅执行一次 */
+    /** 开屏规则组：与监控窗口一致的匹配时间 + 每次进入 App 仅执行一次 */
     private fun splashGroup(
+        matchTimeMs: Long,
         activityIds: List<String> = emptyList(),
         rules: List<MatchRule>
     ): RuleGroup = RuleGroup(
@@ -219,7 +230,7 @@ object BuiltInRules {
         name = "开屏广告",
         order = 0,
         activityIds = activityIds,
-        matchTime = 10_000L,
+        matchTime = matchTimeMs,
         actionMaximum = 1,
         actionCd = ACTION_CD_MS,
         resetMatch = ResetMatch.APP,

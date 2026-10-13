@@ -6,6 +6,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -18,9 +19,48 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.ui.theme.InsetGroupedSection
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.SettingsRow
+
+/**
+ * 开屏跳过监控窗口选择行（5/10/15 秒）。
+ *
+ * 窗口同时是内置规则的时间闸门（见 `SkipConfig`）：弱网/冷启动下广告出得慢就调大，
+ * 但窗口越大，正常页面里的"跳过"按钮被误点的概率也越高。
+ */
+@Composable
+private fun WatchWindowRow(windowMs: Long, onSelect: (Long) -> Unit) {
+    Column(
+        modifier = Modifier.padding(
+            horizontal = MonitorSpacing.lg,
+            vertical = MonitorSpacing.md,
+        )
+    ) {
+        Text(
+            text = "监控窗口",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(MonitorSpacing.xxs))
+        Text(
+            text = "进入 App 后自动检测开屏广告的时长；广告出得慢（弱网/冷启动）就调大",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(MonitorSpacing.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm)) {
+            SkipConfig.WINDOW_OPTIONS_MS.forEach { option ->
+                FilterChip(
+                    selected = option == windowMs,
+                    onClick = { onSelect(option) },
+                    label = { Text("${option / 1000} 秒") },
+                )
+            }
+        }
+    }
+}
 
 /**
  * 无障碍服务状态文案。
@@ -46,6 +86,7 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val debugEnabled by viewModel.debugEnabled.collectAsState()
+    val watchWindowMs by viewModel.watchWindowMs.collectAsState()
 
     // 从系统「无障碍」设置页返回时立即刷新状态（不看 3 秒轮询的运气）
     LifecycleResumeEffect(Unit) {
@@ -142,6 +183,17 @@ fun SettingsScreen(
                         Button(onClick = onNavigateToWhitelist) {
                             Text("管理")
                         }
+                    }
+                )
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                WatchWindowRow(
+                    windowMs = watchWindowMs,
+                    onSelect = {
+                        viewModel.setWatchWindowMs(it)
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                     }
                 )
             }
