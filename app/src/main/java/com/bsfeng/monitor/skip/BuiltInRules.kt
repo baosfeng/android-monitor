@@ -27,7 +27,7 @@ import com.bsfeng.monitor.domain.model.SkipRule
 object BuiltInRules {
 
     /** 内置规则版本：内容有增删改时递增，触发本地规则合并（保留用户启停状态） */
-    const val BUILT_IN_VERSION = 8
+    const val BUILT_IN_VERSION = 9
 
     /** 全局规则 ID */
     const val GLOBAL_SPLASH_RULE_ID = "builtin_global_splash"
@@ -50,6 +50,25 @@ object BuiltInRules {
     /** 关闭广告文本特征（不含裸"关闭"，避免误触普通弹窗） */
     private const val CLOSE_AD_TEXT =
         "[childCount=0][visibleToUser=true][text.length<10][text*=\"关闭广告\"||desc*=\"关闭广告\"]"
+
+    /**
+     * QQ阅读开屏页 Activity（真机快照 `files/snapshots/1791906264682.json` 实测）。
+     *
+     * 注意：快照里的 Activity 名依赖 `ActivityNames` 过滤 widget 类事件——修复前它会被 Toast 冲成
+     * `android.widget.TextView`，按错误界面名写规则会一直不生效。
+     */
+    private const val QQ_READER_SPLASH_ACTIVITY = "com.qq.reader.activity.launch.DefaultAliasSplashActivity"
+
+    /**
+     * QQ阅读跳过按钮：`splash_root` 内的短文本叶子节点。
+     *
+     * 真机快照结构（2026-10-13）：`RelativeLayout[vid=splash_root] > TextView[text="跳过5"]`
+     * （189x84、clickable=true、childCount=0）；广告内容在
+     * `splash_root > splash_container > RelativeLayout[vid=ywad_gdt_splash_container]`
+     * （优量汇 SDK 容器，整屏且不可点——绝不能点它，面积守卫也会丢弃）。
+     */
+    private const val QQ_READER_SKIP_TEXT =
+        "[vid=\"splash_root\"] > TextView[text^=\"跳过\"][text.length<10][visibleToUser=true]"
 
     /** 小尺寸跳过按钮（限制宽高，进一步降低误触） */
     private const val TEXT_SKIP_SMALL =
@@ -122,6 +141,18 @@ object BuiltInRules {
     // ==================== 应用规则 ====================
 
     private fun appRules(matchTimeMs: Long): List<SkipRule> = listOf(
+        appRule(
+            id = "qq_reader_splash",
+            app = "com.qq.reader",
+            name = "QQ阅读",
+            groups = listOf(
+                splashGroup(
+                    matchTimeMs = matchTimeMs,
+                    activityIds = listOf(QQ_READER_SPLASH_ACTIVITY),
+                    rules = listOf(rule(0, "splash_root 内的跳过文本", QQ_READER_SKIP_TEXT))
+                )
+            )
+        ),
         appRule(
             id = "bilibili_splash",
             app = "tv.danmaku.bili",
