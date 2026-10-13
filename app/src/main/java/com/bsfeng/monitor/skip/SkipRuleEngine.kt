@@ -12,6 +12,7 @@ import com.bsfeng.monitor.domain.model.MatchRule
 import com.bsfeng.monitor.domain.model.ResetMatch
 import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
+import com.bsfeng.monitor.util.ActivityNames
 import com.bsfeng.monitor.util.DebugConfig
 
 /**
@@ -177,16 +178,21 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             return
         }
         val now = currentTimeMillis()
-        if (packageName != currentPackage) {
+        val appSwitched = packageName != currentPackage
+        // Toast/弹窗/输入法也会发 WINDOW_STATE_CHANGED，且 className 是 widget 类名（真机 30 份快照里
+        // 12 份如此）。直接采信会冲掉"当前 Activity"，让写了 activityIds 的规则静默失效 → 交给
+        // ActivityNames 判定：同 App 内保留已知 Activity，跨 App 清空。
+        val activityClass = ActivityNames.resolveActivityClass(currentClassName, className, appSwitched)
+        if (appSwitched) {
             resetAppState(packageName)
             currentPackage = packageName
             enterTimeMs = now
-            DebugConfig.log("SkipEngine: 进入 App " + packageName + " / " + className)
-        } else if (className != currentClassName) {
+            DebugConfig.log("SkipEngine: 进入 App " + packageName + " / " + activityClass)
+        } else if (activityClass != currentClassName) {
             resetActivityScopedCounters(packageName)
-            DebugConfig.log("SkipEngine: Activity 变化 " + className)
+            DebugConfig.log("SkipEngine: Activity 变化 " + activityClass)
         }
-        currentClassName = className
+        currentClassName = activityClass
         startWatching(now)
     }
 

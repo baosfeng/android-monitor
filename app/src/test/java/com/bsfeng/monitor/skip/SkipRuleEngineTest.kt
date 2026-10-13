@@ -297,6 +297,42 @@ class SkipRuleEngineTest {
         assertTrue("规则窗口过期后不得再执行", results.isEmpty())
     }
 
+    // ==================== Activity 名可靠性（Toast 不得冲掉 Activity） ====================
+
+    /**
+     * 回归防护（真机取证 2026-10-13：30 份页面快照里 12 份把 className 记成了 widget 类名）：
+     * Toast/弹窗也发 WINDOW_STATE_CHANGED 且 className 是 `android.widget.TextView`，
+     * 旧实现直接采信 → 写了 activityIds 的规则在 Toast 之后**静默失效**，晚到的广告点不到。
+     */
+    @Test
+    fun `窗口内出现 Toast 事件后仍能用 activityIds 规则命中晚到的广告`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), activityIds = listOf("com.test.app.MainActivity"))
+        var adVisible = false
+        rootProvider = {
+            if (adVisible) tree(listOf(node(text = "跳过广告"))) else tree(listOf(node(text = "首页")))
+        }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(300)                                                       // 首次扫描：广告还没渲染出来
+        engine.onWindowChanged(testPackage, "android.widget.TextView")     // Toast 抢走窗口事件
+        adVisible = true                                                   // 广告晚到
+        engine.onContentChanged(testPackage)
+        advance(300)
+
+        assertEquals("Toast 不得让 activityIds 规则失效", 1, results.size)
+    }
+
+    @Test
+    fun `首个窗口事件是 widget 类名时 activityIds 规则仍可命中`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), activityIds = listOf("com.test.app.MainActivity"))
+        rootProvider = { tree(listOf(node(text = "跳过广告"))) }
+
+        engine.onWindowChanged(testPackage, "android.widget.TextView")
+        advance(500)
+
+        assertEquals("Activity 未知时不得把规则锁死（否则整次启动漏检）", 1, results.size)
+    }
+
     // ==================== 点击后确认（P2-4） ====================
 
     @Test
