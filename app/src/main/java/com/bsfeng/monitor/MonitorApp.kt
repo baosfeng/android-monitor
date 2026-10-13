@@ -6,9 +6,15 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.util.Log
 import com.bsfeng.monitor.core.di.ServiceContainer
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
+import com.bsfeng.monitor.skip.GkdSubscription
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * 应用入口 — 初始化 DI 容器并注册系统广播接收器。
@@ -20,6 +26,9 @@ class MonitorApp : Application() {
 
     private lateinit var recordReceiver: RecordReceiver
 
+    /** 应用级协程作用域（一次性后台任务：订阅检查等） */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -28,6 +37,18 @@ class MonitorApp : Application() {
         registerWifiNetworkCallback()
         // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
         scheduleAlarmCheck(this)
+        checkSubscriptionUpdate()
+    }
+
+    /** 启动时后台检查一次规则订阅更新（未订阅或未到周期时立即返回，不发请求） */
+    private fun checkSubscriptionUpdate() {
+        appScope.launch {
+            try {
+                GkdSubscription.autoCheck(container.skipRuleManager)
+            } catch (e: Exception) {
+                Log.w(TAG, "订阅自动检查失败", e)
+            }
+        }
     }
 
     private fun registerRecordReceiver() {
@@ -82,6 +103,8 @@ class MonitorApp : Application() {
     }
 
     companion object {
+        private const val TAG = "MonitorApp"
+
         @Volatile
         lateinit var instance: MonitorApp
             private set

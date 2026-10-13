@@ -8,6 +8,7 @@ import android.os.PowerManager
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.domain.model.MatchAction
 import com.bsfeng.monitor.domain.model.MatchRule
 import com.bsfeng.monitor.domain.model.ResetMatch
 import com.bsfeng.monitor.domain.model.RuleGroup
@@ -70,6 +71,12 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
     /** matchDelay 到期时间（key 同上）：到期前该规则不参与执行 */
     private val pendingDelays = mutableMapOf<String, Long>()
+
+    /** actionDelay 确认时间（key 同上）：到期且**再次命中**才真正执行动作（GKD `actionDelay`） */
+    private val actionConfirmDelays = mutableMapOf<String, Long>()
+
+    /** 各规则组最近一次执行的规则 key（map key = ruleId#groupKey），用于 `preKeys` 顺序闸门 */
+    private val lastExecuted = mutableMapOf<String, Int>()
 
     /** 时钟与屏幕状态提供器（测试注入） */
     internal var currentTimeMillis: () -> Long = { System.currentTimeMillis() }
@@ -150,6 +157,8 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         counters.clear()
         cooldowns.clear()
         pendingDelays.clear()
+        actionConfirmDelays.clear()
+        lastExecuted.clear()
         stopWatching()
         if (packageName != null && packageName != currentPackage) {
             currentPackage = null
@@ -226,8 +235,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         for (group in rule.groups.sortedBy { it.order }) {
             if (!group.enabled || !activityMatches(group, packageName)) continue
             for (matchRule in group.rules) {
-                val key = rule.id + "#" + group.key + "#" + matchRule.key
-                val selector = applyMatchRule(group, matchRule, key, root, now) ?: continue
+                val selector = applyMatchRule(rule, group, matchRule, root, now) ?: continue
                 val ruleName = matchRule.name.ifEmpty { group.name }
                 return SkipResult(packageName, rule.name + "/" + ruleName, selector, matchRule.action.value)
             }
@@ -237,17 +245,18 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
     /** 执行单条匹配规则；返回命中的选择器 */
     private fun applyMatchRule(
+        rule: SkipRule,
         group: RuleGroup,
         matchRule: MatchRule,
-        key: String,
         root: AccessibilityNodeInfo,
         now: Long
     ): String? {
-        if (!ruleAllowed(group, matchRule, key, now)) return null
-        if (matchRule.action.value == "none") return null
+        val key = ruleKey(rule.id, group.key, matchRule.key)
+        if (!ruleAllowed(rule.id, group, matchRule, now)) return null
+        if (matchRule.action == MatchAction.NONE) return null
         if (anySelectorMatches(matchRule.excludeMatches, matchRule, root)) return null
         val target = findTarget(matchRule, root) ?: return null
-        if (!delaySatisfied(matchRule, key, now)) {
+        if (!delaySatisfied(matchRule, key, now) || !actionDelaySatisfied(matchRule, key, now)) {
             NodeMatcher.recycleAll(target.nodes)
             return null
         }
@@ -260,20 +269,76 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             DebugConfig.log("SkipEngine: 动作执行失败 " + key + " → " + target.selector)
             return null
         }
-        counters[key] = (counters[key] ?: 0) + 1
-        val cooldown = matchRule.actionCd ?: group.actionCd
-        if (cooldown > 0) cooldowns[key] = now + cooldown
+        recordExecution(rule.id, group, matchRule, now)
         return target.selector
     }
 
-    /** 规则是否可执行（窗口/次数/冷却/matchDelay） */
-    private fun ruleAllowed(group: RuleGroup, matchRule: MatchRule, key: String, now: Long): Boolean {
+    /**
+     * 规则是否可执行：匹配窗口、执行次数（含 [MatchRule.actionMaximumKey] 共享）、
+     * 冷却（含 [MatchRule.actionCdKey] 共享）、[MatchRule.preKeys] 顺序闸门。
+     */
+    private fun ruleAllowed(ruleId: String, group: RuleGroup, matchRule: MatchRule, now: Long): Boolean {
         val window = matchRule.matchTime ?: group.matchTime
         if (window > 0 && now - enterTimeMs > window) return false
         val limit = matchRule.actionMaximum ?: group.actionMaximum
-        if (limit > 0 && (counters[key] ?: 0) >= limit) return false
+        if (limit > 0) {
+            val used = counterKeys(ruleId, group.key, matchRule).maxOf { counters[it] ?: 0 }
+            if (used >= limit) return false
+        }
         val cooldown = matchRule.actionCd ?: group.actionCd
-        if (cooldown > 0 && now < (cooldowns[key] ?: 0L)) return false
+        if (cooldown > 0) {
+            val until = cooldownKeys(ruleId, group.key, matchRule).maxOf { cooldowns[it] ?: 0L }
+            if (now < until) return false
+        }
+        if (matchRule.preKeys.isNotEmpty()) {
+            val last = lastExecuted[groupScopeKey(ruleId, group.key)]
+            if (last == null || last !in matchRule.preKeys) return false
+        }
+        return true
+    }
+
+    /** 记录一次执行：写入计数、冷却与 preKeys 游标 */
+    private fun recordExecution(ruleId: String, group: RuleGroup, matchRule: MatchRule, now: Long) {
+        counterKeys(ruleId, group.key, matchRule).forEach { counters[it] = (counters[it] ?: 0) + 1 }
+        val cooldown = matchRule.actionCd ?: group.actionCd
+        if (cooldown > 0) {
+            cooldownKeys(ruleId, group.key, matchRule).forEach { cooldowns[it] = now + cooldown }
+        }
+        lastExecuted[groupScopeKey(ruleId, group.key)] = matchRule.key
+    }
+
+    private fun groupScopeKey(ruleId: String, groupKey: Int): String = ruleId + "#" + groupKey
+
+    private fun ruleKey(ruleId: String, groupKey: Int, key: Int): String = groupScopeKey(ruleId, groupKey) + "#" + key
+
+    /** 计数键：自身 + [MatchRule.actionMaximumKey] 共享键 */
+    private fun counterKeys(ruleId: String, groupKey: Int, matchRule: MatchRule): List<String> {
+        val keys = mutableListOf(ruleKey(ruleId, groupKey, matchRule.key))
+        matchRule.actionMaximumKey?.let { keys.add(ruleKey(ruleId, groupKey, it)) }
+        return keys.distinct()
+    }
+
+    /** 冷却键：自身 + [MatchRule.actionCdKey] 共享键 */
+    private fun cooldownKeys(ruleId: String, groupKey: Int, matchRule: MatchRule): List<String> {
+        val keys = mutableListOf(ruleKey(ruleId, groupKey, matchRule.key))
+        matchRule.actionCdKey?.let { keys.add(ruleKey(ruleId, groupKey, it)) }
+        return keys.distinct()
+    }
+
+    /**
+     * actionDelay 语义：命中后先等待，**到期且仍然命中**才执行动作（GKD `actionDelay`，抗误触）。
+     * 与 matchDelay 一样以实现为时间戳，不会被后续扫描取消。
+     */
+    private fun actionDelaySatisfied(matchRule: MatchRule, key: String, now: Long): Boolean {
+        if (matchRule.actionDelay <= 0) return true
+        val confirmAt = actionConfirmDelays[key]
+        if (confirmAt == null) {
+            actionConfirmDelays[key] = now + matchRule.actionDelay
+            DebugConfig.log("SkipEngine: 命中后等待 actionDelay=" + matchRule.actionDelay + "ms 复核 " + key)
+            return false
+        }
+        if (now < confirmAt) return false
+        actionConfirmDelays.remove(key)
         return true
     }
 
@@ -407,7 +472,11 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
                 group.rules.map { rule.id + "#" + group.key + "#" + it.key }
             }
         }
-        keys.forEach { counters.remove(it); pendingDelays.remove(it) }
+        keys.forEach {
+            counters.remove(it)
+            pendingDelays.remove(it)
+            actionConfirmDelays.remove(it)
+        }
     }
 
     private fun isWhitelisted(packageName: String): Boolean = try {

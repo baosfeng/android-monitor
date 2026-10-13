@@ -45,6 +45,7 @@ fun SkipRule.toJson(): JSONObject = JSONObject().apply {
     put("app", app)
     put("name", name)
     put("enabled", enabled)
+    put("excludedApps", JSONArray(excludedApps))
     put("groups", JSONArray(groups.map { it.toJson() }))
 }
 
@@ -58,6 +59,7 @@ fun parseSkipRule(json: JSONObject): SkipRule = SkipRule(
     app = readString(json, "app", ""),
     name = readString(json, "name", ""),
     enabled = readEnabled(json, true),
+    excludedApps = readStringList(json, "excludedApps"),
     groups = parseRuleGroups(json.opt("groups"))
 )
 
@@ -117,6 +119,9 @@ fun MatchRule.toJson(): JSONObject = JSONObject().apply {
     put("matchTime", matchTime ?: JSONObject.NULL)
     put("actionMaximum", actionMaximum ?: JSONObject.NULL)
     put("actionCd", actionCd ?: JSONObject.NULL)
+    put("actionCdKey", actionCdKey ?: JSONObject.NULL)
+    put("actionMaximumKey", actionMaximumKey ?: JSONObject.NULL)
+    put("preKeys", JSONArray(preKeys))
     put("fastQuery", fastQuery)
     put("position", position?.toJson() ?: JSONObject.NULL)
 }
@@ -141,9 +146,23 @@ fun parseMatchRule(json: JSONObject): MatchRule = MatchRule(
     matchTime = readOptionalLong(json, "matchTime"),
     actionMaximum = readOptionalInt(json, "actionMaximum"),
     actionCd = readOptionalLong(json, "actionCd"),
+    actionCdKey = readOptionalInt(json, "actionCdKey"),
+    actionMaximumKey = readOptionalInt(json, "actionMaximumKey"),
+    preKeys = readIntList(json, "preKeys"),
     fastQuery = readFastQuery(json, RULE_DEFAULTS.fastQuery),
     position = parseClickPosition(json.optJSONObject("position"))
 )
+
+/** 读取整数数组（用于 `preKeys`）；缺字段或元素非法时忽略该项。 */
+private fun readIntList(json: JSONObject, key: String): List<Int> {
+    val array = json.optJSONArray(key) ?: return emptyList()
+    val result = mutableListOf<Int>()
+    for (i in 0 until array.length()) {
+        val value = array.optInt(i, Int.MIN_VALUE)
+        if (value != Int.MIN_VALUE) result.add(value)
+    }
+    return result
+}
 
 /** 序列化自定义点击位置（归一化 0..1，存 Double 保证 Float 精确往返）。 */
 private fun ClickPosition.toJson(): JSONObject = JSONObject().apply {
@@ -205,7 +224,12 @@ private fun parseGkdApps(apps: JSONArray): List<SkipRule> =
         )
     }
 
-/** 把订阅的 `globalGroups[]` 转成全局规则；整个组对象即该规则唯一的规则组。 */
+/**
+ * 把订阅的 `globalGroups[]` 转成全局规则；整个组对象即该规则唯一的规则组。
+ *
+ * GKD 用组内的 `apps:[{id, enable:false}]` 声明"该全局规则在这些 App 上不生效"，
+ * 这里转成 [SkipRule.excludedApps]，由 [SkipRuleManager.findRulesFor] 过滤。
+ */
 private fun parseGkdGlobalGroups(groups: JSONArray): List<SkipRule> =
     (0 until groups.length()).mapNotNull { index ->
         val group = groups.optJSONObject(index) ?: return@mapNotNull null
@@ -215,9 +239,23 @@ private fun parseGkdGlobalGroups(groups: JSONArray): List<SkipRule> =
             app = SkipRule.GLOBAL_APP,
             name = readString(group, "name", "gkd_global_$key"),
             enabled = readEnabled(group, true),
+            excludedApps = parseGkdDisabledApps(group.opt("apps")),
             groups = listOf(parseRuleGroup(group))
         )
     }
+
+/** 解析 GKD 全局组的按应用开关：`enable == false` 的包名进入排除名单。 */
+private fun parseGkdDisabledApps(apps: Any?): List<String> {
+    val array = apps as? JSONArray ?: return emptyList()
+    val result = mutableListOf<String>()
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        val id = readString(item, "id", "")
+        if (id.isEmpty()) continue
+        if (!readEnabled(item, true)) result.add(id)
+    }
+    return result
+}
 
 // ==================== JSON / JSON5 读取辅助 ====================
 

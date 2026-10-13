@@ -44,6 +44,26 @@ object GkdSubscription {
         data class Failed(val reason: String) : Outcome
     }
 
+    /** 自动检查周期（毫秒，默认 1 天） */
+    const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
+
+    /**
+     * 定时检查并更新订阅（App 启动时调用）。
+     *
+     * 未添加订阅、或距上次检查不足 [CHECK_INTERVAL_MS] 时返回 null（不做任何网络请求）。
+     *
+     * @param manager 规则管理器
+     * @param now 当前时间（毫秒，便于测试）
+     */
+    fun autoCheck(manager: SkipRuleManager, now: Long = System.currentTimeMillis()): Outcome? {
+        val meta = manager.subscriptionMeta() ?: return null
+        if (now - manager.lastSubscriptionCheckAt() < CHECK_INTERVAL_MS) return null
+        manager.markSubscriptionChecked(now)
+        val outcome = update(manager, meta.url)
+        Log.i(TAG, "订阅自动检查: " + outcome)
+        return outcome
+    }
+
     /**
      * 拉取并更新订阅。
      *
@@ -118,13 +138,14 @@ object GkdSubscription {
         null
     }
 
-    private fun containsRules(root: Any?): Boolean {
+    /** 订阅根节点里是否直接包含规则（`apps`/`globalGroups`）；供快速判定与单测使用 */
+    internal fun containsRules(root: Any?): Boolean {
         val map = root as? Map<*, *> ?: return false
         return map["apps"] != null || map["globalGroups"] != null
     }
 
-    /** 解析 updateUrl/checkUpdateUrl（相对路径按订阅地址解析） */
-    private fun resolveUpdateUrl(root: Any?, baseUrl: String): String? {
+    /** 解析 updateUrl/checkUpdateUrl（相对路径按订阅地址解析；非 https 结果一律拒绝） */
+    internal fun resolveUpdateUrl(root: Any?, baseUrl: String): String? {
         val map = root as? Map<*, *> ?: return null
         val raw = (map["updateUrl"] ?: map["checkUpdateUrl"]) as? String ?: return null
         if (raw.isBlank()) return null

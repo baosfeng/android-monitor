@@ -1,7 +1,9 @@
 package com.bsfeng.monitor.skip
 
 import android.content.Context
+import com.bsfeng.monitor.skip.json.Json5Parser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -64,5 +66,63 @@ class GkdSubscriptionTest {
     fun `解析失败返回空列表`() {
         assertTrue(GkdSubscription.parseRules("{ 非法 json5 ").isEmpty())
         assertTrue(GkdSubscription.parseRules("[]").isEmpty())
+    }
+
+    // ==================== 定时检查（不发网络请求的分支） ====================
+
+    @Test
+    fun `未订阅时自动检查直接返回`() {
+        manager.resetToBuiltIn()
+        assertNull(GkdSubscription.autoCheck(manager, now = Long.MAX_VALUE))
+    }
+
+    @Test
+    fun `未到检查周期时不重复拉取`() {
+        manager.saveSubscription(
+            url = "https://example.com/gkd.json5",
+            version = 5L,
+            rules = emptyList()
+        )
+        manager.markSubscriptionChecked(1_000L)
+        assertNull("距上次检查不足 24 小时应跳过", GkdSubscription.autoCheck(manager, now = 2_000L))
+        assertEquals(1_000L, manager.lastSubscriptionCheckAt())
+    }
+
+    // ==================== 两级订阅地址解析 ====================
+
+    @Test
+    fun `相对 updateUrl 按订阅地址目录解析`() {
+        val root = Json5Parser.parse("{id:1, version:2, updateUrl:'./gkd.json5'}")
+        val resolved = GkdSubscription.resolveUpdateUrl(root, "https://cdn.example.com/dir/ver.json5")
+        assertEquals("https://cdn.example.com/dir/gkd.json5", resolved)
+    }
+
+    @Test
+    fun `绝对 https updateUrl 原样返回`() {
+        val root = Json5Parser.parse("{checkUpdateUrl:'https://cdn.example.com/a/gkd.json5'}")
+        assertEquals(
+            "https://cdn.example.com/a/gkd.json5",
+            GkdSubscription.resolveUpdateUrl(root, "https://cdn.example.com/ver.json5")
+        )
+    }
+
+    @Test
+    fun `http 的 updateUrl 被拒绝`() {
+        val root = Json5Parser.parse("{updateUrl:'http://cdn.example.com/gkd.json5'}")
+        assertNull(GkdSubscription.resolveUpdateUrl(root, "https://cdn.example.com/ver.json5"))
+    }
+
+    @Test
+    fun `缺少 updateUrl 返回空`() {
+        assertNull(GkdSubscription.resolveUpdateUrl(Json5Parser.parse("{id:1, version:2}"), "https://x/y.json5"))
+        assertNull(GkdSubscription.resolveUpdateUrl(null, "https://x/y.json5"))
+    }
+
+    @Test
+    fun `包含 apps 或 globalGroups 的订阅无需二次跳转`() {
+        assertTrue(GkdSubscription.containsRules(Json5Parser.parse("{apps:[]}")))
+        assertTrue(GkdSubscription.containsRules(Json5Parser.parse("{globalGroups:[]}")))
+        assertFalse(GkdSubscription.containsRules(Json5Parser.parse("{id:1, version:2}")))
+        assertFalse(GkdSubscription.containsRules(null))
     }
 }
