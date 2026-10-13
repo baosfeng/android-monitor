@@ -32,6 +32,8 @@ import com.bsfeng.monitor.util.DebugConfig
  *   `actionCd` 限制最小间隔；`excludeMatches` 排除误触场景
  * - 熄屏（Dozing）时不做任何点击
  * - 白名单 App 完全不处理
+ * - **点击后确认**（[verifyDelaysMs]）：动作执行后再用同一选择器复核一次，广告没消失就标为
+ *   "未确认"（避免点到装饰性节点也算"跳过成功"，成功率数字才可信）
  *
  * ## 与旧实现的差异（修复的缺陷）
  * - `matchDelay` 改为"到期标记"（[pendingDelays]），不再用 Handler 取消/重投，避免被
@@ -40,12 +42,18 @@ import com.bsfeng.monitor.util.DebugConfig
  */
 class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
-    /** 一次成功跳过 */
+    /**
+     * 一次跳过动作的结果。
+     *
+     * @param confirmed 点击后确认结果：true = 复核时广告已消失；false = 复核时仍在；
+     *   null = 未做复核（[verifyDelaysMs] 为空，如单元测试）
+     */
     data class SkipResult(
         val packageName: String,
         val ruleName: String,
         val selector: String,
-        val action: String
+        val action: String,
+        val confirmed: Boolean? = null
     )
 
     private val handler = Handler(Looper.getMainLooper())
@@ -84,6 +92,24 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
     /** 匹配窗口提供器（毫秒；默认取用户配置 [SkipConfig.watchWindowMs]，测试可注入） */
     internal var watchWindowProvider: () -> Long = { SkipConfig.watchWindowMs }
+
+    /**
+     * 点击后确认的复核延时表（毫秒）：第 i 项是第 i 次复核前的等待时间。
+     *
+     * 空列表 = 不做复核（动作执行后立即上报，`confirmed = null`）。
+     */
+    internal var verifyDelaysMs: List<Long> = VERIFY_DELAYS.toList()
+
+    /** 待确认的跳过动作（复核期间只做复核，不再执行任何规则，避免重复点击） */
+    private var pendingVerify: PendingVerify? = null
+
+    private class PendingVerify(
+        val result: SkipResult,
+        val selector: String,
+        val fastQuery: Boolean,
+        var attempt: Int,
+        var dueAt: Long
+    )
 
     private val scanTask = Runnable { performScan() }
 
@@ -147,6 +173,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         watching = false
         handler.removeCallbacks(scanTask)
         scanCount = 0
+        pendingVerify = null
     }
 
     /** 当前是否处于匹配窗口内 */
@@ -196,6 +223,15 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             stopWatching()
             return
         }
+        // 点击后确认优先：复核期间不执行任何规则（否则同一条广告可能被点多次）
+        pendingVerify?.let { pv ->
+            if (now < pv.dueAt) {
+                schedule(pv.dueAt - now)
+                return
+            }
+            verifyAndFinish(pv, now)
+            return
+        }
         if (now - enterTimeMs > watchWindowProvider() || scanCount >= MAX_SCANS) {
             DebugConfig.log("SkipEngine: 匹配窗口结束 " + pkg + " (扫描 " + scanCount + " 次)")
             stopWatching()
@@ -208,22 +244,84 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
             schedule(BACKUP_SCAN_INTERVAL_MS)
             return
         }
-        val result = try {
+        val hit = try {
             applyRules(pkg, root, now)
         } finally {
             root.recycle()
         }
-        if (result != null) {
-            Log.d(TAG, "✅ 跳过成功: " + pkg + " ← " + result.selector)
-            onSkipSuccess?.invoke(result)
-            stopWatching()
+        if (hit != null) {
+            startVerification(hit, now)
             return
         }
         schedule(BACKUP_SCAN_INTERVAL_MS)
     }
 
+    /**
+     * 动作已执行：安排「点击后确认」（P2-4）。
+     *
+     * 跳过按钮点了不等于广告真的消失（点到装饰性节点、点了没反应、广告换了容器都会误判成功），
+     * 因此延迟 [verifyDelaysMs] 后重新用同一选择器复核：命中不到才算"已确认"。
+     */
+    private fun startVerification(hit: Hit, now: Long) {
+        val delays = verifyDelaysMs
+        if (delays.isEmpty()) {
+            finishSkip(hit.result)
+            return
+        }
+        pendingVerify = PendingVerify(hit.result, hit.result.selector, hit.matchRule.fastQuery, 0, now + delays[0])
+        DebugConfig.log("SkipEngine: 动作已执行，等待 " + delays[0] + "ms 确认广告是否消失 → " + hit.result.selector)
+        schedule(delays[0])
+    }
+
+    /**
+     * 复核：用命中的选择器重新匹配，命中不到则确认跳过成功。
+     *
+     * 复核失败（广告仍在 / 根节点不可用）时还有剩余复核次数就再等一轮——
+     * 广告消失通常有几十到几百毫秒的动画延迟。
+     */
+    private fun verifyAndFinish(pv: PendingVerify, now: Long) {
+        val root = rootNodeProvider?.invoke()
+        var confirmed: Boolean? = null
+        if (root != null) {
+            try {
+                val nodes = query(pv.selector, pv.fastQuery, root)
+                if (nodes != null) {
+                    val stillMatched = nodes.isNotEmpty()
+                    NodeMatcher.recycleAll(nodes)
+                    confirmed = !stillMatched
+                }
+            } finally {
+                root.recycle()
+            }
+        }
+        val delays = verifyDelaysMs
+        if (confirmed != true && pv.attempt + 1 < delays.size) {
+            pv.attempt++
+            pv.dueAt = now + delays[pv.attempt]
+            DebugConfig.log("SkipEngine: 复核未通过（广告仍在或根节点不可用），" + delays[pv.attempt] + "ms 后再复核一次")
+            schedule(delays[pv.attempt])
+            return
+        }
+        finishSkip(pv.result.copy(confirmed = confirmed))
+    }
+
+    /** 上报跳过结果并结束窗口 */
+    private fun finishSkip(result: SkipResult) {
+        pendingVerify = null
+        when (result.confirmed) {
+            true -> Log.d(TAG, "✅ 跳过成功（已确认广告消失）: " + result.packageName + " ← " + result.selector)
+            false -> Log.d(TAG, "⚠️ 跳过未确认（点完广告仍在）: " + result.packageName + " ← " + result.selector)
+            null -> Log.d(TAG, "✅ 跳过成功: " + result.packageName + " ← " + result.selector)
+        }
+        onSkipSuccess?.invoke(result)
+        stopWatching()
+    }
+
+    /** 一次命中：结果 + 用于确认复核的匹配规则 */
+    private class Hit(val result: SkipResult, val matchRule: MatchRule)
+
     /** 依次尝试匹配规则；返回命中的结果 */
-    private fun applyRules(packageName: String, root: AccessibilityNodeInfo, now: Long): SkipResult? {
+    private fun applyRules(packageName: String, root: AccessibilityNodeInfo, now: Long): Hit? {
         val rules = ruleManager.findRulesFor(packageName)
             .sortedWith(compareBy({ if (it.isGlobal) 1 else 0 }, { it.id }))
         for (rule in rules) {
@@ -234,13 +332,14 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         return null
     }
 
-    private fun applyRule(rule: SkipRule, packageName: String, root: AccessibilityNodeInfo, now: Long): SkipResult? {
+    private fun applyRule(rule: SkipRule, packageName: String, root: AccessibilityNodeInfo, now: Long): Hit? {
         for (group in rule.groups.sortedBy { it.order }) {
             if (!group.enabled || !activityMatches(group, packageName)) continue
             for (matchRule in group.rules) {
                 val selector = applyMatchRule(rule, group, matchRule, root, now) ?: continue
                 val ruleName = matchRule.name.ifEmpty { group.name }
-                return SkipResult(packageName, rule.name + "/" + ruleName, selector, matchRule.action.value)
+                val result = SkipResult(packageName, rule.name + "/" + ruleName, selector, matchRule.action.value)
+                return Hit(result, matchRule)
             }
         }
         return null
@@ -403,8 +502,11 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         return Target(target, lastSelector, lastNodes)
     }
 
-    private fun query(expr: String, matchRule: MatchRule, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? {
-        val selector = SelectorCache.get(expr, matchRule.fastQuery) ?: return null
+    private fun query(expr: String, matchRule: MatchRule, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? =
+        query(expr, matchRule.fastQuery, root)
+
+    private fun query(expr: String, fastQuery: Boolean, root: AccessibilityNodeInfo): List<AccessibilityNodeInfo>? {
+        val selector = SelectorCache.get(expr, fastQuery) ?: return null
         return NodeMatcher.find(root, selector)
     }
 
@@ -509,5 +611,11 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
         /** 单次窗口内的扫描次数上限（护栏，防止异常场景空转） */
         const val MAX_SCANS = 80
+
+        /**
+         * 点击后确认的复核延时（毫秒）：第一次 400ms 后复核，未通过再等 600ms 复核一次。
+         * 广告消失有动画延迟，太快复核会把"正在消失"误判成"没点掉"。
+         */
+        val VERIFY_DELAYS: List<Long> = listOf(400L, 600L)
     }
 }

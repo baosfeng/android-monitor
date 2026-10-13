@@ -14,21 +14,31 @@ object SkipEventRecorder {
     private const val TL = "MonitorTimeline"
 
     /**
-     * 记录一次成功的跳过操作。
+     * 记录一次跳过操作。
+     *
+     * @param confirmed 点击后确认结果：true 已确认（广告消失）/ false 未确认（广告仍在）/
+     *   null 未做复核
      */
     fun recordSkip(
         packageName: String,
         appName: String,
         selectorExpr: String,
-        className: String?
+        className: String?,
+        confirmed: Boolean? = null
     ) {
-        Log.d(TAG, "记录跳过事件: $appName ($packageName)")
-        Log.d(TL, "⏭️ 跳过广告: $appName <- $selectorExpr")
+        val suffix = when (confirmed) {
+            true -> "（已确认）"
+            false -> "（未确认）"
+            null -> ""
+        }
+        Log.d(TAG, "记录跳过事件: $appName ($packageName)$suffix")
+        Log.d(TL, "⏭️ 跳过广告: $appName <- $selectorExpr$suffix")
 
         MonitorApp.instance.container.recordCollector.onSkipAd(
             appName = appName,
             packageName = packageName,
-            selectorExpr = selectorExpr
+            selectorExpr = selectorExpr,
+            confirmed = confirmed
         )
     }
 }

@@ -20,7 +20,9 @@ data class SkipRecord(
     val packageName: String,
     val timestampMs: Long,
     val selector: String,
-    val summary: String
+    val summary: String,
+    /** 点击后确认结果：true 已确认广告消失 / false 未确认 / null 未复核（旧版本记录） */
+    val confirmed: Boolean? = null
 )
 
 /**
@@ -37,6 +39,10 @@ class AdViewModel : ViewModel() {
 
     private val _totalCount = MutableStateFlow(0)
     val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
+
+    /** 其中"点击后确认广告消失"的条数（成功率才可信） */
+    private val _confirmedCount = MutableStateFlow(0)
+    val confirmedCount: StateFlow<Int> = _confirmedCount.asStateFlow()
 
     init {
         loadData()
@@ -57,16 +63,19 @@ class AdViewModel : ViewModel() {
                     RecordType.SCREEN, "AD_SKIPPED", todayStart, System.currentTimeMillis()
                 )
 
-                _skipRecords.value = skipEvents.map { record ->
+                val records = skipEvents.map { record ->
                     SkipRecord(
                         appName = record.detail?.get("app_name") ?: "",
                         packageName = record.detail?.get("package_name") ?: "",
                         timestampMs = record.timestamp,
                         selector = record.detail?.get("selector") ?: "",
-                        summary = record.label
+                        summary = record.label,
+                        confirmed = record.detail?.get("confirmed")?.toBoolean()
                     )
                 }
-                _totalCount.value = skipEvents.size
+                _skipRecords.value = records
+                _totalCount.value = records.size
+                _confirmedCount.value = records.count { it.confirmed == true }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -81,6 +90,7 @@ class AdViewModel : ViewModel() {
                 store.deleteByAction("AD_SKIPPED")
                 _skipRecords.value = emptyList()
                 _totalCount.value = 0
+                _confirmedCount.value = 0
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -33,6 +33,7 @@ fun AdScreen(
 ) {
     val records by adViewModel.skipRecords.collectAsState()
     val totalCount by adViewModel.totalCount.collectAsState()
+    val confirmedCount by adViewModel.confirmedCount.collectAsState()
 
     LaunchedEffect(Unit) {
         adViewModel.loadData()
@@ -61,7 +62,8 @@ fun AdScreen(
                             animationSpec = tween(durationMillis = 600),
                         )
                         Text(
-                            "累计跳过 ${animatedCount} 次",
+                            text = "累计跳过 " + animatedCount + " 次" +
+                                if (confirmedCount > 0) "（已确认 " + confirmedCount + " 次）" else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -187,7 +189,11 @@ private fun TimelineItem(record: SkipRecord) {
             )
             Spacer(Modifier.height(MonitorSpacing.xxs))
             Text(
-                text = "已自动跳过开屏广告",
+                text = when (record.confirmed) {
+                    true -> "已自动跳过开屏广告（已确认）"
+                    false -> "已点击跳过按钮，但广告仍在（未确认）"
+                    null -> "已自动跳过开屏广告"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

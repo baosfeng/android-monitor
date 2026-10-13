@@ -62,6 +62,9 @@ class SkipRuleEngineTest {
             screenInteractive = { interactive }
             setRootNodeProvider { rootProvider() }
             onSkipSuccess = { results.add(it) }
+            // 默认关闭「点击后确认」，否则每个用例都要多等复核延时；
+            // 复核行为由「点击后确认」小节里的专门用例覆盖
+            verifyDelaysMs = emptyList()
         }
     }
 
@@ -70,6 +73,21 @@ class SkipRuleEngineTest {
     private fun advance(ms: Long) {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
         clock += ms
+    }
+
+    /**
+     * 小步推进虚拟时钟。
+     *
+     * 引擎的 `now` 只在 [advance] 返回后才前进，因此"等待 400ms 再复核"这类逻辑必须小步走：
+     * 一次大跳会让引擎在整个 idle 期间都看到旧时间，反复重排复核任务而永不到期。
+     */
+    private fun advanceSteps(totalMs: Long, stepMs: Long = 50L) {
+        var remaining = totalMs
+        while (remaining > 0) {
+            val step = minOf(stepMs, remaining)
+            advance(step)
+            remaining -= step
+        }
     }
 
     private fun node(
@@ -256,6 +274,80 @@ class SkipRuleEngineTest {
         engine.onContentChanged(testPackage)
         advance(1_000)
         assertTrue("规则窗口过期后不得再执行", results.isEmpty())
+    }
+
+    // ==================== 点击后确认（P2-4） ====================
+
+    @Test
+    fun `点击后广告消失则标记为已确认`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        engine.verifyDelaysMs = listOf(400L)
+        var adVisible = true
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else tree(listOf(node(text = "首页"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(50)              // 首次扫描 → 命中并点击 → 进入确认等待
+        adVisible = false        // 广告消失
+        advanceSteps(800)        // 到点复核
+
+        assertEquals(1, results.size)
+        assertEquals(true, results.first().confirmed)
+    }
+
+    @Test
+    fun `点击后广告仍在则标记为未确认`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        engine.verifyDelaysMs = listOf(300L)
+        rootProvider = { tree(listOf(node(text = "跳过广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advanceSteps(800)
+
+        assertEquals(1, results.size)
+        assertEquals(false, results.first().confirmed)
+    }
+
+    @Test
+    fun `复核期内再复核一次，消失后仍算已确认`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        engine.verifyDelaysMs = listOf(300L, 300L)
+        var adVisible = true
+        rootProvider = { if (adVisible) tree(listOf(node(text = "跳过广告"))) else tree(listOf(node(text = "首页"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(50)           // 点击 → 第一次复核在 +300ms
+        advanceSteps(500)     // 第一次复核：广告仍在 → 安排了第二次复核
+        assertTrue("复核未结束不得上报", results.isEmpty())
+        adVisible = false
+        advanceSteps(800)     // 第二次复核：广告已消失
+
+        assertEquals(1, results.size)
+        assertEquals(true, results.first().confirmed)
+    }
+
+    @Test
+    fun `复核期间不会重复点击（即使规则允许无限次）`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"), actionCd = 0L, actionMaximum = 0)
+        engine.verifyDelaysMs = listOf(1_000L)
+        rootProvider = { tree(listOf(node(text = "跳过广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(50)              // 命中并点击
+        advanceSteps(2_000)      // 复核期间（1 秒）+ 复核结束后
+
+        assertEquals("复核期间不得再次执行规则", 1, results.size)
+    }
+
+    @Test
+    fun `未启用确认时直接上报且不带确认标记`() {
+        addRule(matches = listOf("[text=\"跳过广告\"]"))
+        rootProvider = { tree(listOf(node(text = "跳过广告"))) }
+
+        engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
+        advance(50)
+
+        assertEquals(1, results.size)
+        assertNull(results.first().confirmed)
     }
 
     // ==================== P2-2 监控窗口可配置 ====================
