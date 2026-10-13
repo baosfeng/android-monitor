@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,6 +20,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
 import com.bsfeng.monitor.ui.theme.InsetGroupedCard
 import com.bsfeng.monitor.ui.theme.IOSNavigationBar
@@ -270,41 +273,137 @@ private fun RuleItem(
     onToggle: () -> Unit,
 ) {
     val view = LocalView.current
+    // 展开后显示每条匹配规则的选择器：排查"为什么没跳/为什么误点"的唯一入口
+    var expanded by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = rule.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = rule.app,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = MonitorSpacing.xxs),
-                )
-                Text(
-                    text = "${rule.groups.size} 组规则 · ${rule.groups.sumOf { it.rules.size }} 条匹配",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = MonitorSpacing.xxs),
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        expanded = !expanded
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    }
+                    .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = rule.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = rule.app,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = MonitorSpacing.xxs),
+                    )
+                    Text(
+                        text = "${rule.groups.size} 组规则 · ${rule.groups.sumOf { it.rules.size }} 条匹配 · " +
+                            if (expanded) "收起 ▴" else "展开 ▾",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = MonitorSpacing.xxs),
+                    )
+                }
+                Spacer(Modifier.width(MonitorSpacing.sm))
+                Switch(
+                    checked = rule.enabled,
+                    onCheckedChange = {
+                        onToggle()
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    },
                 )
             }
-            Spacer(Modifier.width(MonitorSpacing.sm))
-            Switch(
-                checked = rule.enabled,
-                onCheckedChange = {
-                    onToggle()
-                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                },
-            )
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(
+                        start = MonitorSpacing.lg,
+                        end = MonitorSpacing.lg,
+                        bottom = MonitorSpacing.md,
+                    )
+                ) {
+                    rule.groups.sortedBy { it.order }.forEach { group ->
+                        RuleGroupDetail(group)
+                    }
+                }
+            }
         }
     }
+}
+
+/**
+ * 规则组明细：闸门参数 + 每条匹配规则的选择器。
+ *
+ * 排查用：真机上「跳不过 / 误触」时先看这里——
+ * 时间闸门（matchTime）是否留足、activityIds 是否限定了界面、选择器到底匹配什么。
+ */
+@Composable
+private fun RuleGroupDetail(group: RuleGroup) {
+    Column(modifier = Modifier.padding(bottom = MonitorSpacing.sm)) {
+        Text(
+            text = group.name.ifEmpty { "规则组" } + (if (group.enabled) "" else "（已停用）"),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = groupScopeText(group),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = MonitorSpacing.xxs),
+        )
+        group.rules.forEach { matchRule ->
+            Text(
+                text = matchRuleText(matchRule),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = MonitorSpacing.sm),
+            )
+            selectorLines(matchRule).forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = MonitorSpacing.sm, top = MonitorSpacing.xxs),
+                )
+            }
+        }
+    }
+}
+
+/** 规则组作用域与闸门摘要 */
+internal fun groupScopeText(group: RuleGroup): String {
+    val window = if (group.matchTime > 0) "matchTime=" + (group.matchTime / 1000) + "s" else "matchTime=不限"
+    val scope = if (group.activityIds.isEmpty()) "界面=全部" else "界面=" + group.activityIds.joinToString("|")
+    val excluded = if (group.excludeActivityIds.isEmpty()) "" else " · 排除界面=" + group.excludeActivityIds.joinToString("|")
+    return window + " · actionMaximum=" + group.actionMaximum + " · actionCd=" + group.actionCd + "ms" +
+        " · reset=" + group.resetMatch.value + " · " + scope + excluded
+}
+
+/** 单条匹配规则的摘要（动作 + 非常规闸门） */
+internal fun matchRuleText(matchRule: MatchRule): String {
+    val guards = mutableListOf<String>()
+    if (matchRule.matchDelay > 0) guards.add("matchDelay=" + matchRule.matchDelay + "ms")
+    if (matchRule.actionDelay > 0) guards.add("actionDelay=" + matchRule.actionDelay + "ms")
+    matchRule.matchTime?.let { guards.add("matchTime=" + (it / 1000) + "s") }
+    matchRule.actionMaximum?.let { guards.add("actionMaximum=" + it) }
+    matchRule.actionCd?.let { guards.add("actionCd=" + it + "ms") }
+    matchRule.actionMaximumKey?.let { guards.add("actionMaximumKey=" + it) }
+    matchRule.actionCdKey?.let { guards.add("actionCdKey=" + it) }
+    if (matchRule.preKeys.isNotEmpty()) guards.add("preKeys=" + matchRule.preKeys.joinToString(","))
+    if (!matchRule.fastQuery) guards.add("fastQuery=false")
+    val name = "#" + matchRule.key + " " + matchRule.name.ifEmpty { "未命名" } + " · " + matchRule.action.value
+    return if (guards.isEmpty()) name else name + "（" + guards.joinToString(" · ") + "）"
+}
+
+/** 选择器明细：matches 全命中才动作，anyMatches 任一命中即动作，excludeMatches 命中则放弃 */
+internal fun selectorLines(matchRule: MatchRule): List<String> {
+    val lines = mutableListOf<String>()
+    matchRule.matches.forEach { lines.add("matches: " + it) }
+    matchRule.anyMatches.forEach { lines.add("any: " + it) }
+    matchRule.excludeMatches.forEach { lines.add("exclude: " + it) }
+    if (lines.isEmpty()) lines.add("（无选择器）")
+    return lines
 }
