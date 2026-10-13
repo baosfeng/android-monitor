@@ -17,9 +17,22 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.bsfeng.monitor.ui.theme.InsetGroupedSection
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.SettingsRow
+
+/**
+ * 无障碍服务状态文案。
+ *
+ * 「已开启但服务未连接」（刚 install -r、系统 UI 重建等场景）单独提示，
+ * 避免用户误以为服务没生效而反复去系统设置里开关。
+ */
+private fun accessibilitySubtitle(state: MonitorState): String = when {
+    state.accessibilityServiceRunning -> "✅ 已开启"
+    state.accessibilityEnabled -> "✅ 已开启（服务未连接，稍候或重进 App 生效）"
+    else -> "❌ 未开启"
+}
 
 @Composable
 fun SettingsScreen(
@@ -33,6 +46,12 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val debugEnabled by viewModel.debugEnabled.collectAsState()
+
+    // 从系统「无障碍」设置页返回时立即刷新状态（不看 3 秒轮询的运气）
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshAccessibilityStatus()
+        onPauseOrDispose { }
+    }
 
     LazyColumn(modifier = modifier.fillMaxSize()) {
         // 标题
@@ -53,7 +72,7 @@ fun SettingsScreen(
             InsetGroupedSection {
                 SettingsRow(
                     title = "无障碍服务",
-                    subtitle = if (state.accessibilityEnabled) "✅ 已开启" else "❌ 未开启",
+                    subtitle = accessibilitySubtitle(state),
                     subtitleColor = if (state.accessibilityEnabled)
                         MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     trailing = {
