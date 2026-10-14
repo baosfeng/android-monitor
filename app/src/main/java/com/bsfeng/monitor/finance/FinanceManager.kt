@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  * 提供协程友好的 API，所有 IO 操作在 Dispatchers.IO 执行。
  * 通过 FinanceDao 访问数据，追加业务规则。
  */
-class FinanceManager private constructor(context: Context) {
+class FinanceManager internal constructor(context: Context) {
 
     private val dbHelper = FinanceDatabaseHelper.getInstance(context)
     val dao = FinanceDao(dbHelper)
@@ -129,8 +129,23 @@ class FinanceManager private constructor(context: Context) {
 
     // ========== 预算 ==========
 
+    /**
+     * 获取某月预算，并用当月**实际支出**回填 [Budget.spentAmount]。
+     *
+     * 存储中的 spent_amount 是导入时的历史快照（熊猫记账的 pay 字段），
+     * 若直接使用，预算进度条会长期停在陈旧值上。
+     */
     suspend fun getMonthlyBudget(yearMonth: String): List<Budget> = withContext(Dispatchers.IO) {
-        dao.getBudgetsByMonth(yearMonth)
+        val budgets = dao.getBudgetsByMonth(yearMonth)
+        if (budgets.isEmpty()) return@withContext emptyList()
+
+        val expenseTotal = dao.getMonthlyExpenseTotal(yearMonth)
+        val breakdown = dao.getMonthlyCategoryBreakdown(yearMonth, TYPE_EXPENSE)
+        budgets.map { budget ->
+            val spent = if (budget.isOverall) expenseTotal
+            else breakdown[budget.categoryName] ?: 0.0
+            budget.copy(spentAmount = spent)
+        }
     }
 
     suspend fun setBudget(month: String, categoryName: String, amount: Double) = withContext(Dispatchers.IO) {
@@ -148,6 +163,12 @@ class FinanceManager private constructor(context: Context) {
     }
 
     companion object {
+        /** 交易类型：支出 */
+        const val TYPE_EXPENSE = 0
+
+        /** 交易类型：收入 */
+        const val TYPE_INCOME = 1
+
         @Volatile
         private var INSTANCE: FinanceManager? = null
 
