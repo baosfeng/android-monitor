@@ -39,8 +39,11 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.BackHandler
+import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
+import com.bsfeng.monitor.finance.ui.BudgetScreen
 import com.bsfeng.monitor.finance.ui.FinanceMainScreen
+import com.bsfeng.monitor.finance.ui.FinanceStatsScreen
 import com.bsfeng.monitor.finance.ui.ImportScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
 import com.bsfeng.monitor.ui.MainScreen
@@ -60,7 +63,9 @@ class MainActivity : ComponentActivity() {
     private sealed class FinanceRoute {
         data object Main : FinanceRoute()
         data class AddTransaction(val fromMonth: String) : FinanceRoute()
-        data class Stats(val fromMonth: String) : FinanceRoute()
+        data class EditTransaction(val transaction: Transaction) : FinanceRoute()
+        data object Stats : FinanceRoute()
+        data object Budget : FinanceRoute()
         data object Import : FinanceRoute()
     }
 
@@ -84,6 +89,11 @@ class MainActivity : ComponentActivity() {
                 var showSkipRuleScreen by remember { mutableStateOf(false) }
                 var showWhitelistScreen by remember { mutableStateOf(false) }
                 val view = LocalView.current
+
+                // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到记账首页
+                BackHandler(enabled = selectedTab == 2 && financeRoute != FinanceRoute.Main) {
+                    financeRoute = FinanceRoute.Main
+                }
 
                 val tabs = remember {
                     listOf(
@@ -158,6 +168,11 @@ class MainActivity : ComponentActivity() {
                                         onImportClick = {
                                             financeRoute = FinanceRoute.Import
                                         },
+                                        onEditClick = { tx ->
+                                            financeRoute = FinanceRoute.EditTransaction(tx)
+                                        },
+                                        onStatsClick = { financeRoute = FinanceRoute.Stats },
+                                        onBudgetClick = { financeRoute = FinanceRoute.Budget },
                                         modifier = Modifier.fillMaxSize()
                                     )
                                     is FinanceRoute.AddTransaction -> AddTransactionScreen(
@@ -169,6 +184,34 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onDismiss = { financeRoute = FinanceRoute.Main }
                                     )
+                                    is FinanceRoute.EditTransaction -> AddTransactionScreen(
+                                        categories = financeViewModel.categories.collectAsState().value,
+                                        accounts = financeViewModel.accounts.collectAsState().value,
+                                        editing = route.transaction,
+                                        onSave = { tx ->
+                                            financeViewModel.updateTransaction(tx)
+                                            financeRoute = FinanceRoute.Main
+                                        },
+                                        onDelete = { tx ->
+                                            financeViewModel.deleteTransaction(tx.id)
+                                            financeRoute = FinanceRoute.Main
+                                        },
+                                        onDismiss = { financeRoute = FinanceRoute.Main }
+                                    )
+                                    is FinanceRoute.Stats -> FinanceStatsScreen(
+                                        currentMonth = financeViewModel.currentMonth.collectAsState().value,
+                                        stats = financeViewModel.monthlyStats.collectAsState().value,
+                                        categoryBreakdown = financeViewModel.categoryBreakdown.collectAsState().value,
+                                        onPreviousMonth = { financeViewModel.previousMonth() },
+                                        onNextMonth = { financeViewModel.nextMonth() },
+                                        onBack = { financeRoute = FinanceRoute.Main },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    is FinanceRoute.Budget -> BudgetScreen(
+                                        viewModel = financeViewModel,
+                                        onBack = { financeRoute = FinanceRoute.Main },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                     is FinanceRoute.Import -> ImportScreen(
                                         importing = financeViewModel.importing.collectAsState().value,
                                         importResult = financeViewModel.importResult.collectAsState().value,
@@ -176,7 +219,6 @@ class MainActivity : ComponentActivity() {
                                         onDismiss = { financeRoute = FinanceRoute.Main },
                                         onClearResult = { financeViewModel.clearImportResult() }
                                     )
-                                    else -> {}
                                 }
                             }
                             3 -> SettingsScreen(
