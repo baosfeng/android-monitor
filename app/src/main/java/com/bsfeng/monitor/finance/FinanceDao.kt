@@ -207,14 +207,21 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
 
     // ========== Category ==========
 
-    /** 批量插入分类（去重，事务） */
-    fun insertCategories(categories: List<Category>) {
+    /**
+     * 批量插入分类（去重，事务）。
+     *
+     * @return 实际新增的分类数量；已存在的同名分类（UNIQUE(name) 冲突）不计入
+     */
+    fun insertCategories(categories: List<Category>): Int {
+        if (categories.isEmpty()) return 0
         val db = dbHelper.writableDatabase
+        var inserted = 0
         db.beginTransaction()
         try {
             for (cat in categories) {
                 try {
                     db.insertOrThrow(CategoryEntity.TABLE_NAME, null, CategoryEntity.toContentValues(cat))
+                    inserted++
                 } catch (_: SQLiteConstraintException) {
                     // UNIQUE 冲突忽略
                 }
@@ -223,6 +230,7 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         } finally {
             db.endTransaction()
         }
+        return inserted
     }
 
     /** 获取所有分类 */
@@ -312,6 +320,24 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     }
 
     // ========== Helper ==========
+
+    /**
+     * 在单个数据库事务中执行 [block]，块内抛出异常时自动回滚。
+     *
+     * 供批量导入等需要「全部成功或全部回滚」的场景使用；
+     * 与块内各方法自己开启的事务可安全嵌套（仅最外层提交生效）。
+     */
+    fun <T> runInTransaction(block: () -> T): T {
+        val db = dbHelper.writableDatabase
+        db.beginTransaction()
+        try {
+            val result = block()
+            db.setTransactionSuccessful()
+            return result
+        } finally {
+            db.endTransaction()
+        }
+    }
 
     /** 获取下个月起始日期字符串 yyyy-MM-dd */
     private fun getNextMonthStart(yearMonth: String): String {

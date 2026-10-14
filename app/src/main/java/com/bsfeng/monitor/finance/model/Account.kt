@@ -18,6 +18,15 @@ data class Account(
     val displayBalance: String get() = String.format(java.util.Locale.CHINA, "%.2f", balance)
 
     companion object {
+        /** 账户类型：现金 */
+        const val TYPE_CASH = 0
+
+        /** 账户类型：银行卡（含信用卡） */
+        const val TYPE_BANK_CARD = 1
+
+        /** 账户类型：第三方支付 */
+        const val TYPE_THIRD_PARTY = 2
+
         /** 熊猫记账导入时默认创建的账户 */
         val defaultAccounts = listOf(
             Account(name = "现金钱包", type = 0),
