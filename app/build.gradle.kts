@@ -1,10 +1,6 @@
-import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
-import org.gradle.testing.jacoco.tasks.JacocoReport
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    jacoco
 }
 
 android {
@@ -49,6 +45,9 @@ android {
         debug {
             isMinifyEnabled = true
             isShrinkResources = true
+            // 单元测试覆盖率：AGP 会对 class 做离线插桩，
+            // Robolectric 沙箱类加载器加载的正是插桩后的类，覆盖率才能被统计到
+            enableUnitTestCoverage = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -96,6 +95,15 @@ tasks.withType<Test> {
         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
         "--add-opens=java.base/java.util=ALL-UNNAMED"
     )
+
+    // 测试并行执行以加快反馈（质量基线要求）。
+    // 每个 fork 是独立 JVM：Robolectric 沙箱缓存、被 resetForTesting 清理的静态单例互不干扰。
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 // =============================================
@@ -218,47 +226,18 @@ dependencies {
 }
 
 // =============================================
-// 单元测试覆盖率（JaCoCo）
+// 单元测试覆盖率
 // ------------------------------------------------------------
-// 仅测试期插桩，不进入 APK，不违反「零第三方业务依赖」原则。
-// 用法：./gradlew :app:jacocoTestReport
-// 报告：app/build/reports/jacoco/jacocoTestReport/html/index.html
+// 使用 AGP 内置的覆盖率支持（见 buildTypes.debug.enableUnitTestCoverage）：
+//
+//   ./gradlew :app:createDebugUnitTestCoverageReport
+//
+// 报告：app/build/reports/coverage/test/debug/index.html
+// 数据：app/build/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec
+//
+// ⚠️ 已知限制：**Robolectric 用例的覆盖不会被计入**。
+// Robolectric 用自带的沙箱 ClassLoader 加载被测类，绕过了 JaCoCo 的在线插桩 agent，
+// 因此 exec 里只包含纯 JVM 用例（如 FinanceModelTest）触碰到的类。
+// 由 Robolectric 覆盖的类（FinanceDao / FinanceManager / PandaImporter 等）在报告里显示 0%，
+// **不代表没有测试**——它们以「用例断言 + 反向验证（回滚修复后测试变红）」作为证据。
 // =============================================
-jacoco {
-    toolVersion = "0.8.13"
-}
-
-tasks.withType<Test>().configureEach {
-    extensions.configure<JacocoTaskExtension> {
-        isEnabled = true
-        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
-    }
-}
-
-val jacocoTestReport by tasks.registering(JacocoReport::class) {
-    group = "verification"
-    description = "生成单元测试覆盖率报告（HTML + XML）"
-    dependsOn("testDebugUnitTest")
-
-    reports {
-        xml.required.set(true)
-        html.required.set(true)
-        csv.required.set(false)
-    }
-
-    // AGP 9 的 Kotlin 编译产物目录，同时兼容旧版 AGP 的 tmp/kotlin-classes
-    classDirectories.setFrom(
-        files(
-            layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
-            layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
-        ).asFileTree.matching {
-            exclude(
-                "**/R.class",
-                "**/R\$*.class",
-                "**/BuildConfig.*",
-            )
-        }
-    )
-    sourceDirectories.setFrom(files("src/main/java"))
-    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
-}
