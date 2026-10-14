@@ -65,7 +65,7 @@
 | 数据持久化 | SQLiteOpenHelper 本地数据库(records 表,版本 3),Repository 实现 → [文档](docs/数据持久化/概述.md) | `com.bsfeng.monitor.data` |
 | 后台服务 | 无障碍服务(前台轮询+开屏跳过)、健康检查、AlarmReceiver 定时保活(每分钟) → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
 | 开屏跳过 | CSS 风格选择器 DSL、节点匹配器、规则引擎、内置规则库、规则管理、坐标点击降级 → [设计](docs/开屏跳过/设计.md) · [后续计划](docs/开屏跳过/后续计划.md) · [业界调研与改进方案](docs/开屏跳过/业界调研与改进方案.md)（改跳过代码/规则前必读） · [兜底方案调研](docs/开屏跳过/兜底方案调研.md)（无文本/无稳定 ID 场景与 OCR 决策） · [规则实测记录](docs/开屏跳过/规则实测记录.md)（逐 App 调优产出与快照工具用法） | `com.bsfeng.monitor.skip` |
-| 记账模块 | 账目分类/账户/交易/预算、FinanceDao、熊猫记账导入、统计 → [文档](docs/UI界面/概述.md) | `com.bsfeng.monitor.finance` |
+| 记账模块 | 账目分类/账户/交易/预算、FinanceDao、熊猫记账导入、统计图表 → [文档](docs/记账/概述.md)（改记账代码前必读） | `com.bsfeng.monitor.finance` |
 | UI 界面 | Jetpack Compose 四标签界面:实时事件流、广告跳过、记账、设置 | `com.bsfeng.monitor.ui` |
 | 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 | `com.bsfeng.monitor.util` |
 
@@ -109,9 +109,14 @@
 | 修改广告跳过页面 | `app/src/main/java/com/bsfeng/monitor/ui/AdScreen.kt` + `AdViewModel.kt` |
 | 修改白名单页面 | `app/src/main/java/com/bsfeng/monitor/ui/WhitelistScreen.kt` + `WhitelistViewModel.kt` |
 | 修改设置页面 | `app/src/main/java/com/bsfeng/monitor/ui/SettingsScreen.kt` |
-| 修改记账 DAO | `app/src/main/java/com/bsfeng/monitor/finance/FinanceDao.kt` |
-| 修改记账业务逻辑 | `app/src/main/java/com/bsfeng/monitor/finance/FinanceManager.kt` |
-| 修改记账 UI | `app/src/main/java/com/bsfeng/monitor/finance/ui/` |
+| 修改记账 DAO / SQL | `app/src/main/java/com/bsfeng/monitor/finance/FinanceDao.kt` |
+| 修改记账业务逻辑 / 统计口径 / 预算进度 | `app/src/main/java/com/bsfeng/monitor/finance/FinanceManager.kt` |
+| 修改熊猫记账导入映射 | `app/src/main/java/com/bsfeng/monitor/finance/PandaImporter.kt` |
+| 修改记账首页 / 交易列表 | `app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceMainScreen.kt` |
+| 修改新增、编辑、删除交易表单 | `app/src/main/java/com/bsfeng/monitor/finance/ui/AddTransactionScreen.kt` |
+| 修改预算设置页 | `app/src/main/java/com/bsfeng/monitor/finance/ui/BudgetScreen.kt` |
+| 修改记账统计图表 | `app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceStatsScreen.kt` |
+| 修改记账 UI 状态 / 刷新 | `app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceViewModel.kt` |
 | 修改应用配置 | `app/src/main/java/com/bsfeng/monitor/AppConfig.kt` |
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` |
 | 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` |
@@ -140,3 +145,5 @@
   - [install 覆盖安装后无障碍服务短暂显示「未开启」](docs/踩坑/install覆盖安装后无障碍服务短暂未开启.md) — 状态判定要用三重来源
   - [GKD 订阅源在真机上的可用性](docs/踩坑/GKD订阅源在真机上的可用性.md) — 用 npm 镜像，注意 URL 里包内路径
   - [adb 输入被中文输入法转成汉字](docs/踩坑/adb输入被中文输入法转成汉字.md) — 自动化填网址前先切英文
+  - [记账首页 FAB 被底部导航栏遮住导致无法新增交易](docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md) — ⚠️ 改记账首页布局前必读，FAB 禁止外包 inset 高度容器
+  - [LocalDate 格式化 HH:mm 导致记账保存崩溃](docs/踩坑/LocalDate格式化HH-mm导致记账保存崩溃.md) — 「点保存跳到别的 App」先查 FATAL EXCEPTION
