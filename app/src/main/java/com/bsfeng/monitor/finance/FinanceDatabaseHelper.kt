@@ -14,7 +14,7 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
     context, DATABASE_NAME, null, DATABASE_VERSION
 ) {
     companion object {
-        private const val DATABASE_NAME = "finance.db"
+        internal const val DATABASE_NAME = "finance.db"
         private const val DATABASE_VERSION = 1
 
         @Volatile
@@ -24,6 +24,14 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: FinanceDatabaseHelper(context.applicationContext).also { INSTANCE = it }
             }
+
+        /** 仅供测试：关闭并释放单例，使每个用例都能拿到干净的 finance.db */
+        internal fun resetForTesting() {
+            synchronized(this) {
+                INSTANCE?.close()
+                INSTANCE = null
+            }
+        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
