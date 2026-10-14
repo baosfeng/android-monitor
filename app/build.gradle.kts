@@ -1,6 +1,10 @@
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    jacoco
 }
 
 android {
@@ -211,4 +215,50 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("org.robolectric:robolectric:4.16.1")
+}
+
+// =============================================
+// 单元测试覆盖率（JaCoCo）
+// ------------------------------------------------------------
+// 仅测试期插桩，不进入 APK，不违反「零第三方业务依赖」原则。
+// 用法：./gradlew :app:jacocoTestReport
+// 报告：app/build/reports/jacoco/jacocoTestReport/html/index.html
+// =============================================
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+tasks.withType<Test>().configureEach {
+    extensions.configure<JacocoTaskExtension> {
+        isEnabled = true
+        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
+    }
+}
+
+val jacocoTestReport by tasks.registering(JacocoReport::class) {
+    group = "verification"
+    description = "生成单元测试覆盖率报告（HTML + XML）"
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    // AGP 9 的 Kotlin 编译产物目录，同时兼容旧版 AGP 的 tmp/kotlin-classes
+    classDirectories.setFrom(
+        files(
+            layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+            layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
+        ).asFileTree.matching {
+            exclude(
+                "**/R.class",
+                "**/R\$*.class",
+                "**/BuildConfig.*",
+            )
+        }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
 }
