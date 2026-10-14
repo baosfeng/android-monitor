@@ -1,10 +1,12 @@
 package com.bsfeng.monitor.finance.ui
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,6 +33,8 @@ import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.theme.CategoryDot
 import com.bsfeng.monitor.ui.theme.FinanceColors
 import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.IOSDivider
+import com.bsfeng.monitor.ui.theme.IOSRow
 import com.bsfeng.monitor.ui.theme.InsetGroupedCard
 import com.bsfeng.monitor.ui.theme.MonitorIconSize
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
@@ -43,8 +49,12 @@ fun FinanceMainScreen(
     viewModel: FinanceViewModel,
     onAddClick: () -> Unit,
     onImportClick: () -> Unit,
+    onEditClick: (Transaction) -> Unit = {},
+    onStatsClick: () -> Unit = {},
+    onBudgetClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val view = LocalView.current
     val currentMonth by viewModel.currentMonth.collectAsState()
     val transactions by viewModel.monthlyTransactions.collectAsState()
     val stats by viewModel.monthlyStats.collectAsState()
@@ -198,6 +208,31 @@ fun FinanceMainScreen(
                 }
             }
 
+            // 功能入口：统计分析 / 预算设置
+            item(key = "entries") {
+                InsetGroupedCard {
+                    IOSRow(
+                        title = "统计分析",
+                        subtitle = "月度收支与分类占比",
+                        trailing = { EntryChevron() },
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            onStatsClick()
+                        },
+                    )
+                    IOSDivider()
+                    IOSRow(
+                        title = "预算设置",
+                        subtitle = "本月总预算与分类预算",
+                        trailing = { EntryChevron() },
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            onBudgetClick()
+                        },
+                    )
+                }
+            }
+
             // 导入入口
             item(key = "import_btn") {
                 Row(
@@ -269,7 +304,10 @@ fun FinanceMainScreen(
                     item {
                         InsetGroupedCard {
                             txs.forEach { tx ->
-                                TransactionRowContent(transaction = tx)
+                                TransactionRowContent(
+                                    transaction = tx,
+                                    onClick = { onEditClick(tx) },
+                                )
                                 if (tx != txs.last()) {
                                     HorizontalDivider(
                                         thickness = 0.5.dp,
@@ -288,36 +326,35 @@ fun FinanceMainScreen(
         }
 
         // FAB
-        Box(
+        //
+        // ⚠️ 不要用 windowInsetsBottomHeight(...) 在外面包一层 Box：
+        // 该容器高度≈导航栏 inset，FAB 会溢出到内容区之外并被底部导航栏盖住，
+        // 导致「看不见 + 点不到」，整个记账入口报废（2026-10 真机验证踩坑）。
+        var fabPressed by remember { mutableStateOf(false) }
+        val fabScale by animateFloatAsState(
+            targetValue = if (fabPressed) 0.88f else 1f,
+            animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
+        )
+        FloatingActionButton(
+            onClick = onAddClick,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                .padding(MonitorSpacing.lg)
+                .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            fabPressed = true
+                            tryAwaitRelease()
+                            fabPressed = false
+                        }
+                    )
+                },
+            containerColor = FinanceColors.budget,
+            contentColor = Color.White,
+            shape = RoundedCornerShape(28.dp),
         ) {
-            var fabPressed by remember { mutableStateOf(false) }
-            val fabScale by animateFloatAsState(
-                targetValue = if (fabPressed) 0.88f else 1f,
-                animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
-            )
-            FloatingActionButton(
-                onClick = onAddClick,
-                modifier = Modifier
-                    .padding(MonitorSpacing.lg)
-                    .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                fabPressed = true
-                                tryAwaitRelease()
-                                fabPressed = false
-                            }
-                        )
-                    },
-                containerColor = FinanceColors.budget,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(28.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加")
-            }
+            Icon(Icons.Default.Add, contentDescription = "添加")
         }
     }
 }
@@ -332,15 +369,22 @@ private fun StatItem(label: String, value: String, color: Color) {
     }
 }
 
-/** 单条交易行 */
+/** 单条交易行（点击进入编辑） */
 @Composable
-private fun TransactionRowContent(transaction: Transaction) {
+private fun TransactionRowContent(transaction: Transaction, onClick: () -> Unit) {
     val catColor = remember(transaction.categoryName) {
         stableCategoryColor(transaction.categoryName, transaction.type)
     }
+    val view = LocalView.current
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onClick()
+            }
+            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CategoryDot(
@@ -375,14 +419,27 @@ private fun TransactionRowContent(transaction: Transaction) {
                 }
             }
         }
+        // 退款（负数支出）按收入色与 + 号展示，避免出现 "-¥-12.00"
+        val amountIsPositive = !transaction.isExpense || transaction.isRefundEntry
         Text(
-            text = if (transaction.isExpense) "-¥${transaction.displayAmount}" else "+¥${transaction.displayAmount}",
+            text = if (amountIsPositive) "+¥${transaction.displayAmount}" else "-¥${transaction.displayAmount}",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Medium,
-            color = if (transaction.isExpense) MaterialTheme.colorScheme.onSurface
-            else FinanceColors.income,
+            color = if (amountIsPositive) FinanceColors.income
+            else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/** 入口行右侧箭头 */
+@Composable
+private fun EntryChevron() {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(MonitorIconSize.md),
+    )
 }
 
 /** 基于分类名哈希的稳定颜色 */

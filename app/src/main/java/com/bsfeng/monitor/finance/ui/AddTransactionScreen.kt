@@ -34,24 +34,45 @@ import com.bsfeng.monitor.ui.theme.Radius
 import com.bsfeng.monitor.ui.theme.categoryPalette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
- * 添加交易页面 — iOS 风格表单。
+ * 添加 / 编辑交易页面 — iOS 风格表单。
+ *
+ * @param editing 非空表示编辑已有交易：表单预填该交易，保存时保留 id/createdAt/source，
+ *                并允许通过 [onDelete] 删除；为空表示新增。
  */
 @Composable
 fun AddTransactionScreen(
     categories: List<Category>,
     accounts: List<Account>,
     onSave: (Transaction) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    editing: Transaction? = null,
+    onDelete: ((Transaction) -> Unit)? = null,
 ) {
-    var txType by remember { mutableStateOf(0) }
-    var amountText by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("") }
-    var selectedAccount by remember { mutableStateOf("") }
-    var remark by remember { mutableStateOf("") }
-    var selectedTag by remember { mutableStateOf("") }
-    var dateText by remember { mutableStateOf(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))) }
+    val editingId = editing?.id
+    val isEditing = editing != null
+    // 退款（负数支出）编辑时金额按绝对值展示，保存时还原负号
+    val isRefundEntry = editing?.isRefundEntry == true
+
+    var txType by remember(editingId) { mutableStateOf(editing?.type ?: TYPE_EXPENSE) }
+    var amountText by remember(editingId) {
+        mutableStateOf(
+            editing?.let { String.format(Locale.CHINA, "%.2f", kotlin.math.abs(it.amount)) } ?: ""
+        )
+    }
+    var selectedCategory by remember(editingId) { mutableStateOf(editing?.categoryName ?: "") }
+    var selectedAccount by remember(editingId) { mutableStateOf(editing?.accountName ?: "") }
+    var remark by remember(editingId) { mutableStateOf(editing?.remark ?: "") }
+    var selectedTag by remember(editingId) { mutableStateOf(editing?.tag ?: "") }
+    var dateText by remember(editingId) {
+        mutableStateOf(editing?.date?.takeIf { it.isNotBlank() } ?: todayText())
+    }
+
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showRemarkEditor by remember { mutableStateOf(false) }
+    var showDateEditor by remember { mutableStateOf(false) }
 
     val filteredCategories = remember(categories, txType) {
         categories.filter { it.type == txType }
@@ -69,6 +90,40 @@ fun AddTransactionScreen(
     val amount = amountText.toDoubleOrNull() ?: 0.0
     val canSave = amount > 0 && selectedCategory.isNotEmpty()
 
+    fun buildTransaction(): Transaction {
+        val magnitude = amountText.toDoubleOrNull() ?: 0.0
+        val signedAmount = if (isRefundEntry) -magnitude else magnitude
+        val now = System.currentTimeMillis()
+        val dateTime = Transaction.buildDateTime(dateText)
+        val base = editing
+        return if (base != null) {
+            base.copy(
+                type = txType,
+                categoryName = selectedCategory,
+                amount = signedAmount,
+                accountName = selectedAccount,
+                remark = remark,
+                tag = selectedTag,
+                date = dateText,
+                dateTime = dateTime,
+                updatedAt = now,
+            )
+        } else {
+            Transaction(
+                type = txType,
+                categoryName = selectedCategory,
+                amount = signedAmount,
+                accountName = selectedAccount,
+                remark = remark,
+                tag = selectedTag,
+                date = dateText,
+                dateTime = dateTime,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 导航栏
         Row(
@@ -83,23 +138,11 @@ fun AddTransactionScreen(
                     tint = MaterialTheme.colorScheme.primary)
             }
             Text(
-                "新增交易",
+                if (isEditing) "编辑交易" else "新增交易",
                 style = MaterialTheme.typography.titleLarge,
             )
             IconButton(
-                onClick = {
-                    val a = amountText.toDoubleOrNull() ?: return@IconButton
-                    if (a <= 0 || selectedCategory.isEmpty()) return@IconButton
-                    val now = System.currentTimeMillis()
-                    onSave(Transaction(
-                        type = txType, categoryName = selectedCategory,
-                        amount = a, accountName = selectedAccount,
-                        remark = remark, tag = selectedTag,
-                        date = dateText,
-                        dateTime = "$dateText ${LocalDate.now().format(DateTimeFormatter.ofPattern("HH:mm"))}",
-                        createdAt = now, updatedAt = now
-                    ))
-                },
+                onClick = { if (canSave) onSave(buildTransaction()) },
                 enabled = canSave,
             ) {
                 Icon(Icons.Default.Check, contentDescription = "保存",
@@ -126,7 +169,7 @@ fun AddTransactionScreen(
                         textStyle = LocalTextStyle.current.copy(
                             fontSize = MaterialTheme.typography.headlineLarge.fontSize,
                             fontWeight = FontWeight.Bold,
-                            color = if (txType == 0) FinanceColors.expense else FinanceColors.income,
+                            color = if (txType == TYPE_EXPENSE) FinanceColors.expense else FinanceColors.income,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         ),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -136,6 +179,16 @@ fun AddTransactionScreen(
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent,
                         ),
+                    )
+                }
+                if (isRefundEntry) {
+                    // 退款交易的金额是负数存储，编辑时按绝对值输入
+                    Text(
+                        "退款交易：保存后按负金额存储，用于抵扣当月支出",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg),
                     )
                 }
                 Spacer(Modifier.height(MonitorSpacing.sm))
@@ -150,23 +203,24 @@ fun AddTransactionScreen(
                 )
             }
 
-            // 日期 + 备注
-            item(key = "date_remark") {
+            // 日期 + 备注（均可点击编辑）
+            item(key = "date_remark_spacer") {
                 Spacer(Modifier.height(MonitorSpacing.sm))
             }
 
-            item {
+            item(key = "date_remark") {
                 InsetGroupedCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { showDateEditor = true }
                             .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("日期", style = MaterialTheme.typography.titleSmall)
                         Text(dateText, style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = MaterialTheme.colorScheme.primary)
                     }
                     HorizontalDivider(
                         thickness = 0.5.dp,
@@ -176,6 +230,7 @@ fun AddTransactionScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { showRemarkEditor = true }
                             .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -199,7 +254,7 @@ fun AddTransactionScreen(
                 )
             }
 
-            item {
+            item(key = "category_grid") {
                 InsetGroupedCard {
                     val chunked = filteredCategories.chunked(4)
                     Column(modifier = Modifier.padding(MonitorSpacing.sm)) {
@@ -274,17 +329,24 @@ fun AddTransactionScreen(
                     modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
                 )
             }
-            item {
+            item(key = "account_list") {
                 InsetGroupedCard {
                     accounts.forEach { account ->
+                        val isSelected = account.name == selectedAccount
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clickable { selectedAccount = account.name }
                                 .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(account.name, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                account.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
                             Text("¥${account.displayBalance}", style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -321,29 +383,112 @@ fun AddTransactionScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     TextButton(
-                        onClick = {
-                            val a = amountText.toDoubleOrNull() ?: return@TextButton
-                            if (a <= 0 || selectedCategory.isEmpty()) return@TextButton
-                            val now = System.currentTimeMillis()
-                            onSave(Transaction(
-                                type = txType, categoryName = selectedCategory,
-                                amount = a, accountName = selectedAccount,
-                                remark = remark, tag = selectedTag,
-                                date = dateText,
-                                dateTime = "$dateText ${LocalDate.now().format(DateTimeFormatter.ofPattern("HH:mm"))}",
-                                createdAt = now, updatedAt = now
-                            ))
-                        },
+                        onClick = { if (canSave) onSave(buildTransaction()) },
                         enabled = canSave,
                         interactionSource = saveInteractionSource,
                     ) {
-                        Text("保存", color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (isEditing) "保存修改" else "保存",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
-                Spacer(Modifier.height(MonitorSpacing.xxxl))
             }
+
+            // 删除（仅编辑态）
+            if (isEditing && onDelete != null) {
+                item(key = "delete") {
+                    Spacer(Modifier.height(MonitorSpacing.md))
+                    val deleteInteractionSource = remember { MutableInteractionSource() }
+                    val isDeletePressed by deleteInteractionSource.collectIsPressedAsState()
+                    val deleteScale by animateFloatAsState(
+                        targetValue = if (isDeletePressed) 0.95f else 1f,
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MonitorSpacing.lg)
+                            .clip(RoundedCornerShape(Radius.md))
+                            .graphicsLayer { scaleX = deleteScale; scaleY = deleteScale }
+                            .background(FinanceColors.expense.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        TextButton(
+                            onClick = { showDeleteConfirm = true },
+                            interactionSource = deleteInteractionSource,
+                        ) {
+                            Text(
+                                "删除这笔交易",
+                                color = FinanceColors.expense,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(key = "bottom") { Spacer(Modifier.height(MonitorSpacing.xxxl)) }
         }
+    }
+
+    // 备注编辑器
+    if (showRemarkEditor) {
+        FinanceInputDialog(
+            title = "备注",
+            initialValue = remark,
+            placeholder = "例如：和朋友聚餐",
+            onConfirm = {
+                remark = it
+                showRemarkEditor = false
+            },
+            onDismiss = { showRemarkEditor = false },
+        )
+    }
+
+    // 日期编辑器
+    if (showDateEditor) {
+        FinanceInputDialog(
+            title = "日期",
+            initialValue = dateText,
+            placeholder = "yyyy-MM-dd",
+            errorMessage = "日期格式应为 yyyy-MM-dd",
+            isValid = { text -> runCatching { LocalDate.parse(text.trim()) }.isSuccess },
+            onConfirm = {
+                dateText = it.trim()
+                showDateEditor = false
+            },
+            onDismiss = { showDateEditor = false },
+        )
+    }
+
+    // 删除确认
+    if (showDeleteConfirm && editing != null && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            shape = RoundedCornerShape(Radius.xl),
+            title = { Text("删除这笔交易？", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    "${editing.categoryName} ¥${editing.displayAmount}，删除后无法恢复。",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete(editing)
+                }) {
+                    Text("删除", color = FinanceColors.expense, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+        )
     }
 }
 
@@ -399,3 +544,9 @@ private fun getCategoryColorStatic(name: String): Color {
     val hash = name.hashCode() and 0x7FFFFFFF
     return categoryPalette[hash % categoryPalette.size]
 }
+
+/** 今日日期 yyyy-MM-dd */
+private fun todayText(): String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+
+/** 交易类型：支出 */
+private const val TYPE_EXPENSE = 0

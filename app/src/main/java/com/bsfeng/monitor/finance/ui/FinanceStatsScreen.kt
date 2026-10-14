@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.ui.theme.FinanceColors
 import com.bsfeng.monitor.ui.theme.IOSColors
+import com.bsfeng.monitor.ui.theme.IOSNavigationBar
 import com.bsfeng.monitor.ui.theme.InsetGroupedCard
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.Radius
@@ -44,6 +45,7 @@ fun FinanceStatsScreen(
     categoryBreakdown: Map<String, Double>,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val monthDisplay = currentMonth.replace("-", "年") + "月"
@@ -59,13 +61,9 @@ fun FinanceStatsScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 大标题
-        item {
-            Text(
-                "统计",
-                style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
-            )
+        // 导航栏
+        item(key = "navbar") {
+            IOSNavigationBar(title = "统计", onBack = onBack)
         }
 
         // 月份切换
