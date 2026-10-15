@@ -7,6 +7,7 @@ import com.bsfeng.monitor.domain.model.SkipRule
 import com.bsfeng.monitor.skip.GkdSubscription
 import com.bsfeng.monitor.skip.SkipRuleManager
 import com.bsfeng.monitor.skip.SnapshotRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,6 +121,11 @@ class SkipRuleViewModel : ViewModel() {
             _state.value = _state.value.copy(message = "订阅地址需以 https:// 开头：" + target.take(24))
             return
         }
+        if (_state.value.updatingUrl != null) {
+            // 并发保护：UI 侧按钮已禁用（SkipRuleScreen 的 updating 态），这里再兜一层，
+            // 避免两个任务同时改同一份规则库。
+            return
+        }
         _state.value = _state.value.copy(updatingUrl = target, message = null, errorMessage = null)
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -132,17 +138,22 @@ class SkipRuleViewModel : ViewModel() {
                 }
                 val failed = outcome is GkdSubscription.Outcome.Failed
                 _state.value = _state.value.copy(
-                    updatingUrl = null,
                     message = message,
                     errorMessage = if (failed) message else null,
                 )
                 refresh()
+            } catch (e: CancellationException) {
+                // 协程取消（ViewModel 销毁）原样上抛，updatingUrl 交给 finally 复位
+                throw e
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
-                    updatingUrl = null,
                     message = "订阅更新异常：" + (e.message ?: e.javaClass.simpleName),
                     errorMessage = "订阅拉取异常（" + e.javaClass.simpleName + "），已保留本地规则，未做覆盖。",
                 )
+            } finally {
+                // 唯一复位点：成功（Updated / UpToDate）/ 失败（Failed）/ 异常 / 协程取消都经过这里。
+                // 复位散落在各分支里必然漏一条，而漏掉就会让「更新订阅」按钮永久停在禁用态。
+                _state.value = _state.value.copy(updatingUrl = null)
             }
         }
     }
