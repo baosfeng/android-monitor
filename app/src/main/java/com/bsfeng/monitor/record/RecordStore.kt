@@ -167,8 +167,11 @@ class RecordStore(private val db: DatabaseHelper) {
                     duration = if (cursor.isNull(cursor.getColumnIndexOrThrow("duration"))) null
                         else cursor.getLong(cursor.getColumnIndexOrThrow("duration")),
                     label = cursor.getString(cursor.getColumnIndexOrThrow("label")),
+                    // 单次解析：keys() 与取值共用同一个 JSONObject（原实现每行 new 了 keys+1 次）
                     detail = if (detailStr.isNullOrBlank()) null
-                        else JSONObject(detailStr).keys().asSequence().associateWith { JSONObject(detailStr).optString(it) },
+                        else JSONObject(detailStr).let { obj ->
+                            obj.keys().asSequence().associateWith { obj.optString(it) }
+                        },
                     owner = cursor.getString(cursor.getColumnIndexOrThrow("owner"))
                 ))
             }
