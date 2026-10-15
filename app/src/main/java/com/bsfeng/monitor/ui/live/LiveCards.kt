@@ -259,7 +259,9 @@ fun LiveEventRow(
             modifier = Modifier.width(TL_TIME_COL_W),
         )
         Spacer(Modifier.width(t.space1))
-        // 应用事件（APP_USAGE 且带 package_name）优先显示应用图标，系统事件默认保留类型图标。
+        // 应用事件（APP_USAGE 且带 package_name）优先显示应用图标；无包名的类型行默认走 TypeIconDot，
+        // 这是有意为之（不是漏做）：AUDIO 记录的 detail 只有 device（SCREEN / WIFI / 充电中 … 同理），
+        // 没有包名 / 应用名，取不到应用图标。
         val pkg = if (record.type == RecordType.APP_USAGE) {
             record.detail?.get("package_name")?.takeIf { it.isNotBlank() }
         } else {
