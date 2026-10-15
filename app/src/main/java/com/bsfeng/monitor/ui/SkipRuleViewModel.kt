@@ -34,7 +34,11 @@ data class SkipRuleUiState(
     /** 最近一次导出快照的文件路径 */
     val snapshotPath: String? = null,
     /** 操作提示（一次性） */
-    val message: String? = null
+    val message: String? = null,
+    /** 加载 / 订阅失败原因（null = 无错误；s10 错误态用） */
+    val errorMessage: String? = null,
+    /** 上次订阅检查时间（毫秒时间戳，0 = 从未检查；s10 订阅源卡「上次同步」用） */
+    val lastSyncAt: Long = 0L
 )
 
 /**
@@ -55,16 +59,21 @@ class SkipRuleViewModel : ViewModel() {
     }
 
     fun refresh() {
-        val rules = ruleManager.getAllRules()
-        _state.value = _state.value.copy(
-            rules = rules,
-            enabledCount = rules.count { it.enabled },
-            isLoading = false,
-            subscriptions = ruleManager.subscriptionMetas().map {
-                SubscriptionUi(url = it.url, version = it.version, ruleCount = it.ruleCount)
-            },
-            snapshotPath = SnapshotRequest.lastPath
-        )
+        try {
+            val rules = ruleManager.getAllRules()
+            _state.value = _state.value.copy(
+                rules = rules,
+                enabledCount = rules.count { it.enabled },
+                isLoading = false,
+                subscriptions = ruleManager.subscriptionMetas().map {
+                    SubscriptionUi(url = it.url, version = it.version, ruleCount = it.ruleCount)
+                },
+                snapshotPath = SnapshotRequest.lastPath,
+                lastSyncAt = ruleManager.lastSubscriptionCheckAt(),
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(isLoading = false, errorMessage = "读取本地规则库失败：" + (e.message ?: e.javaClass.simpleName))
+        }
     }
 
     fun toggleRule(ruleId: String) {
@@ -86,6 +95,13 @@ class SkipRuleViewModel : ViewModel() {
 
     fun getRule(ruleId: String): SkipRule? = ruleManager.getAllRules().find { it.id == ruleId }
 
+    /** 消费错误态（s10 错误态「重试」用） */
+    fun clearError() {
+        if (_state.value.errorMessage != null) {
+            _state.value = _state.value.copy(errorMessage = null)
+        }
+    }
+
     // ==================== 订阅规则（多订阅源） ====================
 
     /**
@@ -99,17 +115,35 @@ class SkipRuleViewModel : ViewModel() {
             _state.value = _state.value.copy(message = "订阅地址不能为空")
             return
         }
-        _state.value = _state.value.copy(updatingUrl = target, message = null)
+        if (!target.startsWith("https://")) {
+            // URL 输入被中文输入法污染 / 用了 http / 漏协议时给出明确拒绝，不发请求
+            _state.value = _state.value.copy(message = "订阅地址需以 https:// 开头：" + target.take(24))
+            return
+        }
+        _state.value = _state.value.copy(updatingUrl = target, message = null, errorMessage = null)
         viewModelScope.launch(Dispatchers.IO) {
-            val outcome = GkdSubscription.update(ruleManager, target)
-            val message = when (outcome) {
-                is GkdSubscription.Outcome.Updated ->
-                    "订阅已更新：v" + outcome.version + "，" + outcome.ruleCount + " 条规则"
-                GkdSubscription.Outcome.UpToDate -> "订阅已是最新版本"
-                is GkdSubscription.Outcome.Failed -> "订阅更新失败：" + outcome.reason
+            try {
+                val outcome = GkdSubscription.update(ruleManager, target)
+                val message = when (outcome) {
+                    is GkdSubscription.Outcome.Updated ->
+                        "订阅已更新：v" + outcome.version + "，" + outcome.ruleCount + " 条规则"
+                    GkdSubscription.Outcome.UpToDate -> "订阅已是最新版本"
+                    is GkdSubscription.Outcome.Failed -> "订阅更新失败：" + outcome.reason
+                }
+                val failed = outcome is GkdSubscription.Outcome.Failed
+                _state.value = _state.value.copy(
+                    updatingUrl = null,
+                    message = message,
+                    errorMessage = if (failed) message else null,
+                )
+                refresh()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    updatingUrl = null,
+                    message = "订阅更新异常：" + (e.message ?: e.javaClass.simpleName),
+                    errorMessage = "订阅拉取异常（" + e.javaClass.simpleName + "），已保留本地规则，未做覆盖。",
+                )
             }
-            _state.value = _state.value.copy(updatingUrl = null, message = message)
-            refresh()
         }
     }
 

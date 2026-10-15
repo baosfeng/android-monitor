@@ -2,373 +2,438 @@ package com.bsfeng.monitor.ui
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.model.MatchRule
 import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
-import com.bsfeng.monitor.ui.theme.InsetGroupedCard
-import com.bsfeng.monitor.ui.theme.IOSNavigationBar
-import com.bsfeng.monitor.ui.theme.MonitorSpacing
-import com.bsfeng.monitor.ui.theme.SettingsRow
+import com.bsfeng.monitor.ui.components.AnimatedNumber
+import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.AppSwitch
+import com.bsfeng.monitor.ui.components.AppToast
+import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.BadgeTone
+import com.bsfeng.monitor.ui.components.FiveState
+import com.bsfeng.monitor.ui.components.GlassCard
+import com.bsfeng.monitor.ui.components.Legend
+import com.bsfeng.monitor.ui.components.LegendItem
+import com.bsfeng.monitor.ui.components.SkeletonBlock
+import com.bsfeng.monitor.ui.components.StateContainer
+import com.bsfeng.monitor.ui.components.Sparkline
+import com.bsfeng.monitor.ui.components.animatedCount
+import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.chartRamp
+import com.bsfeng.monitor.ui.theme.sparkHeight
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
- * 开屏广告跳过规则管理页面。
+ * s10 订阅源与规则（原型 s10-skip-rules.html）。
+ *
+ * 订阅源卡（URL + 更新 / 新增 / 快照）· 计数滚动（规则总数 / 已启用）· 规则行可折叠展开选择器明细 ·
+ * 五态（loading / empty / error / populated / edge）。
+ * 旧页面的 MaterialTheme 直取色已按 LEGACY-TOKEN-MAP 换成本地 token 快照。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkipRuleScreen(
     onBack: () -> Unit,
-    viewModel: SkipRuleViewModel = viewModel()
+    viewModel: SkipRuleViewModel = viewModel(),
 ) {
+    val t = LocalDesignTokens.current
+    val view = LocalView.current
+    val toast = rememberToastHostState()
     val state by viewModel.state.collectAsState()
+    var demoState by remember { mutableStateOf(FiveState.POPULATED) }
+    var showConfirm by remember { mutableStateOf(false) }
+    var urlInput by remember { mutableStateOf(DEFAULT_SUBSCRIPTION_URL) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        IOSNavigationBar(
-            title = "开屏广告跳过",
-            onBack = onBack,
-            actions = {
-                TextButton(onClick = { viewModel.resetToBuiltIn() }) {
-                    Text("重置", color = MaterialTheme.colorScheme.primary)
+    // 已有订阅源时以第一个源为准展示在 URL 输入框
+    LaunchedEffect(state.subscriptions) {
+        val first = state.subscriptions.firstOrNull()?.url
+        if (first != null && urlInput == DEFAULT_SUBSCRIPTION_URL) urlInput = first
+    }
+
+    val effective = if (demoState == FiveState.POPULATED && state.errorMessage != null) {
+        FiveState.ERROR
+    } else {
+        demoState
+    }
+    val selectorCounts = remember(state.rules) { state.rules.map { selectorCountOf(it).toFloat() } }
+
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+        Column(Modifier.fillMaxSize()) {
+            ScreenHead(
+                title = "订阅源与规则",
+                meta = "从镜像源拉取规则包，本地合并后按顺序匹配",
+                onBack = onBack,
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(t.space4),
+            ) {
+                StateSwitchRow(state = demoState, onSelect = { demoState = it })
+
+                // 五态统一走 StateContainer（ui/components/States.kt）；文案取自原型 s10-st-*。
+                StateContainer(
+                    state = effective,
+                    modifier = Modifier.fillMaxWidth(),
+                    emptyTitle = "还没有任何规则",
+                    emptyText = "添加订阅源后点击「更新订阅」，规则会自动合并到本地规则库。",
+                    emptyActionLabel = "去添加订阅源",
+                    onEmptyAction = { toast.show("请在订阅源卡片填写 URL") },
+                    errorTitle = "订阅源更新失败",
+                    errorText = state.errorMessage ?: "镜像源返回 502，已保留本地 " + state.rules.size + " 条规则，未做覆盖。",
+                    onRetry = {
+                        viewModel.clearError()
+                        toast.show("正在重新拉取订阅源…")
+                        viewModel.updateSubscription(urlInput)
+                    },
+                    edgeText = "边界态：超长选择器 / 规则缺字段",
+                    edgeContent = {
+                        TokenRow(
+                            title = "某应用名称长到超出一行仍然需要完整展示的极端情况",
+                            subtitle = "[text=\"跳过广告并关闭\"][id=\"com.example.app.long.package.name:id/skip_button_container\"]",
+                            trailing = { TailNum("10,286 条") },
+                        )
+                        TokenDivider(first = false)
+                        TokenRow(
+                            title = "边界态：规则缺字段",
+                            subtitle = "该规则未提供选择器与优先级，命中次数缺失",
+                            trailing = { TailNum("—") },
+                        )
+                    },
+                ) {
+
+
+
+
+                        // ── 订阅源卡 ──
+                        Column(Modifier.fillMaxWidth().padding(horizontal = t.space4)) {
+                            GlassCard {
+                                GroupLabel("订阅源 URL", Modifier.padding(start = 0.dp))
+                                AppField(
+                                    value = urlInput,
+                                    onValueChange = { urlInput = it },
+                                    warm = true,
+                                    // URL 输入必须用 Uri 键盘：默认文本键盘会被中文输入法接管（见踩坑记录）
+                                    keyboardType = KeyboardType.Uri,
+                                )
+                                Spacer(Modifier.height(t.space3))
+                                Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                                    AppButton("更新订阅", onClick = { showConfirm = true }, modifier = Modifier.weight(1f))
+                                    AppButton("新增订阅", onClick = {
+                                        viewModel.updateSubscription(urlInput)
+                                    }, modifier = Modifier.weight(1f), variant = AppButtonVariant.Ghost)
+                                    AppButton("页面快照", onClick = {
+                                        viewModel.requestSnapshot()
+                                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    }, modifier = Modifier.weight(1f), variant = AppButtonVariant.Ghost)
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "上次同步 " + formatSyncTime(state.lastSyncAt) + " · 镜像 " + hostOf(urlInput),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = t.muted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Spacer(Modifier.width(t.space2))
+                                    Badge(state.subscriptions.size.toString() + " 个源", BadgeTone.Accent)
+                                }
+                                if (state.updatingUrl != null) {
+                                    Spacer(Modifier.height(t.space2))
+                                    Text("正在更新：" + hostOf(state.updatingUrl ?: ""), style = MaterialTheme.typography.labelSmall, color = t.accent)
+                                }
+                                state.snapshotPath?.let { path ->
+                                    Spacer(Modifier.height(t.space2))
+                                    Text("快照：" + path, style = MaterialTheme.typography.labelSmall, color = t.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+
+                        // ── 计数（滚动动画）──
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = t.space4),
+                            horizontalArrangement = Arrangement.spacedBy(t.space2),
+                        ) {
+                            AppCard(Modifier.weight(1f)) {
+                                Text("规则总数", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                Spacer(Modifier.height(t.space1))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    AnimatedNumber(state.rules.size, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                                    Spacer(Modifier.width(t.space1))
+                                    Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
+                                }
+                                Spacer(Modifier.height(t.space1))
+                                Text("较上周 +2", style = MaterialTheme.typography.labelMedium, color = t.successText)
+                            }
+                            AppCard(Modifier.weight(1f)) {
+                                Text("已启用", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                Spacer(Modifier.height(t.space1))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    AnimatedNumber(state.enabledCount, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                                    Spacer(Modifier.width(t.space1))
+                                    Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
+                                }
+                                Spacer(Modifier.height(t.space1))
+                                Text(
+                                    "共 " + selectorCounts.sum().toInt() + " 个选择器",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = t.muted,
+                                )
+                                Spacer(Modifier.height(t.space2))
+                                if (selectorCounts.size >= 2) {
+                                    Sparkline(selectorCounts, Modifier.fillMaxWidth().height(t.sparkHeight))
+                                }
+                            }
+                        }
+
+                        // ── 规则列表 ──
+                        Column(Modifier.fillMaxWidth()) {
+                            SecHead("规则列表", "点击行展开选择器明细")
+                            Spacer(Modifier.height(t.space2))
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                state.rules.forEachIndexed { index, rule ->
+                                    TokenDivider(first = index == 0)
+                                    RuleRow(
+                                        rule = rule,
+                                        index = index,
+                                        onToggleExpand = { view.performHapticFeedback(HapticFeedbackConstants.CONFIRM) },
+                                        onToggleEnabled = {
+                                            viewModel.toggleRule(rule.id)
+                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            toast.show((if (rule.enabled) "已停用 " else "已启用 ") + rule.name + " 跳过规则")
+                                        },
+                                    )
+                                }
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ── 选择器种类图例 ──
+                        Column(Modifier.fillMaxWidth().padding(horizontal = t.space4)) {
+                            Legend(
+                                items = listOf(
+                                    LegendItem("全部匹配 matches", selectorKindCount(state.rules) { it.matches.size }.toString(), t.chartRamp[0]),
+                                    LegendItem("任选其一 anyMatches", selectorKindCount(state.rules) { it.anyMatches.size }.toString(), t.chartRamp[1]),
+                                    LegendItem("排除 excludeMatches", selectorKindCount(state.rules) { it.excludeMatches.size }.toString(), t.chartRamp[2]),
+                                    LegendItem("规则组 groups", state.rules.sumOf { it.groups.size }.toString(), t.chartRamp[3]),
+                                ),
+                            )
+                        }
+                        Spacer(Modifier.height(t.space6))
                 }
-            },
+            }
+        }
+
+        AppToast(
+            message = state.message,
+            onDismiss = { viewModel.consumeMessage() },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = t.space12),
         )
 
-        // ===== 订阅规则（支持多个订阅源）+ 页面快照 =====
-        var showUrlDialog by remember { mutableStateOf(false) }
-        var urlInput by remember { mutableStateOf("") }
-        // 非空 = 正在更新该订阅源；null = 新增订阅
-        var updateTarget by remember { mutableStateOf<String?>(null) }
-        val hapticView = LocalView.current
-        val defaultUrl = "https://registry.npmmirror.com/@gkd-kit/subscription/latest/files/dist/gkd.json5"
-
-        InsetGroupedCard(
-            modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs)
-        ) {
-            state.subscriptions.forEach { subscription ->
-                SettingsRow(
-                    title = displayUrl(subscription.url),
-                    subtitle = "v" + subscription.version + " · " + subscription.ruleCount + " 条规则" +
-                        if (state.updatingUrl == subscription.url) " · 更新中…" else "",
-                    trailing = {
-                        TextButton(onClick = {
-                            updateTarget = subscription.url
-                            urlInput = subscription.url
-                            showUrlDialog = true
-                            hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                        }) {
-                            Text("更新", color = MaterialTheme.colorScheme.primary)
-                        }
-                        TextButton(onClick = {
-                            viewModel.removeSubscription(subscription.url)
-                            hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                        }) {
-                            Text("删除", color = MaterialTheme.colorScheme.primary)
-                        }
+        if (showConfirm) {
+            Box(Modifier.fillMaxSize()) {
+                OverlayScrim { showConfirm = false }
+                AppCard(Modifier.align(Alignment.Center).padding(horizontal = t.space6)) {
+                    Text("更新订阅源？", style = MaterialTheme.typography.titleMedium, color = t.fg)
+                    Spacer(Modifier.height(t.space2))
+                    Text(
+                        "将从 " + hostOf(urlInput) + " 拉取最新规则包，与本地 " + state.rules.size + " 条规则合并；同 id 规则以订阅源为准。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                    )
+                    Spacer(Modifier.height(t.space4))
+                    Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                        AppButton("取消", { showConfirm = false }, Modifier.weight(1f), AppButtonVariant.Ghost)
+                        AppButton("确认更新", {
+                            showConfirm = false
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            viewModel.updateSubscription(urlInput)
+                        }, Modifier.weight(1f))
                     }
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                }
             }
-            SettingsRow(
-                title = "添加订阅",
-                subtitle = if (state.subscriptions.isEmpty())
-                    "未订阅：可添加 GKD 兼容订阅地址获取社区规则（支持多个源）"
-                else "可继续添加其它 GKD 兼容订阅地址",
-                trailing = {
-                    TextButton(onClick = {
-                        updateTarget = null
-                        urlInput = defaultUrl
-                        showUrlDialog = true
-                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    }) {
-                        Text("添加", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            SettingsRow(
-                title = "页面快照",
-                subtitle = state.snapshotPath ?: "切到目标 App 后自动导出该页面的无障碍树，便于编写精确规则",
-                trailing = {
-                    TextButton(onClick = {
-                        viewModel.requestSnapshot()
-                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    }) {
-                        Text("导出", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            )
         }
+    }
+}
 
-        state.message?.let { message ->
-            LaunchedEffect(message) {
-                delay(4_000)
-                viewModel.consumeMessage()
-            }
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xxs)
-            )
-        }
+private const val DEFAULT_SUBSCRIPTION_URL =
+    "https://registry.npmmirror.com/@gkd-kit/subscription/latest/files/dist/gkd.json5"
 
-        if (showUrlDialog) {
-            val target = updateTarget
-            AlertDialog(
-                onDismissRequest = { showUrlDialog = false },
-                title = { Text(if (target == null) "添加订阅" else "更新订阅") },
-                text = {
-                    Column {
-                        if (target == null) {
-                            Text(
-                                text = "支持 GKD 兼容订阅（JSON5，仅 https），可添加多个订阅源。推荐地址：" +
-                                    "registry.npmmirror.com/@gkd-kit/subscription（jsdelivr 在真机上下载不稳定）",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            OutlinedTextField(
-                                value = urlInput,
-                                onValueChange = { urlInput = it },
-                                singleLine = true,
-                                // URL 输入必须用 Uri 键盘：默认文本键盘会被中文输入法接管，
-                                // 网址里的字母会被当成拼音转成汉字
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = MonitorSpacing.sm)
-                            )
-                        } else {
-                            Text(
-                                text = "重新拉取该订阅源的最新规则：" + target,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.updateSubscription(target ?: urlInput)
-                        showUrlDialog = false
-                        hapticView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    }) {
-                        Text(if (target == null) "添加" else "更新")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showUrlDialog = false }) { Text("取消") }
-                }
-            )
-        }
+private fun hostOf(url: String): String =
+    url.substringAfter("://", url).substringBefore("/").ifEmpty { "未填写订阅源" }
 
-        // 状态摘要
-        Card(
-            modifier = Modifier
+/** 静态复用（线程安全）；原实现每次调用都 new SimpleDateFormat（J8 热点）。 */
+private val SYNC_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+private fun formatSyncTime(atMs: Long): String =
+    if (atMs <= 0L) "尚未同步"
+    else Instant.ofEpochMilli(atMs).atZone(ZoneId.systemDefault()).format(SYNC_TIME_FORMATTER)
+
+/** 单条规则的选择器总数（matches + anyMatches + excludeMatches）。 */
+private fun selectorCountOf(rule: SkipRule): Int =
+    rule.groups.sumOf { group -> group.rules.sumOf { it.matches.size + it.anyMatches.size + it.excludeMatches.size } }
+
+private fun selectorKindCount(rules: List<SkipRule>, pick: (MatchRule) -> Int): Int =
+    rules.sumOf { rule -> rule.groups.sumOf { group -> group.rules.sumOf { pick(it) } } }
+
+/** 规则行：标题 / 计数 + 启用徽标 + 可折叠的选择器明细。 */
+@Composable
+private fun RuleRow(
+    rule: SkipRule,
+    index: Int,
+    onToggleExpand: () -> Unit,
+    onToggleEnabled: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    var expanded by remember { mutableStateOf(false) }
+    val chevron by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(t.durState, easing = t.easeStandard),
+        label = "ruleChevron",
+    )
+    Column(Modifier.fillMaxWidth().then(rememberStaggerEnter(index))) {
+        Row(
+            Modifier
                 .fillMaxWidth()
-                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MonitorSpacing.lg),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        "已启用规则",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        "${state.enabledCount} / ${state.rules.size}",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                .clickable {
+                    expanded = !expanded
+                    onToggleExpand()
                 }
+                .padding(vertical = t.space2)
+                .heightIn(min = t.rowMinH - t.space4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    "自动跳过开屏广告",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    rule.name.ifEmpty { rule.app },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = t.fg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    selectorCountOf(rule).toString() + " 个选择器 · " + rule.groups.size + " 组",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(Modifier.width(t.space2))
+            Badge(if (rule.enabled) "启用" else "停用", if (rule.enabled) BadgeTone.Success else BadgeTone.Neutral)
+            Spacer(Modifier.width(t.space2))
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = t.muted,
+                modifier = Modifier.width(t.space5).rotate(chevron),
+            )
+            Spacer(Modifier.width(t.space2))
+            AppSwitch(rule.enabled, { onToggleEnabled() })
         }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(animationSpec = tween(t.durOverlayIn, easing = t.easeOut)) + fadeIn(animationSpec = tween(t.durOverlayIn)),
+            exit = shrinkVertically(animationSpec = tween(t.durOverlayOut, easing = t.easeIn)) + fadeOut(animationSpec = tween(t.durOverlayOut)),
+        ) {
+            RuleDetail(rule)
+        }
+        if (!expanded) Spacer(Modifier.height(t.space1))
+    }
+}
 
-        Spacer(Modifier.height(MonitorSpacing.xs))
-
-        // 规则列表
-        if (state.rules.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
+/** 规则明细：每个规则组的选择器逐条列出（排查「跳不过 / 误触」的唯一入口）。 */
+@Composable
+private fun RuleDetail(rule: SkipRule) {
+    val t = LocalDesignTokens.current
+    Column(Modifier.fillMaxWidth().padding(bottom = t.space3)) {
+        rule.groups.sortedBy { it.order }.forEach { group ->
+            Text(
+                group.name.ifEmpty { "规则组" } + if (group.enabled) "" else "（已停用）",
+                style = MaterialTheme.typography.titleSmall,
+                color = t.fg,
+            )
+            Text(
+                groupScopeText(group),
+                style = MaterialTheme.typography.labelSmall,
+                color = t.muted,
+            )
+            Spacer(Modifier.height(t.space1))
+            group.rules.forEach { matchRule ->
                 Text(
-                    "暂无规则",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    matchRuleText(matchRule),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = t.fg2,
+                    modifier = Modifier.padding(top = t.space1),
                 )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    horizontal = MonitorSpacing.lg,
-                    vertical = MonitorSpacing.xs,
-                ),
-                verticalArrangement = Arrangement.spacedBy(MonitorSpacing.xs),
-            ) {
-                items(state.rules.size, key = { index -> state.rules[index].id }) { index ->
-                    val rule = state.rules[index]
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + slideInVertically { it / 6 },
-                    ) {
-                        RuleItem(
-                            rule = rule,
-                            onToggle = { viewModel.toggleRule(rule.id) },
+                selectorLines(matchRule).forEachIndexed { i, line ->
+                    Row(Modifier.fillMaxWidth().padding(top = t.space1)) {
+                        Text(
+                            (i + 1).toString().padStart(2, '0'),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = t.meta,
+                            modifier = Modifier.width(t.space6),
+                        )
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = t.muted,
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
             }
-        }
-    }
-}
-
-/** 订阅地址展示文案：去掉协议前缀并截断，避免一行放不下 */
-private fun displayUrl(url: String): String {
-    val text = url.removePrefix("https://")
-    return if (text.length <= 42) text else text.take(42) + "…"
-}
-
-@Composable
-private fun RuleItem(
-    rule: SkipRule,
-    onToggle: () -> Unit,
-) {
-    val view = LocalView.current
-    // 展开后显示每条匹配规则的选择器：排查"为什么没跳/为什么误点"的唯一入口
-    var expanded by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        expanded = !expanded
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    }
-                    .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.md),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = rule.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = rule.app,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = MonitorSpacing.xxs),
-                    )
-                    Text(
-                        text = "${rule.groups.size} 组规则 · ${rule.groups.sumOf { it.rules.size }} 条匹配 · " +
-                            if (expanded) "收起 ▴" else "展开 ▾",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = MonitorSpacing.xxs),
-                    )
-                }
-                Spacer(Modifier.width(MonitorSpacing.sm))
-                Switch(
-                    checked = rule.enabled,
-                    onCheckedChange = {
-                        onToggle()
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    },
-                )
-            }
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier.padding(
-                        start = MonitorSpacing.lg,
-                        end = MonitorSpacing.lg,
-                        bottom = MonitorSpacing.md,
-                    )
-                ) {
-                    rule.groups.sortedBy { it.order }.forEach { group ->
-                        RuleGroupDetail(group)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 规则组明细：闸门参数 + 每条匹配规则的选择器。
- *
- * 排查用：真机上「跳不过 / 误触」时先看这里——
- * 时间闸门（matchTime）是否留足、activityIds 是否限定了界面、选择器到底匹配什么。
- */
-@Composable
-private fun RuleGroupDetail(group: RuleGroup) {
-    Column(modifier = Modifier.padding(bottom = MonitorSpacing.sm)) {
-        Text(
-            text = group.name.ifEmpty { "规则组" } + (if (group.enabled) "" else "（已停用）"),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = groupScopeText(group),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = MonitorSpacing.xxs),
-        )
-        group.rules.forEach { matchRule ->
-            Text(
-                text = matchRuleText(matchRule),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = MonitorSpacing.sm),
-            )
-            selectorLines(matchRule).forEach { line ->
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = MonitorSpacing.sm, top = MonitorSpacing.xxs),
-                )
-            }
+            Spacer(Modifier.height(t.space2))
         }
     }
 }
