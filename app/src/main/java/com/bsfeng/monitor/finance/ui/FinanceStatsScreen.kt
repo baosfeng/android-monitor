@@ -48,13 +48,12 @@ import com.bsfeng.monitor.ui.components.HeatBar
 import com.bsfeng.monitor.ui.components.Legend
 import com.bsfeng.monitor.ui.components.LegendItem
 import com.bsfeng.monitor.ui.components.MotionToken
-import com.bsfeng.monitor.ui.components.RingChart
+import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.animatedAmount
 import com.bsfeng.monitor.ui.components.rememberMotionEnabled
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
-import com.bsfeng.monitor.ui.theme.categoryDot
 import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
@@ -62,8 +61,8 @@ import java.time.LocalDate
 /**
  * s07 统计分析。
  *
- * 收支卡 + 分类支出环图与图例 + 近 7 天分组柱 + 24 小时消费热力；图表全部走
- * [com.bsfeng.monitor.ui.components] 的 Canvas 基元（环形用 [RingChart]，分组柱由屏内组合）。
+ * 收支卡 + 分类支出扇形图与图例 + 近 7 天分组柱 + 24 小时消费热力；图表全部走
+ * [com.bsfeng.monitor.ui.components] 的 Canvas 基元（占比用 [PieChart]，分组柱由屏内组合）。
  */
 @Composable
 fun FinanceStatsScreen(
@@ -89,7 +88,6 @@ fun FinanceStatsScreen(
     val sortedEntries = remember(categoryBreakdown) {
         categoryBreakdown.entries.sortedByDescending { it.value }.take(CATEGORY_LIMIT)
     }
-    val total = remember(categoryBreakdown) { categoryBreakdown.values.sum() }
     val week = remember(transactions, currentMonth) { last7DayTotals(transactions, currentMonth) }
     val hourly = remember(transactions) { hourlyCounts(transactions) }
     val peak = remember(hourly) { hourlyPeaks(hourly) }
@@ -223,45 +221,29 @@ fun FinanceStatsScreen(
                                     Text("占比", style = MaterialTheme.typography.labelSmall, color = t.meta)
                                 }
                                 Spacer(Modifier.height(t.space3))
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    // 环径 104dp（W4 冻结参数名 size）：原型 s04-finance-home.html:15 /
-                                    // s06-budget.html:14 的 104px 圆环。
-                                    RingChart(
-                                        segments = sortedEntries.map { it.value.toFloat() },
-                                        size = 104.dp,
-                                        centerLabel = null,
-                                    )
-                                    // 中心文案对齐原型 .s07-ringctr（s07-stats.html:14-15）：
-                                    // b = 等宽 21px/700 的 ¥2,468，span = 14px 的「总支出」。
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            yen(animatedAmount(total.toFloat()).toDouble(), 0),
-                                            style = monitorMonoKpi,
-                                            color = t.fg,
-                                        )
-                                        Text(
-                                            "总支出",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = t.muted,
-                                        )
-                                    }
-                                }
+                                // 分片色与下方图例**同源**：按分类名走 categoryColorOf
+                                // （= categoryDot(categorySlotOf(name))），不用 PieChart 默认的「分片下标取色」，
+                                // 否则同一分类在图例与扇形上会落到不同色槽（购物图例 chart-3、分片却 chart-1）。
+                                val sliceColors = sortedEntries.map { categoryColorOf(it.key) }
+                                // 占比用实心扇形图（原型 s07:4051 data-chart="pie"），
+                                // 扇形直径 104dp 沿用改动前的冻结尺寸参数。
+                                // 不叠中心文案：实心扇形没有环心空白可承载「总额 / 总支出」——
+                                // 原型的 .s07-ringctr 是落在 ring() 渲出的空心环心上的（08-prototype.html:3455 运行时用 ring()），
+                                // 换成实心扇形后文字会压在色块上；总额由上方 KPI「支出」给出、逐项数值由下方图例给出。
+                                PieChart(
+                                    segments = sortedEntries.map { it.value.toFloat() },
+                                    colors = sliceColors,
+                                    size = 104.dp,
+                                )
                                 Spacer(Modifier.height(t.space3))
                                 Legend(
-                                    items = sortedEntries.mapIndexed { _, entry ->
-                                        val percent = if (total > 0) {
-                                            (entry.value / total * 100).toInt()
-                                        } else {
-                                            0
-                                        }
+                                    items = sortedEntries.mapIndexed { index, entry ->
                                         LegendItem(
                                             label = entry.key,
-                                            value = yen(entry.value, 0) + " · " + percent + "%",
-                                            // 与 s04 / s05 同一个分类色口径
-                                            color = categoryColorOf(entry.key),
+                                            // 原型 s07:4055-4060 的 .legend-num 只有金额（¥686），不带百分比后缀
+                                            value = yen(entry.value, 0),
+                                            // 与 s04 / s05 同一个分类色口径，且与上面的扇形分片共用同一份取色结果
+                                            color = sliceColors[index],
                                         )
                                     },
                                 )

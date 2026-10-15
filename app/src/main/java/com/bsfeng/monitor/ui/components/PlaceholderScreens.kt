@@ -116,6 +116,8 @@ fun OverviewScreen(
         AppCard {
             Text("24 小时活跃度", style = MaterialTheme.typography.titleSmall, color = t.fg)
             Spacer(Modifier.height(t.space3))
+            // 峰值标注保持默认开启：原型 area 引擎按 d.peak !== false 判定（08-prototype.html:5839），
+            // 组件默认值即原型默认值，展台 / 占位屏不额外关闭。
             AreaChart(values = HOURS_24, modifier = Modifier.fillMaxWidth().height(t.chartH))
             ChartAxisLabels(listOf("00", "06", "12", "18", "23"))
         }
@@ -123,10 +125,11 @@ fun OverviewScreen(
             Text("事件类型分布", style = MaterialTheme.typography.titleSmall, color = t.fg)
             Spacer(Modifier.height(t.space3))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RingChart(
+                // 事件类型分布是占比 → 实心扇形图（原型 s01:2415 / s12:5153 均为 data-chart="pie"），
+                // 数值只在右侧图例里，无中心文案。
+                PieChart(
                     segments = listOf(38f, 24f, 16f, 12f, 10f),
                     modifier = Modifier.fillMaxWidth(),
-                    centerLabel = "1,284",
                 )
                 Spacer(Modifier.width(t.space4))
                 Legend(

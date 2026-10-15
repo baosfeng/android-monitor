@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NavigateNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppToast
@@ -42,7 +44,7 @@ import com.bsfeng.monitor.ui.components.ChartAxisLabels
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.Legend
 import com.bsfeng.monitor.ui.components.LegendItem
-import com.bsfeng.monitor.ui.components.RingChart
+import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.rememberStaggerEnter
@@ -215,6 +217,8 @@ private fun LazyListScope.todayPanel(
         AppCard(modifier = Modifier.then(rememberStaggerEnter(4))) {
             CardHead("最近 24 小时活跃", "合计 " + state.todayActiveMinutes + " 分钟")
             Spacer(Modifier.height(t.space3))
+            // 峰值标注保持默认开启：原型 area 引擎按 d.peak !== false 判定（08-prototype.html:5839），
+            // s01-chart24h（2400-2403）未传关闭标记 → 原型此图带「峰值 N」。
             AreaChart(
                 values = state.hourlyIntensity,
                 modifier = Modifier
@@ -245,15 +249,23 @@ private fun LazyListScope.todayPanel(
                 MetaText("暂无类型数据")
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RingChart(
+                    // 分片色与右图例**同源**：同一份 sliceColors 同时喂给扇形与图例
+                    // （原型 s01:2415-2423 两侧都是 s1..s7 同一个下标槽位），
+                    // 显式传 colors 避免 PieChart 内部默认取色与图例各自演化后错位。
+                    val sliceColors = state.typeSlicesToday.indices.map { t.categoryDot(it) }
+                    // 占比用实心扇形图（原型 s01:2415 data-chart="pie"）。
+                    // 圆形本体不叠中心文案 —— 原型 .s01-ringbox 内没有 s07 那样的 .s07-ringctr。
+                    PieChart(
                         segments = state.typeSlicesToday.map { it.count.toFloat() },
                         modifier = Modifier.size(t.ringSize),
-                        centerLabel = state.todayEventCount.toString(),
+                        colors = sliceColors,
+                        size = t.ringSize,
                     )
                     Spacer(Modifier.width(t.space4))
                     Legend(
+                        // 原型图例 = 色点 + 名称 + 数值（s01:2417-2423），无百分比。
                         items = state.typeSlicesToday.mapIndexed { index, slice ->
-                            LegendItem(slice.label, slice.count.toString(), t.categoryDot(index))
+                            LegendItem(slice.label, slice.count.toString(), sliceColors[index])
                         },
                         modifier = Modifier.weight(1f),
                     )
@@ -284,6 +296,7 @@ private fun LazyListScope.todayPanel(
             } else {
                 state.recentEvents.forEachIndexed { index, record ->
                     if (index > 0) HorizontalDivider(color = t.borderSoft)
+                    // s01 行与 s02 时间线同源：时间列不带秒 → showSeconds = false（原型 .tl-time HH:mm）
                     LiveEventRow(record = record, showSeconds = false, onClick = onOpenLive)
                 }
             }
@@ -391,7 +404,7 @@ private fun LazyListScope.weekPanel(state: OverviewState) {
                             .padding(vertical = t.space3),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TypeIconDot(com.bsfeng.monitor.domain.model.RecordType.APP_USAGE)
+                        TypeIconDot(RecordType.APP_USAGE)
                         Spacer(Modifier.width(t.space3))
                         Text(
                             text = slice.label,
@@ -461,6 +474,8 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
         AppCard(modifier = Modifier.then(rememberStaggerEnter(4))) {
             CardHead("近 30 天活跃趋势", "单位 分钟")
             Spacer(Modifier.height(t.space3))
+            // 与 24h 同口径：原型 s01-chart30d（2550-2554）同样是 area 且未传 peak 关闭标记
+            // → 引擎默认标注「峰值 372」（08-prototype.html:5839）。
             AreaChart(
                 values = state.dailyActiveMinutes30,
                 modifier = Modifier
@@ -480,15 +495,20 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
                 MetaText("暂无类型数据")
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RingChart(
+                    // 同上：近 30 天类型分布也是占比 → 实心扇形图（原型 s01:2562 data-chart="pie"），
+                    // 分片色与图例共用同一份 sliceColors（原型两侧同为 s1..s7 下标槽位）。
+                    val sliceColors = state.typeSlices30.indices.map { t.categoryDot(it) }
+                    PieChart(
                         segments = state.typeSlices30.map { it.count.toFloat() },
                         modifier = Modifier.size(t.ringSize),
-                        centerLabel = state.monthEventCount.toString(),
+                        colors = sliceColors,
+                        size = t.ringSize,
                     )
                     Spacer(Modifier.width(t.space4))
                     Legend(
+                        // 原型图例 = 色点 + 名称 + 数值（s01:2564-2570），无百分比。
                         items = state.typeSlices30.mapIndexed { index, slice ->
-                            LegendItem(slice.label, slice.count.toString(), t.categoryDot(index))
+                            LegendItem(slice.label, slice.count.toString(), sliceColors[index])
                         },
                         modifier = Modifier.weight(1f),
                     )

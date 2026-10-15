@@ -42,7 +42,7 @@ import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.Legend
 import com.bsfeng.monitor.ui.components.LegendItem
-import com.bsfeng.monitor.ui.components.RingChart
+import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.SkeletonBlock
 import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.theme.DesignTokens
@@ -199,13 +199,19 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 )
                                 Spacer(Modifier.height(t.space3))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RingChart(
+                                    // 占比用实心扇形图（原型 s13:5393 .pv-ring data-chart="pie"）。
+                                    // 原型此图不叠中心文案（无 .s07-ringctr 那样的 .pv-ring 中心块），故无 centerLabel。
+                                    // 分片色与右图例**同源**：两侧都按 s1..s5 下标取 chartRamp（原型 s13:5393-5398），
+                                    // 显式传 colors 把这条同源关系钉在调用点上（图例只列前 4 项，与原型一致）。
+                                    PieChart(
                                         segments = listOf(42f, 31f, 24f, 18f, 13f),
                                         modifier = Modifier.size(t.ringSize),
-                                        centerLabel = "128",
+                                        colors = t.chartRamp,
+                                        size = t.ringSize,
                                     )
                                     Spacer(Modifier.width(t.space4))
                                     Legend(
+                                        // 原型图例 = 色点 + 名称 + 数值（s13:5395-5398），分类色 s1..s4 = chart-1..4。
                                         items = listOf(
                                             LegendItem("前台切换", "42", t.chartRamp[0]),
                                             LegendItem("广告跳过", "34", t.chartRamp[1]),
