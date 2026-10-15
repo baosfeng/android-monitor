@@ -7,6 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.util.Log
+import com.bsfeng.monitor.autobook.AutoBookConfig
 import com.bsfeng.monitor.core.di.ServiceContainer
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
@@ -35,6 +36,8 @@ class MonitorApp : Application() {
         instance = this
         // 跳过配置需在规则管理器创建（读取内置规则时间闸门）之前装载
         SkipConfig.init(this)
+        // 自动记账开关（默认开启）：无障碍服务会在支付结果页上读取它
+        AutoBookConfig.init(this)
         container = ServiceContainer(this)
         registerRecordReceiver()
         registerWifiNetworkCallback()
