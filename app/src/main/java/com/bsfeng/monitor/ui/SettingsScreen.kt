@@ -201,12 +201,11 @@ fun SettingsScreen(
                         ) {
                         // ① 监控时长窗口（chip 组）
                         //
-                        // ⚠️ 原型 s09 的档位是「15 分钟 / 30 分钟 / 1 小时 / 永久」，与本实现的
-                        // 5/10/15 **秒** 不是同一量纲 —— 但本 chip 绑定的值（SkipConfig.watchWindowMs）
-                        // 是**开屏跳过引擎的匹配窗口**（自 App 切换起算），同时是内置规则的 matchTime
-                        // 时间闸门（SkipRuleManager.load → BuiltInRules.getRules）。把它放宽到分钟/永久会
-                        // 直接改变跳过引擎的运行语义（防误触闸门失效、matchTime=0 在 GKD 语义里 = 不限），
-                        // 因此本轮**保持 5/10/15 秒不动**，冲突与建议见交付报告。
+                        // 已确认保留 5/10/15 **秒**，不采用原型 s09 的「15 分钟 / 30 分钟 / 1 小时 / 永久」
+                        // 档位：本 chip 绑定的值（SkipConfig.watchWindowMs）优先服务**开屏跳过引擎的匹配窗口**
+                        // 语义 —— 自 App 切换起算，同时是内置规则的 matchTime 时间闸门
+                        // （SkipRuleManager.load → BuiltInRules.getRules），放宽到分钟 / 永久会改变引擎行为
+                        // （防误触闸门失效；matchTime=0 在 GKD 语义里 = 不限）。
                         // 语义依据：docs/开屏跳过/设计.md §1「匹配窗口模型」、§4.3、§7。
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("监控时长窗口")
@@ -277,9 +276,9 @@ fun SettingsScreen(
                                     },
                                 )
                                 TokenDivider(first = false)
-                                // 使用时长统计（原型 s09 缺行）：引擎侧 UsageTracker 随无障碍服务的前台轮询
-                                // 无条件运行，没有独立开关与消费点，故用状态角标如实呈现开/未授权，
-                                // 不做「拨一下就弹回」的假开关。
+                                // 使用时长统计（原型 s09 缺行）：已确认保留状态角标（不引入 AppSwitch）——
+                                // 引擎侧 UsageTracker 随无障碍服务的前台轮询无条件运行，没有独立开关与消费点，
+                                // 角标如实呈现开 / 未授权；做成开关只会是「拨一下就弹回」的假开关。
                                 TokenRow(
                                     title = "使用时长统计",
                                     subtitle = "按应用累计前台时长，用于概览曲线",
@@ -292,9 +291,10 @@ fun SettingsScreen(
                                     },
                                 )
                                 TokenDivider(first = false)
-                                // 事件上报（原型 s09 缺行）：心跳调度真实存在（AlarmReceiver 每分钟 →
-                                // HealthChecker），上传是二期桩实现（EventReporter.uploadBatch 直接返回 0），
-                                // 因此角标如实写「本地留存」，不宣称"上次上报成功"。
+                                // 事件上报（原型 s09 缺行）：已确认保留状态角标（不引入 AppSwitch）——
+                                // 心跳调度真实存在（AlarmReceiver 每分钟 → HealthChecker），上传是二期桩实现
+                                // （EventReporter.uploadBatch 直接返回 0），没有可切换的消费点；角标如实写
+                                // 「本地留存」，不宣称"上次上报成功"。
                                 // 副标题 13 汉字（16 字位）单行可容纳；原「每分钟心跳 · 上传通道二期接入，
                                 // 事件先本地留存」24 字位会被 TokenRow 的 maxLines = 1 截断成「…事…」。
                                 // 「事件先本地留存」交给右侧角标承载，副标题只留「心跳存在 + 上传未接入」。
