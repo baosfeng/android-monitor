@@ -388,7 +388,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // 开屏：品牌 C2 动效（1.8s 后自动结束）
+                    // 开屏：品牌 C2 动效，时序同原型 §8 —— 1600ms 起 240ms ease-in 淡出、1900ms 结束；
+                    // 减弱动效时落终态后 400ms 收起、700ms 结束（见 ui/components/BrandSplash.kt）。
                     if (showSplash) {
                         BrandSplash(onFinished = { showSplash = false })
                     }
