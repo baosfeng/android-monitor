@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 行为记录 · C2 时间切片 · 由 tools/sync-brand-assets.mjs 从 brand-mark.svg 生成，请勿手改 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <path
+        android:pathData="M128,28 A100,100 0 1 1 128,228 A100,100 0 1 1 128,28"
+        android:fillColor="#00000000"
+        android:strokeColor="#0E1218"
+        android:strokeWidth="18"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        />
+    <path
+        android:pathData="M199,40 A17,17 0 1 1 199,74 A17,17 0 1 1 199,40"
+        android:fillColor="#1D6E9E"
+        />
+    <path
+        android:pathData="M84 176V104"
+        android:fillColor="#00000000"
+        android:strokeColor="#0E1218"
+        android:strokeWidth="15"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        />
+    <path
+        android:pathData="M128 176V64"
+        android:fillColor="#00000000"
+        android:strokeColor="#0E1218"
+        android:strokeWidth="15"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        />
+    <path
+        android:pathData="M172 176V120"
+        android:fillColor="#00000000"
+        android:strokeColor="#0E1218"
+        android:strokeWidth="15"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        />
+</vector>

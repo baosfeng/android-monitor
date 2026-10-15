@@ -1,20 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 监控主题前景图标：眼睛，表示行为监控 -->
+<!-- 行为记录 · 自适应图标 foreground 层
+     108dp 画布；官方规格：安全区是 66x66dp 圆形（圆心 54,54，任何 OEM 形状遮罩都不得裁到它）。
+     256 viewBox 标识等比缩放 translate(21,21) scale(0.2578125)：256*0.2578125 = 66dp，居中于 21..87。
+     几何自证（/tmp/check_safe_area.py）：外接圆直径 60.54dp <= 66dp，圆心 (54,54) 偏差 0dp。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 眼白 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,30C42,30 31,36 24,45C22,48 22,52 24,55C31,64 42,70 54,70C66,70 77,64 84,55C86,52 86,48 84,45C77,36 66,30 54,30Z" />
-    <!-- 瞳孔 -->
-    <path
-        android:fillColor="#1A237E"
-        android:pathData="M54,40C49,40 45,44 45,49C45,54 49,58 54,58C59,58 63,54 63,49C63,44 59,40 54,40Z" />
-    <!-- 高光 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M51,44a3,3 0,1 0,0 6a3,3 0,1 0,0 -6Z" />
+    <group
+        android:translateX="21"
+        android:translateY="21"
+        android:scaleX="0.2578125"
+        android:scaleY="0.2578125">
+        <path
+            android:pathData="M28,128 A100,100 0 1 1 228,128 A100,100 0 1 1 28,128 Z"
+            android:fillColor="#00000000"
+            android:strokeColor="#0E1218"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M84,176 L84,104"
+            android:fillColor="#00000000"
+            android:strokeColor="#0E1218"
+            android:strokeWidth="15"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M128,176 L128,64"
+            android:fillColor="#00000000"
+            android:strokeColor="#0E1218"
+            android:strokeWidth="15"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M172,176 L172,120"
+            android:fillColor="#00000000"
+            android:strokeColor="#0E1218"
+            android:strokeWidth="15"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M182,57 A17,17 0 1 1 216,57 A17,17 0 1 1 182,57 Z"
+            android:fillColor="#1D6E9E" />
+    </group>
 </vector>
