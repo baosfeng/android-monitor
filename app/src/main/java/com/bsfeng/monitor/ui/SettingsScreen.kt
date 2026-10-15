@@ -3,6 +3,7 @@ package com.bsfeng.monitor.ui
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -24,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Info
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -197,6 +200,14 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(t.space4),
                         ) {
                         // ① 监控时长窗口（chip 组）
+                        //
+                        // ⚠️ 原型 s09 的档位是「15 分钟 / 30 分钟 / 1 小时 / 永久」，与本实现的
+                        // 5/10/15 **秒** 不是同一量纲 —— 但本 chip 绑定的值（SkipConfig.watchWindowMs）
+                        // 是**开屏跳过引擎的匹配窗口**（自 App 切换起算），同时是内置规则的 matchTime
+                        // 时间闸门（SkipRuleManager.load → BuiltInRules.getRules）。把它放宽到分钟/永久会
+                        // 直接改变跳过引擎的运行语义（防误触闸门失效、matchTime=0 在 GKD 语义里 = 不限），
+                        // 因此本轮**保持 5/10/15 秒不动**，冲突与建议见交付报告。
+                        // 语义依据：docs/开屏跳过/设计.md §1「匹配窗口模型」、§4.3、§7。
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("监控时长窗口")
                             Row(
@@ -220,13 +231,21 @@ fun SettingsScreen(
                         // ② 无障碍服务
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("无障碍服务")
+                            // 运行时长跟随原型 s09 的「已运行 6 小时 12 分」：仅在服务实例已连接时追加。
+                            // 文案前半段仍取自 ui/AccessibilityCopy.kt 的唯一来源（s01/s02/s05 同口径），
+                            // 本屏只做后缀拼接，不复制措辞。
+                            val a11ySubtitle = accessibilityStatusText(
+                                state.accessibilityEnabled,
+                                state.accessibilityServiceRunning,
+                            ) + if (state.accessibilityServiceRunning) {
+                                " · 已运行 " + formatUptime(processUptimeMs())
+                            } else {
+                                ""
+                            }
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
                                 TokenRow(
                                     title = "无障碍服务",
-                                    subtitle = accessibilityStatusText(
-                                        state.accessibilityEnabled,
-                                        state.accessibilityServiceRunning,
-                                    ),
+                                    subtitle = a11ySubtitle,
                                     subtitleColor = if (state.accessibilityEnabled) t.successText else t.dangerText,
                                     icon = Icons.Outlined.Accessibility,
                                     trailing = {
@@ -256,6 +275,34 @@ fun SettingsScreen(
                                             toast.show(if (isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                                         })
                                     },
+                                )
+                                TokenDivider(first = false)
+                                // 使用时长统计（原型 s09 缺行）：引擎侧 UsageTracker 随无障碍服务的前台轮询
+                                // 无条件运行，没有独立开关与消费点，故用状态角标如实呈现开/未授权，
+                                // 不做「拨一下就弹回」的假开关。
+                                TokenRow(
+                                    title = "使用时长统计",
+                                    subtitle = "按应用累计前台时长，用于概览曲线",
+                                    icon = Icons.Outlined.BarChart,
+                                    trailing = {
+                                        Badge(
+                                            text = if (state.accessibilityEnabled) "已开启" else "待授权",
+                                            tone = if (state.accessibilityEnabled) BadgeTone.Success else BadgeTone.Warn,
+                                        )
+                                    },
+                                )
+                                TokenDivider(first = false)
+                                // 事件上报（原型 s09 缺行）：心跳调度真实存在（AlarmReceiver 每分钟 →
+                                // HealthChecker），上传是二期桩实现（EventReporter.uploadBatch 直接返回 0），
+                                // 因此角标如实写「本地留存」，不宣称"上次上报成功"。
+                                // 副标题 13 汉字（16 字位）单行可容纳；原「每分钟心跳 · 上传通道二期接入，
+                                // 事件先本地留存」24 字位会被 TokenRow 的 maxLines = 1 截断成「…事…」。
+                                // 「事件先本地留存」交给右侧角标承载，副标题只留「心跳存在 + 上传未接入」。
+                                TokenRow(
+                                    title = "事件上报",
+                                    subtitle = "每分钟心跳 · 上传通道尚未接入",
+                                    icon = Icons.Outlined.Visibility,
+                                    trailing = { Badge(text = "本地留存", tone = BadgeTone.Warn) },
                                 )
                                 Spacer(Modifier.height(t.space1))
                             }
@@ -382,6 +429,13 @@ fun SettingsScreen(
                                     onClick = { toast.show("已是最新版本 1.0.0") },
                                     trailing = { TailChevron() },
                                 )
+                                TokenDivider(first = false)
+                                // 开源许可（原型 s09 缺行）：与原型一致，行本身不带图标、点击出许可文案。
+                                TokenRow(
+                                    title = "开源许可",
+                                    onClick = { toast.show("开源许可：Apache-2.0") },
+                                    trailing = { TailChevron() },
+                                )
                                 Spacer(Modifier.height(t.space1))
                             }
                         }
@@ -425,3 +479,28 @@ fun SettingsScreen(
 
 // 无障碍状态文案已收敛到 ui/AccessibilityCopy.kt 的 accessibilityStatusText(...)：
 // s01 / s02 / s05 三屏同一数据源（AccessibilityStatus 三重判定）与同一措辞。
+
+/**
+ * 本进程已运行的毫秒数（用于 s09 的「已运行 6 小时 12 分」）。
+ *
+ * 无障碍服务运行在 App 进程内、与服务实例同生命周期，而系统没有提供「服务绑定时刻」的公开 API
+ * （AccessibilityServiceInfo 只有能力位与包名，无时间戳）。在「本 agent 不改 service/skip 等
+ * 范围外文件」的约束下，进程启动至今是当前可得的最近似值：服务由系统绑定拉起进程时两者一致，
+ * 用户先开 App、后授权时该值会略大于服务真实运行时长。
+ * 若要精确到「服务运行时长」，需在 MonitorAccessibilityService 记录 onServiceConnected 时间戳
+ * 并由状态层暴露（超出本文件范围）。
+ */
+private fun processUptimeMs(): Long =
+    (SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()).coerceAtLeast(0L)
+
+/** 运行时长文案：≥1 小时用「X 小时 Y 分」（同原型），不足 1 分钟用「不足 1 分钟」。 */
+private fun formatUptime(ms: Long): String {
+    val totalMinutes = ms / 60_000L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return when {
+        hours > 0 -> "$hours 小时 $minutes 分"
+        totalMinutes > 0 -> "$minutes 分钟"
+        else -> "不足 1 分钟"
+    }
+}
