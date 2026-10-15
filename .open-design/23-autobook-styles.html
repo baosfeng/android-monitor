@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>自动记账浮窗 · 四种风格（对齐 App glassmorphism 主题）</title>
+<style>
+/* ── Token 全部取自 .open-design/08-prototype.html 的 glassmorphism 主题（App 当前主题） ── */
+:root{
+  --gm-bg:#eef6ff; --gm-surface:rgba(255,255,255,.74); --gm-surface-solid:#ffffff;
+  --gm-fg:#102033; --gm-fg-2:#34465f; --gm-muted:#60708a; --gm-meta:#4f8cff;
+  --gm-border:rgba(255,255,255,.64); --gm-border-soft:rgba(255,255,255,.38);
+  --gm-accent:#3e6ec9; --gm-accent-on:#fff; --gm-success:#22c55e; --gm-danger:#ef4444; --gm-warn:#f59e0b;
+  --gm-elev:0 24px 80px rgba(79,140,255,.18);
+  --chart-1:#e8833a; --chart-2:#3b82f6; --chart-3:#8b5cf6; --chart-4:#10b981;
+  --chart-9:#84cc16; --chart-5:#ef4444; --chart-15:#22c55e;
+  --text-xs:12px; --text-sm:14px; --text-base:17px; --text-2xl:40px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px;
+  --r-md:12px; --r-lg:18px; --r-xl:24px; --r-pill:980px;
+  --font-body:-apple-system,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"SF Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--gm-bg);font-family:var(--font-body);color:var(--gm-fg);padding:36px 20px 60px}
+.head{max-width:860px;margin:0 auto 26px;text-align:center}
+.head h1{margin:0 0 8px;font-size:23px;font-weight:600;letter-spacing:-.01em}
+.head p{margin:0;color:var(--gm-muted);font-size:13px;line-height:1.7}
+.head code{font-family:var(--font-mono);font-size:12px;background:rgba(255,255,255,.7);padding:1px 6px;border-radius:6px}
+.grid{display:grid;grid-template-columns:repeat(2,393px);gap:32px 34px;justify-content:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:12px}
+.col-tag{font-size:13px;font-weight:600;background:rgba(255,255,255,.8);border:1px solid var(--gm-border);
+         padding:6px 16px;border-radius:var(--r-pill);color:var(--gm-fg-2);box-shadow:0 4px 16px rgba(79,140,255,.10)}
+.col-tag b{color:var(--gm-accent)}
+.col-note{font-size:12px;color:var(--gm-muted);max-width:370px;text-align:center;line-height:1.65}
+
+/* 设备框 */
+.phone{width:393px;height:852px;background:#fff;border-radius:44px;position:relative;overflow:hidden;
+       box-shadow:0 26px 60px rgba(16,32,51,.20),0 0 0 10px #101828,0 0 0 11px #2b3648}
+.punch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:11px;height:11px;border-radius:50%;background:#111;z-index:60}
+.statusbar{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;justify-content:space-between;
+           padding:0 22px;font-size:13px;font-weight:600;z-index:55}
+.gesturebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:4px;border-radius:2px;
+            background:rgba(0,0,0,.3);z-index:70}
+
+/* 背景：支付宝账单详情页（真机 dump 原文） */
+.paypage{position:absolute;inset:0;background:#fff;padding-top:44px}
+.paynav{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:16px}
+.paynav .right{font-size:14px;color:#1677ff}
+.paynav .title{font-weight:600}
+.payhero{text-align:center;padding:18px 0 4px}
+.paylogo{width:54px;height:54px;border-radius:14px;background:#1a1a1a;color:#fff;display:grid;place-items:center;margin:0 auto 10px;font-size:22px}
+.paymerchant{font-size:15px;color:#424245;margin-bottom:6px}
+.payamount{font-family:var(--font-mono);font-size:40px;font-weight:700;letter-spacing:-.02em}
+.paystatus{font-size:13px;color:#86868b;margin-top:4px}
+.payrows{margin-top:16px;padding:0 20px}
+.payrow{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-top:1px solid #ececf0;font-size:14px}
+.payrow .k{color:#86868b}.payrow .v{color:#424245;text-align:right}
+.scrim{position:absolute;inset:0;z-index:30}
+
+/* ── 浮窗公共结构 ── */
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:40;padding:10px 20px 22px}
+.grip{width:38px;height:4px;border-radius:2px;margin:0 auto 14px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sheet-head .t{font-size:15px;font-weight:600}
+.src{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 11px 4px 5px;border-radius:var(--r-pill)}
+.src .dot{width:17px;height:17px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+.src.alipay{background:rgba(22,119,255,.12);color:#1677ff}.src.alipay .dot{background:#1677ff}
+.src.wechat{background:rgba(7,193,96,.14);color:#07934b}.src.wechat .dot{background:#07c160}
+.amt-row{display:flex;align-items:flex-end;gap:10px}
+.amt{font-family:var(--font-mono);font-size:40px;font-weight:700;letter-spacing:-.025em;line-height:1}
+.amt.expense{color:var(--gm-danger)}
+.amt.income{color:var(--gm-success)}
+.merchant{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--gm-muted);margin:9px 0 0}
+.merchant .micon{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:13px;flex:0 0 auto}
+.label{font-size:12px;color:var(--gm-muted);margin:0 0 8px}
+.segmented{display:flex;border-radius:10px;padding:3px;gap:3px}
+.segmented .seg{flex:1;text-align:center;font-size:14px;padding:7px 0;border-radius:8px;font-weight:500;color:var(--gm-fg-2)}
+.chips{display:flex;gap:8px;overflow:hidden}
+.chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:6px 13px 6px 9px;border-radius:var(--r-pill);
+      font-size:14px;white-space:nowrap;color:var(--gm-fg-2)}
+.chip i{width:8px;height:8px;border-radius:50%;display:block}
+.chip.is-on{font-weight:600;color:var(--gm-fg);box-shadow:inset 0 0 0 1.5px currentColor}
+.metas{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;color:var(--gm-muted)}
+.metas .v{color:var(--gm-fg-2);font-weight:500}
+.btns{display:flex;gap:10px;margin-top:18px}
+.btn{border:0;font-family:inherit;font-size:16px;font-weight:600;padding:13px 20px;border-radius:14px;cursor:pointer}
+.btn-main{flex:1;background:var(--gm-accent);color:#fff;box-shadow:0 8px 22px rgba(62,110,201,.30)}
+.btn-ghost{background:rgba(16,32,51,.06);color:var(--gm-fg-2)}
+.sep{height:1px;margin:15px 0;background:rgba(16,32,51,.08)}
+
+/* ══ 风格 1：毛玻璃浮层（对齐 App 当前主题）══ */
+.s1{background:rgba(255,255,255,.80);-webkit-backdrop-filter:blur(26px) saturate(180%);backdrop-filter:blur(26px) saturate(180%);
+    border-radius:26px 26px 0 0;border-top:1px solid rgba(255,255,255,.9);box-shadow:0 -18px 60px rgba(79,140,255,.22)}
+.s1 .grip{background:rgba(16,32,51,.18)}
+.s1 .segmented{background:rgba(16,32,51,.06)}
+.s1 .seg.is-on{background:#fff;color:var(--gm-fg);font-weight:600;box-shadow:0 2px 8px rgba(16,32,51,.10)}
+.s1 .chip{background:rgba(255,255,255,.85)}
+.s1 .sep{background:rgba(16,32,51,.08)}
+.scrim.s1-scrim{background:linear-gradient(180deg,rgba(16,32,51,.10) 0%,rgba(16,32,51,.34) 100%);
+                -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+
+/* ══ 风格 2：实心白卡（与记账页卡片同款）══ */
+.s2{background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -10px 40px rgba(16,32,51,.16);
+    margin:0 8px 8px;border-radius:24px}
+.s2 .grip{background:rgba(16,32,51,.14)}
+.s2 .segmented{background:#f1f4f9}
+.s2 .seg.is-on{background:#fff;color:var(--gm-fg);font-weight:600;box-shadow:0 1px 4px rgba(16,32,51,.12)}
+.s2 .chip{background:#f1f4f9}
+.s2 .sep{background:#eaeef5}
+.scrim.s2-scrim{background:rgba(16,32,51,.34)}
+
+/* ══ 风格 3：深色高对比（金额最醒目）══ */
+.s3{background:linear-gradient(180deg,#16233a 0%,#0f1a2c 100%);border-radius:26px 26px 0 0;
+    box-shadow:0 -18px 60px rgba(10,20,35,.45)}
+.s3 .grip{background:rgba(255,255,255,.22)}
+.s3 .t{color:#fff}
+.s3 .amt{color:#fff}
+.s3 .merchant{color:rgba(255,255,255,.62)}
+.s3 .merchant .micon{background:rgba(255,255,255,.12);color:#fff}
+.s3 .label{color:rgba(255,255,255,.5)}
+.s3 .segmented{background:rgba(255,255,255,.09)}
+.s3 .seg{color:rgba(255,255,255,.72)}
+.s3 .seg.is-on{background:rgba(255,255,255,.96);color:#0f1a2c;font-weight:600}
+.s3 .chip{background:rgba(255,255,255,.10);color:rgba(255,255,255,.86)}
+.s3 .chip.is-on{color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.7)}
+.s3 .metas{color:rgba(255,255,255,.52)}.s3 .metas .v{color:rgba(255,255,255,.92)}
+.s3 .sep{background:rgba(255,255,255,.12)}
+.s3 .btn-main{background:#3f7ae0;box-shadow:0 8px 24px rgba(63,122,224,.45)}
+.s3 .btn-ghost{background:rgba(255,255,255,.10);color:rgba(255,255,255,.8)}
+.scrim.s3-scrim{background:rgba(8,15,26,.52);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+
+/* ══ 风格 4：语义色带（类型一眼可辨）══ */
+.s4{background:linear-gradient(180deg,rgba(239,68,68,.13) 0%,rgba(255,255,255,.92) 26%,rgba(255,255,255,.92) 100%);
+    -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+    border-radius:26px 26px 0 0;box-shadow:0 -18px 60px rgba(79,140,255,.20)}
+.s4 .band{height:5px;background:var(--gm-danger);border-radius:3px 3px 0 0;margin:0 0 14px}
+.s4.income .band{background:var(--gm-success)}
+.s4 .amt{color:var(--gm-danger)}
+.s4 .grip{background:rgba(16,32,51,.16)}
+.s4 .segmented{background:rgba(16,32,51,.06)}
+.s4 .seg.is-on{background:#fff;color:var(--gm-fg);font-weight:600;box-shadow:0 2px 8px rgba(16,32,51,.10)}
+.s4 .chip{background:rgba(255,255,255,.9)}
+.s4 .sep{background:rgba(16,32,51,.08)}
+.scrim.s4-scrim{background:linear-gradient(180deg,rgba(239,68,68,.06) 0%,rgba(16,32,51,.36) 100%)}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>自动记账浮窗 · 四种风格</h1>
+  <p>全部改用 App 当前的 <code>glassmorphism</code> 主题 token：底色 <code>#eef6ff</code> · 主色 <code>#3e6ec9</code> ·
+     正文 <code>#102033</code> · 支出 <code>#ef4444</code>；分类小圆点按 <code>chart-1..16</code> 取色，与记账页交易行完全一致。</p>
+</div>
+
+<div class="grid">
+
+  <!-- ══ 1 毛玻璃浮层 ══ -->
+  <div class="col">
+    <div class="col-tag">风格 1 · <b>毛玻璃浮层</b>（与 App 主题同款）</div>
+    <div class="phone">
+      <div class="punch"></div><div class="statusbar"><span>23:14</span><span>5G ▮▮▮ 88</span></div>
+      <div class="paypage">
+        <div class="paynav"><span>‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero"><div class="paylogo">☁</div><div class="paymerchant">阿里云</div>
+          <div class="payamount">-3.00</div><div class="paystatus">交易成功</div></div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-15 23:14:43</span></div>
+          <div class="payrow"><span class="k">付款方式</span><span class="v">余额宝</span></div>
+          <div class="payrow"><span class="k">收款方全称</span><span class="v">阿里云计算有限公司</span></div>
+        </div>
+      </div>
+      <div class="scrim s1-scrim"></div>
+      <div class="sheet s1">
+        <div class="grip"></div>
+        <div class="sheet-head"><span class="t">识别到一笔支出</span>
+          <span class="src alipay"><span class="dot">支</span>支付宝</span></div>
+        <div class="amt-row"><span class="amt expense">-¥3.00</span></div>
+        <div class="merchant"><span class="micon" style="background:#e8f2ff;color:#3e6ec9">☁</span>阿里云计算有限公司</div>
+        <div class="sep"></div>
+        <div class="label">类型</div>
+        <div class="segmented"><div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div></div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on" style="color:#10b981"><i style="background:#10b981"></i>日用</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
+        </div>
+        <div class="sep"></div>
+        <div class="metas"><span>账户</span><span class="v">支付宝</span></div>
+        <div class="metas"><span>时间</span><span class="v">10-15 23:14</span></div>
+        <div class="btns"><button class="btn btn-ghost">忽略</button><button class="btn btn-main">记一笔</button></div>
+      </div>
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">半透明 + 背景模糊，浮在支付页上有「浮起来」的层次；和 App 卡片同一套玻璃质感，切换主题也不会突兀。</div>
+  </div>
+
+  <!-- ══ 2 实心白卡 ══ -->
+  <div class="col">
+    <div class="col-tag">风格 2 · <b>实心白卡</b>（记账页卡片同款）</div>
+    <div class="phone">
+      <div class="punch"></div><div class="statusbar"><span>23:14</span><span>5G ▮▮▮ 88</span></div>
+      <div class="paypage">
+        <div class="paynav"><span>‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero"><div class="paylogo">☁</div><div class="paymerchant">阿里云</div>
+          <div class="payamount">-3.00</div><div class="paystatus">交易成功</div></div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-15 23:14:43</span></div>
+          <div class="payrow"><span class="k">付款方式</span><span class="v">余额宝</span></div>
+          <div class="payrow"><span class="k">收款方全称</span><span class="v">阿里云计算有限公司</span></div>
+        </div>
+      </div>
+      <div class="scrim s2-scrim"></div>
+      <div class="sheet s2">
+        <div class="grip"></div>
+        <div class="sheet-head"><span class="t">识别到一笔支出</span>
+          <span class="src alipay"><span class="dot">支</span>支付宝</span></div>
+        <div class="amt-row"><span class="amt expense">-¥3.00</span></div>
+        <div class="merchant"><span class="micon" style="background:#e8f2ff;color:#3e6ec9">☁</span>阿里云计算有限公司</div>
+        <div class="sep"></div>
+        <div class="label">类型</div>
+        <div class="segmented"><div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div></div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on" style="color:#10b981"><i style="background:#10b981"></i>日用</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
+        </div>
+        <div class="sep"></div>
+        <div class="metas"><span>账户</span><span class="v">支付宝</span></div>
+        <div class="metas"><span>时间</span><span class="v">10-15 23:14</span></div>
+        <div class="btns"><button class="btn btn-ghost">忽略</button><button class="btn btn-main">记一笔</button></div>
+      </div>
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">不透明白卡，四周留边，读起来最干净；缺点是遮住支付页更多内容，且少了通透感。</div>
+  </div>
+
+  <!-- ══ 3 深色高对比 ══ -->
+  <div class="col">
+    <div class="col-tag">风格 3 · <b>深色高对比</b>（金额最跳）</div>
+    <div class="phone">
+      <div class="punch"></div><div class="statusbar"><span>23:14</span><span>5G ▮▮▮ 88</span></div>
+      <div class="paypage">
+        <div class="paynav"><span>‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero"><div class="paylogo">☁</div><div class="paymerchant">阿里云</div>
+          <div class="payamount">-3.00</div><div class="paystatus">交易成功</div></div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-15 23:14:43</span></div>
+          <div class="payrow"><span class="k">付款方式</span><span class="v">余额宝</span></div>
+          <div class="payrow"><span class="k">收款方全称</span><span class="v">阿里云计算有限公司</span></div>
+        </div>
+      </div>
+      <div class="scrim s3-scrim"></div>
+      <div class="sheet s3">
+        <div class="grip"></div>
+        <div class="sheet-head"><span class="t">识别到一笔支出</span>
+          <span class="src alipay"><span class="dot">支</span>支付宝</span></div>
+        <div class="amt-row"><span class="amt">-¥3.00</span></div>
+        <div class="merchant"><span class="micon">☁</span>阿里云计算有限公司</div>
+        <div class="sep"></div>
+        <div class="label">类型</div>
+        <div class="segmented"><div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div></div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on"><i style="background:#10b981"></i>日用</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
+        </div>
+        <div class="sep"></div>
+        <div class="metas"><span>账户</span><span class="v">支付宝</span></div>
+        <div class="metas"><span>时间</span><span class="v">10-15 23:14</span></div>
+        <div class="btns"><button class="btn btn-ghost">忽略</button><button class="btn btn-main">记一笔</button></div>
+      </div>
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">深底白字，扫一眼只看见金额；夜里不刺眼。但与 App 浅色主题反差大，更像「另一个 App 弹的窗」。</div>
+  </div>
+
+  <!-- ══ 4 语义色带 ══ -->
+  <div class="col">
+    <div class="col-tag">风格 4 · <b>语义色带</b>（收支一眼分）</div>
+    <div class="phone">
+      <div class="punch"></div><div class="statusbar"><span>23:14</span><span>5G ▮▮▮ 88</span></div>
+      <div class="paypage">
+        <div class="paynav"><span>‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero"><div class="paylogo">☁</div><div class="paymerchant">阿里云</div>
+          <div class="payamount">-3.00</div><div class="paystatus">交易成功</div></div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-15 23:14:43</span></div>
+          <div class="payrow"><span class="k">付款方式</span><span class="v">余额宝</span></div>
+          <div class="payrow"><span class="k">收款方全称</span><span class="v">阿里云计算有限公司</span></div>
+        </div>
+      </div>
+      <div class="scrim s4-scrim"></div>
+      <div class="sheet s4">
+        <div class="band"></div>
+        <div class="sheet-head"><span class="t">识别到一笔支出</span>
+          <span class="src alipay"><span class="dot">支</span>支付宝</span></div>
+        <div class="amt-row"><span class="amt">-¥3.00</span></div>
+        <div class="merchant"><span class="micon" style="background:#fee;color:#ef4444">☁</span>阿里云计算有限公司</div>
+        <div class="sep"></div>
+        <div class="label">类型</div>
+        <div class="segmented"><div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div></div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on" style="color:#10b981"><i style="background:#10b981"></i>日用</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
+        </div>
+        <div class="sep"></div>
+        <div class="metas"><span>账户</span><span class="v">支付宝</span></div>
+        <div class="metas"><span>时间</span><span class="v">10-15 23:14</span></div>
+        <div class="btns"><button class="btn btn-ghost">忽略</button><button class="btn btn-main">记一笔</button></div>
+      </div>
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">顶部色带随类型变（支出红 / 收入绿），一眼分清收支方向，也顺手提示「这笔被记成支出了」。</div>
+  </div>
+
+</div>
+</body>
+</html>
