@@ -127,10 +127,13 @@ fun WhitelistScreen(
                         )
                     },
                 ) {
-
-
-
-
+                    // StateContainer 的 POPULATED 分支把 content 放进 Box（States.kt:90）：
+                    // Box 下多个兄弟节点会叠在同一原点（「搜索框 / 应用列表 / 空态卡片互压 + 页面不可滚动」的根因）。
+                    // 各区块先收进一个 Column，Box 下只留这一个子节点；组间距沿用外层滚动 Column 的 space3。
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(t.space3),
+                    ) {
                         // 搜索（真过滤）
                         Column(Modifier.fillMaxWidth().padding(horizontal = t.space4)) {
                             AppField(
@@ -210,6 +213,7 @@ fun WhitelistScreen(
                             }
                         }
                         Spacer(Modifier.height(t.space6))
+                    }
                 }
             }
         }
