@@ -163,10 +163,13 @@ fun SkipRuleScreen(
                         )
                     },
                 ) {
-
-
-
-
+                    // StateContainer 的 POPULATED 分支把 content 放进 Box（States.kt:90）：
+                    // Box 下多个兄弟节点会叠在同一原点（「订阅源卡 / 计数 / 规则列表 / 图例互压 + 页面不可滚动」的根因）。
+                    // 五个区块先收进一个 Column，Box 下只留这一个子节点；组间距沿用外层滚动 Column 的 space4。
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(t.space4),
+                    ) {
                         // ── 订阅源卡 ──
                         Column(Modifier.fillMaxWidth().padding(horizontal = t.space4)) {
                             GlassCard {
@@ -284,6 +287,7 @@ fun SkipRuleScreen(
                             )
                         }
                         Spacer(Modifier.height(t.space6))
+                    }
                 }
             }
         }
