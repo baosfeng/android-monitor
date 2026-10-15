@@ -55,6 +55,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _availableMonths = MutableStateFlow<List<String>>(emptyList())
     val availableMonths: StateFlow<List<String>> = _availableMonths.asStateFlow()
 
+    /** 月份切换越界提示（一次性消费；原型 s04/s06/s07 月份条到边界时的 toast 口径）。 */
+    private val _monthNotice = MutableStateFlow<String?>(null)
+    val monthNotice: StateFlow<String?> = _monthNotice.asStateFlow()
+
+    fun consumeMonthNotice() {
+        _monthNotice.value = null
+    }
+
     // 导入状态
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
@@ -99,9 +107,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** 切换到上一个月 */
+    /** 切换到上一个月：已在最早可浏览月时只提示、不改月份（接 [availableMonths] 边界）。 */
     fun previousMonth() {
         val ym = _currentMonth.value
+        val earliest = _availableMonths.value.minOrNull()
+        if (earliest != null && ym <= earliest) {
+            _monthNotice.value = "已经是可浏览的最早月份（" + monthLabelOf(ym) + "）"
+            return
+        }
         val parts = ym.split("-")
         val year = parts[0].toInt()
         val month = parts[1].toInt()
@@ -109,9 +122,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         loadMonth(newMonth)
     }
 
-    /** 切换到下一个月 */
+    /** 切换到下一个月：已在最新可浏览月时只提示、不改月份（接 [availableMonths] 边界）。 */
     fun nextMonth() {
         val ym = _currentMonth.value
+        val latest = _availableMonths.value.maxOrNull()
+        if (latest != null && ym >= latest) {
+            _monthNotice.value = "已经是可浏览的最新月份（" + monthLabelOf(ym) + "）"
+            return
+        }
         val parts = ym.split("-")
         val year = parts[0].toInt()
         val month = parts[1].toInt()
@@ -153,6 +171,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             manager.setBudget(_currentMonth.value, categoryName, amount)
             loadMonth(_currentMonth.value)
+        }
+    }
+
+    /**
+     * 修改某条分类预算，并把总预算行同步为「分类预算之和」（对齐原型 s06 的口径：
+     * 分类预算合计等于总预算）。写入后重新加载本月数据，总额 / 百分比 / 圆环随之重算。
+     *
+     * 业务读写仍全部经由 [FinanceManager.setBudget]，未改动任何统计口径。
+     */
+    fun setCategoryBudget(categoryName: String, amount: Double) {
+        viewModelScope.launch {
+            val month = _currentMonth.value
+            manager.setBudget(month, categoryName, amount)
+            val sum = manager.getMonthlyBudget(month)
+                .filterNot { it.isOverall }
+                .sumOf { it.budgetAmount }
+            manager.setBudget(month, "", sum)
+            loadMonth(month)
         }
     }
 

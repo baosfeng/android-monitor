@@ -5,32 +5,68 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import com.bsfeng.monitor.finance.PandaImporter
-import com.bsfeng.monitor.ui.theme.FinanceColors
-import com.bsfeng.monitor.ui.theme.IOSColors
-import com.bsfeng.monitor.ui.theme.InsetGroupedCard
-import com.bsfeng.monitor.ui.theme.MonitorSpacing
-import com.bsfeng.monitor.ui.theme.Radius
+import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.AppToast
+import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.BadgeTone
+import com.bsfeng.monitor.ui.components.FiveState
+import com.bsfeng.monitor.ui.components.GlassCard
+import com.bsfeng.monitor.ui.components.StateContainer
+import com.bsfeng.monitor.ui.components.animatedCount
+import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.accentSoftFill
 import java.io.File
 import java.io.FileOutputStream
 
 /**
- * 数据导入页面。
- * 选择熊猫记账的 .db 文件并导入。
+ * s08 数据导入。
+ *
+ * 三步说明 + 文件选择 + 进度条 + 结果统计 + 失败明细与重试；五态齐备。
+ * 真实导入走 [PandaImporter]（熊猫记账导出的数据库文件），业务口径未改动。
  */
 @Composable
 fun ImportScreen(
@@ -41,9 +77,14 @@ fun ImportScreen(
     onClearResult: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val t = LocalDesignTokens.current
     val context = LocalContext.current
+    val toast = rememberToastHostState()
+    val control = rememberFinanceStateControl()
+
     var selectedFileName by remember { mutableStateOf("") }
     var selectedFilePath by remember { mutableStateOf("") }
+    var readError by remember { mutableStateOf("") }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -52,290 +93,524 @@ fun ImportScreen(
             val fileName = getFileName(context, it) ?: "panda_jizhang.db"
             selectedFileName = fileName
             try {
-                val cacheFile = File(context.cacheDir, "panda_import_${System.currentTimeMillis()}.db")
+                val cacheFile = File(context.cacheDir, "panda_import_" + System.currentTimeMillis() + ".db")
                 context.contentResolver.openInputStream(it)?.use { input ->
-                    FileOutputStream(cacheFile).use { output ->
-                        input.copyTo(output)
-                    }
+                    FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
                 }
                 selectedFilePath = cacheFile.absolutePath
+                readError = ""
+                toast.show("已选择 " + fileName)
             } catch (e: Exception) {
-                selectedFileName = "文件读取失败: ${e.message}"
+                readError = "文件读取失败：" + (e.message ?: "未知错误")
+                selectedFileName = ""
                 selectedFilePath = ""
             }
         }
     }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // iOS 导航栏
-        item(key = "nav") {
+    val result = importResult
+    val derivedState = when {
+        importing -> FiveState.LOADING
+        result != null && !result.isSuccess && result.importedTransactions == 0 -> FiveState.ERROR
+        // 选文件页是常态页（原型 populated）；空态留给五态演示开关
+        else -> FiveState.POPULATED
+    }
+    val state = control.value ?: derivedState
+    // 导入中断（原型 s08-fail）：文件卡与结果卡保持可见，另加显式「已回滚」提示卡；
+    // 空态同样画在列表里（带「选择数据文件」CTA）
+    val containerState = when (state) {
+        FiveState.ERROR, FiveState.EMPTY -> FiveState.POPULATED
+        else -> state
+    }
+
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(importing) {
+        if (importing) {
+            progress.snapTo(0f)
+            progress.animateTo(PROGRESS_CEILING, tween(t.durChart + t.durChart, easing = t.easeOut))
+        } else if (result != null) {
+            progress.snapTo(1f)
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+        Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = MonitorSpacing.sm, vertical = MonitorSpacing.sm),
+                    .padding(horizontal = t.space2, vertical = t.space2),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("完成", color = MaterialTheme.colorScheme.primary)
+                    Text("完成", style = MaterialTheme.typography.titleSmall, color = t.accent)
                 }
                 Text(
                     "导入数据",
                     style = MaterialTheme.typography.titleLarge,
+                    color = t.fg,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                    ) { control.toggleBar() },
                 )
-                Spacer(Modifier.width(64.dp))
+                Spacer(Modifier.width(t.tapMin))
             }
-        }
 
-        // 说明
-        item(key = "desc") {
-            Spacer(Modifier.height(MonitorSpacing.xxl))
-            Text(
-                "熊猫记账数据导入",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
-            )
-        }
-        item {
-            InsetGroupedCard {
-                Text(
-                    "请选择熊猫记账导出的 .db 数据库文件。\n" +
-                            "支持导入：账单记录、分类、账户、预算。\n\n" +
-                            "已导入的记录不会重复导入（按原始 ID 去重）。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
-                    modifier = Modifier.padding(MonitorSpacing.lg),
-                )
-            }
-        }
-
-        // 文件选择
-        item(key = "file_label") {
-            Spacer(Modifier.height(MonitorSpacing.sm))
-            Text(
-                "选择数据库文件",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
-            )
-        }
-        item {
-            InsetGroupedCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(MonitorSpacing.lg),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (selectedFileName.isNotEmpty()) selectedFileName else "点击选取文件",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (selectedFileName.isNotEmpty())
-                                MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (selectedFileName.isNotEmpty()) {
-                            Text(
-                                "已选择",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = FinanceColors.income,
-                            )
-                        }
-                    }
-                    Button(onClick = { filePickerLauncher.launch("application/octet-stream") }) {
-                        Text("选取")
-                    }
-                }
-            }
-        }
-
-        // 导入按钮
-        item(key = "import_btn") {
-            Spacer(Modifier.height(MonitorSpacing.lg))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = MonitorSpacing.lg)
-                    .clip(RoundedCornerShape(Radius.md))
-                    .background(
-                        if (selectedFilePath.isNotEmpty() && !importing)
-                            MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    ),
-                contentAlignment = Alignment.Center,
+            StateContainer(
+                state = containerState,
+                modifier = Modifier.weight(1f),
+                emptyText = "先在熊猫记账里「我的 → 导出账单」，再回到这里选择该文件",
+                errorText = "不是有效的熊猫记账导出文件，或文件已损坏",
+                edgeText = "边界态：超长文件名 / 128,430 条记录 / 超过 20 MB 建议上限",
+                onRetry = {
+                    if (selectedFilePath.isNotEmpty()) onImport(selectedFilePath) else toast.show("请先选择要导入的文件")
+                },
             ) {
-                TextButton(
-                    onClick = {
-                        if (selectedFilePath.isNotEmpty()) onImport(selectedFilePath)
-                    },
-                    enabled = selectedFilePath.isNotEmpty() && !importing,
-                ) {
-                    Text(
-                        if (importing) "导入中..." else "开始导入",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-            Spacer(Modifier.height(MonitorSpacing.lg))
-        }
-
-        // 导入中
-        if (importing) {
-            item(key = "loading") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.xxxl),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(36.dp),
-                            strokeWidth = 3.dp,
-                        )
-                        Spacer(Modifier.height(MonitorSpacing.md))
-                        Text("正在导入数据...",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    if (state == FiveState.ERROR) {
+                        item(key = "rollback") {
+                            Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
+                                FinanceEmptyState(
+                                    title = "导入中断",
+                                    desc = "本次写入已回滚，本地账目未被修改。" +
+                                        (result?.errors?.firstOrNull()?.let { " " + it } ?: ""),
+                                    icon = Icons.Filled.Warning,
+                                    actionText = "重试",
+                                    onAction = {
+                                        if (selectedFilePath.isNotEmpty()) {
+                                            onImport(selectedFilePath)
+                                        } else {
+                                            toast.show("请先选择要导入的文件")
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
-                }
-            }
-        }
+                    if (state == FiveState.EMPTY) {
+                        item(key = "empty") {
+                            Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
+                                FinanceEmptyState(
+                                    title = "还没有选择文件",
+                                    desc = "先在熊猫记账里导出账单数据文件，再回到这里选择该文件",
+                                    icon = Icons.Filled.Description,
+                                    actionText = "选择数据文件",
+                                    onAction = { filePickerLauncher.launch("application/octet-stream") },
+                                )
+                            }
+                        }
+                    }
 
-        // 导入结果
-        val result = importResult
-        if (result != null && !importing) {
-            item(key = "result_section") {
-                Spacer(Modifier.height(MonitorSpacing.sm))
-                Text(
-                    "导入结果",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
-                )
-            }
-            item {
-                InsetGroupedCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.lg),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(if (result.isSuccess) "✅" else "⚠️",
-                            style = MaterialTheme.typography.headlineSmall)
-                        Spacer(Modifier.width(MonitorSpacing.md))
-                        Column {
+                    item(key = "steps") {
+                        Column(Modifier.padding(horizontal = t.space4)) {
+                            Spacer(Modifier.height(t.space3))
                             Text(
-                                if (result.isSuccess) "导入完成" else "导入完成（有错误）",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
+                                "从熊猫记账导出的数据文件导入历史账目。导入前会先预检：重复记录自动跳过，" +
+                                    "无法识别的分类落到「未分类」。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = t.meta,
                             )
-                            val animTransactions by animateIntAsState(
-                                targetValue = result.totalTransactions,
-                                animationSpec = tween(durationMillis = 600),
+                            Spacer(Modifier.height(t.space3))
+                            listOf(
+                                "选择熊猫记账导出的数据文件",
+                                "预检并预览：导入 / 跳过 / 失败 三类记录",
+                                "写入本地数据库并重建预算与统计",
+                            ).forEachIndexed { index, step ->
+                                Row(
+                                    modifier = Modifier.padding(vertical = t.space1),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(t.space6)
+                                            .clip(CircleShape)
+                                            .background(t.surfaceWarm),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            (index + 1).toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = t.accent,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(t.space2))
+                                    Text(
+                                        step,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = t.fg2,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = "pick") {
+                        Column(Modifier.padding(horizontal = t.space4)) {
+                            Spacer(Modifier.height(t.space3))
+                            AppCard(
+                                onClick = { filePickerLauncher.launch("application/octet-stream") },
+                                padding = t.space6,
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(t.tapMin)
+                                            .clip(CircleShape)
+                                            .background(t.accentSoftFill()),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Upload,
+                                            contentDescription = null,
+                                            tint = t.accent,
+                                            modifier = Modifier.size(t.iconSize),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(t.space3))
+                                    Text(
+                                        "选择数据文件",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = t.fg,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Spacer(Modifier.height(t.space1))
+                                    Text(
+                                        "熊猫记账导出的 .db 文件",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = t.muted,
+                                    )
+                                }
+                            }
+                            if (readError.isNotEmpty()) {
+                                Spacer(Modifier.height(t.space2))
+                                Text(
+                                    readError,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = t.dangerText,
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedFileName.isNotEmpty()) {
+                        item(key = "file") {
+                            Column(Modifier.padding(horizontal = t.space4)) {
+                                Spacer(Modifier.height(t.space3))
+                                AppCard(padding = t.space1) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = t.space3, vertical = t.space3),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Description,
+                                            contentDescription = null,
+                                            tint = t.muted,
+                                            modifier = Modifier.size(t.iconSize),
+                                        )
+                                        Spacer(Modifier.width(t.space3))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                selectedFileName,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = t.fg,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                if (selectedFilePath.isNotEmpty()) "已就绪 · 可开始导入" else "读取失败",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (selectedFilePath.isNotEmpty()) t.incomeText else t.dangerText,
+                                            )
+                                        }
+                                        FinanceIconButton(
+                                            onClick = {
+                                                selectedFileName = ""
+                                                selectedFilePath = ""
+                                                onClearResult()
+                                            },
+                                            contentDescription = "移除文件",
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Close,
+                                                contentDescription = null,
+                                                tint = t.muted,
+                                                modifier = Modifier.size(t.iconSize),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (importing) {
+                        item(key = "progress") {
+                            Column(Modifier.padding(horizontal = t.space4)) {
+                                Spacer(Modifier.height(t.space3))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(t.space2)
+                                        .clip(RoundedCornerShape(t.radiusPill))
+                                        .background(t.borderSoft),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(progress.value)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(t.radiusPill))
+                                            // B1：进度条用 chart-2（不占每屏强调色预算）
+                                            .background(t.chart2),
+                                    )
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                Text(
+                                    progressLabel(progress.value),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = t.meta,
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "go") {
+                        Column(Modifier.padding(horizontal = t.space4)) {
+                            Spacer(Modifier.height(t.space4))
+                            ImportActionButton(
+                                text = if (importing) "导入中…" else "开始导入",
+                                enabled = selectedFilePath.isNotEmpty() && !importing,
+                                onClick = { if (selectedFilePath.isNotEmpty()) onImport(selectedFilePath) },
                             )
+                            Spacer(Modifier.height(t.space2))
                             Text(
-                                "共 $animTransactions 条记录",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "导入不会删除已有账目；如需重来，先移除文件再重新选择。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = t.meta,
                             )
                         }
                     }
-                }
-            }
 
-            item {
-                InsetGroupedCard {
-                    ImportStatRow("账单导入", "${result.importedTransactions}")
-                    if (result.importedTransactions > 0) {
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.padding(start = MonitorSpacing.lg),
-                        )
-                    }
-                    ImportStatRow("账单跳过（已存在）", "${result.skippedTransactions}")
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(start = MonitorSpacing.lg),
-                    )
-                    ImportStatRow("分类导入", "${result.importedCategories}")
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(start = MonitorSpacing.lg),
-                    )
-                    ImportStatRow("账户导入", "${result.importedAccounts}")
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(start = MonitorSpacing.lg),
-                    )
-                    ImportStatRow("预算导入", "${result.importedBudgets}")
-                }
-            }
+                    if (result != null && !importing) {
+                        item(key = "resulthead") {
+                            Column(Modifier.padding(horizontal = t.space4)) {
+                                Spacer(Modifier.height(t.space4))
+                                GlassCard {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            if (result.hasErrors) "导入完成（有错误）" else "导入完成",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = t.fg,
+                                        )
+                                        Badge(
+                                            formatCount(result.totalTransactions),
+                                            if (result.hasErrors) BadgeTone.Warn else BadgeTone.Success,
+                                        )
+                                    }
+                                    Spacer(Modifier.height(t.space3))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
+                                        ResultTile(
+                                            label = "成功",
+                                            value = formatCount(animatedCount(result.importedTransactions)),
+                                            color = t.incomeText,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        ResultTile(
+                                            label = "跳过",
+                                            value = formatCount(animatedCount(result.skippedTransactions)),
+                                            color = t.fg,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        ResultTile(
+                                            label = "失败",
+                                            value = formatCount(animatedCount(result.errors.size)),
+                                            color = if (result.hasErrors) t.expenseText else t.fg,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(t.space3))
+                                    Text(
+                                        "共 " + formatCount(result.totalTransactions) + " 条记录 · 新增 " +
+                                            result.importedCategories + " 个分类 · " +
+                                            result.importedAccounts + " 个账户 · " +
+                                            result.importedBudgets + " 条预算",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = t.meta,
+                                    )
+                                }
+                            }
+                        }
 
-            // 错误列表
-            if (result.hasErrors) {
-                item {
-                    InsetGroupedCard {
-                        Text(
-                            "错误信息",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(MonitorSpacing.lg, MonitorSpacing.md,
-                                MonitorSpacing.lg, MonitorSpacing.xs),
-                        )
-                        result.errors.forEach { error ->
-                            Text(
-                                "⚠ $error",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.xs),
-                            )
+                        if (result.hasErrors) {
+                            item(key = "failrows") {
+                                Column(Modifier.padding(horizontal = t.space4)) {
+                                    Spacer(Modifier.height(t.space3))
+                                    AppCard(padding = t.space1) {
+                                        result.errors.forEach { error ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = t.space3, vertical = t.space3),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.Warning,
+                                                    contentDescription = null,
+                                                    tint = t.warnText,
+                                                    modifier = Modifier.size(t.iconSize),
+                                                )
+                                                Spacer(Modifier.width(t.space3))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(
+                                                        error,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = t.fg,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                    Text(
+                                                        "该条已跳过，可点「重试失败项」再次导入",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = t.meta,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item(key = "resultactions") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = t.space4, vertical = t.space3),
+                                horizontalArrangement = Arrangement.spacedBy(t.space3),
+                            ) {
+                                GhostActionButton(
+                                    text = "重试失败项",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        if (selectedFilePath.isNotEmpty()) {
+                                            onImport(selectedFilePath)
+                                        } else {
+                                            toast.show("请先重新选择文件")
+                                        }
+                                    },
+                                )
+                                GhostActionButton(
+                                    text = "再导一个文件",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        onClearResult()
+                                        selectedFileName = ""
+                                        selectedFilePath = ""
+                                    },
+                                )
+                            }
                         }
                     }
-                }
-            }
 
-            // 重新导入按钮
-            item(key = "retry") {
-                Spacer(Modifier.height(MonitorSpacing.lg))
-                OutlinedButton(
-                    onClick = { onClearResult() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = MonitorSpacing.lg),
-                ) {
-                    Text("重新导入")
+                    item(key = "bottom") { Spacer(Modifier.height(t.space12)) }
                 }
-                Spacer(Modifier.height(MonitorSpacing.xxxl))
             }
         }
 
-        item(key = "bottom") { Spacer(Modifier.height(MonitorSpacing.xxxl)) }
+        FinanceStateBar(
+            control = control,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(t.space4),
+        )
+
+        AppToast(
+            message = toast.message,
+            onDismiss = { toast.clear() },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = t.fabSize),
+        )
     }
 }
 
 @Composable
-private fun ImportStatRow(label: String, value: String) {
-    Row(
+private fun ResultTile(
+    label: String,
+    value: String,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)
+        Spacer(Modifier.height(t.space1))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            color = color,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ImportActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clip(RoundedCornerShape(t.radiusLg))
+            .background(if (enabled) t.accent else t.accent.copy(alpha = 0.45f))
+            .clickable { if (enabled) onClick() }
+            .padding(vertical = t.space3),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.titleSmall)
-        Text(value, style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold)
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmall,
+            color = t.accentOn,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
     }
+}
+
+@Composable
+private fun GhostActionButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(t.radiusLg))
+            .background(t.surfaceWarm)
+            .clickable { onClick() }
+            .padding(vertical = t.space3),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = t.fg2)
+    }
+}
+
+/** 进度文案按阶段推进（与原型的三段提示一致）。 */
+private fun progressLabel(value: Float): String {
+    val percent = (value * 100).toInt().coerceIn(0, 100)
+    val stage = when {
+        value < 0.45f -> "正在解析文件… "
+        value < 0.9f -> "正在写入本地数据库… "
+        else -> "正在重建预算与统计… "
+    }
+    return stage + percent + "%"
 }
 
 private fun getFileName(context: Context, uri: Uri): String? {
@@ -348,3 +623,6 @@ private fun getFileName(context: Context, uri: Uri): String? {
     }
     return name
 }
+
+/** 进度条封顶值：导入没有真实进度事件，动画停在 90% 直到结果返回。 */
+private const val PROGRESS_CEILING = 0.92f
