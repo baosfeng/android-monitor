@@ -75,3 +75,10 @@ android-sdk
 docs/superpowers
 tools/
 .superpowers/
+
+## ==============================
+## 设计原型附带产物
+## 原型本体与品牌资产入库；过程截图与任务交接书属临时产物，不入库
+## ==============================
+.open-design/assets/
+.open-design/21-app-sync-handover.md
