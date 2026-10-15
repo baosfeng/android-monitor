@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 import android.content.Context
-import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
 import android.graphics.drawable.Drawable
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -85,20 +85,19 @@ class WhitelistViewModel : ViewModel() {
             try {
                 val pm = MonitorApp.instance.packageManager
                 val whitelist = getWhitelist()
-                val installedApps = pm.getInstalledPackages(PackageManager.GET_ACTIVITIES)
-                    .mapNotNull { pkg ->
-                        val info = pkg.applicationInfo ?: return@mapNotNull null
-                        if ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) return@mapNotNull null
-                        if (pkg.packageName == MonitorApp.instance.packageName) return@mapNotNull null
-                        pkg to info
+                // 只取 ApplicationInfo：带上 GET_ACTIVITIES 会让 400+ 应用的返回体超过 Binder 事务上限（约 1MB）
+                val installedApps = pm.getInstalledApplications(0)
+                    .filter { info ->
+                        (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0 &&
+                            info.packageName != MonitorApp.instance.packageName
                     }
-                    .sortedBy { (_, info) -> pm.getApplicationLabel(info).toString().lowercase() }
-                    .map { (pkg, info) ->
+                    .sortedBy { pm.getApplicationLabel(it).toString().lowercase() }
+                    .map { info ->
                         AppInfo(
-                            packageName = pkg.packageName,
+                            packageName = info.packageName,
                             appName = pm.getApplicationLabel(info).toString(),
                             icon = info.loadIcon(pm),
-                            isInWhitelist = pkg.packageName in whitelist
+                            isInWhitelist = info.packageName in whitelist
                         )
                     }
                 _apps.value = installedApps
