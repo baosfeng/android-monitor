@@ -23,15 +23,42 @@ class FinanceManager internal constructor(context: Context) {
     // ========== 交易 ==========
 
     suspend fun addTransaction(tx: Transaction): Long = withContext(Dispatchers.IO) {
-        dao.insertTransaction(tx)
+        val id = dao.insertTransaction(tx)
+        applyBalanceDelta(tx.accountName, balanceEffectOf(tx))
+        id
     }
 
     suspend fun deleteTransaction(id: Long) = withContext(Dispatchers.IO) {
+        val existing = dao.getTransactionById(id)
         dao.deleteTransaction(id)
+        if (existing != null) applyBalanceDelta(existing.accountName, -balanceEffectOf(existing))
     }
 
     suspend fun updateTransaction(tx: Transaction) = withContext(Dispatchers.IO) {
+        val old = dao.getTransactionById(tx.id)
         dao.updateTransaction(tx)
+        if (old != null && old.accountName != tx.accountName) {
+            // 换账户：旧账户回冲，新账户计入
+            applyBalanceDelta(old.accountName, -balanceEffectOf(old))
+            applyBalanceDelta(tx.accountName, balanceEffectOf(tx))
+        } else {
+            applyBalanceDelta(tx.accountName, balanceEffectOf(tx) - (old?.let { balanceEffectOf(it) } ?: 0.0))
+        }
+    }
+
+    /** 交易对账户余额的影响（收入为正、支出为负；退款交易 amount 本身为负，故回冲为正）。 */
+    private fun balanceEffectOf(tx: Transaction): Double = if (tx.isIncome) tx.amount else -tx.amount
+
+    /**
+     * 账户余额随交易增减（接上原先零调用的 [FinanceDao.updateAccountBalance]）。
+     *
+     * 口径：种子账户从 0 起算，导入账户以熊猫记账 t_card.money 为快照起点，
+     * 之后由本 App 记录的交易按签名金额增减；账户名对不上（空串 / 账户已删）时跳过。
+     */
+    private suspend fun applyBalanceDelta(accountName: String, delta: Double) {
+        if (accountName.isBlank() || delta == 0.0) return
+        val account = dao.getAccountByName(accountName) ?: return
+        dao.updateAccountBalance(account.id, account.balance + delta)
     }
 
     suspend fun getTransactionById(id: Long): Transaction? = withContext(Dispatchers.IO) {

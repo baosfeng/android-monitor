@@ -32,8 +32,16 @@ data class Transaction(
     /** 负数支出：熊猫记账退款导入后为此形态，用于抵扣当月支出而非虚增支出 */
     val isRefundEntry: Boolean get() = isExpense && amount < 0
 
-    /** 展示用金额（绝对值），符号由 [isExpense] / [isIncome] 决定 */
-    val displayAmount: String get() = String.format(java.util.Locale.CHINA, "%.2f", kotlin.math.abs(amount))
+    /**
+     * 展示用金额（绝对值），符号由 [isExpense] / [isIncome] 决定。
+     *
+     * 金额口径（全屏唯一）：交易行 = 千分位分组 + 固定两位小数，对齐原型 s04-tx-1 的 -¥38.00、
+     * s04-tx-6 的 +¥1,200.00；汇总 / KPI / 预算 = 千分位分组 + 0 位小数（FinanceUIKit.yen(value, 0)），
+     * 对齐原型 s04-krow 的 ¥2,468 与 s07-kv 的 ¥2,468。
+     * 两者同源（String.format 的 %,.Nf），差异只在上下文小数位，不再有第二套格式。
+     */
+    val displayAmount: String
+        get() = String.format(java.util.Locale.CHINA, "%,.2f", kotlin.math.abs(amount))
 
     /** 带符号金额：支出/退款为负，收入为正 */
     val signedAmount: Double get() = if (isExpense || isRefund) -amount else amount

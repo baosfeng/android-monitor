@@ -1,42 +1,69 @@
 package com.bsfeng.monitor.finance.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.FinanceStats
-import com.bsfeng.monitor.ui.theme.FinanceColors
-import com.bsfeng.monitor.ui.theme.IOSColors
-import com.bsfeng.monitor.ui.theme.IOSNavigationBar
-import com.bsfeng.monitor.ui.theme.InsetGroupedCard
-import com.bsfeng.monitor.ui.theme.MonitorSpacing
-import com.bsfeng.monitor.ui.theme.Radius
+import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.ChartAxisLabels
+import com.bsfeng.monitor.ui.components.FiveState
+import com.bsfeng.monitor.ui.components.HeatBar
+import com.bsfeng.monitor.ui.components.Legend
+import com.bsfeng.monitor.ui.components.LegendItem
+import com.bsfeng.monitor.ui.components.MotionToken
+import com.bsfeng.monitor.ui.components.RingChart
+import com.bsfeng.monitor.ui.components.StateContainer
+import com.bsfeng.monitor.ui.components.animatedAmount
+import com.bsfeng.monitor.ui.components.rememberMotionEnabled
+import com.bsfeng.monitor.ui.components.springOf
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.categoryDot
+import com.bsfeng.monitor.ui.theme.monitorMonoKpi
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.time.LocalDate
 
 /**
- * 记账统计页面。
- * 月度概览 + 分类支出环形图。
+ * s07 统计分析。
+ *
+ * 收支卡 + 分类支出环图与图例 + 近 7 天分组柱 + 24 小时消费热力；图表全部走
+ * [com.bsfeng.monitor.ui.components] 的 Canvas 基元（环形用 [RingChart]，分组柱由屏内组合）。
  */
 @Composable
 fun FinanceStatsScreen(
@@ -46,247 +73,418 @@ fun FinanceStatsScreen(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: FinanceViewModel? = null,
+    /** 空态 CTA「新增一笔」的目标（原型 s07-empty-add）；未传时空态只显示文案。 */
+    onAddClick: (() -> Unit)? = null,
 ) {
-    val monthDisplay = currentMonth.replace("-", "年") + "月"
-    val total = categoryBreakdown.values.sum()
+    val t = LocalDesignTokens.current
+    val vm = viewModel ?: rememberFinanceViewModel()
+    val emptyFlow = remember { MutableStateFlow<List<Transaction>>(emptyList()) }
+    val transactions by (vm?.monthlyTransactions ?: emptyFlow).collectAsState()
+    val loading = vm?.loading?.collectAsState()?.value == true
+
+    val control = rememberFinanceStateControl()
+    val monthLabel = monthLabelOf(currentMonth)
     val sortedEntries = remember(categoryBreakdown) {
-        categoryBreakdown.entries
-            .sortedByDescending { it.value }
-            .take(10)
+        categoryBreakdown.entries.sortedByDescending { it.value }.take(CATEGORY_LIMIT)
     }
+    val total = remember(categoryBreakdown) { categoryBreakdown.values.sum() }
+    val week = remember(transactions, currentMonth) { last7DayTotals(transactions, currentMonth) }
+    val hourly = remember(transactions) { hourlyCounts(transactions) }
+    val peak = remember(hourly) { hourlyPeaks(hourly) }
+    val weekExpense = remember(week) { week.sumOf { it.first.toDouble() } }
+    val weekIncome = remember(week) { week.sumOf { it.second.toDouble() } }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // 导航栏
-        item(key = "navbar") {
-            IOSNavigationBar(title = "统计", onBack = onBack)
-        }
+    val derivedState = when {
+        loading && transactions.isEmpty() && categoryBreakdown.isEmpty() -> FiveState.LOADING
+        categoryBreakdown.isEmpty() && transactions.isEmpty() -> FiveState.EMPTY
+        else -> FiveState.POPULATED
+    }
+    val state = control.value ?: derivedState
+    // EMPTY 只作为演示态：内容仍渲染，空态卡画在列表首位（原型 s07-empty 带「新增一笔」）
+    val containerState = if (state == FiveState.EMPTY) FiveState.POPULATED else state
 
-        // 月份切换
-        item {
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+        Column(Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = t.space2, vertical = t.space2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val prevInteractionSource = remember { MutableInteractionSource() }
-                val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
-                val prevScale by animateFloatAsState(
-                    targetValue = if (isPrevPressed) 0.85f else 1f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
-                )
-                TextButton(
-                    onClick = onPreviousMonth,
-                    modifier = Modifier.graphicsLayer { scaleX = prevScale; scaleY = prevScale },
-                    interactionSource = prevInteractionSource,
-                ) {
-                    Text("◀", style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary)
-                }
-                Text(monthDisplay, style = MaterialTheme.typography.titleLarge)
-                val nextInteractionSource = remember { MutableInteractionSource() }
-                val isNextPressed by nextInteractionSource.collectIsPressedAsState()
-                val nextScale by animateFloatAsState(
-                    targetValue = if (isNextPressed) 0.85f else 1f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
-                )
-                TextButton(
-                    onClick = onNextMonth,
-                    modifier = Modifier.graphicsLayer { scaleX = nextScale; scaleY = nextScale },
-                    interactionSource = nextInteractionSource,
-                ) {
-                    Text("▶", style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-
-        // 收支卡片
-        item {
-            val animatedExpense by animateFloatAsState(
-                targetValue = stats.totalExpense.toFloat(),
-                animationSpec = tween(durationMillis = 600),
-            )
-            val animatedIncome by animateFloatAsState(
-                targetValue = stats.totalIncome.toFloat(),
-                animationSpec = tween(durationMillis = 600),
-            )
-            val animatedBalance by animateFloatAsState(
-                targetValue = (stats.totalIncome - stats.totalExpense).toFloat(),
-                animationSpec = tween(durationMillis = 600),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.md),
-            ) {
-                StatCard(
-                    title = "支出",
-                    amount = "¥${String.format("%.2f", animatedExpense.toDouble())}",
-                    color = FinanceColors.expense, modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "收入",
-                    amount = "¥${String.format("%.2f", animatedIncome.toDouble())}",
-                    color = FinanceColors.income, modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "结余",
-                    amount = "¥${String.format("%.2f", animatedBalance.toDouble())}",
-                    color = if (stats.balance >= 0) FinanceColors.budget else FinanceColors.expense,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // 分类支出环形图
-        if (categoryBreakdown.isNotEmpty()) {
-            item {
-                Spacer(Modifier.height(MonitorSpacing.sm))
-            }
-            item {
-                InsetGroupedCard {
-                    Text(
-                        "支出分类占比",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(MonitorSpacing.lg, MonitorSpacing.lg, MonitorSpacing.lg, MonitorSpacing.sm),
+                FinanceIconButton(onClick = onBack, contentDescription = "返回") {
+                    Icon(
+                        Icons.Filled.ChevronLeft,
+                        contentDescription = null,
+                        tint = t.accent,
+                        modifier = Modifier.size(t.iconSize),
                     )
+                }
+                Text(
+                    "统计",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = t.fg,
+                    modifier = Modifier
+                        .padding(start = t.space2)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                        ) { control.toggleBar() },
+                )
+            }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .padding(MonitorSpacing.lg),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        DonutChart(data = categoryBreakdown, total = total)
+            StateContainer(
+                state = containerState,
+                modifier = Modifier.weight(1f),
+                emptyText = "记一笔账或从熊猫记账导入历史数据后，这里会生成分类占比与趋势",
+                errorText = "聚合查询超时，图表数据不完整",
+                edgeText = "边界态：分类 120 个 / 单月 ¥12,345,678.90 / 缺失分类字段",
+                onRetry = { vm?.loadCurrentMonth() },
+            ) {
+                // 底部避让：为底部 Tab 条留出高度（fab-size 56 + 32），
+                // 滚到底时「近 7 天收支」的 x 轴日期与数值刻度不再被 Tab 条裁掉。
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = t.fabSize + t.space8),
+                ) {
+                    if (state == FiveState.EMPTY) {
+                        item(key = "empty") {
+                            Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
+                                FinanceEmptyState(
+                                    title = "本月还没有可统计的支出",
+                                    desc = "记一笔账或从熊猫记账导入历史数据后，这里会生成分类占比与趋势",
+                                    icon = Icons.Filled.BarChart,
+                                    actionText = if (onAddClick != null) "新增一笔" else null,
+                                    onAction = onAddClick,
+                                )
+                            }
+                        }
                     }
 
-                    sortedEntries.forEachIndexed { index, entry ->
-                        val color = getChartColor(index)
-                        val percent = if (total > 0) (entry.value / total * 100).toInt() else 0
+                    item(key = "month") {
+                        Column(Modifier.padding(horizontal = t.space4)) {
+                            FinanceMonthBar(
+                                monthText = monthLabel,
+                                onPrevious = onPreviousMonth,
+                                onNext = onNextMonth,
+                                modifier = Modifier.padding(vertical = t.space2),
+                            )
+                            Text(
+                                monthLabel + " · 共 " + sortedEntries.size + " 个分类",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = t.meta,
+                            )
+                            Spacer(Modifier.height(t.space3))
+                        }
+                    }
+
+                    item(key = "kpis") {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = MonitorSpacing.lg, vertical = MonitorSpacing.sm.plus(2.dp)),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(horizontal = t.space4),
+                            horizontalArrangement = Arrangement.spacedBy(t.space3),
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(RoundedCornerShape(Radius.xxs))
-                                        .background(color)
-                                )
-                                Spacer(Modifier.width(MonitorSpacing.sm))
-                                Text(entry.key, style = MaterialTheme.typography.titleSmall)
-                            }
-                            Text(
-                                "¥${String.format("%.0f", entry.value)} ($percent%)",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            KpiTile(
+                                label = "支出",
+                                value = yen(animatedAmount(stats.totalExpense.toFloat()).toDouble(), 0),
+                                color = t.expenseText,
+                                modifier = Modifier.weight(1f),
                             )
-                        }
-                        if (index < sortedEntries.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.padding(start = MonitorSpacing.lg),
+                            KpiTile(
+                                label = "收入",
+                                value = yen(animatedAmount(stats.totalIncome.toFloat()).toDouble(), 0),
+                                color = t.incomeText,
+                                modifier = Modifier.weight(1f),
+                            )
+                            KpiTile(
+                                label = "结余",
+                                value = yen(animatedAmount(stats.balance.toFloat()).toDouble(), 0),
+                                color = if (stats.balance >= 0) t.fg else t.expenseText,
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
+
+                    item(key = "ring") {
+                        Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
+                            AppCard {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "分类支出",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = t.fg,
+                                    )
+                                    Text("占比", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    // 环径 104dp（W4 冻结参数名 size）：原型 s04-finance-home.html:15 /
+                                    // s06-budget.html:14 的 104px 圆环。
+                                    RingChart(
+                                        segments = sortedEntries.map { it.value.toFloat() },
+                                        size = 104.dp,
+                                        centerLabel = null,
+                                    )
+                                    // 中心文案对齐原型 .s07-ringctr（s07-stats.html:14-15）：
+                                    // b = 等宽 21px/700 的 ¥2,468，span = 14px 的「总支出」。
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            yen(animatedAmount(total.toFloat()).toDouble(), 0),
+                                            style = monitorMonoKpi,
+                                            color = t.fg,
+                                        )
+                                        Text(
+                                            "总支出",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = t.muted,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                Legend(
+                                    items = sortedEntries.mapIndexed { _, entry ->
+                                        val percent = if (total > 0) {
+                                            (entry.value / total * 100).toInt()
+                                        } else {
+                                            0
+                                        }
+                                        LegendItem(
+                                            label = entry.key,
+                                            value = yen(entry.value, 0) + " · " + percent + "%",
+                                            // 与 s04 / s05 同一个分类色口径
+                                            color = categoryColorOf(entry.key),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "week") {
+                        Column(Modifier.padding(horizontal = t.space4)) {
+                            AppCard {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "近 7 天收支",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = t.fg,
+                                    )
+                                    Text("单位 ¥", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                GroupedBarChart(
+                                    values = week,
+                                    modifier = Modifier.fillMaxWidth().height(t.chartH),
+                                )
+                                ChartAxisLabels(week.map { dayLabelOf(it.third) })
+                                Spacer(Modifier.height(t.space3))
+                                Legend(
+                                    items = listOf(
+                                        LegendItem("支出", "7 天 " + yen(weekExpense, 0), t.chart1),
+                                        LegendItem("收入", "7 天 " + yen(weekIncome, 0), t.chart4),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "heat") {
+                        Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
+                            AppCard {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "24 小时消费强度",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = t.fg,
+                                    )
+                                    Text("笔 / 小时", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                }
+                                Spacer(Modifier.height(t.space3))
+                                HeatBar(
+                                    values = hourly,
+                                    modifier = Modifier.fillMaxWidth().height(t.heatH),
+                                )
+                                ChartAxisLabels(listOf("00", "04", "08", "12", "16", "20"))
+                                Spacer(Modifier.height(t.space3))
+                                Text(
+                                    peakText(peak),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = t.meta,
+                                )
+                            }
+                        }
+                    }
+
                 }
             }
-            item { Spacer(Modifier.height(MonitorSpacing.xxl)) }
+        }
+
+        FinanceStateBar(
+            control = control,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(t.space4),
+        )
+    }
+}
+
+@Composable
+private fun KpiTile(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    AppCard(modifier = modifier, padding = t.space3) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)
+        Spacer(Modifier.height(t.space2))
+        Text(
+            value,
+            // 原型 .s07-kv（s07-stats.html:9）：--text-lg 等宽 700，逐位对齐
+            style = monitorMonoKpi,
+            color = color,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 近 7 天分组柱：单序列 [com.bsfeng.monitor.ui.components.BarChart] 只画一根，
+ * 这里在屏内把「支出 / 收入」两根一组逐日并排绘制（底部锚定 + 逐日错峰）。
+ */
+@Composable
+private fun GroupedBarChart(
+    values: List<Triple<Float, Float, String>>,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val animated = rememberMotionEnabled()
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(values, animated) {
+        if (animated) {
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(t.durChartFast, easing = t.easeOut))
         } else {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(MonitorSpacing.huge),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "暂无本月的分类数据",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+            progress.snapTo(1f)
+        }
+    }
+    val colors = listOf(t.chart1, t.chart4)
+    Canvas(modifier) {
+        if (values.isEmpty()) return@Canvas
+        val dash = PathEffect.dashPathEffect(floatArrayOf(2f, 4f), 0f)
+        val rows = GRID_ROWS
+        for (i in 0..rows) {
+            val y = size.height * i / rows
+            drawLine(t.border, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f, pathEffect = dash)
+        }
+        val maxValue = values.maxOfOrNull { maxOf(it.first, it.second) }?.takeIf { it > 0f } ?: 1f
+        val groupWidth = size.width / values.size
+        val barWidth = groupWidth * 0.20f
+        val barGap = groupWidth * 0.06f
+        values.forEachIndexed { index, day ->
+            val per = ((progress.value * values.size) - index).coerceIn(0f, 1f)
+            val startX = groupWidth * index + groupWidth / 2f - barWidth - barGap / 2f
+            listOf(day.first to colors[0], day.second to colors[1]).forEachIndexed { slot, pair ->
+                val height = (size.height - 2f) * (pair.first / maxValue) * per
+                if (height > 0f) {
+                    drawRoundRect(
+                        color = pair.second,
+                        topLeft = Offset(startX + slot * (barWidth + barGap), size.height - height),
+                        size = Size(barWidth, height),
+                        cornerRadius = CornerRadius(3f, 3f),
                     )
                 }
             }
         }
-
-        item { Spacer(Modifier.height(MonitorSpacing.xxxl)) }
     }
 }
 
-@Composable
-private fun StatCard(
-    title: String,
-    amount: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(Radius.lg),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(MonitorSpacing.md),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(amount, style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold, color = color, maxLines = 1)
-            Spacer(Modifier.height(MonitorSpacing.xxs))
-            Text(title, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
+/** 日期标签：2026-10-08 → 08。 */
+private fun dayLabelOf(date: String): String = date.takeLast(2)
 
-/** 环形图（Compose Canvas 自绘），带旋转展开入场动画 */
-@Composable
-private fun DonutChart(data: Map<String, Double>, total: Double) {
-    val animationProgress = remember { Animatable(0f) }
-    LaunchedEffect(data, total) {
-        animationProgress.snapTo(0f)
-        animationProgress.animateTo(1f,
-            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+/**
+ * 近 7 天（含当月为当前月时的今天 / 非当前月时的月末）的支出与收入。
+ * 每项为 Triple(支出, 收入, yyyy-MM-dd)。
+ */
+private fun last7DayTotals(
+    transactions: List<Transaction>,
+    yearMonth: String,
+): List<Triple<Float, Float, String>> {
+    val today = LocalDate.now()
+    val anchor = if (yearMonth == FinanceViewModel.currentMonthStr()) {
+        today
+    } else {
+        val parts = yearMonth.split("-")
+        val year = parts.getOrNull(0)?.toIntOrNull() ?: today.year
+        val month = parts.getOrNull(1)?.toIntOrNull() ?: today.monthValue
+        LocalDate.of(year, month, 1).withDayOfMonth(
+            LocalDate.of(year, month, 1).lengthOfMonth()
         )
     }
-
-    Canvas(modifier = Modifier.size(150.dp)) {
-        if (total <= 0) return@Canvas
-        val strokeWidth = 30f
-        val radius = (size.minDimension - strokeWidth) / 2
-        val center = Offset(size.width / 2, size.height / 2)
-        val arcSize = Size(radius * 2, radius * 2)
-        var startAngle = -90f
-        val sorted = data.entries.sortedByDescending { it.value }
-        for ((index, entry) in sorted.withIndex()) {
-            val sweepAngle = (entry.value / total * 360).toFloat() * animationProgress.value
-            drawArc(
-                color = getChartColor(index),
-                startAngle = startAngle, sweepAngle = sweepAngle,
-                useCenter = false,
-                topLeft = Offset(center.x - radius, center.y - radius),
-                size = arcSize, style = Stroke(width = strokeWidth),
-            )
-            startAngle += sweepAngle
+    val byDate = transactions.groupBy { it.date }
+    return (6 downTo 0).map { offset ->
+        val day = anchor.minusDays(offset.toLong())
+        val key = day.toString()
+        var expense = 0f
+        var income = 0f
+        byDate[key]?.forEach { tx ->
+            val magnitude = if (tx.isRefundEntry) tx.amount else kotlin.math.abs(tx.amount)
+            if (tx.isExpense) expense += magnitude.toFloat() else if (tx.isIncome) income += magnitude.toFloat()
         }
+        Triple(expense, income, key)
     }
 }
 
-private val chartColors = listOf(
-    IOSColors.red, IOSColors.orange, IOSColors.yellow,
-    IOSColors.green, IOSColors.lightBlue, IOSColors.blue,
-    IOSColors.purple, IOSColors.pink, IOSColors.gray,
-    IOSColors.indigo,
-)
+/** 24 小时笔数分布（取 dateTime 的小时位）。 */
+private fun hourlyCounts(transactions: List<Transaction>): List<Float> {
+    val buckets = MutableList(HOURS) { 0f }
+    transactions.forEach { tx ->
+        val hour = tx.dateTime.substringAfter(' ', "").take(2).toIntOrNull()
+        if (hour != null && hour in 0 until HOURS) buckets[hour] += 1f
+    }
+    return buckets
+}
 
-private fun getChartColor(index: Int): Color = chartColors[index % chartColors.size]
+/** 峰值小时（最多两个）。 */
+private fun hourlyPeaks(hourly: List<Float>): List<Int> =
+    hourly.withIndex()
+        .filter { it.value > 0f }
+        .sortedByDescending { it.value }
+        .take(2)
+        .map { it.index }
+
+private fun peakText(peaks: List<Int>): String {
+    if (peaks.isEmpty()) return "本月还没有交易记录，热力图为空。"
+    val parts = peaks.map { hour ->
+        val label = if (hour < 10) "0" + hour + ":00" else hour.toString() + ":00"
+        label
+    }
+    return "峰值出现在 " + parts.joinToString(" 与 ") + "；柱高按当月最大值归一。"
+}
+
+/** 图表网格行数 */
+private const val GRID_ROWS = 2
+
+/** 24 小时 */
+private const val HOURS = 24
+
+/** 环形图与图例最多展示的分类数 */
+private const val CATEGORY_LIMIT = 8
