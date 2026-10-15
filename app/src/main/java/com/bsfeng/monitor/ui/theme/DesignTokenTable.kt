@@ -1,6 +1,6 @@
 // ============================================================================
 // DesignTokenTable.kt —— 生成文件，请勿手改。
-// 来源：.open-design/parts/00-tokens.css + 00-tokens-extra.css
+// 来源：.open-design/08-prototype.html 的 :root 与 [data-theme] 块
 // 生成器：tools/gen-design-tokens.mjs（重跑：node tools/gen-design-tokens.mjs）
 // ============================================================================
 package com.bsfeng.monitor.ui.theme
@@ -25,9 +25,9 @@ internal class CssToken(val name: String, val kind: TokenKind, val base: String,
 internal object DesignTokenTable {
     const val DEFAULT_THEME: String = "apple"
     /** CSS 变量总数（00-tokens.css 的 :root 声明数；extra 文件只复述同名槽位，不新增名字）。 */
-    const val CSS_VARIABLE_COUNT: Int = 234
+    const val CSS_VARIABLE_COUNT: Int = 243
     /** 其中语义槽位数（其余为 7 套主题的色值命名空间槽位）。 */
-    const val SEMANTIC_COUNT: Int = 123
+    const val SEMANTIC_COUNT: Int = 132
     val THEME_IDS: List<String> = listOf("apple", "glassmorphism", "notion", "stripe", "claude", "ibm", "kami", "bento")
     /** themeId 合法性判定集合：避免 raw() 每次都做 List.contains 线性扫描。 */
     private val THEME_ID_SET: Set<String> = THEME_IDS.toHashSet()
@@ -308,7 +308,7 @@ internal object DesignTokenTable {
             CssToken(
                 "font-display",
                 TokenKind.FONT,
-                "\"SF Pro Display\", \"SF Pro Icons\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+                "-apple-system, \"SF Pro Display\", \"SF Pro Icons\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
                 mapOf(
                 "glassmorphism" to "Inter, system-ui, sans-serif",
                 "notion" to "\"NotionInter\", \"Inter\", -apple-system, system-ui, \"Segoe UI\", Helvetica, Arial, sans-serif",
@@ -325,7 +325,7 @@ internal object DesignTokenTable {
             CssToken(
                 "font-body",
                 TokenKind.FONT,
-                "\"SF Pro Text\", \"SF Pro Icons\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+                "-apple-system, \"SF Pro Text\", \"SF Pro Icons\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
                 mapOf(
                 "glassmorphism" to "Inter, system-ui, sans-serif",
                 "notion" to "\"NotionInter\", \"Inter\", -apple-system, system-ui, \"Segoe UI\", Helvetica, Arial, sans-serif",
@@ -342,7 +342,7 @@ internal object DesignTokenTable {
             CssToken(
                 "font-mono",
                 TokenKind.FONT,
-                "\"SF Mono\", ui-monospace, \"JetBrains Mono\", Menlo, Monaco, Consolas, monospace",
+                "ui-monospace, \"SF Mono\", SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", monospace",
                 mapOf(
                 "glassmorphism" to "\"SF Mono\", ui-monospace, Menlo, monospace",
                 "notion" to "ui-monospace, \"SF Mono\", \"JetBrains Mono\", Menlo, Monaco, Consolas, monospace",
@@ -1331,14 +1331,39 @@ internal object DesignTokenTable {
                 ),
             ),
         )
+        put(
+            "chart-seq",
+            CssToken(
+                "chart-seq",
+                TokenKind.COLOR,
+                "#0071e3",
+                mapOf(
+                "glassmorphism" to "#3e6ec9",
+                "notion" to "#0075de",
+                "stripe" to "#533afd",
+                "claude" to "#aa5538",
+                "ibm" to "#0f62fe",
+                "kami" to "#1b365d",
+                "bento" to "#2563eb",
+                ),
+            ),
+        )
         put("chart-1", CssToken("chart-1", TokenKind.COLOR, "#e8833a", emptyMap()))
         put("chart-2", CssToken("chart-2", TokenKind.COLOR, "#3b82f6", emptyMap()))
         put("chart-3", CssToken("chart-3", TokenKind.COLOR, "#8b5cf6", emptyMap()))
         put("chart-4", CssToken("chart-4", TokenKind.COLOR, "#10b981", emptyMap()))
         put("chart-5", CssToken("chart-5", TokenKind.COLOR, "#ef4444", emptyMap()))
-        put("chart-6", CssToken("chart-6", TokenKind.COLOR, "#f59e0b", emptyMap()))
+        put("chart-6", CssToken("chart-6", TokenKind.COLOR, "#d9a832", emptyMap()))
         put("chart-7", CssToken("chart-7", TokenKind.COLOR, "#06b6d4", emptyMap()))
         put("chart-8", CssToken("chart-8", TokenKind.COLOR, "#ec4899", emptyMap()))
+        put("chart-9", CssToken("chart-9", TokenKind.COLOR, "#84cc16", emptyMap()))
+        put("chart-10", CssToken("chart-10", TokenKind.COLOR, "#6366f1", emptyMap()))
+        put("chart-11", CssToken("chart-11", TokenKind.COLOR, "#14b8a6", emptyMap()))
+        put("chart-12", CssToken("chart-12", TokenKind.COLOR, "#f97316", emptyMap()))
+        put("chart-13", CssToken("chart-13", TokenKind.COLOR, "#a855f7", emptyMap()))
+        put("chart-14", CssToken("chart-14", TokenKind.COLOR, "#0ea5e9", emptyMap()))
+        put("chart-15", CssToken("chart-15", TokenKind.COLOR, "#22c55e", emptyMap()))
+        put("chart-16", CssToken("chart-16", TokenKind.COLOR, "#eab308", emptyMap()))
         put("fab-size", CssToken("fab-size", TokenKind.LENGTH, "56px", emptyMap()))
         put("icon-size", CssToken("icon-size", TokenKind.LENGTH, "44px", emptyMap()))
         put("switch-w", CssToken("switch-w", TokenKind.LENGTH, "56px", emptyMap()))
