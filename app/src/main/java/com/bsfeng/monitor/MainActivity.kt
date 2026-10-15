@@ -5,11 +5,13 @@ import android.content.Context
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -22,23 +24,30 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.activity.compose.BackHandler
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
 import com.bsfeng.monitor.finance.ui.BudgetScreen
@@ -55,7 +64,18 @@ import com.bsfeng.monitor.ui.AdScreen
 import com.bsfeng.monitor.ui.AdViewModel
 import com.bsfeng.monitor.ui.WhitelistScreen
 import com.bsfeng.monitor.ui.WhitelistViewModel
+import com.bsfeng.monitor.ui.components.AppearanceScreen
+import com.bsfeng.monitor.ui.theme.DesignTokenCatalog
+import com.bsfeng.monitor.ui.components.BrandSplash
+import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
+import com.bsfeng.monitor.ui.components.MotionToken
+import com.bsfeng.monitor.ui.components.springOf
+import com.bsfeng.monitor.ui.OverviewScreen
+import com.bsfeng.monitor.ui.components.appBackdrop
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.MonitorTheme
+import com.bsfeng.monitor.ui.theme.ThemeRepository
 import androidx.compose.ui.graphics.vector.ImageVector
 
 class MainActivity : ComponentActivity() {
@@ -71,7 +91,28 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // 全应用仅浅色主题：状态栏/导航栏透明，图标用深色，保证压在浅色底衬上清晰可辨
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
+
+        // 双保险：显式关掉系统栏对比度/深色图标自动推断，避免不同 ROM 行为不一致
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
+        // 主题持久化：必须在 setContent 之前读，保证首帧就是用户选定的主题
+        ThemeRepository.init(applicationContext)
+
+        // 自验钩子（演示件）：把当前主题全部 token 的运行时值打到 logcat，tag=TokenDump。
+        // 用法：adb logcat -d -s TokenDump  →  逐条比对 CSS 原文值。仅「调试模式」打开时输出。
+        if (com.bsfeng.monitor.util.DebugConfig.demoVisible) {
+            val active = ThemeRepository.currentThemeId()
+            android.util.Log.i("TokenDump", "theme=" + active + " tokens=" + DesignTokenCatalog.dumpAll(active).size)
+            DesignTokenCatalog.dumpAll(active).forEach { android.util.Log.i("TokenDump", it) }
+        }
 
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (!nm.areNotificationsEnabled()) {
@@ -84,19 +125,34 @@ class MainActivity : ComponentActivity() {
                 val financeViewModel: FinanceViewModel = viewModel()
                 val skipRuleViewModel: SkipRuleViewModel = viewModel()
                 val whitelistViewModel: WhitelistViewModel = viewModel()
+                val tokens = LocalDesignTokens.current
+                // 5 Tab：0 概览(s01 占位) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 设置(s09)
                 var selectedTab by remember { mutableIntStateOf(0) }
-                var financeRoute by remember { mutableStateOf<FinanceRoute>(FinanceRoute.Main) }
+                var financeRoute by rememberSaveable(stateSaver = FinanceRouteSaver) {
+                    mutableStateOf<FinanceRoute>(FinanceRoute.Main)
+                }
+                // 每次切到记账 Tab 或从子页返回时自增，驱动记账首页把列表滚回顶部
+                var financeEntryKey by remember { mutableIntStateOf(0) }
                 var showSkipRuleScreen by remember { mutableStateOf(false) }
                 var showWhitelistScreen by remember { mutableStateOf(false) }
+                var showGallery by remember { mutableStateOf(false) }
+                var showAppearance by remember { mutableStateOf(false) }
+                var showSplash by remember { mutableStateOf(true) }
                 val view = LocalView.current
+                val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery || showAppearance
+                // 原型二级页（记账子页 / 设置子页）无 Tab 栏
+                val financeSubPage = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main
+                val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
 
                 // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到记账首页
-                BackHandler(enabled = selectedTab == 2 && financeRoute != FinanceRoute.Main) {
+                BackHandler(enabled = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main) {
                     financeRoute = FinanceRoute.Main
+                    financeEntryKey++
                 }
 
                 val tabs = remember {
                     listOf(
+                        TabItem("概览", Icons.Outlined.DateRange, Icons.Filled.DateRange),
                         TabItem("实时", Icons.Outlined.Home, Icons.Filled.Home),
                         TabItem("广告", Icons.Outlined.Visibility, Icons.Outlined.Visibility),
                         TabItem("记账", Icons.Outlined.AddCircle, Icons.Filled.AddCircle),
@@ -104,176 +160,291 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
-                        if (!showSkipRuleScreen && !showWhitelistScreen) {
-                            NavigationBar {
-                                tabs.forEachIndexed { index, tab ->
-                                    val isSelected = selectedTab == index
-                                    val tabColor by animateColorAsState(
-                                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
-                                    )
-                                    NavigationBarItem(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedTab = index
-                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                            if (index == 2) {
-                                                financeRoute = FinanceRoute.Main
-                                            }
-                                        },
-                                        icon = {
-                                            Icon(
-                                                if (isSelected) tab.selectedIcon else tab.icon,
-                                                contentDescription = tab.title,
-                                                modifier = Modifier.size(24.dp),
-                                                tint = tabColor,
-                                            )
-                                        },
-                                        label = {
-                                            Text(tab.title, color = tabColor)
-                                        },
-                                    )
+                Box(Modifier.fillMaxSize().appBackdrop()) {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = Color.Transparent,
+                        bottomBar = {
+                            if (bottomBarVisible) {
+                                // 原型 .tabbar / .tab（00-shell.html:174-197）：
+                                // 底 = color-mix(surface 84%)、上边 1px --border-soft、选中胶囊 = color-mix(accent 14%)、字 = accent / muted
+                                val barColors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = tokens.accent,
+                                    selectedTextColor = tokens.accent,
+                                    indicatorColor = tokens.accentFade(14),
+                                    unselectedIconColor = tokens.muted,
+                                    unselectedTextColor = tokens.muted,
+                                )
+                                NavigationBar(
+                                    modifier = Modifier.drawWithContent {
+                                        drawContent()
+                                        drawLine(
+                                            color = tokens.borderSoft,
+                                            start = Offset(0f, 0f),
+                                            end = Offset(size.width, 0f),
+                                            strokeWidth = 1.dp.toPx(),
+                                        )
+                                    },
+                                    containerColor = tokens.surface.copy(alpha = tokens.surface.alpha * 0.84f),
+                                    tonalElevation = 0.dp,
+                                ) {
+                                    tabs.forEachIndexed { index, tab ->
+                                        val isSelected = selectedTab == index
+                                        val tabColor by animateColorAsState(
+                                            targetValue = if (isSelected) tokens.accent else tokens.muted,
+                                            animationSpec = tokens.springOf<Color>(MotionToken.State),
+                                        )
+                                        NavigationBarItem(
+                                            colors = barColors,
+                                            selected = isSelected,
+                                            onClick = {
+                                                selectedTab = index
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                if (index == FINANCE_TAB) {
+                                                    financeRoute = FinanceRoute.Main
+                                                    financeEntryKey++
+                                                }
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    if (isSelected) tab.selectedIcon else tab.icon,
+                                                    contentDescription = tab.title,
+                                                    modifier = Modifier.size(24.dp),
+                                                    tint = tabColor,
+                                                )
+                                            },
+                                            label = {
+                                                Text(tab.title, color = tabColor)
+                                            },
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                ) { paddingValues ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                    ) {
-                        when (selectedTab) {
-                            0 -> MainScreen(
-                                viewModel = viewModel,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            1 -> AdScreen(
-                                adViewModel = viewModel(),
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            2 -> {
-                                when (val route = financeRoute) {
-                                    is FinanceRoute.Main -> FinanceMainScreen(
-                                        viewModel = financeViewModel,
-                                        onAddClick = {
-                                            financeRoute = FinanceRoute.AddTransaction(
-                                                financeViewModel.currentMonth.value
-                                            )
-                                        },
-                                        onImportClick = {
-                                            financeRoute = FinanceRoute.Import
-                                        },
-                                        onEditClick = { tx ->
-                                            financeRoute = FinanceRoute.EditTransaction(tx)
-                                        },
-                                        onStatsClick = { financeRoute = FinanceRoute.Stats },
-                                        onBudgetClick = { financeRoute = FinanceRoute.Budget },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    is FinanceRoute.AddTransaction -> AddTransactionScreen(
-                                        categories = financeViewModel.categories.collectAsState().value,
-                                        accounts = financeViewModel.accounts.collectAsState().value,
-                                        onSave = { tx ->
-                                            financeViewModel.addTransaction(tx)
-                                            financeRoute = FinanceRoute.Main
-                                        },
-                                        onDismiss = { financeRoute = FinanceRoute.Main }
-                                    )
-                                    is FinanceRoute.EditTransaction -> AddTransactionScreen(
-                                        categories = financeViewModel.categories.collectAsState().value,
-                                        accounts = financeViewModel.accounts.collectAsState().value,
-                                        editing = route.transaction,
-                                        onSave = { tx ->
-                                            financeViewModel.updateTransaction(tx)
-                                            financeRoute = FinanceRoute.Main
-                                        },
-                                        onDelete = { tx ->
-                                            financeViewModel.deleteTransaction(tx.id)
-                                            financeRoute = FinanceRoute.Main
-                                        },
-                                        onDismiss = { financeRoute = FinanceRoute.Main }
-                                    )
-                                    is FinanceRoute.Stats -> FinanceStatsScreen(
-                                        currentMonth = financeViewModel.currentMonth.collectAsState().value,
-                                        stats = financeViewModel.monthlyStats.collectAsState().value,
-                                        categoryBreakdown = financeViewModel.categoryBreakdown.collectAsState().value,
-                                        onPreviousMonth = { financeViewModel.previousMonth() },
-                                        onNextMonth = { financeViewModel.nextMonth() },
-                                        onBack = { financeRoute = FinanceRoute.Main },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    is FinanceRoute.Budget -> BudgetScreen(
-                                        viewModel = financeViewModel,
-                                        onBack = { financeRoute = FinanceRoute.Main },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    is FinanceRoute.Import -> ImportScreen(
-                                        importing = financeViewModel.importing.collectAsState().value,
-                                        importResult = financeViewModel.importResult.collectAsState().value,
-                                        onImport = { path -> financeViewModel.importFromPanda(path) },
-                                        onDismiss = { financeRoute = FinanceRoute.Main },
-                                        onClearResult = { financeViewModel.clearImportResult() }
-                                    )
-                                }
-                            }
-                            3 -> SettingsScreen(
-                                viewModel = viewModel,
-                                onNavigateToSkipRules = { showSkipRuleScreen = true },
-                                onNavigateToWhitelist = { showWhitelistScreen = true },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
-                        AnimatedVisibility(
-                            visible = showSkipRuleScreen,
-                            enter = slideInHorizontally() + fadeIn(),
-                            exit = slideOutHorizontally() + fadeOut()
+                        },
+                    ) { paddingValues ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
                         ) {
-                            Box(Modifier.fillMaxSize()) {
-                                BackHandler {
-                                    showSkipRuleScreen = false
-                                    skipRuleViewModel.refresh()
+                            when (selectedTab) {
+                                0 -> OverviewScreen(
+                                    onOpenLive = { selectedTab = 1 },
+                                    onOpenFinance = { selectedTab = FINANCE_TAB },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                1 -> MainScreen(
+                                    viewModel = viewModel,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                2 -> AdScreen(
+                                    onOpenRules = { showSkipRuleScreen = true },
+                                    adViewModel = viewModel(),
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                FINANCE_TAB -> {
+                                    when (val route = financeRoute) {
+                                        is FinanceRoute.Main -> FinanceMainScreen(
+                                            viewModel = financeViewModel,
+                                            entryKey = financeEntryKey,
+                                            onAddClick = {
+                                                financeRoute = FinanceRoute.AddTransaction(
+                                                    financeViewModel.currentMonth.value
+                                                )
+                                            },
+                                            onImportClick = {
+                                                financeRoute = FinanceRoute.Import
+                                            },
+                                            onEditClick = { tx ->
+                                                financeRoute = FinanceRoute.EditTransaction(tx)
+                                            },
+                                            onStatsClick = { financeRoute = FinanceRoute.Stats },
+                                            onBudgetClick = { financeRoute = FinanceRoute.Budget },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        is FinanceRoute.AddTransaction -> AddTransactionScreen(
+                                            categories = financeViewModel.categories.collectAsState().value,
+                                            accounts = financeViewModel.accounts.collectAsState().value,
+                                            // 记账首页当前浏览月（W2 的 AddTransactionScreen.fromMonth）；形如 "2026-07"
+                                            fromMonth = route.fromMonth,
+                                            onSave = { tx ->
+                                                financeViewModel.addTransaction(tx)
+                                                financeRoute = FinanceRoute.Main
+                                            },
+                                            onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ }
+                                        )
+                                        is FinanceRoute.EditTransaction -> AddTransactionScreen(
+                                            categories = financeViewModel.categories.collectAsState().value,
+                                            accounts = financeViewModel.accounts.collectAsState().value,
+                                            editing = route.transaction,
+                                            onSave = { tx ->
+                                                financeViewModel.updateTransaction(tx)
+                                                financeRoute = FinanceRoute.Main
+                                            },
+                                            onDelete = { tx ->
+                                                financeViewModel.deleteTransaction(tx.id)
+                                                financeRoute = FinanceRoute.Main
+                                            },
+                                            onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ }
+                                        )
+                                        is FinanceRoute.Stats -> FinanceStatsScreen(
+                                            currentMonth = financeViewModel.currentMonth.collectAsState().value,
+                                            stats = financeViewModel.monthlyStats.collectAsState().value,
+                                            categoryBreakdown = financeViewModel.categoryBreakdown.collectAsState().value,
+                                            onPreviousMonth = { financeViewModel.previousMonth() },
+                                            onNextMonth = { financeViewModel.nextMonth() },
+                                            onBack = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        is FinanceRoute.Budget -> BudgetScreen(
+                                            viewModel = financeViewModel,
+                                            onBack = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        is FinanceRoute.Import -> ImportScreen(
+                                            importing = financeViewModel.importing.collectAsState().value,
+                                            importResult = financeViewModel.importResult.collectAsState().value,
+                                            onImport = { path -> financeViewModel.importFromPanda(path) },
+                                            onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
+                                            onClearResult = { financeViewModel.clearImportResult() }
+                                        )
+                                    }
                                 }
-                                SkipRuleScreen(
-                                    onBack = {
+                                SETTINGS_TAB -> SettingsScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToSkipRules = { showSkipRuleScreen = true },
+                                    onNavigateToWhitelist = { showWhitelistScreen = true },
+                                    onNavigateToAppearance = { showAppearance = true },
+                                    onNavigateToGallery = { showGallery = true },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
+                            AnimatedVisibility(
+                                visible = showSkipRuleScreen,
+                                enter = slideInHorizontally() + fadeIn(),
+                                exit = slideOutHorizontally() + fadeOut()
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
+                                    BackHandler {
                                         showSkipRuleScreen = false
                                         skipRuleViewModel.refresh()
-                                    },
-                                    viewModel = skipRuleViewModel
-                                )
-                            }
-                        }
-
-                        // 广告白名单页面（覆盖层）— 从右侧滑入
-                        AnimatedVisibility(
-                            visible = showWhitelistScreen,
-                            enter = slideInHorizontally() + fadeIn(),
-                            exit = slideOutHorizontally() + fadeOut()
-                        ) {
-                            Box(Modifier.fillMaxSize()) {
-                                BackHandler(showWhitelistScreen) {
-                                    showWhitelistScreen = false
-                                    whitelistViewModel.refresh()
+                                    }
+                                    SkipRuleScreen(
+                                        onBack = {
+                                            showSkipRuleScreen = false
+                                            skipRuleViewModel.refresh()
+                                        },
+                                        viewModel = skipRuleViewModel
+                                    )
                                 }
-                                WhitelistScreen(
-                                    onBack = {
+                            }
+
+                            // 广告白名单页面（覆盖层）— 从右侧滑入
+                            AnimatedVisibility(
+                                visible = showWhitelistScreen,
+                                enter = slideInHorizontally() + fadeIn(),
+                                exit = slideOutHorizontally() + fadeOut()
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
+                                    BackHandler(showWhitelistScreen) {
                                         showWhitelistScreen = false
                                         whitelistViewModel.refresh()
-                                    },
-                                    viewModel = whitelistViewModel
-                                )
+                                    }
+                                    WhitelistScreen(
+                                        onBack = {
+                                            showWhitelistScreen = false
+                                            whitelistViewModel.refresh()
+                                        },
+                                        viewModel = whitelistViewModel
+                                    )
+                                }
+                            }
+
+                            // s12 组件展厅（占位屏，W2 接手）
+                            AnimatedVisibility(
+                                visible = showGallery,
+                                enter = slideInHorizontally() + fadeIn(),
+                                exit = slideOutHorizontally() + fadeOut()
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
+                                    BackHandler(showGallery) { showGallery = false }
+                                    ComponentGalleryScreen(onBack = { showGallery = false })
+                                }
+                            }
+
+                            // s13 外观 / 主题切换（占位屏，W3 接手）
+                            AnimatedVisibility(
+                                visible = showAppearance,
+                                enter = slideInHorizontally() + fadeIn(),
+                                exit = slideOutHorizontally() + fadeOut()
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
+                                    BackHandler(showAppearance) { showAppearance = false }
+                                    AppearanceScreen(onBack = { showAppearance = false })
+                                }
                             }
                         }
+                    }
+
+                    // 开屏：品牌 C2 动效（1.8s 后自动结束）
+                    if (showSplash) {
+                        BrandSplash(onFinished = { showSplash = false })
                     }
                 }
             }
         }
+    }
+
+    private companion object {
+        const val FINANCE_TAB = 3
+        const val SETTINGS_TAB = 4
+
+        /** 旋转 / 进程重建后仍停留在原子页：把路由编码成可保存的原语列表。 */
+        val FinanceRouteSaver: Saver<FinanceRoute, Any> = listSaver(
+            save = { route ->
+                when (route) {
+                    is FinanceRoute.Main -> listOf("main")
+                    is FinanceRoute.AddTransaction -> listOf("add", route.fromMonth)
+                    is FinanceRoute.EditTransaction -> with(route.transaction) {
+                        listOf(
+                            "edit", id, type, categoryName, amount, accountName, remark, tag,
+                            date, dateTime, createdAt, updatedAt, source, sourceId,
+                        )
+                    }
+                    is FinanceRoute.Stats -> listOf("stats")
+                    is FinanceRoute.Budget -> listOf("budget")
+                    is FinanceRoute.Import -> listOf("import")
+                }
+            },
+            restore = { saved ->
+                when (saved.firstOrNull() as? String) {
+                    "add" -> FinanceRoute.AddTransaction(saved.getOrNull(1) as? String ?: "")
+                    "edit" -> if (saved.size < 14) FinanceRoute.Main else FinanceRoute.EditTransaction(
+                        Transaction(
+                            id = saved[1] as Long,
+                            type = saved[2] as Int,
+                            categoryName = saved[3] as String,
+                            amount = saved[4] as Double,
+                            accountName = saved[5] as String,
+                            remark = saved[6] as String,
+                            tag = saved[7] as String,
+                            date = saved[8] as String,
+                            dateTime = saved[9] as String,
+                            createdAt = saved[10] as Long,
+                            updatedAt = saved[11] as Long,
+                            source = saved[12] as String,
+                            sourceId = saved[13] as String,
+                        )
+                    )
+                    "stats" -> FinanceRoute.Stats
+                    "budget" -> FinanceRoute.Budget
+                    "import" -> FinanceRoute.Import
+                    else -> FinanceRoute.Main
+                }
+            },
+        )
     }
 }
 
