@@ -38,9 +38,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BarChart
@@ -63,7 +63,6 @@ import com.bsfeng.monitor.ui.live.PLACEHOLDER
 import com.bsfeng.monitor.ui.live.ScreenHead
 import com.bsfeng.monitor.ui.live.StackRow
 import com.bsfeng.monitor.ui.live.StatBox
-import com.bsfeng.monitor.ui.live.TypeIconDot
 import com.bsfeng.monitor.ui.live.formatClockSec
 import com.bsfeng.monitor.ui.live.formatDayLabel
 import com.bsfeng.monitor.ui.live.startOfDay
@@ -416,7 +415,9 @@ private fun SkipRecordRow(record: SkipRecord, onClick: () -> Unit) {
             modifier = Modifier.width(t.space12),
         )
         Spacer(Modifier.width(t.space1))
-        TypeIconDot(RecordType.SCREEN)
+        // s03 跳过记录行以应用为主体（原型 .s03 列表每行都是 .app-icon）→ 用应用自身图标，
+        // 取不到真实图标时 AppIcon 内部回落「品牌色底 + 应用首字」。旧记录缺 package_name 时同样走兜底。
+        AppIcon(packageName = record.packageName.takeIf { it.isNotBlank() }, appName = record.displayName)
         Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f)) {
             Text(

@@ -44,11 +44,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.MatchRule
+import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
+import com.bsfeng.monitor.record.RecordStore
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
@@ -63,9 +67,13 @@ import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.components.animatedCount
 import com.bsfeng.monitor.ui.components.rememberStaggerEnter
 import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.live.DAY_MS
+import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.sparkHeight
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -86,6 +94,13 @@ fun SkipRuleScreen(
     val view = LocalView.current
     val toast = rememberToastHostState()
     val state by viewModel.state.collectAsState()
+    // s10 摘要「累计命中」：数据源是 records 表的 AD_SKIPPED 事件（与 s03 跳过记录页同源，
+    // 由 RecordCollector.onSkipAd 写入）。规则库里只有规则定义、没有命中计数器，故按事件表统计。
+    val recordStore = remember { MonitorApp.instance.container.recordStore }
+    var hits by remember { mutableStateOf(SkipHits.EMPTY) }
+    LaunchedEffect(Unit) {
+        hits = withContext(Dispatchers.IO) { loadSkipHits(recordStore, System.currentTimeMillis()) }
+    }
     var demoState by remember { mutableStateOf(FiveState.POPULATED) }
     var showConfirm by remember { mutableStateOf(false) }
     var urlInput by remember { mutableStateOf(DEFAULT_SUBSCRIPTION_URL) }
@@ -101,7 +116,6 @@ fun SkipRuleScreen(
     } else {
         demoState
     }
-    val selectorCounts = remember(state.rules) { state.rules.map { selectorCountOf(it).toFloat() } }
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
         Column(Modifier.fillMaxSize()) {
@@ -215,24 +229,24 @@ fun SkipRuleScreen(
                                 Spacer(Modifier.height(t.space1))
                                 Text("较上周 +2", style = MaterialTheme.typography.labelMedium, color = t.successText)
                             }
+                            // 原型 s10 摘要第二格是「累计命中 + 今日 N 次 + 近 7 天迷你走势」
+                            // （08-prototype.html:4594-4599 的 .kpi-row），不再是「已启用」。
                             AppCard(Modifier.weight(1f)) {
-                                Text("已启用", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                                Text("累计命中", style = MaterialTheme.typography.labelSmall, color = t.meta)
                                 Spacer(Modifier.height(t.space1))
                                 Row(verticalAlignment = Alignment.Bottom) {
-                                    AnimatedNumber(state.enabledCount, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                                    AnimatedNumber(hits.total, style = MaterialTheme.typography.headlineMedium, color = t.fg)
                                     Spacer(Modifier.width(t.space1))
-                                    Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
+                                    Text("次", style = MaterialTheme.typography.labelMedium, color = t.muted)
                                 }
                                 Spacer(Modifier.height(t.space1))
                                 Text(
-                                    "共 " + selectorCounts.sum().toInt() + " 个选择器",
+                                    "今日 " + hits.today + " 次",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = t.muted,
                                 )
                                 Spacer(Modifier.height(t.space2))
-                                if (selectorCounts.size >= 2) {
-                                    Sparkline(selectorCounts, Modifier.fillMaxWidth().height(t.sparkHeight))
-                                }
+                                Sparkline(hits.daily7, Modifier.fillMaxWidth().height(t.sparkHeight))
                             }
                         }
 
@@ -309,6 +323,48 @@ fun SkipRuleScreen(
 private const val DEFAULT_SUBSCRIPTION_URL =
     "https://registry.npmmirror.com/@gkd-kit/subscription/latest/files/dist/gkd.json5"
 
+/** 原型 s10 规则行专用图标尺寸（.screen.s10 .rule-main.has-icon .app-icon = 25px）。 */
+private val RULE_ICON_SIZE = 25.dp
+
+/** 跳过事件的动作名（与 RecordCollector.onSkipAd 写入的 action 一致）。 */
+private const val AD_SKIPPED_ACTION = "AD_SKIPPED"
+
+/** 「累计命中」迷你走势的天数（与 s03 跳过趋势同窗口）。 */
+private const val SKIP_TREND_DAYS = 7
+
+/**
+ * s10 摘要「累计命中」的三个数字（原型 08-prototype.html:4594-4599 的第二个 .kpi）。
+ *
+ * @param total 全量命中次数（kpi-value）
+ * @param today 今日命中次数（kpi-delta）
+ * @param daily7 近 7 天逐日命中分桶（kpi-spark 迷你走势）
+ */
+internal data class SkipHits(val total: Int, val today: Int, val daily7: List<Float>) {
+    companion object {
+        val EMPTY = SkipHits(total = 0, today = 0, daily7 = List(SKIP_TREND_DAYS) { 0f })
+    }
+}
+
+/**
+ * 从 records 表统计跳过命中（与 s03 跳过记录页同一数据源：SCREEN / AD_SKIPPED 事件）。
+ *
+ * 规则库里只有规则定义、没有命中计数器，真实命中记录只存在于跳过事件表，
+ * 因此这里对事件表计数，而不是拿规则条数冒充命中数。调用方需在 IO 线程执行。
+ */
+private fun loadSkipHits(store: RecordStore, now: Long): SkipHits {
+    val todayStart = startOfDay(now)
+    val weekStart = todayStart - (SKIP_TREND_DAYS - 1) * DAY_MS
+    val events = store.queryByTypeAndAction(RecordType.SCREEN, AD_SKIPPED_ACTION, 0L, now)
+    var today = 0
+    val buckets = FloatArray(SKIP_TREND_DAYS)
+    events.forEach { record ->
+        if (record.timestamp >= todayStart) today++
+        val idx = ((record.timestamp - weekStart) / DAY_MS).toInt()
+        if (idx in 0 until SKIP_TREND_DAYS) buckets[idx] += 1f
+    }
+    return SkipHits(total = events.size, today = today, daily7 = buckets.toList())
+}
+
 private fun hostOf(url: String): String =
     url.substringAfter("://", url).substringBefore("/").ifEmpty { "未填写订阅源" }
 
@@ -353,6 +409,15 @@ private fun RuleRow(
                 .heightIn(min = t.rowMinH - t.space4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // 原型 s10 规则行以应用为主体：行首是该应用的图标（08-prototype.html:4610 的
+            // .rule-main.has-icon > .app-icon，25px/间距 5px）；取不到真实图标时 AppIcon 走
+            // 「品牌色底 + 首字」兜底，全局规则（app = "*"）没有包名，直接兜底。
+            AppIcon(
+                packageName = rule.app.takeIf { !rule.isGlobal },
+                appName = rule.name.ifEmpty { rule.app },
+                size = RULE_ICON_SIZE,
+            )
+            Spacer(Modifier.width(t.space1))
             Column(Modifier.weight(1f)) {
                 Text(
                     rule.name.ifEmpty { rule.app },
