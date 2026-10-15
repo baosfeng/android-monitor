@@ -58,7 +58,9 @@ import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.AreaChart
 import com.bsfeng.monitor.ui.components.BarChart
+import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.ChartAxisLabels
 import com.bsfeng.monitor.ui.components.Chip
 import com.bsfeng.monitor.ui.components.ChipRow
@@ -72,7 +74,7 @@ import com.bsfeng.monitor.ui.components.Legend
 import com.bsfeng.monitor.ui.components.LegendItem
 import com.bsfeng.monitor.ui.components.LineChart
 import com.bsfeng.monitor.ui.components.MotionToken
-import com.bsfeng.monitor.ui.components.RingChart
+import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.RingProgress
 import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.Sparkline
@@ -82,10 +84,12 @@ import com.bsfeng.monitor.ui.components.animatedCount
 import com.bsfeng.monitor.ui.components.rememberStaggerEnter
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.components.springOf
+import com.bsfeng.monitor.finance.ui.categoryColorOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.categoryDot
 import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.heatHeight
+import com.bsfeng.monitor.ui.theme.heatRamp
 import com.bsfeng.monitor.ui.theme.sparkHeight
 
 /**
@@ -752,23 +756,43 @@ private fun GalleryProgress() {
 @Composable
 private fun GalleryChartRamp() {
     val t = LocalDesignTokens.current
-    DemoSection("图表灰阶色板 s1 – s7") {
+    // 原型 s12 色板卡（08-prototype.html:5115「图表灰阶色板 s1 – s7」）沿用其形态：色块行 + 图例
+    // （色点 / 名称 / 右侧 token 名）；口径按现行 token 语义改正（docs/UI设计/设计规范.md §7.4）：
+    //   ① chart-1..chart-16 是**分类色板**（彩色、跨主题固定），既不是中性灰阶，也不再是 7 槽；
+    //   ② 趋势图用的序列色 chartSeq 跟随主题强调色，同一图表内所有数据点同色；
+    //   ③ 热力条的强度阶 heatRamp 是序列色的 8–90% 透明阶梯，不单独占分类色板槽位。
+    DemoSection("分类色板 chart-1 – chart-16") {
         AppCard {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(t.space1)) {
-                repeat(7) { i ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(t.space6)
-                            .clip(RoundedCornerShape(t.radiusSm))
-                            .background(t.chartRamp[i]),
-                    )
+            // 16 槽分两行 × 8：单行 16 块在 360dp 屏上会压到约 15dp 宽，失去比色意义。
+            Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
+                repeat(2) { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(t.space1)) {
+                        repeat(8) { col ->
+                            val slot = row * 8 + col
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .height(t.space6)
+                                    .clip(RoundedCornerShape(t.radiusSm))
+                                    .background(t.chartRamp[slot]),
+                            )
+                        }
+                    }
                 }
             }
+            Spacer(Modifier.height(t.space2))
+            Text(
+                "跨主题固定 · 同一分类在 8 套主题下同色",
+                style = MaterialTheme.typography.labelSmall,
+                color = t.meta,
+            )
             Spacer(Modifier.height(t.space3))
             Legend(
-                items = listOf("主序列", "次序列", "第三序列", "第四序列", "第五序列", "第六序列", "第七序列")
-                    .mapIndexed { i, label -> LegendItem(label, "s" + (i + 1), t.chartRamp[i]) },
+                items = listOf(
+                    LegendItem("分类色板 · 扇形分片", "chart-1..16", t.chartRamp.first()),
+                    LegendItem("序列色 · 柱状 / 折线", "chartSeq", t.chartSeq),
+                    LegendItem("强度阶 · 热力条", "heatRamp", t.heatRamp.last()),
+                ),
             )
         }
     }
@@ -804,9 +828,11 @@ private fun GalleryCharts() {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
                 AppCard(Modifier.weight(1f)) {
-                    Text("环形图 ring", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                    // 原型 s12「图表基元」此卡的标签写 ring，实际渲染 data-chart="pie"（08-prototype.html:5153）：
+                    // 占比一律实心扇形、数值只在外部图例里（无 centerLabel）。
+                    Text("扇形图 pie · 占比", style = MaterialTheme.typography.bodySmall, color = t.muted)
                     Spacer(Modifier.height(t.space3))
-                    RingChart(listOf(42f, 31f, 24f, 18f, 13f), Modifier.fillMaxWidth(), centerLabel = "128")
+                    PieChart(listOf(42f, 31f, 24f, 18f, 13f), Modifier.fillMaxWidth())
                 }
                 AppCard(Modifier.weight(1f)) {
                     Text("圆环进度 gauge", style = MaterialTheme.typography.bodySmall, color = t.muted)
@@ -888,23 +914,59 @@ private fun StateCard(label: String, show: Boolean, content: @Composable () -> U
 @Composable
 private fun GalleryDots() {
     val t = LocalDesignTokens.current
-    DemoSection("分类圆点 categoryDot / 事件圆点") {
-        AppCard {
-            Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                repeat(8) { i ->
-                    Box(
-                        Modifier
-                            .size(t.space6)
-                            .clip(RoundedCornerShape(t.radiusSm))
-                            .background(t.categoryDot(i)),
-                    )
+    DemoSection("分类图标 CategoryIcon / 应用图标 AppIcon / 分类色板") {
+        Column(verticalArrangement = Arrangement.spacedBy(t.space3)) {
+            AppCard {
+                Text("分类图标 · 22 个支出分类线描图标", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                Spacer(Modifier.height(t.space3))
+                // 原型 .cat-icon（08-prototype.html:1509）：34px 圆角方块 + 分类色 12% 淡底 + 78% 描边图标；
+                // 取色与 s04 / s05 / s07 同一口径（categoryColorOf → chart-1..16 槽位循环，跨主题固定）。
+                Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                    GALLERY_CATEGORIES.forEach { name ->
+                        CategoryIcon(name = name, color = categoryColorOf(name))
+                    }
                 }
             }
-            Spacer(Modifier.height(t.space2))
-            Text("按 chart-1..chart-8 循环取色（替代旧 categoryPalette）", style = MaterialTheme.typography.labelSmall, color = t.meta)
+            AppCard {
+                Text("应用图标 · 真实图标，取不到回落品牌色首字", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                Spacer(Modifier.height(t.space3))
+                // 原型 .app-icon（08-prototype.html:1366）：30px 方块，background 取品牌色、无品牌色回落中性色。
+                Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                    GALLERY_APPS.forEach { (pkg, name) ->
+                        AppIcon(packageName = pkg, appName = name)
+                    }
+                }
+            }
+            AppCard {
+                Text("分类色板 · 图例色点 categoryDot", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                Spacer(Modifier.height(t.space3))
+                Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                    repeat(8) { i ->
+                        Box(
+                            Modifier
+                                .size(t.space6)
+                                .clip(RoundedCornerShape(t.radiusSm))
+                                .background(t.categoryDot(i)),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(t.space2))
+                Text("按 chart-1..chart-16 循环取色（替代旧 categoryPalette）", style = MaterialTheme.typography.labelSmall, color = t.meta)
+            }
         }
     }
 }
+
+/** 展台演示用分类：原型 s05 前 6 个支出分类，顺序与 finance_categories.sort_order 一致。 */
+private val GALLERY_CATEGORIES = listOf("餐饮", "出行", "购物", "日用", "零食", "水果")
+
+/** 展台演示用应用：原型 s03 跳过记录的前三个品牌 + 一个表外包名（走兜底）。 */
+private val GALLERY_APPS = listOf(
+    "com.tencent.mm" to "微信",
+    "tv.danmaku.bili" to "哔哩哔哩",
+    "com.taobao.taobao" to "淘宝",
+    "com.example.unknown" to "未知",
+)
 
 @Composable
 private fun GalleryMotion(toast: com.bsfeng.monitor.ui.components.ToastHostState) {
