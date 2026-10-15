@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 行为记录 · 自适应图标 background 层（浅色唯一形态）
+     满幅 108dp 打底 + 一道斜切面 = 时间地平线。
+     深色场景备用：把 #F4F6F9 换成 #0E1218、#E6EAF1 换成 #2B333F，并同步把 foreground 换成 #FFFFFF。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#1A237E"
-        android:pathData="M0,0h108v108h-108z" />
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z"
+        android:fillColor="#F4F6F9" />
+    <path
+        android:pathData="M0,72 L108,34 L108,108 L0,108 Z"
+        android:fillColor="#E6EAF1" />
 </vector>
