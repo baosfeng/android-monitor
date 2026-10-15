@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.BottomSheet
 import com.bsfeng.monitor.ui.components.FiveState
@@ -598,7 +599,7 @@ private fun CategoryCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        LegendDot(color, size = t.dotSize)
+        CategoryIcon(name = name, color = color)
         Spacer(Modifier.height(t.space1))
         Text(
             name,

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.HeatBar
 import com.bsfeng.monitor.ui.components.Sparkline
@@ -221,7 +222,14 @@ fun StackRow(
     }
 }
 
-/** 事件行（s01 最近事件 / s02 时间线共用）。 */
+/**
+ * 事件行（s01 最近事件 / s02 时间线共用，全应用唯一的行实现）。
+ *
+ * 图标按原型 s02 的规律分流：**行标题里应用名在前 = 应用事件 → 显示应用自身的图标**
+ * （「微信 · 前台 12 分钟」用 .app-icon，s01:2437）；系统事件（屏幕点亮 / Wi-Fi 连接 /
+ * 充电中 …）保持类型图标（.row-icon，s01:2443/2449）。旧记录缺 package_name 时
+ * 由 [AppIcon] 内部回落「品牌色底 + 应用首字」。
+ */
 @Composable
 fun LiveEventRow(
     record: Record,
@@ -251,7 +259,17 @@ fun LiveEventRow(
             modifier = Modifier.width(TL_TIME_COL_W),
         )
         Spacer(Modifier.width(t.space1))
-        TypeIconDot(record.type)
+        // 应用事件（APP_USAGE 且带 package_name）优先显示应用图标，系统事件默认保留类型图标。
+        val pkg = if (record.type == RecordType.APP_USAGE) {
+            record.detail?.get("package_name")?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+        if (pkg != null) {
+            AppIcon(packageName = pkg, appName = record.label)
+        } else {
+            TypeIconDot(record.type)
+        }
         Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f)) {
             Text(

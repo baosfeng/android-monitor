@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import com.bsfeng.monitor.finance.model.Category
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.MotionToken
@@ -265,29 +266,33 @@ internal fun FinanceScrim(onDismiss: () -> Unit) {
 // ─────────────────────────── 分类色（三屏唯一口径） ───────────────────────────
 
 /**
- * 分类 → 颜色的**唯一**映射：s04 交易行色点 / s05 分类芯片 / s07 图例色点共用同一函数，
- * 因此同一分类在任何一屏取到同一个颜色（原型 s05:48-53 与 s07:61-66 的 s1..s6 同序）。
+ * 分类 → 颜色的**唯一**映射：s04 交易行色点 / s05 分类网格 / s07 图例色点共用同一函数，
+ * 因此同一分类在任何一屏取到同一个颜色。
  *
- * 内置分类按原型固定槽位取色；其余分类名走稳定哈希，跨屏 / 跨进程结果一致。
+ * 色板是跨主题固定的 chart-1..chart-16：切主题时分类身份色不变（只有序列色跟着主题走）。
  */
 @Composable
 internal fun categoryColorOf(name: String): Color =
     LocalDesignTokens.current.categoryDot(categorySlotOf(name))
 
-/** 分类槽位（chart-1..chart-8 的下标）：原型 6 个内置分类固定序，其余按名称稳定哈希。 */
+/**
+ * 分类槽位（分类色板 chart-1..chart-16 的下标）。
+ *
+ * 支出 / 收入分类按 [Category] 的预设顺序取槽 —— 该顺序与 finance_categories.sort_order
+ * 一致，因此相邻分类天然不重色；自定义分类再按名称稳定哈希兜底（跨屏 / 跨进程结果一致）。
+ */
 internal fun categorySlotOf(name: String): Int {
-    val fixed = PROTOTYPE_CATEGORY_SLOTS.indexOf(name)
-    if (fixed >= 0) return fixed
+    val expense = Category.defaultExpenseCategories.indexOf(name)
+    if (expense >= 0) return expense
+    val income = Category.defaultIncomeCategories.indexOf(name)
+    if (income >= 0) return Category.defaultExpenseCategories.size + income
     var hash = 0
     for (ch in name) hash = (hash * 31 + ch.code) and 0x7FFFFFFF
     return hash % CHART_SLOT_COUNT
 }
 
-/** 原型固定槽位序（s05:48-53 / s07:61-66）。 */
-private val PROTOTYPE_CATEGORY_SLOTS = listOf("餐饮", "交通", "购物", "娱乐", "居住", "医疗")
-
-/** chart-1..chart-8 共 8 槽。 */
-private const val CHART_SLOT_COUNT = 8
+/** 分类色板共 16 槽（chart-1..chart-16）。 */
+private const val CHART_SLOT_COUNT = 16
 
 // ─────────────────────────── 空态卡（带行动按钮） ───────────────────────────
 
