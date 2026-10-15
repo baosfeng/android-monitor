@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.autobook.AutoBookEngine
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
@@ -53,6 +54,13 @@ class MonitorAccessibilityService : AccessibilityService() {
     private val skipEngine: SkipRuleEngine by lazy {
         (application as MonitorApp).container.skipRuleEngine
     }
+
+    /**
+     * 自动记账引擎：在微信/支付宝支付结果页上弹确认浮窗。
+     *
+     * 懒加载 —— 服务启动时不会触碰记账模块，只有真正遇到支付页才会初始化。
+     */
+    private val autoBookEngine: AutoBookEngine by lazy { AutoBookEngine(this) }
 
     /** 是否在桌面（防止重复触发回桌面事件） */
     private var isOnHomeScreen: Boolean = false
@@ -143,6 +151,14 @@ class MonitorAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleContentChanged(event)
+        }
+
+        // ===== 自动记账：识别微信/支付宝支付结果页并弹确认浮窗 =====
+        // 独立 try/catch：记账链路异常不能影响监控与开屏跳过主链路
+        try {
+            autoBookEngine.onAccessibilityEvent(event)
+        } catch (e: Exception) {
+            Log.w("MonitorService", "自动记账处理异常", e)
         }
     }
 
@@ -471,6 +487,8 @@ class MonitorAccessibilityService : AccessibilityService() {
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
         removeCurrentDanmaku()
+        // 清理自动记账浮窗与协程，避免服务重建后残留窗口
+        runCatching { autoBookEngine.release() }
         // 清空静态引用,防止持有已销毁的 Service 实例
         ActionExecutor.accessibilityService = null
         super.onDestroy()
