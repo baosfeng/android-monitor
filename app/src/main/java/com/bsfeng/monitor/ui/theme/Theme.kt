@@ -1,64 +1,63 @@
 package com.bsfeng.monitor.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
-// Dimens 通过 MonitorRadius 便捷访问
 
 /**
- * 统一主题入口。
+ * 统一主题入口（浅色唯一形态，无深色分支、不跟随系统）。
  *
- * 用法：在 MainActivity 的 setContent 中用 MonitorTheme 包裹整个 UI：
  * ```
- * MonitorTheme {
- *     // ... 你的页面
+ * MonitorTheme {                            // 跟随 ThemeRepository 当前主题
+ *     // ...
  * }
+ * MonitorTheme(themeId = "bento") { ... }   // 强制指定主题（s13 预览用）
  * ```
  *
- * 所有页面从此通过 MaterialTheme.colorScheme / typography / shapes
- * 访问统一的 iOS 风格主题，不再使用硬编码颜色/字号/间距。
+ * 非 Material 用色走 [LocalDesignTokens]：
+ * ```
+ * val t = LocalDesignTokens.current
+ * Box(Modifier.background(t.chart1)) { ... }
+ * ```
  */
+
+/** 当前主题的非 Material token；默认 apple。 */
+val LocalDesignTokens = staticCompositionLocalOf { DesignTokens(DesignTokenTable.DEFAULT_THEME) }
 
 /** 统一圆角定义。 */
 private val monitorShapes = Shapes(
-    extraSmall = RoundedCornerShape(Radius.sm),     // 8dp
-    small = RoundedCornerShape(Radius.md),           // 10dp
-    medium = RoundedCornerShape(Radius.lg),          // 12dp
-    large = RoundedCornerShape(Radius.lg + 4.dp),   // 16dp
-    extraLarge = RoundedCornerShape(Radius.xl),     // 16dp
+    extraSmall = RoundedCornerShape(Radius.sm),
+    small = RoundedCornerShape(Radius.md),
+    medium = RoundedCornerShape(Radius.lg),
+    large = RoundedCornerShape(Radius.lg + 4.dp),
+    extraLarge = RoundedCornerShape(Radius.xl),
 )
 
-/**
- * Monitor 主题入口。
- *
- * @param darkTheme 是否使用深色模式，默认跟随系统
- * @param content   子组件
- */
 @Composable
 fun MonitorTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeId: String? = null,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) iOSDarkColorScheme else iOSLightColorScheme
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = monitorTypography,
-        shapes = monitorShapes,
-        content = content,
-    )
+    val activeId = themeId ?: ThemeRepository.themeId.collectAsState().value
+    val tokens = remember(activeId) { ThemeRepository.tokens(activeId) }
+    val colorScheme = remember(activeId) { ThemeRepository.colorScheme(activeId) }
+    CompositionLocalProvider(LocalDesignTokens provides tokens) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = monitorTypography,
+            shapes = monitorShapes,
+            content = content,
+        )
+    }
 }
 
-/**
- * 便捷访问当前主题的 spacing 值。
- * Material 3 没有内置 spacing token，所以通过此扩展访问。
- *
- * 用法：`MonitorSpacing.lg` 或 `with(MonitorSpacing) { padding(lg) }`
- */
+/** 便捷访问当前主题的 spacing 值。 */
 object MonitorSpacing {
     val xxs get() = Spacing.xxs
     val xs get() = Spacing.xs
