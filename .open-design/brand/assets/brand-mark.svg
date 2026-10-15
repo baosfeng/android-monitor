@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 行为记录 · C2 时间切片 · 主标识（256 viewBox）
+     使用：颜色一律走 currentColor，不要内联写死色值。
+     品牌场景（浅色底）可额外给珠子着色：.bead { fill: #1D6E9E }
+     几何：环 r100/stroke18 + 3 根强度柱/stroke15 + 此刻珠 r17（落环 45 度） -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"
+     fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"
+     role="img" aria-label="行为记录">
+  <circle cx="128" cy="128" r="100"/>
+  <path d="M84 176V104" stroke-width="15"/>
+  <path d="M128 176V64" stroke-width="15"/>
+  <path d="M172 176V120" stroke-width="15"/>
+  <circle class="bead" cx="199" cy="57" r="17" fill="currentColor" stroke="none"/>
+</svg>

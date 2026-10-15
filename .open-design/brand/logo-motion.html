@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行为记录 · 开屏动效演示（4 概念对照）</title>
+<style>
+:root{
+  --bg:#06070B; --bg-2:#0A0D14; --frame:#15171C; --rail:#0D1017;
+  --glass:rgba(255,255,255,.055); --glass-2:rgba(255,255,255,.10);
+  --brd:rgba(255,255,255,.10); --brd-2:rgba(255,255,255,.22);
+  --fg:#F2F5FA; --fg-2:#AEB6C6; --fg-3:#7C8598;
+  --accent:#63D8FF; --accent-soft:rgba(99,216,255,.16); --accent-veil:rgba(99,216,255,.07);
+  --clear:transparent; --shadow:rgba(0,0,0,.55);
+  --r:22px; --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 var(--font);-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(700px 460px at 10% -8%,var(--accent-soft),var(--clear) 70%),radial-gradient(820px 560px at 94% 6%,var(--accent-veil),var(--clear) 72%)}
+.wrap{position:relative;max-width:1800px;margin:0 auto;padding:36px 26px 80px}
+h1{font-size:30px;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:14px;font-weight:400;color:var(--fg-2);letter-spacing:.16em;text-transform:uppercase;margin-top:8px}
+.kicker{color:var(--fg-2);font-size:14px;margin:8px 0 0;max-width:900px}
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:22px 0 6px}
+button{font:inherit;min-height:44px;padding:0 20px;border-radius:12px;cursor:pointer;border:1px solid var(--brd-2);background:var(--glass-2);color:var(--fg)}
+button:hover{background:var(--accent-soft);border-color:var(--accent)}
+.tl{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 20px}
+.tl span{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;background:var(--glass);border:1px solid var(--brd);font-size:14px;color:var(--fg-2)}
+.rail{display:flex;gap:30px;overflow-x:auto;padding:8px 4px 26px;scroll-snap-type:x proximity}
+.stage{scroll-snap-align:start;flex:0 0 auto}
+.phone{padding:10px;border-radius:46px;background:linear-gradient(180deg,var(--frame),var(--bg-2));border:1px solid var(--brd);box-shadow:0 26px 60px var(--shadow)}
+.screen{position:relative;width:393px;height:852px;border-radius:38px;overflow:hidden;background:var(--bg);isolation:isolate}
+.screen::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(320px 260px at 78% 6%,var(--accent-veil),var(--clear) 70%)}
+.status{position:absolute;z-index:5;top:0;left:0;right:0;height:46px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--fg-2)}
+.status .ic{color:var(--fg-2);fill:currentColor}
+.cold{position:absolute;inset:0;background:var(--bg);opacity:0}
+.boot{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;opacity:0}
+.boot .pulse{position:absolute;width:230px;height:230px;border-radius:50%;border:1px solid var(--accent);opacity:0;transform:scale(.6)}
+.boot .mk{color:var(--fg);width:132px;height:132px}
+.boot .word{font-size:26px;font-weight:600;letter-spacing:.06em}
+.boot .sub{font-size:14px;color:var(--fg-3);letter-spacing:.18em}
+.mk{fill:none;stroke:currentColor;stroke-width:18;stroke-linecap:round;stroke-linejoin:round;display:block}
+.mk .mid{stroke-width:15}
+.mk .row{stroke-width:15}
+.mk .fill{fill:currentColor;stroke:none}
+.sk{position:absolute;inset:46px 0 34px;padding:18px 20px 0;display:flex;flex-direction:column;gap:14px}
+.sk>*{opacity:0}
+.sk .b{background:var(--glass-2);border-radius:8px}
+.sk .b.a{background:var(--accent-soft)}
+.head{display:flex;align-items:center;gap:12px}
+.dot{width:40px;height:40px;border-radius:50%;background:var(--glass-2);flex:0 0 auto}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kpi{border:1px solid var(--brd);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--glass)}
+.kpi .num{height:26px;border-radius:6px;background:var(--glass-2)}
+.card{border:1px solid var(--brd);border-radius:18px;padding:14px;background:var(--glass);display:flex;flex-direction:column;gap:12px}
+.chart{display:flex;align-items:flex-end;gap:6px;height:96px}
+.chart i{flex:1;background:var(--accent-soft);border-radius:4px}
+.row{display:flex;align-items:center;gap:12px}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:78px;border-top:1px solid var(--brd);background:var(--glass);display:flex;align-items:center;justify-content:space-around;padding-bottom:14px}
+.tabs div{display:flex;flex-direction:column;align-items:center;gap:7px}
+.tabs i{width:22px;height:22px;border-radius:7px;background:var(--glass-2);display:block}
+.tabs i.on{background:var(--accent)}
+.tabs b{width:26px;height:6px;border-radius:3px;background:var(--glass-2)}
+.gesture{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:118px;height:4px;border-radius:2px;background:var(--brd-2);z-index:6}
+.meta{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}
+.meta b{font-size:15px}
+.meta em{font-style:normal;color:var(--fg-3);font-size:14px;letter-spacing:.14em}
+/* ---------- 动效：只用 transform / opacity ---------- */
+@keyframes coldIn{from{opacity:0;transform:scale(1.03)}to{opacity:1;transform:none}}
+@keyframes bootIn{0%{opacity:0;transform:scale(.74)}22%{opacity:1;transform:scale(1)}60%{opacity:1;transform:scale(1)}82%{opacity:0;transform:scale(1.14)}100%{opacity:0;transform:scale(1.14)}}
+@keyframes markIn{from{opacity:0;transform:scale(.68)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%{opacity:0;transform:scale(.6)}30%{opacity:.55}100%{opacity:0;transform:scale(1.45)}}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.screen.run .cold{animation:coldIn .42s ease-out both}
+.screen.run .boot{animation:bootIn 2.15s cubic-bezier(.4,0,.2,1) .12s both}
+.screen.run .boot .mk{animation:markIn .62s cubic-bezier(.2,.9,.2,1) .18s both}
+.screen.run .boot .pulse{animation:pulse 1.35s ease-out .24s both}
+.screen.run .boot .word{animation:rise .5s ease-out .5s both}
+.screen.run .boot .sub{animation:rise .5s ease-out .66s both}
+.screen.run .sk>*{animation:rise .55s cubic-bezier(.2,.9,.2,1) both}
+.screen.run .sk>*:nth-child(1){animation-delay:1.58s}
+.screen.run .sk>*:nth-child(2){animation-delay:1.68s}
+.screen.run .sk>*:nth-child(3){animation-delay:1.82s}
+.screen.run .sk>*:nth-child(4){animation-delay:1.96s}
+.screen.run .tabs{animation:rise .5s cubic-bezier(.2,.9,.2,1) 2.1s both}
+@media (prefers-reduced-motion: reduce){
+  .screen.run .cold{animation:none;opacity:1;transform:none}
+  .screen.run .boot,.screen.run .boot .mk,.screen.run .boot .word,.screen.run .boot .sub{animation:none;opacity:0;transform:none}
+  .screen.run .boot .pulse{animation:none;opacity:0}
+  .screen.run .sk>*,.screen.run .tabs{animation:none;opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header data-od-id="motion-header">
+    <h1>行为记录 · 开屏（冷启动）动效演示<small>Splash Motion · 4 Concepts · 393×852</small></h1>
+    <p class="kicker">4 个概念跑同一套动画脚本，只有 mark 不同：冷启动黑场 → logo 入场（缩放 + 脉冲环 + 字标上浮）→ 首页骨架错落浮现。全部只用 transform / opacity，掉帧风险最低；<code>prefers-reduced-motion</code> 下自动降级为静态终态。</p>
+    <div class="bar">
+      <button data-replay-all>全部重播</button>
+      <button data-static>查看静态终态（首页骨架）</button>
+    </div>
+    <div class="tl" data-od-id="motion-timeline">
+      <span>0.00s 冷启动黑场</span><span>0.12–1.50s logo 入场（scale .74→1 + 脉冲环 + 字标上浮）</span><span>1.58–2.10s 首页骨架错落浮现</span><span>合计 ≈ 2.6s</span>
+    </div>
+  </header>
+  <div class="rail" data-od-id="motion-rail">
+<section class="stage" data-od-id="motion-c1">
+      <div class="phone">
+        <div class="screen run" data-screen="c1">
+          <div class="status"><span>21:35</span><span class="ic"><svg width="52" height="14" viewBox="0 0 52 14" aria-hidden="true"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="5" y="5" width="3" height="9" rx="1"/><rect x="10" y="2" width="3" height="12" rx="1"/><path d="M22 5.5a6 6 0 0 1 8 0l-4 4.2z"/><rect x="36" y="3" width="13" height="8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="38" y="5" width="8" height="4" rx="1"/></svg></span></div>
+          <div class="cold"></div>
+          <div class="boot">
+            <div class="pulse"></div>
+            <svg class="mk" viewBox="0 0 256 256" width="132" height="132" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/><circle cx="128" cy="128" r="32" class="mid"/><circle cx="128" cy="128" r="15" class="fill"/><path class="mid" d="M200 42A112 112 0 0 1 234 93"/><path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg>
+            <div class="word">行为记录</div>
+            <div class="sub">MONITOR · LEDGER</div>
+          </div>
+          <div class="sk">
+            <div class="head"><span class="dot"></span><span style="flex:1;display:flex;flex-direction:column;gap:8px"><span class="b" style="height:12px;width:52%"></span><span class="b" style="height:10px;width:34%"></span></span></div>
+            <div class="kpis">
+              <div class="kpi"><span class="b" style="height:10px;width:56%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:44%"></span><span class="num a"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:60%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:38%"></span><span class="num"></span></div>
+            </div>
+            <div class="card"><span class="b" style="height:12px;width:38%"></span><div class="chart"><i style="height:38%"></i><i style="height:62%"></i><i style="height:30%"></i><i style="height:74%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:66%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:80%"></i><i style="height:46%"></i></div></div>
+            <div class="row"><span class="dot" style="width:28px;height:28px"></span><span class="b" style="height:12px;flex:1"></span></div>
+          </div>
+          <div class="tabs">
+            <div><i class="on"></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <div class="meta"><span><b>C1 注视之眼</b> <em>VIGILANT EYE</em></span><button data-replay="c1">重播</button></div>
+    </section>
+<section class="stage" data-od-id="motion-c2">
+      <div class="phone">
+        <div class="screen run" data-screen="c2">
+          <div class="status"><span>21:35</span><span class="ic"><svg width="52" height="14" viewBox="0 0 52 14" aria-hidden="true"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="5" y="5" width="3" height="9" rx="1"/><rect x="10" y="2" width="3" height="12" rx="1"/><path d="M22 5.5a6 6 0 0 1 8 0l-4 4.2z"/><rect x="36" y="3" width="13" height="8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="38" y="5" width="8" height="4" rx="1"/></svg></span></div>
+          <div class="cold"></div>
+          <div class="boot">
+            <div class="pulse"></div>
+            <svg class="mk" viewBox="0 0 256 256" width="132" height="132" aria-hidden="true"><circle cx="128" cy="128" r="100"/><path class="mid" d="M84 176V104"/><path class="mid" d="M128 176V64"/><path class="mid" d="M172 176V120"/><circle cx="199" cy="57" r="17" class="fill"/></svg>
+            <div class="word">行为记录</div>
+            <div class="sub">MONITOR · LEDGER</div>
+          </div>
+          <div class="sk">
+            <div class="head"><span class="dot"></span><span style="flex:1;display:flex;flex-direction:column;gap:8px"><span class="b" style="height:12px;width:52%"></span><span class="b" style="height:10px;width:34%"></span></span></div>
+            <div class="kpis">
+              <div class="kpi"><span class="b" style="height:10px;width:56%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:44%"></span><span class="num a"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:60%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:38%"></span><span class="num"></span></div>
+            </div>
+            <div class="card"><span class="b" style="height:12px;width:38%"></span><div class="chart"><i style="height:38%"></i><i style="height:62%"></i><i style="height:30%"></i><i style="height:74%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:66%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:80%"></i><i style="height:46%"></i></div></div>
+            <div class="row"><span class="dot" style="width:28px;height:28px"></span><span class="b" style="height:12px;flex:1"></span></div>
+          </div>
+          <div class="tabs">
+            <div><i class="on"></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <div class="meta"><span><b>C2 时间切片</b> <em>TIME SLICES</em></span><button data-replay="c2">重播</button></div>
+    </section>
+<section class="stage" data-od-id="motion-c3">
+      <div class="phone">
+        <div class="screen run" data-screen="c3">
+          <div class="status"><span>21:35</span><span class="ic"><svg width="52" height="14" viewBox="0 0 52 14" aria-hidden="true"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="5" y="5" width="3" height="9" rx="1"/><rect x="10" y="2" width="3" height="12" rx="1"/><path d="M22 5.5a6 6 0 0 1 8 0l-4 4.2z"/><rect x="36" y="3" width="13" height="8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="38" y="5" width="8" height="4" rx="1"/></svg></span></div>
+          <div class="cold"></div>
+          <div class="boot">
+            <div class="pulse"></div>
+            <svg class="mk" viewBox="0 0 256 256" width="132" height="132" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/><path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/><circle cx="66" cy="156" r="13" class="fill"/><circle cx="194" cy="104" r="13" class="fill"/></svg>
+            <div class="word">行为记录</div>
+            <div class="sub">MONITOR · LEDGER</div>
+          </div>
+          <div class="sk">
+            <div class="head"><span class="dot"></span><span style="flex:1;display:flex;flex-direction:column;gap:8px"><span class="b" style="height:12px;width:52%"></span><span class="b" style="height:10px;width:34%"></span></span></div>
+            <div class="kpis">
+              <div class="kpi"><span class="b" style="height:10px;width:56%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:44%"></span><span class="num a"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:60%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:38%"></span><span class="num"></span></div>
+            </div>
+            <div class="card"><span class="b" style="height:12px;width:38%"></span><div class="chart"><i style="height:38%"></i><i style="height:62%"></i><i style="height:30%"></i><i style="height:74%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:66%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:80%"></i><i style="height:46%"></i></div></div>
+            <div class="row"><span class="dot" style="width:28px;height:28px"></span><span class="b" style="height:12px;flex:1"></span></div>
+          </div>
+          <div class="tabs">
+            <div><i class="on"></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <div class="meta"><span><b>C3 盾与流</b> <em>SHIELD & STREAM</em></span><button data-replay="c3">重播</button></div>
+    </section>
+<section class="stage" data-od-id="motion-c4">
+      <div class="phone">
+        <div class="screen run" data-screen="c4">
+          <div class="status"><span>21:35</span><span class="ic"><svg width="52" height="14" viewBox="0 0 52 14" aria-hidden="true"><rect x="0" y="8" width="3" height="6" rx="1"/><rect x="5" y="5" width="3" height="9" rx="1"/><rect x="10" y="2" width="3" height="12" rx="1"/><path d="M22 5.5a6 6 0 0 1 8 0l-4 4.2z"/><rect x="36" y="3" width="13" height="8" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="38" y="5" width="8" height="4" rx="1"/></svg></span></div>
+          <div class="cold"></div>
+          <div class="boot">
+            <div class="pulse"></div>
+            <svg class="mk" viewBox="0 0 256 256" width="132" height="132" aria-hidden="true"><circle cx="100" cy="128" r="80"/><circle cx="156" cy="128" r="80"/><path class="row" d="M90 100H166"/><path class="row" d="M86 128H170"/><path class="row" d="M90 156H166"/></svg>
+            <div class="word">行为记录</div>
+            <div class="sub">MONITOR · LEDGER</div>
+          </div>
+          <div class="sk">
+            <div class="head"><span class="dot"></span><span style="flex:1;display:flex;flex-direction:column;gap:8px"><span class="b" style="height:12px;width:52%"></span><span class="b" style="height:10px;width:34%"></span></span></div>
+            <div class="kpis">
+              <div class="kpi"><span class="b" style="height:10px;width:56%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:44%"></span><span class="num a"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:60%"></span><span class="num"></span></div>
+              <div class="kpi"><span class="b" style="height:10px;width:38%"></span><span class="num"></span></div>
+            </div>
+            <div class="card"><span class="b" style="height:12px;width:38%"></span><div class="chart"><i style="height:38%"></i><i style="height:62%"></i><i style="height:30%"></i><i style="height:74%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:66%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:80%"></i><i style="height:46%"></i></div></div>
+            <div class="row"><span class="dot" style="width:28px;height:28px"></span><span class="b" style="height:12px;flex:1"></span></div>
+          </div>
+          <div class="tabs">
+            <div><i class="on"></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div><div><i></i><b></b></div>
+          </div>
+          <div class="gesture"></div>
+        </div>
+      </div>
+      <div class="meta"><span><b>C4 双环账本</b> <em>TWIN LEDGER</em></span><button data-replay="c4">重播</button></div>
+    </section>
+  </div>
+  <footer data-od-id="motion-footer" style="color:var(--fg-2);font-size:14px;max-width:1000px">
+    对应实现：Android 12+ SplashScreen API（windowSplashScreenBackground / windowSplashScreenAnimatedIcon），冷启动图标即上面 66dp 遮罩版；骨架浮现对应 Compose 首帧后的错落入场（AnimatedVisibility + stagger）。本页无外链、无位图、无 emoji。
+  </footer>
+</div>
+<script>
+(function(){
+  function replay(id){var el=document.querySelector('[data-screen="'+id+'"]');if(!el)return;el.classList.remove('run');void el.offsetWidth;el.classList.add('run');}
+  document.querySelectorAll('[data-replay]').forEach(function(b){b.addEventListener('click',function(){replay(b.getAttribute('data-replay'));});});
+  var all=document.querySelector('[data-replay-all]');
+  if(all){all.addEventListener('click',function(){document.querySelectorAll('[data-screen]').forEach(function(el,i){setTimeout(function(){replay(el.getAttribute('data-screen'));},i*90);});});}
+  var st=document.querySelector('[data-static]');
+  if(st){st.addEventListener('click',function(){document.querySelectorAll('[data-screen]').forEach(function(el){el.classList.remove('run');void el.offsetWidth;});});}
+})();
+</script>
+</body>
+</html>

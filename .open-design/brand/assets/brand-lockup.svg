@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 行为记录 · C2 时间切片 · mark + 字标 横向锁定
+     规格：H = 40（mark 方框高）· gap = 12 = 0.30H · 字标 26px / 600 / letter-spacing 0.12em
+     字标为实时文本，依赖系统中文字体（PingFang SC / 微软雅黑）。Android 端请用 Compose Text 复刻，
+     本文件用于 Web 与设计交付。最小整体宽 132px，低于此值只保留 mark。 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 40" width="172" height="40"
+     role="img" aria-label="行为记录">
+  <g transform="scale(0.15625)" fill="none" stroke="currentColor" stroke-width="18"
+     stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="128" cy="128" r="100"/>
+    <path d="M84 176V104" stroke-width="15"/>
+    <path d="M128 176V64" stroke-width="15"/>
+    <path d="M172 176V120" stroke-width="15"/>
+    <circle cx="199" cy="57" r="17" fill="currentColor" stroke="none"/>
+  </g>
+  <text x="52" y="30" font-size="26" font-weight="600" letter-spacing="3.12" fill="currentColor"
+        font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',system-ui,sans-serif">行为记录</text>
+</svg>
