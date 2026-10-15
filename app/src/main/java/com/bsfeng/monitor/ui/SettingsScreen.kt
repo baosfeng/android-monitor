@@ -30,8 +30,10 @@ import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
+import com.bsfeng.monitor.autobook.AutoBookConfig
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Visibility
@@ -250,6 +252,34 @@ fun SettingsScreen(
                                             onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                                             variant = AppButtonVariant.Ghost,
                                         )
+                                    },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // 自动记账：跟随无障碍服务；开关落盘 monitor_prefs，无障碍服务侧读取即时生效
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("自动记账")
+                            val autoBookEnabled by AutoBookConfig.enabledFlow.collectAsState()
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "支付后弹窗确认",
+                                    // 副标题按 TokenRow 单行容量写短（16 字位上限），过长会被省略号截断
+                                    subtitle = if (autoBookEnabled) {
+                                        "识别支付页，确认后入账"
+                                    } else {
+                                        "已关闭：不识别、不弹窗"
+                                    },
+                                    icon = Icons.Outlined.Payments,
+                                    trailing = {
+                                        AppSwitch(autoBookEnabled, { enabled ->
+                                            AutoBookConfig.setEnabled(context, enabled)
+                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            toast.show(
+                                                if (enabled) "已开启支付后弹窗记账" else "已关闭支付后弹窗记账"
+                                            )
+                                        })
                                     },
                                 )
                                 Spacer(Modifier.height(t.space1))

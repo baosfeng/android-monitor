@@ -47,6 +47,10 @@ class AutoBookEngine(private val service: AccessibilityService) {
     /** 当前浮窗对应的幂等键：同一笔不重复弹窗 */
     private var showingSourceId: String? = null
 
+    /** 用户刚忽略过的幂等键：同一笔在 [DISMISS_TTL_MS] 内不再弹（否则页面一有变化就复弹） */
+    private var dismissedSourceId: String? = null
+    private var dismissedAtMs = 0L
+
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
     private var categoriesByType: Map<Int, List<Category>> = emptyMap()
@@ -118,6 +122,12 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         // 同一笔已在浮窗上，别重复弹
         if (overlay.isShowing && draft.sourceId == showingSourceId) return
+
+        // 用户刚忽略过这一笔：给他一段安静期，别页面一变就再弹
+        if (draft.sourceId == dismissedSourceId && now - dismissedAtMs < DISMISS_TTL_MS) {
+            Log.d(TAG, "该笔已被忽略，安静期内不弹窗: ${draft.sourceId}")
+            return
+        }
 
         Log.i(
             TAG,
@@ -208,6 +218,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 },
                 onDismiss = {
                     showingSourceId = null
+                    dismissedSourceId = draft.sourceId
+                    dismissedAtMs = System.currentTimeMillis()
                     Log.i(TAG, "用户忽略: sourceId=${draft.sourceId}")
                 }
             )
@@ -283,5 +295,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         /** 落库来源前缀，最终 source 形如 auto_alipay / auto_wechat */
         const val SOURCE_PREFIX = "auto_"
+
+        /** 用户忽略后的安静期：同一笔 10 分钟内不再弹 */
+        const val DISMISS_TTL_MS = 10 * 60 * 1000L
     }
 }
