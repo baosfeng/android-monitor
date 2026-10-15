@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行为记录 · C2 时间切片 · 品牌定稿</title>
+<style>
+:root{
+  /* ===== 全站唯一颜色落点：其余位置一律 currentColor / var() ===== */
+  --ink:#0E1218; --ink-2:#3C4553; --ink-3:#6B7484;
+  --paper:#FFFFFF; --surf:#F4F6F9; --surf-2:#E6EAF1; --hair:#DDE3EB;
+  --accent:#1D6E9E; --accent-2:#63D8FF;
+  --dark:#0E1218; --dark-2:#171C24; --dark-hair:#2B333F;
+  --veil:rgba(14,18,24,.04); --veil-2:rgba(14,18,24,.08);
+  --guide:rgba(29,110,158,.55); --guide-2:rgba(14,18,24,.22);
+  --shadow:rgba(14,18,24,.08); --shadow-2:rgba(14,18,24,.04);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surf);color:var(--ink);font:15px/1.72 var(--font);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:44px 26px 96px}
+h1{font-size:34px;line-height:1.2;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:14px;font-weight:400;color:var(--ink-3);letter-spacing:.18em;text-transform:uppercase;margin-top:10px}
+h2{font-size:22px;margin:0;letter-spacing:-.01em}
+h3{font-size:16px;margin:0 0 10px;letter-spacing:.01em}
+p{margin:8px 0 0;color:var(--ink-2);font-size:15px}
+.top{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-end;justify-content:space-between}
+.meta{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;min-height:44px;padding:0 15px;border:1px solid var(--hair);border-radius:999px;background:var(--paper);font-size:14px;color:var(--ink-2)}
+.chip b{color:var(--ink);font-weight:600;margin-right:6px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 4px}
+nav.toc a{display:inline-flex;align-items:center;min-height:48px;padding:0 16px;border-radius:13px;text-decoration:none;color:var(--ink);background:var(--paper);border:1px solid var(--hair);font-size:14px}
+nav.toc a:hover{border-color:var(--guide)}
+nav.toc a i{font-style:normal;color:var(--accent);margin-right:8px;font-weight:600}
+section{margin-top:38px}
+.s-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:14px}
+.s-head .tag{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:30px;padding:0 10px;border-radius:9px;background:var(--veil-2);color:var(--accent);font-size:14px;font-weight:600;letter-spacing:.06em}
+.s-head .kicker{color:var(--ink-3);font-size:14px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.card{background:var(--paper);border:1px solid var(--hair);border-radius:18px;padding:20px;box-shadow:0 12px 30px var(--shadow-2)}
+.card h3{color:var(--ink)}
+.card .sub{font-size:14px;color:var(--ink-3);margin:0}
+.stage{display:flex;align-items:center;justify-content:center;background:var(--surf);border:1px solid var(--hair);border-radius:14px;padding:24px}
+.stage.dark{background:var(--dark);border-color:var(--dark-hair)}
+/* ---- 主标识：唯一几何定义 ---- */
+.mk{display:block;flex:none;color:var(--ink);fill:none;stroke:currentColor;stroke-width:18;stroke-linecap:round;stroke-linejoin:round}
+.mk--mini{stroke-width:2}
+.mk .bead{fill:var(--bead,currentColor);stroke:none}
+.mk--brand{--bead:var(--accent)}
+.mk--paper{color:var(--paper)}
+.dark .mk--brand{--bead:var(--accent-2)}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+table.spec{width:100%;border-collapse:collapse;font-size:14px}
+table.spec th,table.spec td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+table.spec th{width:38%;color:var(--ink-3);font-weight:500}
+table.spec td{color:var(--ink);font-family:var(--mono);font-size:14px}
+table.spec tr:last-child th,table.spec tr:last-child td{border-bottom:0}
+/* ---- 锁定 ---- */
+.lockup{position:relative;display:inline-block;background:var(--paper);border:1px solid var(--hair);border-radius:16px;padding:30px 30px 30px 24px}
+.lockup.on-dark{background:var(--dark);border-color:var(--dark-hair)}
+.lk{display:flex;align-items:center;gap:12px}
+.lk-word{font-size:26px;font-weight:600;letter-spacing:.12em;line-height:1;color:var(--ink);white-space:nowrap}
+.on-dark .lk-word{color:var(--paper)}
+.gl{position:absolute;background:var(--guide);pointer-events:none}
+.gl.h{height:1px;width:40px;left:24px}
+.gl.h.t{top:30px}
+.gl.h.b{bottom:30px}
+.gl.v{width:1px;top:30px;height:40px}
+.gl.v.ml{left:24px}
+.gl.v.mr{left:64px}
+.gl.v.mt{left:76px}
+.gl.v.mb{left:76px}
+.cap{position:absolute;font-size:14px;color:var(--accent);font-family:var(--mono);white-space:nowrap}
+.cap-h{left:24px;top:6px;color:var(--ink-3)}
+.cap-gap{left:64px;bottom:6px}
+.cap-fs{right:26px;top:6px;color:var(--ink-3)}
+/* ---- 图标 ---- */
+.ic{display:block;flex:none;background:var(--surf);border-radius:14px}
+.ic-wrap{position:relative;width:216px;height:216px;margin:0 auto}
+.mask66{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.mask66>div{display:flex;align-items:center;justify-content:center;width:132px;height:132px;border-radius:50%;overflow:hidden;outline:1px dashed var(--guide)}
+.mask72>div{display:flex;align-items:center;justify-content:center;width:144px;height:144px;border-radius:50%;overflow:hidden;outline:1px dashed var(--guide)}
+/* ---- 尺寸条 ---- */
+.strip{display:flex;align-items:flex-end;gap:26px;background:var(--surf);border:1px solid var(--hair);border-radius:14px;padding:24px 26px;flex-wrap:wrap}
+.strip.dark{background:var(--dark);border-color:var(--dark-hair)}
+.sz{display:flex;flex-direction:column;align-items:center;gap:10px}
+.sz .box{display:flex;align-items:center;justify-content:center;box-sizing:content-box;border:1px dashed var(--guide-2);border-radius:6px}
+.strip.dark .sz .box{border-color:var(--dark-hair)}
+.sz em{font-style:normal;font-size:14px;color:var(--ink-3);font-family:var(--mono)}
+.strip.dark .sz em{color:var(--paper)}
+.zoom-row{display:flex;gap:44px;align-items:flex-end;background:var(--paper);border:1px solid var(--hair);border-radius:14px;padding:22px 26px;flex-wrap:wrap}
+.zoom-cell{display:flex;flex-direction:column;align-items:center;gap:8px}
+.zoom-cell .pix{width:24px;height:24px;display:flex;align-items:center;justify-content:center;outline:1px dashed var(--guide-2)}
+.zoom-cell em{font-style:normal;font-size:14px;color:var(--ink-3)}
+.proof{margin:16px 0 0;padding:16px;background:var(--paper);border:1px solid var(--hair);border-radius:14px}
+.proof img{display:block;width:auto;max-width:100%;image-rendering:pixelated;border-radius:8px}
+.proof-note{font-size:14px;color:var(--ink-3);margin-bottom:10px}
+.note{background:var(--paper);border:1px solid var(--hair);border-left:3px solid var(--accent);border-radius:12px;padding:18px 20px}
+.note ol{margin:0;padding-left:22px}
+.note li{margin:6px 0;color:var(--ink)}
+.foot{margin-top:34px;font-size:14px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>行为记录 · C2 时间切片<small>Brand Final · Android Adaptive Icon</small></h1>
+    </div>
+    <div class="meta">
+      <span class="chip"><b>viewBox</b>256 × 256</span>
+      <span class="chip"><b>图元</b>5</span>
+      <span class="chip"><b>小尺寸</b>24px 专用简化版</span>
+      <span class="chip"><b>图标</b>108dp / 三层</span>
+      <span class="chip"><b>形态</b>浅色唯一</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <a href="#mark"><i>01</i>主标识</a>
+    <a href="#small"><i>02</i>24px 简化版</a>
+    <a href="#lockup"><i>03</i>横版锁定</a>
+    <a href="#icon"><i>04</i>自适应图标</a>
+    <a href="#mono"><i>05</i>单色版</a>
+    <a href="#sizes"><i>06</i>尺寸实拍</a>
+    <a href="#why"><i>07</i>设计说明</a>
+  </nav>
+
+  <!-- ============ 精灵：唯一几何定义（页面其余位置一律 use 引用） ============ -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="mk-body" viewBox="0 0 256 256">
+        <circle cx="128" cy="128" r="100"/>
+        <path d="M84 176V104"/>
+        <path d="M128 176V64"/>
+        <path d="M172 176V120"/>
+      </symbol>
+      <symbol id="mk-body-mini" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M9.5 16.5V10.5"/>
+        <path d="M15 16.5V8"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ============ 01 主标识 ============ -->
+  <section id="mark">
+    <div class="s-head"><span class="tag">01</span><h2>主标识 Mark</h2><span class="kicker">256 × 256 viewBox · 仅 path / circle · 无 filter / mask / 位图 / 文字</span></div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="stage">
+          <!-- 唯一一处完整内联展开（其余用 use 引用，几何完全一致） -->
+          <svg class="mk mk--brand" viewBox="0 0 256 256" width="224" height="224" role="img" aria-label="行为记录 主标识">
+            <circle cx="128" cy="128" r="100"/>
+            <path d="M84 176V104"/>
+            <path d="M128 176V64"/>
+            <path d="M172 176V120"/>
+            <circle class="bead" cx="199" cy="57" r="17"/>
+          </svg>
+        </div>
+        <p class="sub" style="margin-top:14px">环 = 一昼夜 24 小时闭合循环；环内三根高低柱 = 同一天里被记录的行为强度切片；环上实心珠 = 「此刻」。</p>
+      </div>
+      <div class="card">
+        <h3>几何规格</h3>
+        <table class="spec">
+          <tbody>
+            <tr><th>画布</th><td>viewBox 0 0 256 256</td></tr>
+            <tr><th>环</th><td>circle cx128 cy128 r100 · stroke 18</td></tr>
+            <tr><th>强度柱 ×3</th><td>x = 84 / 128 / 172 · y 176 → 104 / 64 / 120 · stroke 15</td></tr>
+            <tr><th>此刻珠</th><td>circle cx199 cy57 r17 · 实心 · 落在环上（45°）</td></tr>
+            <tr><th>端点 / 拐角</th><td>stroke-linecap: round · linejoin: round</td></tr>
+            <tr><th>可见外接</th><td>19 → 237（218 / 256 = 85.2%）</td></tr>
+            <tr><th>着色</th><td>环与柱 currentColor；珠 var(--accent)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 24px 简化版 ============ -->
+  <section id="small">
+    <div class="s-head"><span class="tag">02</span><h2>24px 专用简化变体</h2><span class="kicker">原版 24px 下柱条仅 1.4px、珠仅 3.2px，会糊 → 另出 24 网格简化版</span></div>
+    <div class="grid g2">
+      <div class="card">
+        <h3>原版（256 网格）缩到 24px</h3>
+        <div class="stage">
+          <svg class="mk mk--brand" viewBox="0 0 256 256" width="120" height="120" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg>
+        </div>
+        <table class="spec" style="margin-top:12px"><tbody>
+          <tr><th>scale</th><td>24 / 256 = 0.0938</td></tr>
+          <tr><th>柱宽 / 间隙</th><td>1.41px / 2.72px</td></tr>
+          <tr><th>珠直径</th><td>3.19px</td></tr>
+          <tr><th>结论</th><td>柱条太细，1px 内抗锯齿后成灰雾</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card">
+        <h3>简化版（24 网格，进像素对齐）</h3>
+        <div class="stage">
+          <svg class="mk mk--mini mk--brand" viewBox="0 0 24 24" width="120" height="120" aria-hidden="true"><use href="#mk-body-mini"/><circle class="bead" cx="18.4" cy="5.6" r="2.4"/></svg>
+        </div>
+        <table class="spec" style="margin-top:12px"><tbody>
+          <tr><th>画布</th><td>viewBox 0 0 24 24（1 单位 = 1px）</td></tr>
+          <tr><th>环</th><td>circle cx12 cy12 r9 · stroke 2</td></tr>
+          <tr><th>强度柱 ×2</th><td>x = 9.5 / 15 · y 16.5 → 10.5 / 8 · stroke 2</td></tr>
+          <tr><th>此刻珠</th><td>circle cx18.4 cy5.6 r2.4 · 直径 4.8px</td></tr>
+          <tr><th>柱间隙</th><td>3.5px（≥3px 阈值）</td></tr>
+          <tr><th>结论</th><td>柱 3→2、线宽 15/18→2、珠 3.2→4.8px</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <h3 style="margin:22px 0 10px">真实 24px 渲染（1:1）</h3>
+    <div class="zoom-row" id="zoom-pair">
+      <div class="zoom-cell">
+        <div class="pix"><svg class="mk mk--brand" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></div>
+        <em>24px · 原版（糊）</em>
+      </div>
+      <div class="zoom-cell">
+        <div class="pix"><svg class="mk mk--mini mk--brand" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#mk-body-mini"/><circle class="bead" cx="18.4" cy="5.6" r="2.4"/></svg></div>
+        <em>24px · 简化版（可辨）</em>
+      </div>
+    </div>
+    <figure class="proof" id="proof-24">
+      <div class="proof-note">5× 像素放大 · 由上面两枚真实 24px 渲染裁切、最近邻放大，非矢量重绘</div>
+      <img alt="24px 原版（左）与 24px 简化版（右）的 5 倍最近邻像素放大对照" width="320" height="160" src="data:image/png;base64,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">
+    </figure>
+  </section>
+
+  <!-- ============ 03 锁定 ============ -->
+  <section id="lockup">
+    <div class="s-head"><span class="tag">03</span><h2>Mark + 字标 横向锁定</h2><span class="kicker">H=40 · gap=12 · 26px · tracking .12em</span></div>
+    <div class="grid g2">
+      <div class="card">
+        <h3>浅色底（默认）</h3>
+        <div class="lockup">
+          <div class="lk">
+            <svg class="mk mk--brand" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg>
+            <span class="lk-word">行为记录</span>
+          </div>
+          <i class="gl h t"></i><i class="gl h b"></i>
+          <i class="gl v ml"></i><i class="gl v mr"></i><i class="gl v mb"></i>
+          <span class="cap cap-h">H = 40</span>
+          <span class="cap cap-gap">gap = 12</span>
+          <span class="cap cap-fs">26px / 0.12em</span>
+        </div>
+        <table class="spec" style="margin-top:14px"><tbody>
+          <tr><th>H（mark 方框高）</th><td>40px · 视觉高 34.1px</td></tr>
+          <tr><th>gap（mark → 字标）</th><td>12px = 0.30 H</td></tr>
+          <tr><th>字标字号 / 字重</th><td>26px / 600</td></tr>
+          <tr><th>tracking</th><td>0.12em（3.12px）</td></tr>
+          <tr><th>对齐</th><td>mark 视觉重心居中 → align-items: center 即光学对齐</td></tr>
+          <tr><th>最小使用</th><td>整体宽 169px；低于 132px 须只留 mark</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card">
+        <h3>深色底反白（备用资产）</h3>
+        <div class="lockup on-dark" style="display:block">
+          <div class="lk">
+            <svg class="mk mk--brand mk--paper" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg>
+            <span class="lk-word">行为记录</span>
+          </div>
+        </div>
+        <p class="sub" style="margin-top:14px">间距、字号、tracking 与浅色底完全一致，只把 currentColor 换为 paper、珠换 --accent-2。项目主调仍为浅色，此版仅备未来深色场景。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 自适应图标 ============ -->
+  <section id="icon">
+    <div class="s-head"><span class="tag">04</span><h2>Android 自适应图标</h2><span class="kicker">108dp 画布 · 66dp 官方安全区 · logo 允许 48–66dp</span></div>
+    <div class="grid g3">
+      <div class="card">
+        <h3>background 层</h3>
+        <div class="ic-wrap">
+          <svg class="ic" viewBox="0 0 108 108" width="216" height="216" role="img" aria-label="background 层">
+            <rect width="108" height="108" fill="var(--surf)"/>
+            <path d="M0 72 L108 34 L108 108 L0 108 Z" fill="var(--surf-2)"/>
+          </svg>
+        </div>
+        <p class="sub" style="margin-top:10px">满幅 108dp 打底 + 一道斜切面 = 时间地平线。</p>
+      </div>
+      <div class="card">
+        <h3>foreground 层（含参考线）</h3>
+        <div class="ic-wrap">
+          <svg class="ic" viewBox="0 0 108 108" width="216" height="216" role="img" aria-label="foreground 层">
+            <rect width="108" height="108" fill="var(--surf)"/>
+            <g class="mk mk--brand" transform="translate(21 21) scale(0.2578125)">
+              <use href="#mk-body" width="256" height="256"/>
+              <circle class="bead" cx="199" cy="57" r="17"/>
+            </g>
+            <rect x="0.5" y="0.5" width="107" height="107" fill="none" stroke="var(--guide-2)" stroke-dasharray="4 4"/>
+            <rect x="21" y="21" width="66" height="66" fill="none" stroke="var(--guide)" stroke-dasharray="4 4"/>
+            <circle cx="54" cy="54" r="33" fill="none" stroke="var(--guide)" stroke-dasharray="4 4"/>
+            <circle cx="54" cy="54" r="24" fill="none" stroke="var(--guide-2)" stroke-dasharray="4 4"/>
+          </svg>
+        </div>
+        <p class="sub" style="margin-top:10px">mark 落 <b>66dp 安全区</b>方框（scale 0.2578125，translate 21,21）；实测外接圆直径 60.54dp &le; 66dp，圆心 (54,54) 无偏移。虚线框/外圈 = 66dp 官方安全区，内圈 = 48dp 最小尺寸参考。</p>
+      </div>
+      <div class="card">
+        <h3>monochrome 层</h3>
+        <div class="ic-wrap">
+          <svg class="ic" viewBox="0 0 108 108" width="216" height="216" role="img" aria-label="monochrome 层">
+            <rect width="108" height="108" fill="var(--paper)"/>
+            <g transform="translate(21 21) scale(0.2578125)" fill="none" stroke="var(--ink)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+              <use href="#mk-body" width="256" height="256"/>
+              <circle cx="199" cy="57" r="17" fill="var(--ink)" stroke="none"/>
+            </g>
+          </svg>
+        </div>
+        <p class="sub" style="margin-top:10px">纯单色实心，系统按主题取 alpha 着色（Android 13+ 主题图标）。</p>
+      </div>
+    </div>
+
+    <h3 style="margin:22px 0 10px">合成预览</h3>
+    <div class="grid g3">
+      <div class="card">
+        <h3>方形遮罩</h3>
+        <div class="ic-wrap">
+          <svg class="ic" viewBox="0 0 108 108" width="216" height="216" aria-hidden="true">
+            <rect width="108" height="108" fill="var(--surf)"/>
+            <path d="M0 72 L108 34 L108 108 L0 108 Z" fill="var(--surf-2)"/>
+            <g class="mk mk--brand" transform="translate(21 21) scale(0.2578125)"><use href="#mk-body" width="256" height="256"/><circle class="bead" cx="199" cy="57" r="17"/></g>
+          </svg>
+        </div>
+      </div>
+      <div class="card">
+        <h3>66dp 圆形遮罩（官方安全区 · 最坏情况）</h3>
+        <div class="ic-wrap">
+          <div class="mask66"><div>
+            <svg class="ic" viewBox="0 0 108 108" width="216" height="216" aria-hidden="true" style="border-radius:0">
+              <rect width="108" height="108" fill="var(--surf)"/>
+              <path d="M0 72 L108 34 L108 108 L0 108 Z" fill="var(--surf-2)"/>
+              <g class="mk mk--brand" transform="translate(21 21) scale(0.2578125)"><use href="#mk-body" width="256" height="256"/><circle class="bead" cx="199" cy="57" r="17"/></g>
+            </svg>
+          </div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>72dp 圆圈（非官方中间参考线，不是安全区）</h3>
+        <div class="ic-wrap">
+          <div class="mask72"><div>
+            <svg class="ic" viewBox="0 0 108 108" width="216" height="216" aria-hidden="true" style="border-radius:0">
+              <rect width="108" height="108" fill="var(--surf)"/>
+              <path d="M0 72 L108 34 L108 108 L0 108 Z" fill="var(--surf-2)"/>
+              <g class="mk mk--brand" transform="translate(21 21) scale(0.2578125)"><use href="#mk-body" width="256" height="256"/><circle class="bead" cx="199" cy="57" r="17"/></g>
+            </svg>
+          </div></div>
+        </div>
+        <p class="sub" style="margin-top:10px">官方规格里<b>没有 72dp 安全区</b>这个数字；此圈仅作非官方中间参考线，判断裁切一律以 66dp 为准。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 单色 ============ -->
+  <section id="mono">
+    <div class="s-head"><span class="tag">05</span><h2>纯黑 / 纯白单色版</h2><span class="kicker">印刷、水印、图标、单色场景</span></div>
+    <div class="grid g2">
+      <div class="card">
+        <h3>纯黑（浅色底）</h3>
+        <div class="stage">
+          <svg class="mk" viewBox="0 0 256 256" width="150" height="150" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg>
+        </div>
+      </div>
+      <div class="card">
+        <h3>纯白（深色底）</h3>
+        <div class="stage dark">
+          <svg class="mk mk--paper" viewBox="0 0 256 256" width="150" height="150" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 尺寸实拍 ============ -->
+  <section id="sizes">
+    <div class="s-head"><span class="tag">06</span><h2>尺寸实拍 24 / 32 / 48 / 96 px</h2><span class="kicker">浅色底与深色底并排 · 24px 位同时给原版与简化版</span></div>
+    <h3 style="margin-bottom:10px">浅色底</h3>
+    <div class="strip">
+      <div class="sz"><span class="box" style="width:96px;height:96px"><svg class="mk mk--brand" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>96px</em></div>
+      <div class="sz"><span class="box" style="width:48px;height:48px"><svg class="mk mk--brand" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>48px</em></div>
+      <div class="sz"><span class="box" style="width:32px;height:32px"><svg class="mk mk--brand" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>32px</em></div>
+      <div class="sz"><span class="box" style="width:24px;height:24px"><svg class="mk mk--brand" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>24px 原版</em></div>
+      <div class="sz"><span class="box" style="width:24px;height:24px"><svg class="mk mk--mini mk--brand" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#mk-body-mini"/><circle class="bead" cx="18.4" cy="5.6" r="2.4"/></svg></span><em>24px 简化</em></div>
+    </div>
+    <h3 style="margin:18px 0 10px">深色底</h3>
+    <div class="strip dark">
+      <div class="sz"><span class="box" style="width:96px;height:96px"><svg class="mk mk--brand mk--paper" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>96px</em></div>
+      <div class="sz"><span class="box" style="width:48px;height:48px"><svg class="mk mk--brand mk--paper" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>48px</em></div>
+      <div class="sz"><span class="box" style="width:32px;height:32px"><svg class="mk mk--brand mk--paper" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>32px</em></div>
+      <div class="sz"><span class="box" style="width:24px;height:24px"><svg class="mk mk--brand mk--paper" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><use href="#mk-body"/><circle class="bead" cx="199" cy="57" r="17"/></svg></span><em>24px 原版</em></div>
+      <div class="sz"><span class="box" style="width:24px;height:24px"><svg class="mk mk--mini mk--brand mk--paper" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><use href="#mk-body-mini"/><circle class="bead" cx="18.4" cy="5.6" r="2.4"/></svg></span><em>24px 简化</em></div>
+    </div>
+  </section>
+
+  <!-- ============ 07 设计说明 ============ -->
+  <section id="why">
+    <div class="s-head"><span class="tag">07</span><h2>设计说明</h2><span class="kicker">4 行说完</span></div>
+    <div class="note">
+      <ol>
+        <li><b>含义</b>：圆环 = 一昼夜 24 小时闭合循环；环内三根高低柱 = 同一天里被记录的行为强度切片；环上实心珠 = 「此刻」正在被记录。</li>
+        <li><b>24px 站得住</b>：主标识描边占标志高度 7%，48px 以上原样可用；24px 另出简化版——柱 3→2、线宽 15/18→2px、珠 3.2→4.8px，柱间隙 3.5px，像素对齐后仍能读出「环 + 高低柱 + 珠」。</li>
+        <li><b>区别</b>：统计类 App 图标多用饼图 / 折线 / 仪表盘，讲「统计分析」；本标识讲「持续记录」——时间闭环 + 强度切片 + 此刻落点。</li>
+        <li><b>落地</b>：环与柱走 currentColor，珠单独走 accent，因此同一份几何可直出浅色、深色、单色与 Android 三层图标，无需重绘。</li>
+      </ol>
+    </div>
+  </section>
+
+  <p class="foot">资产路径：.open-design/brand/assets/ · 颜色仅定义于 :root · 页面无外链、无位图依赖（像素证据为内联 data URI）</p>
+</div>
+</body>
+</html>

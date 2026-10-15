@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 行为记录 · C2 时间切片 · 24px 专用简化版（24 网格，1 单位 = 1px）
+     与主标识的差异：柱 3 -> 2、描边 15/18 -> 2、珠直径 3.2 -> 4.8px、柱间隙 3.5px。
+     仅用于 <= 24px 的场景（favicon / 列表小图标 / 状态栏），>= 32px 一律用 brand-mark.svg。 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+     role="img" aria-label="行为记录">
+  <circle cx="12" cy="12" r="9"/>
+  <path d="M9.5 16.5V10.5"/>
+  <path d="M15 16.5V8"/>
+  <circle class="bead" cx="18.4" cy="5.6" r="2.4" fill="currentColor" stroke="none"/>
+</svg>

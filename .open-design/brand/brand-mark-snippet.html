@@ -1,0 +1,20 @@
+<!-- 用法：把下面 <svg class="brand-mark" ...> 整段复制走，替换 90-splash.html 里的占位 mark 用。
+     颜色：全部走 currentColor，外层容器设 color 即可（浅色底设品牌墨色变量，深色底设纸白变量），无需改 SVG。
+     珠子：默认 currentColor；需要品牌强调色时给外层加 .brand-mark--accent（读 --brand-accent，取不到就回落 currentColor）。
+     尺寸：加 .brand-mark--32 / --48 / --96，或直接写 width / height；小于等于 24px 请改用 assets/brand-mark-24.svg 的 24 网格版本。
+     禁止：改 viewBox、拉伸、加阴影 / 描边 / 滤镜、增删强度柱、把珠子挪离圆环。 -->
+<style>
+.brand-mark{display:block;color:currentColor;fill:none;stroke:currentColor;stroke-width:18;stroke-linecap:round;stroke-linejoin:round}
+.brand-mark .brand-mark__bead{fill:currentColor;stroke:none}
+.brand-mark--accent .brand-mark__bead{fill:var(--brand-accent,currentColor)}
+.brand-mark--32{width:32px;height:32px}
+.brand-mark--48{width:48px;height:48px}
+.brand-mark--96{width:96px;height:96px}
+</style>
+<svg class="brand-mark brand-mark--accent" viewBox="0 0 256 256" width="48" height="48" role="img" aria-label="行为记录">
+  <circle cx="128" cy="128" r="100"/>
+  <path d="M84 176V104" stroke-width="15"/>
+  <path d="M128 176V64" stroke-width="15"/>
+  <path d="M172 176V120" stroke-width="15"/>
+  <circle class="brand-mark__bead" cx="199" cy="57" r="17"/>
+</svg>

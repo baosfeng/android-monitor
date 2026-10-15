@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行为记录 · Logo 品牌方案（4 概念对照）</title>
+<style>
+:root{
+  /* ===== 全站唯一的颜色定义处：其余位置一律 var(--...) ===== */
+  --bg:#06070B; --bg-2:#0A0D14;
+  --glass:rgba(255,255,255,.055); --glass-2:rgba(255,255,255,.10);
+  --brd:rgba(255,255,255,.10); --brd-2:rgba(255,255,255,.22);
+  --fg:#F2F5FA; --fg-2:#AEB6C6; --fg-3:#7C8598;
+  --accent:#63D8FF; --accent-deep:#1D6E9E;
+  --accent-soft:rgba(99,216,255,.16); --accent-veil:rgba(99,216,255,.07);
+  --icon-bg:#071426; --icon-glow:rgba(99,216,255,.30); --icon-glow-2:rgba(99,216,255,.13);
+  --ink:#000000; --paper:#FFFFFF;
+  --light-bg:#F4F6F9; --light-bg-2:#E6EAF1;
+  --light-fg:#0E1218; --light-fg-2:#4A5361; --light-brd:rgba(14,18,24,.12);
+  --chk1:rgba(255,255,255,.045); --chk2:rgba(255,255,255,.10);
+  --guide:rgba(255,255,255,.28); --guide-a:rgba(99,216,255,.55);
+  --shadow:rgba(0,0,0,.55); --clear:transparent;
+  --mono-ink:#FFFFFF; --mono-bg:#101319;
+  --r-lg:22px; --r-md:14px; --r-sm:10px; --pad:20px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 var(--font);-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(680px 420px at 12% -6%,var(--accent-soft),var(--clear) 68%),radial-gradient(760px 520px at 92% 4%,var(--accent-veil),var(--clear) 70%),radial-gradient(900px 700px at 50% 120%,var(--accent-veil),var(--clear) 72%)}
+.wrap{position:relative;z-index:1;max-width:1360px;margin:0 auto;padding:40px 28px 96px}
+.panel{background:linear-gradient(180deg,var(--glass-2),var(--glass));border:1px solid var(--brd);border-radius:var(--r-lg);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);padding:var(--pad);box-shadow:0 18px 44px var(--shadow)}
+.kicker{color:var(--fg-2);font-size:14px;margin:6px 0 0}
+.top{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-end;justify-content:space-between}
+h1{font-size:34px;line-height:1.2;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:14px;font-weight:400;color:var(--fg-2);letter-spacing:.16em;text-transform:uppercase;margin-top:10px}
+h2{font-size:26px;margin:0;letter-spacing:-.01em}
+h3{font-size:16px;margin:0 0 12px;letter-spacing:.02em}
+.meta{display:flex;flex-wrap:wrap;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid var(--brd);border-radius:999px;background:var(--glass);font-size:14px;color:var(--fg-2)}
+.chip b{color:var(--fg);font-weight:600}
+nav.toc{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 8px}
+nav.toc a{display:inline-flex;align-items:center;min-height:48px;padding:0 18px;border-radius:14px;text-decoration:none;color:var(--fg);background:var(--glass);border:1px solid var(--brd);font-size:15px}
+nav.toc a:hover{border-color:var(--brd-2);background:var(--glass-2)}
+nav.toc a i{font-style:normal;color:var(--accent);margin-right:8px;font-weight:600}
+.ov{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:18px}
+.ov .cell{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 12px;border-radius:var(--r-md);background:var(--glass);border:1px solid var(--brd)}
+.ov .cell b{font-size:15px}
+.ov .cell span{font-size:14px;color:var(--fg-3);text-align:center}
+.concept{margin-top:44px}
+.c-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin-bottom:6px}
+.c-head .tag{display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:30px;padding:0 12px;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:600;letter-spacing:.06em}
+.c-head .en{font-size:14px;color:var(--fg-3);letter-spacing:.18em}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:16px}
+.grid .span2{grid-column:1/-1}
+.mk{fill:none;stroke:currentColor;stroke-width:18;stroke-linecap:round;stroke-linejoin:round;display:block}
+.mk .mid{stroke-width:15}
+.mk .row{stroke-width:15}
+.mk .fill{fill:currentColor;stroke:none}
+.hero{display:flex;align-items:center;gap:26px}
+.hero .txt{font-size:14px;color:var(--fg-2)}
+.hero .txt b{display:block;color:var(--fg);font-size:16px;margin-bottom:4px}
+.ctxs{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.ctx{border-radius:var(--r-md);padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;min-height:210px;justify-content:center}
+.ctx.dark{background:linear-gradient(160deg,var(--bg-2),var(--bg));border:1px solid var(--brd);color:var(--fg)}
+.ctx.light{background:linear-gradient(160deg,var(--paper),var(--light-bg-2));border:1px solid var(--light-brd);color:var(--ink)}
+.ctx span{font-size:14px}
+.ctx.dark span{color:var(--fg-2)}
+.ctx.light span{color:var(--light-fg-2)}
+.lockup{position:relative;padding:34px 26px;border-radius:var(--r-md);background:var(--bg-2);border:1px solid var(--brd)}
+.lk-row{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
+.lk-word{font-size:26px;font-weight:600;letter-spacing:.06em;line-height:1}
+.lk-gap{width:12px;height:44px;display:block}
+.gl{position:absolute;pointer-events:none}
+.gl.h{left:0;right:0;height:1px;background:var(--guide-a);opacity:.55}
+.gl.v{top:0;bottom:0;width:1px;background:var(--guide-a);opacity:.55}
+.gl.c{top:50%} .gl.t{top:calc(50% - 20px)} .gl.b{top:calc(50% + 20px)}
+.gl.mr{left:66px} .gl.ml{left:78px}
+.gl-cap{position:absolute;font-size:14px;color:var(--guide-a);background:var(--bg-2);padding:0 6px;line-height:18px}
+table.spec{width:100%;border-collapse:collapse;margin-top:20px;font-size:14px}
+table.spec th,table.spec td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--brd);vertical-align:top}
+table.spec th{color:var(--fg-3);font-weight:500;white-space:nowrap;width:38%}
+table.spec td{color:var(--fg-2)}
+table.spec td b{color:var(--fg)}
+.ac{display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:start}
+.ac-canvas{position:relative;width:216px;height:216px;border-radius:6px;overflow:hidden}
+.layer{position:absolute;display:block}
+.layer.bg{inset:0;width:100%;height:100%}
+.layer.fg{top:19.444%;left:19.444%;width:61.111%;height:61.111%;color:var(--mono-ink)}
+.layer.guide{inset:0;width:100%;height:100%}
+.g1{fill:none;stroke:var(--guide);stroke-width:.8}
+.g2{fill:none;stroke:var(--guide-a);stroke-width:1}
+.g3{fill:none;stroke:var(--accent);stroke-width:1.2}
+.icbg{fill:var(--icon-bg)}
+.icv{fill:var(--icon-glow)}
+.icv2{fill:var(--icon-glow-2)}
+.ac-legend{font-size:14px;color:var(--fg-3);margin-top:12px;max-width:216px}
+.ac-side{display:flex;flex-wrap:wrap;gap:18px}
+.mask-wrap{display:flex;flex-direction:column;gap:10px;align-items:center}
+.ac-mask{position:relative;width:132px;height:132px;border-radius:50%;overflow:hidden;box-shadow:0 12px 30px var(--shadow)}
+.ac-mask .layer.bg{top:-31.818%;left:-31.818%;width:163.636%;height:163.636%;inset:auto}
+.ac-mask .layer.fg{top:0;left:0;width:100%;height:100%}
+.mask-cap{font-size:14px;color:var(--fg-3)}
+.layers{display:flex;flex-wrap:wrap;gap:14px}
+.lchip{width:96px;text-align:center;margin:0}
+.lchip .box{position:relative;width:96px;height:96px;border-radius:12px;overflow:hidden;border:1px solid var(--brd)}
+.lchip .box.chk{background-image:repeating-linear-gradient(45deg,var(--chk1) 0 8px,var(--chk2) 8px 16px)}
+.lchip .box.mono{background:var(--mono-bg)}
+.lchip figcaption{font-size:14px;color:var(--fg-3);margin-top:8px}
+.monos{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.mono-box{border-radius:var(--r-md);height:170px;display:flex;align-items:center;justify-content:center}
+.mono-box.on-light{background:var(--paper);color:var(--ink);border:1px solid var(--light-brd)}
+.mono-box.on-dark{background:var(--mono-bg);color:var(--mono-ink);border:1px solid var(--brd)}
+.sizes{display:flex;flex-direction:column;gap:14px}
+.sz-strip{display:flex;align-items:flex-end;gap:26px;padding:20px 22px;border-radius:var(--r-md)}
+.sz-strip.dark{background:var(--bg-2);border:1px solid var(--brd);color:var(--fg)}
+.sz-strip.light{background:var(--light-bg);border:1px solid var(--light-brd);color:var(--ink)}
+.sz{display:flex;flex-direction:column;align-items:center;gap:8px}
+.sz .cap{display:flex;align-items:center;justify-content:center}
+.sz em{font-style:normal;font-size:14px;color:var(--fg-2)}
+.sz-strip.light em{color:var(--light-fg-2)}
+.notes{display:grid;gap:10px;margin-top:18px}
+.notes p{margin:0;font-size:15px;color:var(--fg-2);padding-left:16px;position:relative;line-height:1.7}
+.notes p::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.notes p b{color:var(--fg)}
+footer{margin-top:56px}
+footer .panel{color:var(--fg-2);font-size:14px}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--accent)}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:8px;vertical-align:-2px;border:1px solid var(--brd)}
+.sw-bg{background:var(--bg)} .sw-ac{background:var(--accent)} .sw-ic{background:var(--icon-bg)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--accent);background:var(--accent-veil);padding:2px 6px;border-radius:6px}
+@media (max-width:900px){.grid,.ov,.ctxs,.monos,.ac{grid-template-columns:1fr}.ac-canvas{margin:0 auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top" data-od-id="brand-header">
+    <div>
+      <h1>行为记录 · Logo 品牌方案<small>Brand / App Icon · 4 Concepts</small></h1>
+      <p class="kicker">玻璃拟态 + Apple/iOS 气质 · 深色优先 · 全部图形只用 path / circle / rect / line，可直接转 Android Vector Drawable（自适应图标）</p>
+    </div>
+    <div class="meta">
+      <span class="chip">画布 <b>393×852</b></span>
+      <span class="chip">图标 <b>108 / 72 / 66 dp</b></span>
+      <span class="chip">minSdk <b>29</b> · target <b>34</b></span>
+      <span class="chip">强调色 <b class="swatch"></b></span>
+    </div>
+  </header>
+  <nav class="toc" data-od-id="brand-toc">
+    <a href="#c1"><i>C1</i>注视之眼</a>
+    <a href="#c2"><i>C2</i>时间切片</a>
+    <a href="#c3"><i>C3</i>盾与流</a>
+    <a href="#c4"><i>C4</i>双环账本</a>
+    <a href="#spec"><i>SPEC</i>通用规范与落地</a>
+  </nav>
+  <section class="panel" data-od-id="brand-overview">
+    <h3>四个概念总览（同一视线框、同一描边重量）</h3>
+    <div class="ov">
+      <div class="cell" data-od-id="ov-c1"><svg class="mk" viewBox="0 0 256 256" width="72" height="72" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg><b>C1 注视之眼</b><span>监控 · 看见 · 持续扫描</span></div>
+      <div class="cell" data-od-id="ov-c2"><svg class="mk" viewBox="0 0 256 256" width="72" height="72" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg><b>C2 时间切片</b><span>行为 · 随时间 · 被记录</span></div>
+      <div class="cell" data-od-id="ov-c3"><svg class="mk" viewBox="0 0 256 256" width="72" height="72" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg><b>C3 盾与流</b><span>拦截 · 保护 · 数据流</span></div>
+      <div class="cell" data-od-id="ov-c4"><svg class="mk" viewBox="0 0 256 256" width="72" height="72" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg><b>C4 双环账本</b><span>一环记行为 · 一环记钱</span></div>
+    </div>
+  </section>
+<section class="concept" id="c1" data-od-id="concept-c1">
+    <div class="c-head" data-od-id="c1-head">
+      <span class="tag">C1</span><h2>注视之眼</h2>
+      <span class="en">VIGILANT EYE</span><span class="kicker">监控 · 看见 · 持续扫描</span>
+    </div>
+    <div class="grid">
+      <div class="panel hero" data-od-id="c1-mark">
+        <svg class="mk" viewBox="0 0 256 256" width="160" height="160" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg>
+        <div class="txt"><b>主标识 Mark</b>256×256 viewBox · path/circle 单调描边 · currentColor 单色<br>共 5 个图元，无滤镜 / 无蒙版 / 无位图 / 无文字</div>
+      </div>
+      <div class="panel" data-od-id="c1-lockup">
+        <h3>字标组合与规范</h3>
+        <div class="lockup">
+          <div class="lk-row"><svg class="mk" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg><span class="lk-gap"></span><span class="lk-word">行为记录</span></div>
+          <i class="gl h c"></i><i class="gl h t"></i><i class="gl h b"></i>
+          <i class="gl v ml"></i><i class="gl v mr"></i>
+          <span class="gl-cap" style="left:96px;top:12px">H = 40</span>
+          <span class="gl-cap" style="left:44px;top:calc(50% + 24px)">gap 12</span>
+          <span class="gl-cap" style="right:10px;top:calc(50% - 46px)">光学中心线</span>
+        </div>
+        <table class="spec"><tbody>
+          <tr><th>图标高度 H</th><td><b>40px</b>（mark 外接方框，非墨迹外接框）</td></tr>
+          <tr><th>图文间距</th><td><b>12px</b> = 0.30 H，随尺寸等比缩放</td></tr>
+          <tr><th>字标字号</th><td><b>26px</b> / 600 字重；汉字字面高约 0.72em</td></tr>
+          <tr><th>字距 tracking</th><td><b>+0.06em</b>（汉字之间不贴紧）；拉丁副标 +0.18em</td></tr>
+          <tr><th>对齐</th><td>汉字字面高光学居中于 mark 垂直中心（不是基线对齐）；左缘贴 8pt 栅格</td></tr>
+          <tr><th>最小尺寸</th><td>mark 单独 ≥ <b>20px</b>；完整锁定 ≥ <b>88px</b> 宽</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel span2" data-od-id="c1-adaptive">
+        <h3>Android 自适应图标（108dp 画布 / 72dp 安全区 / 66dp 遮罩）</h3>
+        <div class="ac">
+          <div>
+            <div class="ac-canvas">
+              <svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="84" cy="88" r="52" class="icv"/><circle cx="22" cy="18" r="26" class="icv2"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg>
+              <svg class="layer guide" viewBox="0 0 108 108" aria-hidden="true">
+                <rect x="1" y="1" width="106" height="106" class="g1"/>
+                <rect x="18" y="18" width="72" height="72" class="g2"/>
+                <circle cx="54" cy="54" r="33" class="g3"/>
+                <path d="M54 0V8M54 100V108M0 54H8M100 54H108" class="g1"/>
+              </svg>
+            </div>
+            <p class="ac-legend">108×108dp 画布（青线圆 r=33 ≈ 66dp 可见区）· 72×72dp 安全区（描边方框）</p>
+          </div>
+          <div class="ac-side">
+            <div class="mask-wrap">
+              <div class="ac-mask"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="84" cy="88" r="52" class="icv"/><circle cx="22" cy="18" r="26" class="icv2"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></div>
+              <span class="mask-cap">66dp 圆形遮罩<br>实际显示效果</span>
+            </div>
+            <div class="layers">
+              <figure class="lchip"><div class="box chk"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></div><figcaption>foreground</figcaption></figure>
+              <figure class="lchip"><div class="box"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="84" cy="88" r="52" class="icv"/><circle cx="22" cy="18" r="26" class="icv2"/></svg></div><figcaption>background</figcaption></figure>
+              <figure class="lchip"><div class="box mono"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></div><figcaption>monochrome</figcaption></figure>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" data-od-id="c1-mono">
+        <h3>单色版（纯黑 / 纯白）</h3>
+        <div class="monos">
+          <div class="mono-box on-light"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></div>
+          <div class="mono-box on-dark"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></div>
+        </div>
+        <p class="kicker">左：纯黑 / 白底（印刷、浅色通知栏）；右：纯白 / 近黑底（深色通知栏、主题图标单色层）。</p>
+      </div>
+      <div class="panel" data-od-id="c1-sizes">
+        <h3>小尺寸实拍（24 / 32 / 48 / 96 px）</h3>
+        <div class="sizes">
+          <div class="sz-strip dark"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>96px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>24px</em></div></div>
+          <div class="sz-strip light"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>24px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg></span><em>24px</em></div></div>
+        </div>
+        <p class="kicker">上排深色底，下排浅色底；同一 SVG，只切换 currentColor。</p>
+      </div>
+      <div class="panel span2" data-od-id="c1-context">
+        <h3>深色底 / 浅色底</h3>
+        <div class="ctxs">
+          <div class="ctx dark"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg><span>深色底：启动页、设置页顶栏、深色通知</span></div>
+          <div class="ctx light"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><path d="M20 128 Q128 0 236 128 Q128 256 20 128Z"/>
+<circle cx="128" cy="128" r="32" class="mid"/>
+<circle cx="128" cy="128" r="15" class="fill"/>
+<path class="mid" d="M200 42A112 112 0 0 1 234 93"/>
+<path class="mid" d="M56 214A112 112 0 0 1 21 163"/></svg><span>浅色底：分享图、应用商店截图、印刷</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-od-id="c1-notes">
+      <p><b>符号</b>：几何眼（两段二次曲线合成的杏仁形）+ 环形扫描弧，同心瞳孔＝「一直在看，且一直在扫」。</p>
+      <p><b>气质</b>：延续现有图标语义，克制、工具、可信；安全类清单里一眼归类正确。</p>
+      <p><b>牺牲</b>：与系统「隐私/可见性」图标同族，差异只靠描边粗细与两段扫描弧撑；24px 下扫描弧退化为两个短点。</p>
+    </div>
+  </section>
+<section class="concept" id="c2" data-od-id="concept-c2">
+    <div class="c-head" data-od-id="c2-head">
+      <span class="tag">C2</span><h2>时间切片</h2>
+      <span class="en">TIME SLICES</span><span class="kicker">行为 · 随时间 · 被记录</span>
+    </div>
+    <div class="grid">
+      <div class="panel hero" data-od-id="c2-mark">
+        <svg class="mk" viewBox="0 0 256 256" width="160" height="160" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg>
+        <div class="txt"><b>主标识 Mark</b>256×256 viewBox · path/circle 单调描边 · currentColor 单色<br>共 5 个图元，无滤镜 / 无蒙版 / 无位图 / 无文字</div>
+      </div>
+      <div class="panel" data-od-id="c2-lockup">
+        <h3>字标组合与规范</h3>
+        <div class="lockup">
+          <div class="lk-row"><svg class="mk" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg><span class="lk-gap"></span><span class="lk-word">行为记录</span></div>
+          <i class="gl h c"></i><i class="gl h t"></i><i class="gl h b"></i>
+          <i class="gl v ml"></i><i class="gl v mr"></i>
+          <span class="gl-cap" style="left:96px;top:12px">H = 40</span>
+          <span class="gl-cap" style="left:44px;top:calc(50% + 24px)">gap 12</span>
+          <span class="gl-cap" style="right:10px;top:calc(50% - 46px)">光学中心线</span>
+        </div>
+        <table class="spec"><tbody>
+          <tr><th>图标高度 H</th><td><b>40px</b>（mark 外接方框，非墨迹外接框）</td></tr>
+          <tr><th>图文间距</th><td><b>12px</b> = 0.30 H，随尺寸等比缩放</td></tr>
+          <tr><th>字标字号</th><td><b>26px</b> / 600 字重；汉字字面高约 0.72em</td></tr>
+          <tr><th>字距 tracking</th><td><b>+0.06em</b>（汉字之间不贴紧）；拉丁副标 +0.18em</td></tr>
+          <tr><th>对齐</th><td>汉字字面高光学居中于 mark 垂直中心（不是基线对齐）；左缘贴 8pt 栅格</td></tr>
+          <tr><th>最小尺寸</th><td>mark 单独 ≥ <b>20px</b>；完整锁定 ≥ <b>88px</b> 宽</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel span2" data-od-id="c2-adaptive">
+        <h3>Android 自适应图标（108dp 画布 / 72dp 安全区 / 66dp 遮罩）</h3>
+        <div class="ac">
+          <div>
+            <div class="ac-canvas">
+              <svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="54" cy="54" r="56" class="icv"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg>
+              <svg class="layer guide" viewBox="0 0 108 108" aria-hidden="true">
+                <rect x="1" y="1" width="106" height="106" class="g1"/>
+                <rect x="18" y="18" width="72" height="72" class="g2"/>
+                <circle cx="54" cy="54" r="33" class="g3"/>
+                <path d="M54 0V8M54 100V108M0 54H8M100 54H108" class="g1"/>
+              </svg>
+            </div>
+            <p class="ac-legend">108×108dp 画布（青线圆 r=33 ≈ 66dp 可见区）· 72×72dp 安全区（描边方框）</p>
+          </div>
+          <div class="ac-side">
+            <div class="mask-wrap">
+              <div class="ac-mask"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="54" cy="54" r="56" class="icv"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></div>
+              <span class="mask-cap">66dp 圆形遮罩<br>实际显示效果</span>
+            </div>
+            <div class="layers">
+              <figure class="lchip"><div class="box chk"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></div><figcaption>foreground</figcaption></figure>
+              <figure class="lchip"><div class="box"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="54" cy="54" r="56" class="icv"/></svg></div><figcaption>background</figcaption></figure>
+              <figure class="lchip"><div class="box mono"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></div><figcaption>monochrome</figcaption></figure>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" data-od-id="c2-mono">
+        <h3>单色版（纯黑 / 纯白）</h3>
+        <div class="monos">
+          <div class="mono-box on-light"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></div>
+          <div class="mono-box on-dark"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></div>
+        </div>
+        <p class="kicker">左：纯黑 / 白底（印刷、浅色通知栏）；右：纯白 / 近黑底（深色通知栏、主题图标单色层）。</p>
+      </div>
+      <div class="panel" data-od-id="c2-sizes">
+        <h3>小尺寸实拍（24 / 32 / 48 / 96 px）</h3>
+        <div class="sizes">
+          <div class="sz-strip dark"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>96px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>24px</em></div></div>
+          <div class="sz-strip light"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>24px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg></span><em>24px</em></div></div>
+        </div>
+        <p class="kicker">上排深色底，下排浅色底；同一 SVG，只切换 currentColor。</p>
+      </div>
+      <div class="panel span2" data-od-id="c2-context">
+        <h3>深色底 / 浅色底</h3>
+        <div class="ctxs">
+          <div class="ctx dark"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg><span>深色底：启动页、设置页顶栏、深色通知</span></div>
+          <div class="ctx light"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><circle cx="128" cy="128" r="100"/>
+<path class="mid" d="M84 176V104"/>
+<path class="mid" d="M128 176V64"/>
+<path class="mid" d="M172 176V120"/>
+<circle cx="199" cy="57" r="17" class="fill"/></svg><span>浅色底：分享图、应用商店截图、印刷</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-od-id="c2-notes">
+      <p><b>符号</b>：圆环（一天 24h）+ 三根高低柱（被切成片段的行为刻度），环上一颗实心珠＝「此刻正在记」。</p>
+      <p><b>气质</b>：数据工具、量化自我、清爽理性，与「今日概览」仪表盘首页最同源。</p>
+      <p><b>牺牲</b>：最像通用统计/图表类 App，缺人情味，也完全不表达「记账」这第二条业务。</p>
+    </div>
+  </section>
+<section class="concept" id="c3" data-od-id="concept-c3">
+    <div class="c-head" data-od-id="c3-head">
+      <span class="tag">C3</span><h2>盾与流</h2>
+      <span class="en">SHIELD & STREAM</span><span class="kicker">拦截 · 保护 · 数据流</span>
+    </div>
+    <div class="grid">
+      <div class="panel hero" data-od-id="c3-mark">
+        <svg class="mk" viewBox="0 0 256 256" width="160" height="160" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg>
+        <div class="txt"><b>主标识 Mark</b>256×256 viewBox · path/circle 单调描边 · currentColor 单色<br>共 4 个图元，无滤镜 / 无蒙版 / 无位图 / 无文字</div>
+      </div>
+      <div class="panel" data-od-id="c3-lockup">
+        <h3>字标组合与规范</h3>
+        <div class="lockup">
+          <div class="lk-row"><svg class="mk" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg><span class="lk-gap"></span><span class="lk-word">行为记录</span></div>
+          <i class="gl h c"></i><i class="gl h t"></i><i class="gl h b"></i>
+          <i class="gl v ml"></i><i class="gl v mr"></i>
+          <span class="gl-cap" style="left:96px;top:12px">H = 40</span>
+          <span class="gl-cap" style="left:44px;top:calc(50% + 24px)">gap 12</span>
+          <span class="gl-cap" style="right:10px;top:calc(50% - 46px)">光学中心线</span>
+        </div>
+        <table class="spec"><tbody>
+          <tr><th>图标高度 H</th><td><b>40px</b>（mark 外接方框，非墨迹外接框）</td></tr>
+          <tr><th>图文间距</th><td><b>12px</b> = 0.30 H，随尺寸等比缩放</td></tr>
+          <tr><th>字标字号</th><td><b>26px</b> / 600 字重；汉字字面高约 0.72em</td></tr>
+          <tr><th>字距 tracking</th><td><b>+0.06em</b>（汉字之间不贴紧）；拉丁副标 +0.18em</td></tr>
+          <tr><th>对齐</th><td>汉字字面高光学居中于 mark 垂直中心（不是基线对齐）；左缘贴 8pt 栅格</td></tr>
+          <tr><th>最小尺寸</th><td>mark 单独 ≥ <b>20px</b>；完整锁定 ≥ <b>88px</b> 宽</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel span2" data-od-id="c3-adaptive">
+        <h3>Android 自适应图标（108dp 画布 / 72dp 安全区 / 66dp 遮罩）</h3>
+        <div class="ac">
+          <div>
+            <div class="ac-canvas">
+              <svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><path d="M0 76 L108 34 V108 H0Z" class="icv"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg>
+              <svg class="layer guide" viewBox="0 0 108 108" aria-hidden="true">
+                <rect x="1" y="1" width="106" height="106" class="g1"/>
+                <rect x="18" y="18" width="72" height="72" class="g2"/>
+                <circle cx="54" cy="54" r="33" class="g3"/>
+                <path d="M54 0V8M54 100V108M0 54H8M100 54H108" class="g1"/>
+              </svg>
+            </div>
+            <p class="ac-legend">108×108dp 画布（青线圆 r=33 ≈ 66dp 可见区）· 72×72dp 安全区（描边方框）</p>
+          </div>
+          <div class="ac-side">
+            <div class="mask-wrap">
+              <div class="ac-mask"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><path d="M0 76 L108 34 V108 H0Z" class="icv"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></div>
+              <span class="mask-cap">66dp 圆形遮罩<br>实际显示效果</span>
+            </div>
+            <div class="layers">
+              <figure class="lchip"><div class="box chk"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></div><figcaption>foreground</figcaption></figure>
+              <figure class="lchip"><div class="box"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><path d="M0 76 L108 34 V108 H0Z" class="icv"/></svg></div><figcaption>background</figcaption></figure>
+              <figure class="lchip"><div class="box mono"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></div><figcaption>monochrome</figcaption></figure>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" data-od-id="c3-mono">
+        <h3>单色版（纯黑 / 纯白）</h3>
+        <div class="monos">
+          <div class="mono-box on-light"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></div>
+          <div class="mono-box on-dark"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></div>
+        </div>
+        <p class="kicker">左：纯黑 / 白底（印刷、浅色通知栏）；右：纯白 / 近黑底（深色通知栏、主题图标单色层）。</p>
+      </div>
+      <div class="panel" data-od-id="c3-sizes">
+        <h3>小尺寸实拍（24 / 32 / 48 / 96 px）</h3>
+        <div class="sizes">
+          <div class="sz-strip dark"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>96px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>24px</em></div></div>
+          <div class="sz-strip light"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>24px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg></span><em>24px</em></div></div>
+        </div>
+        <p class="kicker">上排深色底，下排浅色底；同一 SVG，只切换 currentColor。</p>
+      </div>
+      <div class="panel span2" data-od-id="c3-context">
+        <h3>深色底 / 浅色底</h3>
+        <div class="ctxs">
+          <div class="ctx dark"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg><span>深色底：启动页、设置页顶栏、深色通知</span></div>
+          <div class="ctx light"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><path d="M128 28 L224 62 V128 C224 188 182 222 128 236 C74 222 32 188 32 128 V62 Z"/>
+<path class="mid" d="M66 156 C 94 100 116 100 130 126 S 168 160 194 104"/>
+<circle cx="66" cy="156" r="13" class="fill"/>
+<circle cx="194" cy="104" r="13" class="fill"/></svg><span>浅色底：分享图、应用商店截图、印刷</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-od-id="c3-notes">
+      <p><b>符号</b>：护盾轮廓（拦截广告 / 保护）+ 内部一条首尾带节点的数据流曲线（记录与上报）。</p>
+      <p><b>气质</b>：力量感与安全感最强，货架上最「成熟商业产品」，也最贴合这个 App 的双主业。</p>
+      <p><b>牺牲</b>：护盾是安全类 App 的陈词滥调，会被杀毒/加速器图标淹没；曲线在 24px 接近一条直线。</p>
+    </div>
+  </section>
+<section class="concept" id="c4" data-od-id="concept-c4">
+    <div class="c-head" data-od-id="c4-head">
+      <span class="tag">C4</span><h2>双环账本</h2>
+      <span class="en">TWIN LEDGER</span><span class="kicker">一环记行为 · 一环记钱</span>
+    </div>
+    <div class="grid">
+      <div class="panel hero" data-od-id="c4-mark">
+        <svg class="mk" viewBox="0 0 256 256" width="160" height="160" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg>
+        <div class="txt"><b>主标识 Mark</b>256×256 viewBox · path/circle 单调描边 · currentColor 单色<br>共 5 个图元，无滤镜 / 无蒙版 / 无位图 / 无文字</div>
+      </div>
+      <div class="panel" data-od-id="c4-lockup">
+        <h3>字标组合与规范</h3>
+        <div class="lockup">
+          <div class="lk-row"><svg class="mk" viewBox="0 0 256 256" width="40" height="40" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg><span class="lk-gap"></span><span class="lk-word">行为记录</span></div>
+          <i class="gl h c"></i><i class="gl h t"></i><i class="gl h b"></i>
+          <i class="gl v ml"></i><i class="gl v mr"></i>
+          <span class="gl-cap" style="left:96px;top:12px">H = 40</span>
+          <span class="gl-cap" style="left:44px;top:calc(50% + 24px)">gap 12</span>
+          <span class="gl-cap" style="right:10px;top:calc(50% - 46px)">光学中心线</span>
+        </div>
+        <table class="spec"><tbody>
+          <tr><th>图标高度 H</th><td><b>40px</b>（mark 外接方框，非墨迹外接框）</td></tr>
+          <tr><th>图文间距</th><td><b>12px</b> = 0.30 H，随尺寸等比缩放</td></tr>
+          <tr><th>字标字号</th><td><b>26px</b> / 600 字重；汉字字面高约 0.72em</td></tr>
+          <tr><th>字距 tracking</th><td><b>+0.06em</b>（汉字之间不贴紧）；拉丁副标 +0.18em</td></tr>
+          <tr><th>对齐</th><td>汉字字面高光学居中于 mark 垂直中心（不是基线对齐）；左缘贴 8pt 栅格</td></tr>
+          <tr><th>最小尺寸</th><td>mark 单独 ≥ <b>20px</b>；完整锁定 ≥ <b>88px</b> 宽</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel span2" data-od-id="c4-adaptive">
+        <h3>Android 自适应图标（108dp 画布 / 72dp 安全区 / 66dp 遮罩）</h3>
+        <div class="ac">
+          <div>
+            <div class="ac-canvas">
+              <svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="40" cy="54" r="34" class="icv"/><circle cx="68" cy="54" r="34" class="icv2"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg>
+              <svg class="layer guide" viewBox="0 0 108 108" aria-hidden="true">
+                <rect x="1" y="1" width="106" height="106" class="g1"/>
+                <rect x="18" y="18" width="72" height="72" class="g2"/>
+                <circle cx="54" cy="54" r="33" class="g3"/>
+                <path d="M54 0V8M54 100V108M0 54H8M100 54H108" class="g1"/>
+              </svg>
+            </div>
+            <p class="ac-legend">108×108dp 画布（青线圆 r=33 ≈ 66dp 可见区）· 72×72dp 安全区（描边方框）</p>
+          </div>
+          <div class="ac-side">
+            <div class="mask-wrap">
+              <div class="ac-mask"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="40" cy="54" r="34" class="icv"/><circle cx="68" cy="54" r="34" class="icv2"/></svg><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></div>
+              <span class="mask-cap">66dp 圆形遮罩<br>实际显示效果</span>
+            </div>
+            <div class="layers">
+              <figure class="lchip"><div class="box chk"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></div><figcaption>foreground</figcaption></figure>
+              <figure class="lchip"><div class="box"><svg class="layer bg" viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" class="icbg"/><circle cx="40" cy="54" r="34" class="icv"/><circle cx="68" cy="54" r="34" class="icv2"/></svg></div><figcaption>background</figcaption></figure>
+              <figure class="lchip"><div class="box mono"><svg class="layer fg mk" viewBox="0 0 256 256" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></div><figcaption>monochrome</figcaption></figure>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" data-od-id="c4-mono">
+        <h3>单色版（纯黑 / 纯白）</h3>
+        <div class="monos">
+          <div class="mono-box on-light"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></div>
+          <div class="mono-box on-dark"><svg class="mk" viewBox="0 0 256 256" width="118" height="118" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></div>
+        </div>
+        <p class="kicker">左：纯黑 / 白底（印刷、浅色通知栏）；右：纯白 / 近黑底（深色通知栏、主题图标单色层）。</p>
+      </div>
+      <div class="panel" data-od-id="c4-sizes">
+        <h3>小尺寸实拍（24 / 32 / 48 / 96 px）</h3>
+        <div class="sizes">
+          <div class="sz-strip dark"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="96" height="96" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>96px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>24px</em></div></div>
+          <div class="sz-strip light"><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="48" height="48" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>48px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="32" height="32" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>32px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>24px</em></div><div class="sz"><span class="cap"><svg class="mk" viewBox="0 0 256 256" width="24" height="24" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg></span><em>24px</em></div></div>
+        </div>
+        <p class="kicker">上排深色底，下排浅色底；同一 SVG，只切换 currentColor。</p>
+      </div>
+      <div class="panel span2" data-od-id="c4-context">
+        <h3>深色底 / 浅色底</h3>
+        <div class="ctxs">
+          <div class="ctx dark"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg><span>深色底：启动页、设置页顶栏、深色通知</span></div>
+          <div class="ctx light"><svg class="mk" viewBox="0 0 256 256" width="130" height="130" aria-hidden="true"><circle cx="100" cy="128" r="80"/>
+<circle cx="156" cy="128" r="80"/>
+<path class="row" d="M90 100H166"/>
+<path class="row" d="M86 128H170"/>
+<path class="row" d="M90 156H166"/></svg><span>浅色底：分享图、应用商店截图、印刷</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-od-id="c4-notes">
+      <p><b>符号</b>：两枚交叠的环（左＝行为记录，右＝记账），交叠处长出三条账页横线，形成只在重叠区出现的第三个图形。</p>
+      <p><b>气质</b>：最「产品哲学」、最 Apple、最不像工具图标，一句话讲清「一本账记两件事」。</p>
+      <p><b>牺牲</b>：最抽象，不直接说「监控」；交叠横线在 24px 糊成一块浅色透镜，小尺寸版需只留双环。</p>
+    </div>
+  </section>
+
+  <section id="spec" class="concept" data-od-id="brand-spec">
+    <div class="c-head" data-od-id="spec-head"><span class="tag">SPEC</span><h2>通用规范与 Android 落地</h2></div>
+    <div class="grid">
+      <div class="panel" data-od-id="spec-color">
+        <h3>色彩系统（唯一颜色落点 :root）</h3>
+        <table class="spec"><tbody>
+          <tr><th>深色底</th><td><b class="sw sw-bg"></b><code>var(--bg)</code> ＋玻璃层 <code>var(--glass)</code> / <code>var(--glass-2)</code></td></tr>
+          <tr><th>唯一强调色</th><td><b class="sw sw-ac"></b><code>var(--accent)</code>，深调 <code>var(--accent-deep)</code> 仅用于图标底</td></tr>
+          <tr><th>正文对比度</th><td>主文字 <code>var(--fg)</code> ≈ <b>17.8:1</b>；次级 <code>var(--fg-2)</code> ≈ <b>9.8:1</b>；三级 <code>var(--fg-3)</code> ≈ <b>5.4:1</b>（均 ≥ 4.5:1）</td></tr>
+          <tr><th>图标底色</th><td><b class="sw sw-ic"></b><code>var(--icon-bg)</code> ＋ <code>var(--icon-glow)</code> 几何辉光（是形状不是模糊，可矢量化）</td></tr>
+          <tr><th>取值位置</th><td><b>本页所有原始色值（hex / rgba）只写在 <code>:root</code></b>，其余位置一律 <code>var(--…)</code>，可整段抄进 ui/theme token</td></tr>
+          <tr><th>Token 映射</th><td>全部写在 <code>:root</code>，其余一律 <code>var(--…)</code>，可 1:1 抄进 ui/theme token（对应 checkUiStyle 门禁）</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel" data-od-id="spec-android">
+        <h3>自适应图标落地约束</h3>
+        <table class="spec"><tbody>
+          <tr><th>前景层 foreground</th><td>mark 缩放进 66dp 可见圆，四周留到 72dp 安全区，不触碰 108dp 画布边缘（圆形/圆角/方形遮罩都不会切到）</td></tr>
+          <tr><th>背景层 background</th><td>纯色 + 1–2 个几何形；允许 <code>&lt;gradient&gt;</code>（API 24+），不允许模糊/位图</td></tr>
+          <tr><th>单色层 monochrome</th><td>只用 mark 的 currentColor 版本，系统按壁纸取色；不含渐变与多色（主题图标）</td></tr>
+          <tr><th>图元白名单</th><td>path / circle / rect / line；无 filter、无 mask、无 clipPath、无 image、无文字转曲</td></tr>
+          <tr><th>小尺寸保底</th><td>24px 必须读出主体轮廓；细节（扫描弧 / 流曲线节点 / 账页横线）允许在小尺寸版删除</td></tr>
+          <tr><th>开屏</th><td>现无启动页：Android 12+ 用 SplashScreen API（windowSplashScreen* 主题），冷启动直接复用本页 66dp 遮罩版</td></tr>
+        </tbody></table>
+      </div>
+      <div class="panel span2" data-od-id="spec-pick">
+        <h3>怎么挑（一句话决策）</h3>
+        <p class="kicker">要「延续现有语义、最不出错」→ <b style="color:var(--fg)">C1 注视之眼</b>；要「和仪表盘首页同一套语言、最现代」→ <b style="color:var(--fg)">C2 时间切片</b>；要「一眼看懂双主业、最有安全感」→ <b style="color:var(--fg)">C3 盾与流</b>；要「品牌故事最强、最像 Apple」→ <b style="color:var(--fg)">C4 双环账本</b>。选定后：落选概念在本目录内直接删除，选中概念的开屏动效见 logo-motion.html。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer data-od-id="brand-footer">
+    <div class="panel">
+      产物：<code>.open-design/brand/logo.html</code>（本页 · 4 概念品牌与自适应图标规范）· <code>.open-design/brand/logo-motion.html</code>（4 个开屏动效演示）<br>
+      单文件自包含：无外链、无外部字体、无位图、无 emoji；所有图形为内联 SVG，仅用 path / circle / rect / line。
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
