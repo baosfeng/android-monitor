@@ -230,17 +230,14 @@ fun SettingsScreen(
                         // ② 无障碍服务
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("无障碍服务")
-                            // 运行时长跟随原型 s09 的「已运行 6 小时 12 分」：仅在服务实例已连接时追加。
-                            // 文案前半段仍取自 ui/AccessibilityCopy.kt 的唯一来源（s01/s02/s05 同口径），
-                            // 本屏只做后缀拼接，不复制措辞。
-                            val a11ySubtitle = accessibilityStatusText(
-                                state.accessibilityEnabled,
-                                state.accessibilityServiceRunning,
-                            ) + if (state.accessibilityServiceRunning) {
-                                " · 已运行 " + formatUptime(processUptimeMs())
-                            } else {
-                                ""
-                            }
+                            // 运行时长跟随原型 s09 的「已运行 6 小时 12 分」：整句（含「已授权 · 已运行 <时长>」
+                            // 两段式）统一由 ui/AccessibilityCopy.kt 的 s09AccessibilityStatusText(...) 产出，
+                            // 本屏只传时长文案、不拼措辞（三段拼接会在窄屏被省略号截掉时长）。
+                            val a11ySubtitle = s09AccessibilityStatusText(
+                                enabled = state.accessibilityEnabled,
+                                running = state.accessibilityServiceRunning,
+                                uptimeText = formatUptime(processUptimeMs()),
+                            )
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
                                 TokenRow(
                                     title = "无障碍服务",
@@ -477,7 +474,8 @@ fun SettingsScreen(
     }
 }
 
-// 无障碍状态文案已收敛到 ui/AccessibilityCopy.kt 的 accessibilityStatusText(...)：
+// 无障碍状态文案已收敛到 ui/AccessibilityCopy.kt：状态行用 s09AccessibilityStatusText(...)
+// （两段式，带运行时长）、仅状态场景用 accessibilityStatusText(...)、空态用 noEventEmptyText(...)。
 // s01 / s02 / s05 三屏同一数据源（AccessibilityStatus 三重判定）与同一措辞。
 
 /**
