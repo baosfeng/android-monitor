@@ -9,26 +9,36 @@ import com.bsfeng.monitor.domain.model.RecordType
  * 收入 / 支出 / 玻璃配方）。所有值都来自 DesignTokenTable，本文件不含任何色值。
  */
 
-/** chart-1..chart-8：中性图表色阶（契约「图表不占用每屏 ≤2 次强调色预算」）。 */
+/**
+ * chart-1..chart-16：**分类色板**（跨主题固定，切主题时同一分类保持同色）。
+ * 供扇形图分片 / 分类圆点 / 分类图例 / 分类网格取色；按分类在 category 表中的
+ * sort_order 取 index % 16，可保证相邻分类不重色。
+ */
 val DesignTokens.chartRamp: List<Color>
-    get() = listOf(chart1, chart2, chart3, chart4, chart5, chart6, chart7, chart8)
+    get() = listOf(
+        chart1, chart2, chart3, chart4, chart5, chart6, chart7, chart8,
+        chart9, chart10, chart11, chart12, chart13, chart14, chart15, chart16,
+    )
 
-/** 分类圆点色：按下标循环取中性色阶（替代旧 categoryPalette[i]）。 */
+/** 分类圆点色：按下标循环取分类色板（替代旧 categoryPalette[i]）。 */
 fun DesignTokens.categoryDot(index: Int): Color {
     val ramp = chartRamp
     return ramp[((index % ramp.size) + ramp.size) % ramp.size]
 }
 
-/** 旧 categoryPalette 的等价物：15 槽循环色阶，供仍按下标取色的调用点过渡。 */
+/** 旧 categoryPalette 的等价物：16 槽循环色阶，供仍按下标取色的调用点过渡。 */
 val DesignTokens.categoryRamp: List<Color>
-    get() = (0 until 15).map { categoryDot(it) }
+    get() = (0 until 16).map { categoryDot(it) }
 
-/** 6 级热力透明度：对应原型 .h0..h5（00-shell.html:496-501）。 */
-private val HEAT_ALPHA = listOf(0.06f, 0.15f, 0.28f, 0.44f, 0.62f, 0.80f)
+/** 6 级热力透明度：对应原型 .h0..h5 的 8/20/36/54/72/90%。 */
+private val HEAT_ALPHA = listOf(0.08f, 0.20f, 0.36f, 0.54f, 0.72f, 0.90f)
 
-/** 热力条色阶：--fg 6/15/28/44/62/80%，越活跃越深（原型 .h0..h5）。 */
+/**
+ * 热力条色阶：**序列色**（--chart-seq）的 8/20/36/54/72/90% 透明阶梯，越活跃越深。
+ * 0 值格用最低一档（8%），在卡片上几乎不可见 —— 与原型 .h0 一致。
+ */
 val DesignTokens.heatRamp: List<Color>
-    get() = HEAT_ALPHA.map { fg.copy(alpha = fg.alpha * it) }
+    get() = HEAT_ALPHA.map { chartSeq.copy(alpha = chartSeq.alpha * it) }
 
 /** 热力条单格颜色：intensity 0..levels-1，越大越深。 */
 fun DesignTokens.heatCell(intensity: Int, levels: Int = 6): Color {

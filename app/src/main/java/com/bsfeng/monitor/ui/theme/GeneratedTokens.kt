@@ -1,6 +1,6 @@
 // ============================================================================
 // GeneratedTokens.kt —— 生成文件，请勿手改。
-// 来源：.open-design/parts/00-tokens.css + 00-tokens-extra.css
+// 来源：.open-design/08-prototype.html 的 :root 与 [data-theme] 块
 // 生成器：tools/gen-design-tokens.mjs（重跑：node tools/gen-design-tokens.mjs）
 // ============================================================================
 package com.bsfeng.monitor.ui.theme
@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 
 /**
- * 8 套主题的全部非 Material 语义 token（123 个 getter）。
+ * 8 套主题的全部非 Material 语义 token（132 个 getter）。
  * 每个 getter 直接读 DesignTokenTable，因此本文件里没有任何色值/尺寸被手抄。
  * themeId 非法时回落到 apple（DesignTokenTable.raw 内保证）。
  */
@@ -110,6 +110,7 @@ class DesignTokens(val themeId: String) {
     val accentText: Color get() = DesignTokenTable.colorOf(themeId, "accent-text")
     val incomeText: Color get() = DesignTokenTable.colorOf(themeId, "income-text")
     val expenseText: Color get() = DesignTokenTable.colorOf(themeId, "expense-text")
+    val chartSeq: Color get() = DesignTokenTable.colorOf(themeId, "chart-seq")
     val chart1: Color get() = DesignTokenTable.colorOf(themeId, "chart-1")
     val chart2: Color get() = DesignTokenTable.colorOf(themeId, "chart-2")
     val chart3: Color get() = DesignTokenTable.colorOf(themeId, "chart-3")
@@ -118,6 +119,14 @@ class DesignTokens(val themeId: String) {
     val chart6: Color get() = DesignTokenTable.colorOf(themeId, "chart-6")
     val chart7: Color get() = DesignTokenTable.colorOf(themeId, "chart-7")
     val chart8: Color get() = DesignTokenTable.colorOf(themeId, "chart-8")
+    val chart9: Color get() = DesignTokenTable.colorOf(themeId, "chart-9")
+    val chart10: Color get() = DesignTokenTable.colorOf(themeId, "chart-10")
+    val chart11: Color get() = DesignTokenTable.colorOf(themeId, "chart-11")
+    val chart12: Color get() = DesignTokenTable.colorOf(themeId, "chart-12")
+    val chart13: Color get() = DesignTokenTable.colorOf(themeId, "chart-13")
+    val chart14: Color get() = DesignTokenTable.colorOf(themeId, "chart-14")
+    val chart15: Color get() = DesignTokenTable.colorOf(themeId, "chart-15")
+    val chart16: Color get() = DesignTokenTable.colorOf(themeId, "chart-16")
     val fabSize: Dp get() = DesignTokenTable.dp(themeId, "fab-size")
     val iconSize: Dp get() = DesignTokenTable.dp(themeId, "icon-size")
     val switchW: Dp get() = DesignTokenTable.dp(themeId, "switch-w")
