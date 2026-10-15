@@ -3,6 +3,7 @@ package com.bsfeng.monitor.util
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 
@@ -34,6 +35,48 @@ object AccessibilityStatus {
      */
     fun isEnabled(context: Context, serviceRunning: Boolean): Boolean =
         serviceRunning || isEnabledInSettings(context) || isEnabledInManager(context)
+
+    /** [isEnabledCached] 的默认缓存窗口：3s 级轮询下不必每次跨进程重读。 */
+    const val DEFAULT_CACHE_TTL_MS: Long = 30_000L
+
+    private var cachedAtMs = 0L
+    private var cachedSettingsOrManager = false
+
+    /**
+     * 带 TTL 的判定，**仅供轮询路径**使用：命中缓存时不再走
+     * [Settings.Secure] 跨进程读与 [AccessibilityManager] 的服务列表解析。
+     *
+     * 用户操作触发的刷新（如设置页 [androidx.lifecycle.LifecycleResumeEffect]）
+     * 必须走 [isEnabledFresh]（实时值 + 回写缓存），否则从系统设置页返回时会看到最多一个 TTL 的旧值。
+     */
+    @Synchronized
+    fun isEnabledCached(
+        context: Context,
+        serviceRunning: Boolean,
+        ttlMs: Long = DEFAULT_CACHE_TTL_MS,
+    ): Boolean {
+        if (serviceRunning) return true
+        val now = SystemClock.elapsedRealtime()
+        if (now - cachedAtMs <= ttlMs) return cachedSettingsOrManager
+        val fresh = isEnabled(context, serviceRunning = false)
+        cachedAtMs = now
+        cachedSettingsOrManager = fresh
+        return fresh
+    }
+
+    /**
+     * 实时判定（语义同 [isEnabled]）**并把结果回写缓存**。
+     *
+     * 用户操作触发的刷新必须走这里：只走 [isEnabled] 不回写，随后的轮询路径
+     * （[isEnabledCached]）会拿旧的 `false` 覆盖实时值，界面最长闪回一个 TTL 的「未开启」。
+     */
+    @Synchronized
+    fun isEnabledFresh(context: Context, serviceRunning: Boolean): Boolean {
+        val fromSystem = isEnabledInSettings(context) || isEnabledInManager(context)
+        cachedAtMs = SystemClock.elapsedRealtime()
+        cachedSettingsOrManager = fromSystem
+        return serviceRunning || fromSystem
+    }
 
     /**
      * 系统设置里是否勾选了本服务（权威来源，`Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`）。

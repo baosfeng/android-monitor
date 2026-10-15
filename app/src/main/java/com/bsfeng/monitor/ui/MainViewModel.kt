@@ -11,12 +11,14 @@ import com.bsfeng.monitor.service.MonitorAccessibilityService
 import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.ui.live.hourlyIntensityOf
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -35,10 +37,16 @@ data class MonitorState(
     val accessibilityServiceRunning: Boolean = false,
     val appUsageStats: List<AppUsageStat> = emptyList(),
     val screenEvents: List<Record> = emptyList(),
-    /** 当前正在使用的 App 名称（没有 CLOSED 的 OPENED） */
-    val activeAppName: String? = null,
-    /** 当前 App 已用时长文字（如 "使用中 1分23秒"） */
-    val activeAppDurationText: String? = null
+    /** 首屏加载中（s02 五态之 loading） */
+    val isLoading: Boolean = true,
+    /** 加载失败原因（s02 五态之 error）；null = 正常 */
+    val loadError: String? = null,
+    /** 今日逐时事件强度（24 格热力条） */
+    val hourlyIntensity: List<Float> = List(24) { 0f },
+    /** 今日各类型事件条数（s02 类型 chip 的计数） */
+    val typeCounts: Map<RecordType, Int> = emptyMap(),
+    /** 最近一次数据更新时间（页头 meta） */
+    val lastUpdatedAt: Long = 0L
 )
 
 class MainViewModel : ViewModel() {
@@ -60,6 +68,8 @@ class MainViewModel : ViewModel() {
 
     companion object {
         private const val PAGE_SIZE = 20
+        /** 轮询周期：仅在 UI 订阅期间生效（见 [init]） */
+        private const val POLL_MS = 3_000L
     }
 
     /** 今天所有记录的缓存（按时间倒序，最新的在前） */
@@ -72,27 +82,29 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             loadDataInternal()  // 等待初次加载完成
             initialLoadDone = true
-            // 再启动轮询
-            while (true) {
-                delay(3000)
-                refreshData()
+            // 轮询：只有 UI 正在订阅（本屏可见、且未退到后台——UI 侧用
+            // collectAsStateWithLifecycle 收集）时才跑；订阅数为 0 直接挂起，
+            // 不再出现「切走 Tab / 退到后台仍每 3s 干活」的情况。
+            _state.subscriptionCount.collectLatest { subscribers ->
+                if (subscribers <= 0) return@collectLatest
+                // 先出数据再进入周期休眠：与 OverviewViewModel.init 同一口径，
+                // 否则切回本 Tab 后要先空等一个 POLL_MS（3s）才刷新。
+                while (true) {
+                    refreshData()
+                    delay(POLL_MS)
+                }
             }
         }
-        // 活跃 App 检测：每秒更新，不依赖数据刷新
-        viewModelScope.launch {
-            while (true) {
-                delay(1000)
-                updateActiveApp()
-            }
-        }
+        // 原「每秒检测活跃 App」的循环已移除：activeApp* 无任何 UI 消费，
+        // 每秒一次主线程 StateFlow 发射（文本含秒数，逐秒都变）会让整屏每秒重组。
     }
 
     /**
      * 外部触发的加载（如切换 tab、手动刷新）。
      */
     fun loadData() {
-        checkAccessibilityStatus()
         viewModelScope.launch(Dispatchers.IO) {
+            checkAccessibilityStatus()
             loadDataInternal()
         }
     }
@@ -119,9 +131,13 @@ class MainViewModel : ViewModel() {
                 recentEvents = records.take(loadedCount),
                 todayEventCount = records.size,
                 isLoadingMore = false,
-                hasMore = loadedCount < records.size
+                hasMore = loadedCount < records.size,
+                hourlyIntensity = hourlyIntensityOf(records),
+                typeCounts = records.groupingBy { it.type }.eachCount(),
+                lastUpdatedAt = now,
+                isLoading = false,
+                loadError = null
             )
-            updateActiveApp()
 
             // 再加载统计数据（较慢的聚合查询）
             val (usage, screens) = withContext(Dispatchers.IO) {
@@ -137,6 +153,10 @@ class MainViewModel : ViewModel() {
             throw e
         } catch (e: Exception) {
             Log.w("MainViewModel", "加载今日数据失败", e)
+            _state.value = _state.value.copy(
+                isLoading = false,
+                loadError = e.message ?: "今日事件读取失败"
+            )
         }
     }
 
@@ -145,10 +165,10 @@ class MainViewModel : ViewModel() {
      * 新事件会自动出现在列表顶部（因为按时间倒序）。
      */
     private fun refreshData() {
-        checkAccessibilityStatus()
-
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // 跨进程读设置 / 无障碍服务列表：留在 IO，且吃 30s TTL 缓存
+                checkAccessibilityStatus()
                 val now = System.currentTimeMillis()
                 val todayStart = now - (now % 86400000L)
                 val records = store.queryByDate(todayStart, now)
@@ -164,60 +184,18 @@ class MainViewModel : ViewModel() {
                 _state.value = _state.value.copy(
                     recentEvents = records.take(loadedCount),
                     todayEventCount = records.size,
-                    hasMore = loadedCount < records.size
+                    hasMore = loadedCount < records.size,
+                    hourlyIntensity = hourlyIntensityOf(records),
+                    typeCounts = records.groupingBy { it.type }.eachCount(),
+                    lastUpdatedAt = now,
+                    loadError = null
                 )
-                updateActiveApp()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w("MainViewModel", "轮询刷新数据失败", e)
             }
         }
-    }
-
-    /**
-     * 检测当前正在使用的 App，计算已用时长。
-     * 通过 UsageTracker.getActiveSession() 获取当前活跃 session。
-     */
-    private fun updateActiveApp() {
-        val usageTracker = app.container.usageTracker
-        val session = usageTracker.getActiveSession()
-        if (session != null) {
-            val (name, totalMs) = session
-            val min = totalMs / 60000
-            val sec = (totalMs % 60000) / 1000
-            val text = if (min > 0) "使用中 ${min}分${sec}秒" else "使用中 ${sec}秒"
-            _state.value = _state.value.copy(
-                activeAppName = name,
-                activeAppDurationText = text
-            )
-        } else {
-            // 1. 先用 UsageTracker 记录的最后活跃 App
-            val lastLabel = usageTracker.lastActiveLabel
-            if (lastLabel != null) {
-                _state.value = _state.value.copy(
-                    activeAppName = lastLabel,
-                    activeAppDurationText = "使用中"
-                )
-                return
-            }
-            // 2. 兜底：从数据库最近记录推断（force-stop 后恢复）
-            val inferred = inferActiveFromRecentRecords()
-            _state.value = _state.value.copy(
-                activeAppName = inferred,
-                activeAppDurationText = if (inferred != null) "使用中" else null
-            )
-        }
-    }
-
-    /**
-     * 从最近 5 分钟的 USAGE 记录推断当前活跃 App（force-stop 重启后 poller 不可用时兜底）。
-     */
-    private fun inferActiveFromRecentRecords(): String? {
-        val fiveMinAgo = System.currentTimeMillis() - 300_000L
-        return cachedTodayRecords.firstOrNull {
-            it.type is RecordType.APP_USAGE && it.action == "USAGE" && it.timestamp >= fiveMinAgo
-        }?.label
     }
 
     /**
@@ -245,17 +223,32 @@ class MainViewModel : ViewModel() {
      *
      * 判定逻辑见 [AccessibilityStatus]：系统设置项 / [android.view.accessibility.AccessibilityManager]
      * 列表 / 服务实例三者任一命中即视为已开启（HyperOS 上单个来源会误报"未开启"）。
+     *
+     * 走 [AccessibilityStatus.isEnabledFresh]：实时值同时回写 30s TTL 缓存，
+     * 否则授权返回后紧接着的轮询会用旧 `false` 把界面刷回「未开启」。
      */
     fun refreshAccessibilityStatus() {
         val running = MonitorAccessibilityService.isRunning
-        val enabled = AccessibilityStatus.isEnabled(app, running)
+        val enabled = AccessibilityStatus.isEnabledFresh(app, running)
         _state.value = _state.value.copy(
             accessibilityEnabled = enabled,
             accessibilityServiceRunning = running
         )
     }
 
-    private fun checkAccessibilityStatus() = refreshAccessibilityStatus()
+    /**
+     * 轮询路径的状态刷新：走 [AccessibilityStatus.isEnabledCached]（30s TTL），
+     * 避免每 3s 一次跨进程设置读取；用户操作触发的刷新仍走
+     * [refreshAccessibilityStatus]（实时值）。
+     */
+    private fun checkAccessibilityStatus() {
+        val running = MonitorAccessibilityService.isRunning
+        val enabled = AccessibilityStatus.isEnabledCached(app, running)
+        _state.value = _state.value.copy(
+            accessibilityEnabled = enabled,
+            accessibilityServiceRunning = running
+        )
+    }
 
     fun togglePause() {
         val newPaused = !_isPaused.value
@@ -292,8 +285,8 @@ class MainViewModel : ViewModel() {
                     todayEventCount = 0,
                     hasMore = false,
                     isLoadingMore = false,
-                    activeAppName = null,
-                    activeAppDurationText = null
+                    hourlyIntensity = List(24) { 0f },
+                    typeCounts = emptyMap()
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -301,6 +294,11 @@ class MainViewModel : ViewModel() {
                 Log.w("MainViewModel", "清除今日数据失败", e)
             }
         }
+    }
+
+    /** 五态 error 态的「重试」入口。 */
+    fun retry() {
+        loadData()
     }
 
     fun getDeviceId(): String = AppUtils.getDeviceId()
