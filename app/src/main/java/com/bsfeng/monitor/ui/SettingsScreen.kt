@@ -1,249 +1,427 @@
 package com.bsfeng.monitor.ui
 
+import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.provider.Settings
-import android.view.HapticFeedbackConstants
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.skip.SkipConfig
-import com.bsfeng.monitor.ui.theme.InsetGroupedSection
-import com.bsfeng.monitor.ui.theme.MonitorSpacing
-import com.bsfeng.monitor.ui.theme.SettingsRow
+import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.AppSwitch
+import com.bsfeng.monitor.ui.components.AppToast
+import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.BadgeTone
+import com.bsfeng.monitor.ui.components.Chip
+import com.bsfeng.monitor.ui.components.FiveState
+import com.bsfeng.monitor.ui.components.SkeletonBlock
+import com.bsfeng.monitor.ui.components.StateContainer
+import com.bsfeng.monitor.ui.components.rememberDebugUiAvailable
+import com.bsfeng.monitor.ui.components.rememberDemoVisible
+import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.util.DebugConfig
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.ThemeRepository
+import android.view.HapticFeedbackConstants
 
 /**
- * 开屏跳过监控窗口选择行（5/10/15 秒）。
+ * s09 设置（原型 s09-settings.html）。
  *
- * 窗口同时是内置规则的时间闸门（见 `SkipConfig`）：弱网/冷启动下广告出得慢就调大，
- * 但窗口越大，正常页面里的"跳过"按钮被误点的概率也越高。
+ * 8 个分组：监控时长窗口（chip 组）· 无障碍服务 · 监控开关 · 电池优化 · 开屏广告跳过 · 外观 · 调试模式 · 关于。
+ * 全部走 token；旧语义色（IOSColors / MaterialTheme 直取色）已按 LEGACY-TOKEN-MAP 换成本地 token 快照。
  */
-@Composable
-private fun WatchWindowRow(windowMs: Long, onSelect: (Long) -> Unit) {
-    Column(
-        modifier = Modifier.padding(
-            horizontal = MonitorSpacing.lg,
-            vertical = MonitorSpacing.md,
-        )
-    ) {
-        Text(
-            text = "监控窗口",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(MonitorSpacing.xxs))
-        Text(
-            text = "进入 App 后自动检测开屏广告的时长；广告出得慢（弱网/冷启动）就调大",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(MonitorSpacing.sm))
-        Row(horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm)) {
-            SkipConfig.WINDOW_OPTIONS_MS.forEach { option ->
-                FilterChip(
-                    selected = option == windowMs,
-                    onClick = { onSelect(option) },
-                    label = { Text("${option / 1000} 秒") },
-                )
-            }
-        }
-    }
-}
-
-/**
- * 无障碍服务状态文案。
- *
- * 「已开启但服务未连接」（刚 install -r、系统 UI 重建等场景）单独提示，
- * 避免用户误以为服务没生效而反复去系统设置里开关。
- */
-private fun accessibilitySubtitle(state: MonitorState): String = when {
-    state.accessibilityServiceRunning -> "✅ 已开启"
-    state.accessibilityEnabled -> "✅ 已开启（服务未连接，稍候或重进 App 生效）"
-    else -> "❌ 未开启"
-}
-
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
     onNavigateToSkipRules: () -> Unit = {},
     onNavigateToWhitelist: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onNavigateToAppearance: (() -> Unit)? = null,
+    onNavigateToGallery: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
+    val t = LocalDesignTokens.current
     val context = LocalContext.current
     val view = LocalView.current
+    val toast = rememberToastHostState()
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val debugEnabled by viewModel.debugEnabled.collectAsState()
+    // 两层闸：debug 构建 + 关于页长按版本解锁（详见 ui/components/DebugGate.kt）
+    val debugUi = rememberDebugUiAvailable()
+    val demoVisible = rememberDemoVisible()
     val watchWindowMs by viewModel.watchWindowMs.collectAsState()
+    val themeId by ThemeRepository.themeId.collectAsState()
+    var demoState by remember { mutableStateOf(FiveState.POPULATED) }
+    // 屏内兜底桥：导航任务接线之前，setter 回调为 null 时本屏自行托管 s12 / s13，
+    // 保证「外观与主题」「组件与状态演示」两个入口在真机上真的能进（接线后自动走宿主导航）。
+    var localAppearance by remember { mutableStateOf(false) }
+    var localGallery by remember { mutableStateOf(false) }
 
-    // 从系统「无障碍」设置页返回时立即刷新状态（不看 3 秒轮询的运气）
-    LifecycleResumeEffect(Unit) {
-        viewModel.refreshAccessibilityStatus()
-        onPauseOrDispose { }
+    // 规则数 / 订阅源数 / 白名单数：只读其它模块的既有数据源，不新增存储
+    var ruleCount by remember { mutableStateOf(0) }
+    var subscriptionCount by remember { mutableStateOf(0) }
+    var whitelistCount by remember { mutableStateOf(0) }
+    var batteryIgnored by remember { mutableStateOf(false) }
+
+    fun reloadCounters() {
+        ruleCount = MonitorApp.instance.container.skipRuleManager.getAllRules().size
+        subscriptionCount = MonitorApp.instance.container.skipRuleManager.subscriptionMetas().size
+        whitelistCount = context
+            .getSharedPreferences("skip_whitelist", Context.MODE_PRIVATE)
+            .getStringSet("whitelist", emptySet())
+            ?.size ?: 0
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        batteryIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
     }
 
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        // 标题
-        item(key = "title") {
-            Text(
-                "设置",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(
-                    horizontal = MonitorSpacing.lg,
-                    vertical = MonitorSpacing.md
-                ),
+    // 从系统设置页返回时立即刷新（不看轮询的运气）
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshAccessibilityStatus()
+        reloadCounters()
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(Unit) { reloadCounters() }
+
+    val effective = if (demoState == FiveState.POPULATED) FiveState.POPULATED else demoState
+
+    // 沉浸式：底衬画在 inset 之外（内容才吃 Scaffold 的 padding），顶部与状态栏连成一片
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            ScreenHead(
+                title = "设置",
+                meta = "行为记录 1.0.0 · 设备 " + viewModel.getDeviceId().take(8),
+                badge = {
+                    Badge(
+                        text = if (isPaused) "已暂停" else "运行中",
+                        tone = if (isPaused) BadgeTone.Warn else BadgeTone.Success,
+                    )
+                },
             )
-        }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(t.space4),
+            ) {
+                StateSwitchRow(state = demoState, onSelect = { demoState = it })
 
-        // Section 1: 无障碍服务
-        item {
-            InsetGroupedSection {
-                SettingsRow(
-                    title = "无障碍服务",
-                    subtitle = accessibilitySubtitle(state),
-                    subtitleColor = if (state.accessibilityEnabled)
-                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    trailing = {
-                        Button(onClick = {
-                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        }) {
-                            Text(if (state.accessibilityEnabled) "管理" else "去开启")
-                        }
-                    }
-                )
-            }
-        }
-
-        // Section 2: 监控开关
-        item {
-            InsetGroupedSection {
-                SettingsRow(
-                    title = "监控开关",
-                    subtitle = if (isPaused) "已暂停" else "运行中",
-                    trailing = {
-                        Button(onClick = { viewModel.togglePause() }) {
-                            Text(if (isPaused) "恢复" else "暂停")
-                        }
-                    }
-                )
-            }
-        }
-
-        // Section 3: 电池优化
-        item {
-            InsetGroupedSection {
-                SettingsRow(
-                    title = "电池优化",
-                    subtitle = "设为无限制以防止被系统关闭",
-                    trailing = {
-                        Button(onClick = {
-                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                            context.startActivity(intent)
-                        }) {
-                            Text("设置")
-                        }
-                    }
-                )
-            }
-        }
-
-        // Section 4: 开屏广告跳过
-        item {
-            InsetGroupedSection {
-                SettingsRow(
-                    title = "开屏广告跳过",
-                    subtitle = "管理自动跳过规则",
-                    trailing = {
-                        Button(onClick = onNavigateToSkipRules) {
-                            Text("管理")
-                        }
-                    }
-                )
-                HorizontalDivider(
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                SettingsRow(
-                    title = "广告白名单",
-                    subtitle = "选择不检测广告的 App",
-                    trailing = {
-                        Button(onClick = onNavigateToWhitelist) {
-                            Text("管理")
-                        }
-                    }
-                )
-                HorizontalDivider(
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                WatchWindowRow(
-                    windowMs = watchWindowMs,
-                    onSelect = {
-                        viewModel.setWatchWindowMs(it)
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    }
-                )
-            }
-        }
-
-        // Section 5: 调试模式
-        item {
-            InsetGroupedSection {
-                SettingsRow(
-                    title = "调试模式",
-                    subtitle = if (debugEnabled) "输出详细调试日志" else "已关闭",
-                    trailing = {
-                        Switch(
-                            checked = debugEnabled,
-                            onCheckedChange = {
-                                viewModel.toggleDebug()
-                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            }
+                // 五态统一走 StateContainer（ui/components/States.kt）：
+                // 空/错态 = 居中列 + 44dp 图标 + 17sp 标题 + 14sp 描述 + CTA，文案取自原型 s09-st-*。
+                StateContainer(
+                    state = effective,
+                    modifier = Modifier.fillMaxWidth(),
+                    emptyTitle = "暂无可用设置项",
+                    emptyText = "无障碍服务尚未授权，开启后才能调整监控与开屏跳过选项。",
+                    emptyActionLabel = "前往系统设置",
+                    onEmptyAction = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                    errorTitle = "读取配置失败",
+                    errorText = "本地配置存储被拒绝（EACCES），上次读取 9:40 失败。",
+                    onRetry = {
+                        reloadCounters()
+                        toast.show("正在重试读取配置…")
+                    },
+                    edgeText = "边界态：超长应用名 / 10,000+ 条计数",
+                    edgeContent = {
+                        TokenRow(
+                            title = "国家电网掌上电力营业厅客户端（企业内网版）",
+                            trailing = { TailNum("10,286 条") },
                         )
-                    }
-                )
+                        TokenDivider(first = false)
+                        TokenRow(
+                            title = "中国建设银行个人网上银行移动客户端",
+                            trailing = { TailNum("10,000 条") },
+                        )
+                        TokenDivider(first = false)
+                        TokenRow(
+                            title = "超长标题：该应用在后台持续拉起前台服务并申请了忽略电池优化的白名单权限",
+                            trailing = { TailNum("9,999 条") },
+                        )
+                    },
+                ) {
+                        // StateContainer 的 POPULATED 分支把 content 放进 Box（States.kt:90）：
+                        // Box 下多个兄弟节点会叠在同一原点（「只剩后两组 + 不可滚动」的根因）。
+                        // 分组先收进一个 Column，Box 下只留这一个子节点；组间距沿用外层原先的 space4。
+                        Column(
+                            Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(t.space4),
+                        ) {
+                        // ① 监控时长窗口（chip 组）
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("监控时长窗口")
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = t.space4),
+                                horizontalArrangement = Arrangement.spacedBy(t.space2),
+                            ) {
+                                SkipConfig.WINDOW_OPTIONS_MS.forEach { option ->
+                                    Chip(
+                                        label = (option / 1000).toString() + " 秒",
+                                        selected = option == watchWindowMs,
+                                        onClick = {
+                                            viewModel.setWatchWindowMs(option)
+                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            toast.show("监控时长窗口：" + (option / 1000) + " 秒")
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        // ② 无障碍服务
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("无障碍服务")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "无障碍服务",
+                                    subtitle = accessibilityStatusText(
+                                        state.accessibilityEnabled,
+                                        state.accessibilityServiceRunning,
+                                    ),
+                                    subtitleColor = if (state.accessibilityEnabled) t.successText else t.dangerText,
+                                    icon = Icons.Outlined.Accessibility,
+                                    trailing = {
+                                        AppButton(
+                                            text = if (state.accessibilityEnabled) "管理" else "去开启",
+                                            onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                                            variant = AppButtonVariant.Ghost,
+                                        )
+                                    },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ③ 监控开关
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("监控开关")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "前台应用监控",
+                                    subtitle = "今日已记录 " + state.todayEventCount + " 条事件",
+                                    icon = Icons.Outlined.Speed,
+                                    trailing = {
+                                        AppSwitch(!isPaused, {
+                                            viewModel.togglePause()
+                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            toast.show(if (isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
+                                        })
+                                    },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ④ 电池优化
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("电池优化")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "忽略电池优化",
+                                    subtitle = if (batteryIgnored) "已在系统白名单，后台不会被冻结" else "未加入白名单，息屏后可能被冻结",
+                                    icon = Icons.Outlined.BatteryFull,
+                                    trailing = {
+                                        AppButton(
+                                            text = "设置",
+                                            onClick = {
+                                                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                            },
+                                            variant = AppButtonVariant.Ghost,
+                                        )
+                                    },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ⑤ 开屏广告跳过
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("开屏广告跳过")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "开屏跳过规则",
+                                    subtitle = "订阅源 " + subscriptionCount + " 个 · 本地合并后按顺序匹配",
+                                    icon = Icons.Outlined.PlayArrow,
+                                    onClick = onNavigateToSkipRules,
+                                    trailing = { TailNum(ruleCount.toString() + " 条"); TailChevron() },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "应用白名单",
+                                    subtitle = "白名单内应用不参与跳过",
+                                    icon = Icons.Outlined.Shield,
+                                    onClick = onNavigateToWhitelist,
+                                    trailing = { TailNum(whitelistCount.toString() + " 个"); TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ⑥ 外观（入口显示当前主题名）
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("外观")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "外观与主题",
+                                    subtitle = ThemeRepository.themeIds.size.toString() + " 套浅色主题 · 切换即时生效",
+                                    icon = Icons.Outlined.Palette,
+                                    onClick = {
+                                        val open = onNavigateToAppearance
+                                        if (open != null) open() else localAppearance = true
+                                    },
+                                    trailing = { TailNum(ThemeRepository.displayName(themeId)); TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        // ⑦ 调试模式（默认不显示：仅 debug 构建 + 关于页长按版本解锁后出现）
+                        if (debugUi) {
+                            Column(Modifier.fillMaxWidth()) {
+                                GroupLabel("调试模式")
+                                AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                    TokenRow(
+                                        title = "调试模式",
+                                        subtitle = "记录详细日志与诊断计数",
+                                        icon = Icons.Outlined.BugReport,
+                                        trailing = {
+                                            AppSwitch(debugEnabled, {
+                                                viewModel.toggleDebug()
+                                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                                toast.show("调试模式" + if (debugEnabled) "已关闭" else "已开启，日志级别 DEBUG")
+                                            })
+                                        },
+                                    )
+                                    // 组件与状态演示屏 = 演示件：debug 构建 + 已解锁 + 调试模式已开才出现
+                                    if (demoVisible) {
+                                        TokenDivider(first = false)
+                                        TokenRow(
+                                            title = "组件与状态演示",
+                                            subtitle = "按钮 / 图表 / 骨架屏 / 空态 / 边界态",
+                                            icon = Icons.Outlined.Widgets,
+                                            onClick = {
+                                                val open = onNavigateToGallery
+                                                if (open != null) open() else localGallery = true
+                                            },
+                                            trailing = { TailChevron() },
+                                        )
+                                    }
+                                    Spacer(Modifier.height(t.space1))
+                                }
+                            }
+                        }
+
+                        // ⑧ 关于
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("关于")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "版本",
+                                    subtitle = "行为记录 · 本地优先，数据不出设备",
+                                    icon = Icons.Outlined.Info,
+                                    // 长按版本行解锁调试入口（release 构建里解锁后也不显示任何调试面）
+                                    onLongClick = {
+                                        DebugConfig.unlock()
+                                        toast.show("调试入口已解锁：设置里出现「调试模式」")
+                                    },
+                                    trailing = { TailNum("1.0.0") },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "检查更新",
+                                    icon = Icons.Outlined.Refresh,
+                                    onClick = { toast.show("已是最新版本 1.0.0") },
+                                    trailing = { TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+                        Spacer(Modifier.height(t.space6))
+                        }
+                }
             }
         }
 
-        // Section 6: 关于
-        item {
-            InsetGroupedSection {
-                Column(modifier = Modifier.padding(MonitorSpacing.lg)) {
-                    Text(
-                        "关于",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(MonitorSpacing.xs))
-                    Text(
-                        "版本: 1.0.0",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "设备 ID: ${viewModel.getDeviceId().take(8)}...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        "包名: com.bsfeng.monitor",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        AppToast(
+            message = toast.message,
+            onDismiss = { toast.clear() },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = t.space12),
+        )
+
+        // 兜底桥：s13 外观（真实屏见 ui/AppearanceScreen.kt）
+        AnimatedVisibility(
+            visible = localAppearance,
+            enter = slideInHorizontally() + fadeIn(),
+            exit = slideOutHorizontally() + fadeOut(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                BackHandler { localAppearance = false }
+                AppearanceScreen(onBack = { localAppearance = false })
+            }
+        }
+
+        // 兜底桥：s12 组件与五态展示厅（真实屏见 ui/ComponentGalleryScreen.kt）
+        AnimatedVisibility(
+            visible = localGallery,
+            enter = slideInHorizontally() + fadeIn(),
+            exit = slideOutHorizontally() + fadeOut(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                BackHandler { localGallery = false }
+                ComponentGalleryScreen(onBack = { localGallery = false })
             }
         }
     }
 }
+
+// 无障碍状态文案已收敛到 ui/AccessibilityCopy.kt 的 accessibilityStatusText(...)：
+// s01 / s02 / s05 三屏同一数据源（AccessibilityStatus 三重判定）与同一措辞。
