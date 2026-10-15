@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.finance.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,14 +31,12 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,6 +60,7 @@ import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.CategoryIcon
+import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.BottomSheet
 import com.bsfeng.monitor.ui.components.FiveState
@@ -529,33 +529,29 @@ fun AddTransactionScreen(
                 .align(Alignment.BottomStart)
                 .padding(t.space4),
         )
-    }
 
-    if (showDeleteConfirm && editing != null && onDelete != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            shape = RoundedCornerShape(t.radiusLg),
-            title = { Text("删除这笔交易？", style = MaterialTheme.typography.titleMedium) },
-            text = {
-                Text(
-                    "删除后无法恢复，预算与统计会同步更新。",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        // 删除确认（原型 s05 #s05-del-dialog，08-prototype.html:3877-3885）：
+        // .scrim > .dialog，标题 .h3、说明 .meta、动作 grid 1fr 1fr 的 .btn-ghost「取消」+ .btn「删除」。
+        // 用 ConfirmDialog（ui/components/Surfaces.kt）而非 M3 AlertDialog：底色 --surface-warm、
+        // 圆角 --radius-lg、阴影 --elev-3、按钮 --tap-min/--radius-md/--accent 全部取 token，
+        // 几何不再由 Material 默认值接管。注意它必须留在本 Box 内：AppDialog 的浮层以 fillMaxSize 铺满父容器。
+        if (showDeleteConfirm && editing != null && onDelete != null) {
+            // M3 AlertDialog 原来会被系统返回键关闭（onDismissRequest）；自绘浮层需显式接管返回键，
+            // 关闭语义与点遮罩 / 取消一致（同项目既有写法：AdScreen.kt:101 / MainScreen.kt:126）。
+            BackHandler { showDeleteConfirm = false }
+            ConfirmDialog(
+                visible = true,
+                title = "删除这笔交易？",
+                message = "删除后无法恢复，预算与统计会同步更新。",
+                confirmLabel = "删除",
+                dismissLabel = "取消",
+                onConfirm = {
                     showDeleteConfirm = false
                     onDelete(editing)
-                }) {
-                    Text("删除", color = t.expenseText, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消", color = t.muted)
-                }
-            },
-        )
+                },
+                onDismiss = { showDeleteConfirm = false },
+            )
+        }
     }
 }
 
