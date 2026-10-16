@@ -362,6 +362,31 @@ class AutoBookParserTest {
         assertEquals("宁可留空也不写垃圾商户名", "", draft.merchant)
     }
 
+    @Test
+    fun `转账支付链路各页的文案不得被当成商户名`() {
+        // 真机实测（微信 8.0.79 / HyperOS，2026-10-16）：伪装白名单身份后微信交出支付页节点，
+        // 但转账支付成功页没有任何商户标签，兜底逻辑把提示语「待李四确认收款」写成了商户名。
+        // 转账给个人本来就没有商户，正确结果是留空。
+        assertEquals(
+            "支付成功页的提示语不得当商户名",
+            "",
+            AutoBookParser.extractMerchant(listOf("支付成功", "待李四确认收款", "¥ 0.01", "完成"))
+        )
+        // 同一条支付链路上的确认页 / 收银台文案同样不得入选
+        assertEquals(
+            "确认页文案不得当商户名",
+            "",
+            AutoBookParser.extractMerchant(listOf("返回", "向李四转账", "￥0.01", "微信支付"))
+        )
+        assertEquals(
+            "收银台文案不得当商户名",
+            "",
+            AutoBookParser.extractMerchant(
+                listOf("使用密码", "返回", "请验证指纹", "付款方式,已选择零钱,更改 更改", "支付")
+            )
+        )
+    }
+
     // ==================== 标签取值 ====================
 
     @Test

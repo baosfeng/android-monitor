@@ -609,9 +609,27 @@ object AutoBookParser {
         return labels.any { text == it || text.startsWith("$it ") }
     }
 
+    /**
+     * 商户名排除用的**句式**（页面提示语与操作文案）。
+     *
+     * ⚠️ 真机实测（微信 8.0.79 / HyperOS，转账支付成功页）：该页没有任何商户标签，
+     * 兜底逻辑会把提示语「待李四确认收款」当成商户名写进账本 —— 转账给个人本来就没有商户，
+     * 正确结果是**留空**。同类文案还有「向李四转账」「请验证指纹」「使用密码」「已选择零钱」。
+     */
+    private val MERCHANT_NOISE_PATTERNS = listOf(
+        Regex("^待.{0,10}确认(收款|付款)"),
+        Regex("^向.{1,15}转账"),
+        Regex("^转账给"),
+        Regex("^(请)?(验证|输入|使用)(指纹|密码|面容|支付密码)"),
+        Regex("^已选择"),
+    )
+
     private fun isUsableMerchant(text: String): Boolean {
         val trimmed = text.trim()
         if (trimmed.length !in 2..20) return false
+        if (MERCHANT_NOISE_PATTERNS.any { it.containsMatchIn(trimmed) }) return false
+        // 品牌名不是商户（「微信支付」「支付宝」这类在支付页到处都是）
+        if (BRAND_WORDS.any { trimmed == it }) return false
         if (trimmed.all { it.isDigit() || it == '.' || it == ',' || it == '-' }) return false
         if (SYMBOL_AMOUNT.containsMatchIn(trimmed) || YUAN_AMOUNT.containsMatchIn(trimmed)) return false
         if (DATE_TIME.containsMatchIn(trimmed)) return false
@@ -623,7 +641,9 @@ object AutoBookParser {
         val noise = listOf(
             "支付成功", "付款成功", "交易成功", "交易失败", "完成", "详情", "查看", "确认", "全部账单",
             "账单详情", "立即领取", "联系商家", "更多", "请选择", "添加",
-            "松开刷新", "下拉刷新", "搜索", "刷新", "扫一扫", "收付款", "卡包", "首页", "我的", "消息", "操作"
+            "松开刷新", "下拉刷新", "搜索", "刷新", "扫一扫", "收付款", "卡包", "首页", "我的", "消息", "操作",
+            // 真机实测（微信支付链路各页）：这些是页面按钮 / 状态文案，兜底逻辑会把它们当商户名
+            "返回", "关闭", "取消", "支付", "付款", "收款", "转账"
         )
         return noise.none { trimmed == it || trimmed.startsWith(it) }
     }
