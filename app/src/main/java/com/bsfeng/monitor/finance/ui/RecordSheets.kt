@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -110,11 +111,11 @@ internal fun BoxScope.CategorySheet(
 private fun CategoryGridCell(name: String, selected: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
+    // 原型 .s14a-grid .s14-cat 是 padding:0 —— 格子自己不带内边距，行距只由网格 gap 决定
     Column(
         modifier = Modifier
             .clip(shape)
-            .clickable { onClick() }
-            .padding(vertical = t.space2),
+            .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 选中态 = 图标外描边（原型 .s14a-grid .s14-cat[aria-pressed="true"] .cat-icon）
@@ -130,7 +131,7 @@ private fun CategoryGridCell(name: String, selected: Boolean, onClick: () -> Uni
         Text(
             name,
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) t.fg else t.fg2,
+            color = if (selected) t.accentText else t.fg2,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -234,7 +235,7 @@ internal fun BoxScope.TimeSheet(
                 "日期",
                 style = MaterialTheme.typography.bodySmall,
                 color = t.muted,
-                modifier = Modifier.width(SHEET_LABEL_W),
+                modifier = Modifier.width(t.tapMin),
             )
             Row(
                 modifier = Modifier
@@ -424,7 +425,9 @@ internal fun BoxScope.ReceiptSheet(
                 )
             }
             Spacer(Modifier.height(t.space3))
-            SheetPrimaryButton(text = "关闭", onClick = onDismiss)
+            // 次级按钮：关闭不是「确认」性质的动作，视觉层级要低于时间抽屉的「确定」
+            // （原型 s14a-receipt-close 用的就是 .btn-ghost）
+            SheetGhostButton(text = "关闭", onClick = onDismiss)
         }
     }
 }
@@ -454,7 +457,25 @@ private fun BoxScope.SheetShell(
     }
 }
 
-/** 抽屉主按钮（原型 .btn.btn-block：「确定」/「关闭」） */
+/** 抽屉次级按钮（原型 .btn-ghost：透明底 + 1px --border 描边 + --fg 文字） */
+@Composable
+private fun SheetGhostButton(text: String, onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusLg)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(1.dp, t.border, shape)
+            .clickable { onClick() }
+            .padding(vertical = t.space3),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.titleSmall, color = t.fg)
+    }
+}
+
+/** 抽屉主按钮（原型 .btn.btn-block：用于时间抽屉的「确定」） */
 @Composable
 private fun SheetPrimaryButton(text: String, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
