@@ -20,8 +20,14 @@ object NodeTextCollector {
      * 收集一屏的文本节点（去重 + 限制节点数）。
      *
      * @param root 无障碍根节点；调用方负责回收 root 本身
+     * @param ignoreBounds 是否忽略节点的屏幕坐标，默认 false。
+     *   ⚠️ **只在诊断时传 true**：部分 App（真机实测微信）会把第三方无障碍服务看到的节点
+     *   标记为不可见并把 bounds 归零，此时正常收集会得到空列表。忽略坐标能区分
+     *   「树还在、只是被标记不可见」和「树被系统裁掉了」—— 这两种情况的应对完全不同，
+     *   详见 docs/记账/微信支付页识别调研.md 的「待真机验证的实验清单」。
+     *   忽略坐标后所有节点坐标为 (0,0)，**不能**用于分行解析，只能用来排查。
      */
-    fun collect(root: AccessibilityNodeInfo?): List<NodeText> {
+    fun collect(root: AccessibilityNodeInfo?, ignoreBounds: Boolean = false): List<NodeText> {
         if (root == null) return emptyList()
 
         val result = ArrayList<NodeText>(64)
@@ -43,7 +49,7 @@ object NodeTextCollector {
             if (label != null && seen.add(label)) {
                 runCatching {
                     node.getBoundsInScreen(rect)
-                    if (rect.width() > 0 && rect.height() > 0) {
+                    if (ignoreBounds || (rect.width() > 0 && rect.height() > 0)) {
                         result.add(NodeText(label, rect.left, rect.top))
                     }
                 }
