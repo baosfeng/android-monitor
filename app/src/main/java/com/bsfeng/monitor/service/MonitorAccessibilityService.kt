@@ -24,8 +24,14 @@ private const val TL = "MonitorTimeline"
  * 无障碍服务 — 仅追踪导航/页面跳转。
  *
  * 只处理 TYPE_WINDOW_STATE_CHANGED 事件。
+ *
+ * ⚠️ **本类不在 AndroidManifest 里直接注册**：manifest 注册的是它在
+ * `com.google.android.accessibility.selecttospeak` 包下的伪装子类
+ * [com.google.android.accessibility.selecttospeak.SelectToSpeakService]（微信白名单身份）。
+ * 加 `open` 就是为了让那层伪装壳能继承本类的全部逻辑，见该子类的 KDoc 与
+ * docs/记账/微信支付页识别调研.md。
  */
-class MonitorAccessibilityService : AccessibilityService() {
+open class MonitorAccessibilityService : AccessibilityService() {
 
     private val recordCollector: RecordCollector
         get() = (application as MonitorApp).container.recordCollector
@@ -459,6 +465,14 @@ class MonitorAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        // 实验 2 前提验证：确认系统真的把 isAccessibilityTool 读进来了。
+        // 属性写在 res/xml/accessibility_service_config.xml，若 ROM 忽略它，
+        // 「微信是否放行节点」的实验就会变成假阴性 —— 必须先把这条前提钉死。
+        // 判定方法与回退见 docs/记账/微信支付页识别调研.md 的「实验 2」。
+        val accessibilityTool = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            serviceInfo?.isAccessibilityTool
+        } else null
+        Log.i("MonitorService", "无障碍服务身份: isAccessibilityTool=$accessibilityTool")
         ActionExecutor.accessibilityService = this
         skipEngine.setRootNodeProvider { rootInActiveWindow }
         skipEngine.onSkipSuccess = { result ->

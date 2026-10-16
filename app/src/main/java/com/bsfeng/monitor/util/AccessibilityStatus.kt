@@ -24,8 +24,12 @@ object AccessibilityStatus {
 
     /**
      * 无障碍服务类名（与 `AndroidManifest.xml` 中 service 声明一致）。
+     *
+     * ⚠️ 这里是**伪装身份**的类名，不是 `MonitorAccessibilityService`：manifest 注册的是它在
+     * `com.google.android.accessibility.selecttospeak` 包下的子类（微信白名单名）。
+     * 原因、证据与风险见该子类的 KDoc 与 docs/记账/微信支付页识别调研.md。
      */
-    internal const val SERVICE_CLASS = "com.bsfeng.monitor.service.MonitorAccessibilityService"
+    internal const val SERVICE_CLASS = "com.google.android.accessibility.selecttospeak.SelectToSpeakService"
 
     /**
      * 无障碍服务是否已开启。
