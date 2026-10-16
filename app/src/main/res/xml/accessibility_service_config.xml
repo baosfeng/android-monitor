@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    ⚠️ 不要再加 flagRequestEnhancedWebAccessibility：它背后的机制（Chromium 的 AccessibilityInjector，
+    靠注入 JS 造节点树）已被 Chromium 移除，API 30 起该 flag 本身也被废弃，加了不会生效。
+    真机实测对微信 WebView 页确实无效。详见 docs/记账/微信支付页识别调研.md
+
+    ⚠️ canTakeScreenshot 目前是 false。若后续要覆盖「微信支付页读不到节点」的场景，
+    需要改成 true 并走「takeScreenshot + 本地 OCR」通道（Android 11+ 正规 API，有 333ms 节流）。
+-->
 <accessibility-service
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagRequestEnhancedWebAccessibility"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"
     android:canTakeScreenshot="false"
