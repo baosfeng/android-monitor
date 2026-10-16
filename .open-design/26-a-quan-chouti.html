@@ -2396,12 +2396,15 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s14a-strip::-webkit-scrollbar{display:none}
   .s14a-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
   /* 时刻：滚轮（比一排圆 chip 紧凑得多，也不用横着划去找数字） */
-  .s14a-timepick{display:flex;align-items:center;justify-content:center;gap:var(--space-2);margin-top:var(--space-4)}
-  .s14a-wheel-wrap{position:relative;width:92px;height:132px;border-radius:var(--radius-md);overflow:hidden;
+  /* ⚠️ flex 容器必须显式 width:100% —— 默认按内容宽度收缩，justify-content:center 就没有可居中的余地，
+     表现出来就是「滚轮组没居中」。 */
+  .s14a-timepick{display:flex;align-items:center;justify-content:center;gap:var(--space-3);
+    margin:var(--space-4) 0 0}
+  .s14a-wheel-wrap{position:relative;flex:0 0 auto;width:104px;height:132px;border-radius:var(--radius-md);overflow:hidden;
     background:color-mix(in srgb, var(--fg) 4%, transparent)}
   .s14a-wheel-band{position:absolute;left:6px;right:6px;top:44px;height:44px;border-radius:var(--radius-sm);
     background:color-mix(in srgb, var(--fg) 8%, transparent);pointer-events:none}
-  .s14a-wheel{position:relative;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;
+  .s14a-wheel{position:relative;height:100%;padding:44px 0;overflow-y:auto;scroll-snap-type:y mandatory;
     scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .s14a-wheel::-webkit-scrollbar{display:none}
   .s14a-wheel button{display:block;width:100%;height:44px;scroll-snap-align:center;border:0;background:transparent;
@@ -2410,8 +2413,19 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s14a-wheel button.is-on{color:var(--fg);font-weight:600}
   .s14a-colon{font-size:var(--text-xl);color:var(--muted);font-weight:600;padding-bottom:2px}
   .s14a-picked{margin:var(--space-3) 0 0;text-align:center;color:var(--muted);font-size:var(--text-sm)}
-  .s14a-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
+  /* ⚠️ min-width:0 是横向滚动的前提：flex 子项默认按内容宽度扩张，
+     会把抽屉整个撑宽、溢出手机框（真机表现就是「超出屏幕」）。
+     strip 必须能收缩，横向滚动才成立。 */
+  .s14a-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;min-width:0}
   .s14a-line > .s14a-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
+  .s14a-line > .s14a-strip{flex:1 1 auto;min-width:0}
+  /* 抽屉宽度锁死在手机框内。
+     外壳的 .scrim.is-bottom 是 grid + place-items:end center，隐式列的 auto 最小尺寸 = item 的
+     min-content，于是抽屉被内容撑到 476px（手机框只有 393px），右侧整块溢出屏幕 ——
+     max-width 也压不住 min-content。这里在 s14a 内改成 flex：stretch 语义明确，不再按内容 sizing。 */
+  .screen.s14a .scrim.is-bottom{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch}
+  .screen.s14a .scrim{overflow:hidden}
+  .screen.s14a .sheet{width:100%;max-width:100%}
 </style>
 <section class="screen s14a is-active" data-screen="s14a" data-title="记一笔 · 全抽屉" data-od-id="screen-s14a">
   <div class="content" data-od-id="s14a-content">
@@ -2725,15 +2739,30 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     }
 
     each.call(sec.querySelectorAll('[data-wheel]'), function (w) {
-      var items = w.querySelectorAll('button');
-      each.call(items, function (x, i) { if (x.classList.contains('is-on')) w.scrollTop = i * 44; });
       var timer;
       w.addEventListener('scroll', function () {
         clearTimeout(timer);
         timer = setTimeout(syncWheels, 80);   // 滚停再算，别每像素都刷新
       });
     });
-    syncWheels();
+
+    /* 对齐必须在抽屉**可见之后**做：hidden 状态下 scrollTop 赋值无效，
+       表现出来就是滚轮停在 00/01/02、选中的 10:30 没落在中间高亮带上。 */
+    function alignWheels() {
+      each.call(sec.querySelectorAll('[data-wheel]'), function (w) {
+        var items = w.querySelectorAll('button');
+        each.call(items, function (x, i) { if (x.classList.contains('is-on')) w.scrollTop = i * 44; });
+      });
+      syncWheels();
+    }
+    each.call(sec.querySelectorAll('[data-sheet="#s14a-time-sheet"]'), function (b) {
+      b.addEventListener('click', function () {
+        // 抽屉带展开动画；动画期间 scroll-snap 会把滚动位置吸回 0，
+        // 所以动画前对齐一次、结束后再兜一次（实测只设一次会被吸回去）。
+        setTimeout(alignWheels, 120);
+        setTimeout(alignWheels, 460);
+      });
+    });
 
     function setValue(key, text) {
       var el = sec.querySelector('[data-value-for="' + key + '"]');
