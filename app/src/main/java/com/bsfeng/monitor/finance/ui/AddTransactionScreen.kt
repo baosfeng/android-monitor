@@ -29,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +63,7 @@ import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.fgFade
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -199,8 +199,9 @@ fun AddTransactionScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = "取消", tint = t.accent)
+                // 原型顶栏按钮是 .icon-btn（44×44 圆底 + 描边），不是裸图标
+                FinanceIconButton(onClick = onDismiss, contentDescription = "取消") {
+                    Icon(Icons.Filled.Close, contentDescription = null, tint = t.accent)
                 }
                 Text(
                     if (isEditing) "编辑交易" else "记一笔",
@@ -601,13 +602,6 @@ private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
                 )
             }
         }
-        if (value.isNotEmpty()) {
-            Text(
-                value.length.toString() + "/" + REMARK_MAX_LEN,
-                style = MaterialTheme.typography.labelSmall,
-                color = t.meta,
-            )
-        }
     }
 }
 
@@ -641,7 +635,9 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
             }
             // 原型 .btn{border-radius:var(--radius-md)} = 12dp（不是 radius-lg 的 18dp）
             .clip(RoundedCornerShape(t.radiusMd))
-            .background(if (enabled) t.accent else t.accent.copy(alpha = 0.45f))
+            // 禁用态走中性配方（底 fg 12% + 字 muted）：accent 降饱和得到的 #87BAEE 配白字
+            // 只有 2.04:1，低于 WCAG AA；中性配方同时把两态的差别从「深浅」变成「有没有色」。
+            .background(if (enabled) t.accent else t.fgFade(12))
             .clickable(interactionSource = interaction, indication = null) { if (enabled) onClick() }
             .padding(vertical = t.space3),
         contentAlignment = Alignment.Center,
@@ -649,7 +645,7 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
         Text(
             text,
             style = MaterialTheme.typography.titleSmall,
-            color = t.accentOn,
+            color = if (enabled) t.accentOn else t.muted,
             fontWeight = FontWeight.SemiBold,
         )
     }

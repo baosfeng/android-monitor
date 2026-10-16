@@ -207,12 +207,6 @@ fun BudgetScreen(
                                         color = t.accent,
                                     )
                                 }
-                                Spacer(Modifier.height(t.space3))
-                                Text(
-                                    "点「总预算」可修改总额，点下方任意分类行可分配额度。",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = t.meta,
-                                )
                             }
                         }
                     }
@@ -262,6 +256,14 @@ fun BudgetScreen(
                             Spacer(Modifier.height(t.space3))
                             Text(
                                 "分类预算合计等于总预算；超出后进度条转为深色并提示超支。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = t.meta,
+                            )
+                            Spacer(Modifier.height(t.space1))
+                            Text(
+                                // 原型 .s06-kpis 卡内只有 3 行 KPI + 环（无文本节点），说明统一挂到列表下方；
+                                // App 的总预算行可点开编辑弹窗，故保留这句操作提示（原型无此句）。
+                                "点「总预算」可修改总额，点任意分类行可分配额度。",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = t.meta,
                             )
@@ -389,9 +391,10 @@ private fun BudgetRow(
             Spacer(Modifier.width(t.space2))
             Text(
                 if (hasBudget) yen(budgetAmount, 0) else "未设置",
+                // 原型 .s06-amt = 17px/600 + 正文色（--fg 系）；「未设置」保留 muted 的弱化语义
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = if (hasBudget) t.accent else t.muted,
+                fontWeight = FontWeight.SemiBold,
+                color = if (hasBudget) t.fg else t.muted,
             )
         }
         Spacer(Modifier.height(t.space2))
@@ -422,7 +425,8 @@ private fun BudgetRow(
             } else {
                 "已支出 " + yen(spentAmount, 0) + " · 剩余 " + yen(budgetAmount - spentAmount, 0)
             },
-            style = MaterialTheme.typography.labelSmall,
+            // 原型 .s06-brow .row-sub = 14px（--text-sm）；12sp 的 labelSmall 比原型小一号
+            style = MaterialTheme.typography.bodySmall,
             color = if (isOverBudget) t.expenseText else t.meta,
         )
     }

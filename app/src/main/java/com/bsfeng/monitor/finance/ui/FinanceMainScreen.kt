@@ -187,8 +187,9 @@ fun FinanceMainScreen(
                                 fraction = stats.budgetProgress,
                                 big = ((stats.budgetProgress * 100).toInt()).toString() + "%",
                                 small = "预算",
-                                // B1：色阶用 chart-1（超支只改文本色，见原型 s04:71-73 gauge 默认色阶）
-                                color = t.chart1,
+                                // 预算进度 = accent（蓝）：原型 s04/s06 circle.chart-gauge 实测
+                                // stroke rgb(0,113,227) = --accent（设计规范 §2.4），与 BudgetScreen 同一口径
+                                color = t.accent,
                             )
                         }
                     }
@@ -527,8 +528,9 @@ private fun TransactionRow(
             // 转账既不是花掉也不是赚到：不带正负号、用中性色（账户余额仍按双向真实增减）
             text = if (isTransfer) "¥" + transaction.displayAmount
             else (if (amountIsPositive) "+" else "-") + "¥" + transaction.displayAmount,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
+            // 原型 .list-row .row-tail = 14px/600（同行 .row-title 17px/500）：金额不得抢过标题
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
             color = when {
                 isTransfer -> t.muted
                 amountIsPositive -> t.incomeText
