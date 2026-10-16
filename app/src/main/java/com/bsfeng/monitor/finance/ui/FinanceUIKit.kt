@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -288,18 +287,6 @@ internal fun FinanceRingGauge(
 internal fun rememberFinanceViewModel(): FinanceViewModel? {
     val context = LocalContext.current
     return if (context is ViewModelStoreOwner) viewModel<FinanceViewModel>() else null
-}
-
-/** 半透明遮罩：铺满父容器，点击关闭（配合底部 sheet 使用）。 */
-@Composable
-internal fun FinanceScrim(onDismiss: () -> Unit) {
-    val t = LocalDesignTokens.current
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(t.scrim)
-            .clickable { onDismiss() },
-    )
 }
 
 // ─────────────────────────── 分类色（三屏唯一口径） ───────────────────────────

@@ -74,24 +74,9 @@ import kotlin.math.roundToInt
 // ─────────────────────────── 抽屉外壳 ───────────────────────────
 
 /**
- * 遮罩：铺满父容器、点击关闭，锚点挂在它身上（原型 `data-od-id` 就在 `.scrim` 上）。
- *
- * 共享的 `Scrim` 没有 modifier 参数、挂不了 testTag，故在 proto 层按同配方重建。
+ * 遮罩不再由本文件自绘：四个抽屉统一走 [BottomSheet] 的**窗口级全屏遮罩**（覆盖状态栏与手势条），
+ * 原型 `data-od-id="s14a-*-sheet"` 的锚点通过它的 `scrimTag` 参数落在遮罩节点上。
  */
-@Composable
-private fun BoxScope.SheetScrim(anchor: String, onDismiss: () -> Unit) {
-    val t = LocalDesignTokens.current
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(anchor)
-            .background(t.scrim)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-    )
-}
 
 // ─────────────────────────── 抽屉 1 · 分类 ───────────────────────────
 
@@ -105,11 +90,11 @@ internal fun BoxScope.CategorySheet(
 ) {
     if (!visible) return
     val t = LocalDesignTokens.current
-    SheetScrim(ProtoAnchors.CAT_SHEET, onDismiss)
     BottomSheet(
         visible = true,
         onDismiss = onDismiss,
         modifier = Modifier.align(Alignment.BottomCenter),
+        scrimTag = ProtoAnchors.CAT_SHEET,
     ) {
         SheetTitle("选择分类")
         Spacer(Modifier.height(t.space3))
@@ -196,11 +181,11 @@ internal fun BoxScope.AccountSheet(
     if (!visible) return
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusLg)
-    SheetScrim(ProtoAnchors.ACCT_SHEET, onDismiss)
     BottomSheet(
         visible = true,
         onDismiss = onDismiss,
         modifier = Modifier.align(Alignment.BottomCenter),
+        scrimTag = ProtoAnchors.ACCT_SHEET,
     ) {
         SheetTitle("选择账户")
         Spacer(Modifier.height(t.space3))
@@ -305,11 +290,11 @@ internal fun BoxScope.TimeSheet(
     val hours = remember { (0..23).map { ProtoRecordLogic.twoDigits(it) } }
     val minutes = remember { (0..59).map { ProtoRecordLogic.twoDigits(it) } }
 
-    SheetScrim(ProtoAnchors.TIME_SHEET, onDismiss)
     BottomSheet(
         visible = true,
         onDismiss = onDismiss,
         modifier = Modifier.align(Alignment.BottomCenter),
+        scrimTag = ProtoAnchors.TIME_SHEET,
     ) {
         SheetTitle("选择时间")
         // 原型 .s14a-line.mt-3：日期键 + 横向滚动的 chip 条（padding --space-2 0）
@@ -493,11 +478,11 @@ internal fun BoxScope.ReceiptSheet(
 ) {
     if (!visible) return
     val t = LocalDesignTokens.current
-    SheetScrim(ProtoAnchors.RECEIPT_SHEET, onDismiss)
     BottomSheet(
         visible = true,
         onDismiss = onDismiss,
         modifier = Modifier.align(Alignment.BottomCenter),
+        scrimTag = ProtoAnchors.RECEIPT_SHEET,
     ) {
         SheetTitle("单据明细")
         Spacer(Modifier.height(t.space3))
