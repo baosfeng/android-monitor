@@ -475,18 +475,6 @@ fun LiveKpiCard(
     }
 }
 
-/** 遮罩层（W0 的 Scrim 只占满宽、不占高，这里按 t.scrim token 自绘以确保全覆盖）。 */
-@Composable
-fun OverlayScrim(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    val t = LocalDesignTokens.current
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(t.scrim)
-            .clickable { onDismiss() },
-    )
-}
-
 /** 卡片内的小标题行（左标题 + 右 meta）。 */
 @Composable
 fun CardHead(title: String, meta: String, modifier: Modifier = Modifier) {

@@ -59,6 +59,7 @@ import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
+import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.Legend
@@ -378,29 +379,21 @@ fun SkipRuleScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = t.space12),
         )
 
-        if (showConfirm) {
-            Box(Modifier.fillMaxSize()) {
-                OverlayScrim { showConfirm = false }
-                AppCard(Modifier.align(Alignment.Center).padding(horizontal = t.space6)) {
-                    Text("更新订阅源？", style = MaterialTheme.typography.titleMedium, color = t.fg)
-                    Spacer(Modifier.height(t.space2))
-                    Text(
-                        "将从 " + hostOf(urlInput) + " 拉取最新规则包，与本地 " + state.rules.size + " 条规则合并；同 id 规则以订阅源为准。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = t.muted,
-                    )
-                    Spacer(Modifier.height(t.space4))
-                    Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                        AppButton("取消", { showConfirm = false }, Modifier.weight(1f), AppButtonVariant.Ghost)
-                        AppButton("确认更新", {
-                            showConfirm = false
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            viewModel.updateSubscription(urlInput)
-                        }, Modifier.weight(1f))
-                    }
-                }
-            }
-        }
+        // 更新确认：统一走 ConfirmDialog（窗口级浮层基元 WindowOverlay），不再自绘遮罩 + 卡片
+        ConfirmDialog(
+            visible = showConfirm,
+            title = "更新订阅源？",
+            message = "将从 " + hostOf(urlInput) + " 拉取最新规则包，与本地 " + state.rules.size +
+                " 条规则合并；同 id 规则以订阅源为准。",
+            confirmLabel = "确认更新",
+            dismissLabel = "取消",
+            onConfirm = {
+                showConfirm = false
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                viewModel.updateSubscription(urlInput)
+            },
+            onDismiss = { showConfirm = false },
+        )
     }
 }
 

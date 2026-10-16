@@ -64,6 +64,7 @@ import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.ChartAxisLabels
 import com.bsfeng.monitor.ui.components.Chip
 import com.bsfeng.monitor.ui.components.ChipRow
+import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
 import com.bsfeng.monitor.ui.components.EdgeState
@@ -542,21 +543,16 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = t.space12),
         )
 
-        if (showDialog) {
-            Box(Modifier.fillMaxSize()) {
-                OverlayScrim { showDialog = false }
-                AppCard(Modifier.align(Alignment.Center).padding(horizontal = t.space6)) {
-                    Text("删除这条记录？", style = MaterialTheme.typography.titleMedium, color = t.fg)
-                    Spacer(Modifier.height(t.space2))
-                    Text("删除后无法恢复，本地统计会在下次汇总时更新。", style = MaterialTheme.typography.bodySmall, color = t.muted)
-                    Spacer(Modifier.height(t.space4))
-                    Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                        AppButton("取消", { showDialog = false }, Modifier.weight(1f), AppButtonVariant.Ghost)
-                        AppButton("删除", { showDialog = false; toast.show("记录已删除") }, Modifier.weight(1f))
-                    }
-                }
-            }
-        }
+        // 删除确认：统一走 ConfirmDialog（窗口级浮层基元 WindowOverlay），不再自绘遮罩 + 卡片
+        ConfirmDialog(
+            visible = showDialog,
+            title = "删除这条记录？",
+            message = "删除后无法恢复，本地统计会在下次汇总时更新。",
+            confirmLabel = "删除",
+            dismissLabel = "取消",
+            onConfirm = { showDialog = false; toast.show("记录已删除") },
+            onDismiss = { showDialog = false },
+        )
 
         if (showSheet) {
             // 遮罩由 BottomSheet 的窗口级全屏浮层承担（页内遮罩盖不住状态栏/手势条，且会叠成两层）
@@ -570,13 +566,6 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
     }
-}
-
-/** 遮罩（token scrim；W0 Scrim 无高度，这里按同一 token 自绘，已记入缺陷回报）。 */
-@Composable
-internal fun OverlayScrim(onDismiss: () -> Unit) {
-    val t = LocalDesignTokens.current
-    Box(Modifier.fillMaxSize().background(t.scrim).clickable { onDismiss() })
 }
 
 @Composable
