@@ -12,7 +12,20 @@ package com.bsfeng.monitor.autobook
  *              `time:alipay:0:3.0:2026-10-15 23:14:43` / `sum:alipay:0:3.0`
  * @param ttlMs 这道指纹自身的安静期上限；最终安静期取它与「结局 TTL」的较小值
  */
-data class DedupKey(val value: String, val ttlMs: Long)
+data class DedupKey(
+    val value: String,
+    val ttlMs: Long,
+    /**
+     * 是否**精确**指纹（订单号 / 交易时间）。
+     *
+     * 模糊指纹（金额兜底 `sum:` 开头）**分不清「同一笔」与「另一笔同金额」**，
+     * 因此它不承担「用户已忽略 / 已记账」这类跨分钟记忆，只参与 [AutoBookDedup.Outcome.SHOWN] 的短暂防抖。
+     *
+     * 真机踩坑（2026-10-16 微信）：用户忽略一笔 ¥0.01 转账后 11 秒发出 ¥0.01 红包，
+     * 两者模糊指纹完全相同（`sum:wechat:0:0.01`），红包被静默吞掉、浮窗不弹。
+     */
+    val precise: Boolean = true
+)
 
 /**
  * 短期去重表：**同一笔账单在短时间内只弹一次确认浮窗**。
@@ -110,6 +123,10 @@ class AutoBookDedup(
         prune(nowMs)
         val outcomeTtl = ttlOf(outcome)
         for (key in keys) {
+            // 模糊指纹只在「刚弹过」时参与防抖：它分不清同一笔和另一笔同金额，
+            // 若让它记住「用户已忽略 / 已记账」，后一笔同金额的真实消费会被静默吞掉
+            // （真机踩过：忽略 ¥0.01 转账后 11 秒发的 ¥0.01 红包没弹窗）
+            if (!key.precise && outcome != Outcome.SHOWN) continue
             entries[key.value] = Entry(outcome, nowMs, minOf(outcomeTtl, key.ttlMs))
         }
     }

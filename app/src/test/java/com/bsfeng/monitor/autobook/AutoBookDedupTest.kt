@@ -15,6 +15,10 @@ class AutoBookDedupTest {
 
     private fun key(value: String, ttlMs: Long = 10 * 60 * 1000L) = DedupKey(value, ttlMs)
 
+    /** 金额兜底指纹（非精确）：真实调用方由 [AutoBookParser.buildDedupKeys] 这样构造 */
+    private fun fuzzyKey(value: String, ttlMs: Long = 2 * 60 * 1000L) =
+        DedupKey(value, ttlMs, precise = false)
+
     @Test
     fun `没处理过的账单可以弹窗`() {
         val dedup = AutoBookDedup()
@@ -44,7 +48,7 @@ class AutoBookDedupTest {
     @Test
     fun `忽略后同样进入安静期`() {
         val dedup = AutoBookDedup()
-        val keys = listOf(key("sum:alipay:0:3.0", 10 * 60 * 1000L))
+        val keys = listOf(key("order:alipay:CFP001"))
         dedup.markDismissed(keys, 0L)
 
         assertFalse(dedup.shouldShow(keys, 5 * 60 * 1000L))
@@ -103,13 +107,41 @@ class AutoBookDedupTest {
     }
 
     @Test
-    fun `兜底指纹的安静期取较短的窗口`() {
+    fun `金额兜底指纹不承担长期记忆：同金额的另一笔不会被吞`() {
+        // 真机回归（2026-10-16 微信）：用户忽略一笔 ¥0.01 转账后 11 秒发出 ¥0.01 红包，
+        // 两者模糊指纹完全相同（sum:wechat:0:0.01），当时红包被静默吞掉、浮窗不弹。
         val dedup = AutoBookDedup()
-        val keys = listOf(key("sum:alipay:0:3.0", 2 * 60 * 1000L))
+        val transfer = listOf(fuzzyKey("sum:wechat:0:0.01"))
+        dedup.markShown(transfer, 0L)
+        dedup.markDismissed(transfer, 39_000L)
+
+        assertTrue(
+            "模糊指纹分不清两笔，不能让它记住「已忽略」",
+            dedup.shouldShow(listOf(fuzzyKey("sum:wechat:0:0.01")), 50_000L)
+        )
+    }
+
+    @Test
+    fun `确认记账后模糊指纹同样不拦下一笔`() {
+        val dedup = AutoBookDedup()
+        val keys = listOf(fuzzyKey("sum:wechat:0:0.01"))
         dedup.markConfirmed(keys, 0L)
 
-        assertFalse("2 分钟内仍被挡住", dedup.shouldShow(keys, 119_000L))
-        assertTrue("超过兜底窗口后放行，同金额的另一笔交易不能被永久吞掉", dedup.shouldShow(keys, 120_000L))
+        assertTrue(
+            "记账那一侧由落库键（含 5 分钟时间桶）兜底，模糊指纹不该拦住同金额的下一笔",
+            dedup.shouldShow(listOf(fuzzyKey("sum:wechat:0:0.01")), 1_000L)
+        )
+    }
+
+    @Test
+    fun `模糊指纹的短暂防抖仍然生效`() {
+        // 去掉长期记忆不等于去掉防抖：同一笔在弹窗后连续抛事件时不能再弹
+        val dedup = AutoBookDedup()
+        val keys = listOf(fuzzyKey("sum:wechat:0:0.01"))
+        dedup.markShown(keys, 0L)
+
+        assertFalse("刚弹过，10 秒内不复弹", dedup.shouldShow(keys, 10_000L))
+        assertTrue("30 秒防抖窗口后放行", dedup.shouldShow(keys, 30_000L))
     }
 
     @Test
