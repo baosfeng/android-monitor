@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
@@ -243,15 +244,28 @@ fun AddTransactionScreen(
                         }
 
                         // ① 类型 + 金额（原型 s14a-amount）
-                        GlassCard {
+                        // 原型 .s14-card{padding:12px 16px} —— GlassCard 默认四边 16，这里按原型给 12/16
+                        GlassCard(padding = 0.dp) {
+                            Column(
+                                Modifier.padding(
+                                    start = t.space4,
+                                    end = t.space4,
+                                    top = t.space3,
+                                    bottom = t.space3,
+                                ),
+                            ) {
                             SegmentedControl(
                                 options = RecordForm.TYPE_OPTIONS,
                                 selectedIndex = txType,
                                 onSelect = { txType = it },
                             )
                             Spacer(Modifier.height(t.space2))
-                            // 原型 .s14a-amt 是 baseline 对齐：¥ 用 --text-xl(28px)/600，金额用 --text-3xl(56px)/700
-                            Row(verticalAlignment = Alignment.Bottom) {
+                            // 原型 .s14a-amt 是 baseline 对齐 + 上下 padding 4px：
+                            // ¥ 用 --text-xl(28px)/600，金额用 --text-3xl(56px)/700
+                            Row(
+                                modifier = Modifier.padding(vertical = t.space1),
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
                                 Text(
                                     "¥",
                                     style = MaterialTheme.typography.headlineMedium.copy(fontSize = t.textXl),
@@ -267,6 +281,7 @@ fun AddTransactionScreen(
                                     textStyle = MaterialTheme.typography.headlineLarge.copy(
                                         fontSize = t.text3xl,
                                         fontWeight = FontWeight.Bold,
+                                        letterSpacing = AMOUNT_LETTER_SPACING,
                                         // 原型 .s14a-input 用 --fg：金额本身不染色，
                                         // 方向由上面那排类型段（支出/收入/转账）表达
                                         color = t.fg,
@@ -283,6 +298,7 @@ fun AddTransactionScreen(
                                                     style = MaterialTheme.typography.headlineLarge.copy(
                                                         fontSize = t.text3xl,
                                                         fontWeight = FontWeight.Bold,
+                                                        letterSpacing = AMOUNT_LETTER_SPACING,
                                                     ),
                                                     color = t.muted,
                                                 )
@@ -291,6 +307,7 @@ fun AddTransactionScreen(
                                         }
                                     },
                                 )
+                            }
                             }
                         }
                         if (isRefundEntry) {
@@ -306,50 +323,63 @@ fun AddTransactionScreen(
 
                         // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 备注 —— 四行同构，与原型一致
                         Spacer(Modifier.height(t.space3))
-                        AppCard(padding = t.space1) {
-                            if (!isTransferType(txType)) {
+                        AppCard(padding = 0.dp) {
+                            // 原型 .s14-card 的 padding 是 12/16；行分隔线（.s14-toggle 的 border-top）
+                            // 就在这层内边距之内 —— 内边距必须给在**行外面**，不能塞进行里
+                            Column(
+                                Modifier.padding(horizontal = t.space4, vertical = t.space3),
+                            ) {
+                                if (!isTransferType(txType)) {
+                                    FieldRow(
+                                        label = "分类",
+                                        value = selectedCategory,
+                                        placeholder = "选择分类",
+                                        onClick = { openSheet = RecordSheet.CATEGORY },
+                                    )
+                                    FieldDivider()
+                                }
                                 FieldRow(
-                                    label = "分类",
-                                    value = selectedCategory,
-                                    placeholder = "选择分类",
-                                    onClick = { openSheet = RecordSheet.CATEGORY },
+                                    label = if (isTransferType(txType)) "转出" else "账户",
+                                    value = accountName,
+                                    placeholder = "选择账户",
+                                    onClick = { openSheet = RecordSheet.ACCOUNT },
+                                )
+                                if (isTransferType(txType)) {
+                                    FieldDivider()
+                                    FieldRow(
+                                        label = "转入",
+                                        value = toAccountName,
+                                        placeholder = "选择转入账户",
+                                        onClick = { openSheet = RecordSheet.TO_ACCOUNT },
+                                    )
+                                }
+                                FieldDivider()
+                                FieldRow(
+                                    label = "时间",
+                                    value = RecordForm.timeRowText(parts, today),
+                                    onClick = { openSheet = RecordSheet.TIME },
                                 )
                                 FieldDivider()
-                            }
-                            FieldRow(
-                                label = if (isTransferType(txType)) "转出" else "账户",
-                                value = accountName,
-                                placeholder = "选择账户",
-                                onClick = { openSheet = RecordSheet.ACCOUNT },
-                            )
-                            if (isTransferType(txType)) {
-                                FieldDivider()
-                                FieldRow(
-                                    label = "转入",
-                                    value = toAccountName,
-                                    placeholder = "选择转入账户",
-                                    onClick = { openSheet = RecordSheet.TO_ACCOUNT },
+                                NoteRow(
+                                    value = remark,
+                                    onValueChange = { remark = it.take(REMARK_MAX_LEN) },
                                 )
                             }
-                            FieldDivider()
-                            FieldRow(
-                                label = "时间",
-                                value = RecordForm.timeRowText(parts, today),
-                                onClick = { openSheet = RecordSheet.TIME },
-                            )
-                            FieldDivider()
-                            NoteRow(value = remark, onValueChange = { remark = it.take(REMARK_MAX_LEN) })
                         }
 
                         // ③ 单据卡：只有自动记账记下的交易才带单据，手动录入不摆空行
                         if (RecordForm.hasReceipt(editing)) {
                             Spacer(Modifier.height(t.space3))
-                            AppCard(padding = t.space1) {
-                                FieldRow(
-                                    label = "单据",
-                                    value = RecordForm.receiptSummary(editing),
-                                    onClick = { openSheet = RecordSheet.RECEIPT },
-                                )
+                            AppCard(padding = 0.dp) {
+                                Column(
+                                    Modifier.padding(horizontal = t.space4, vertical = t.space3),
+                                ) {
+                                    FieldRow(
+                                        label = "单据",
+                                        value = RecordForm.receiptSummary(editing),
+                                        onClick = { openSheet = RecordSheet.RECEIPT },
+                                    )
+                                }
                             }
                         }
 
@@ -366,7 +396,13 @@ fun AddTransactionScreen(
                             .background(
                                 Brush.verticalGradient(0f to Color.Transparent, 0.38f to t.surface),
                             )
-                            .padding(horizontal = t.space4, vertical = t.space3),
+                            // 原型 .s14a-actions：padding 12px 16px 20px
+                            .padding(
+                                start = t.space4,
+                                end = t.space4,
+                                top = t.space3,
+                                bottom = t.space5,
+                            ),
                     ) {
                         PrimaryButton(
                             text = if (isEditing) "保存修改" else "保存",
@@ -496,8 +532,10 @@ private fun FieldRow(
             .fillMaxWidth()
             .heightIn(min = FIELD_ROW_MIN_H)
             .clip(RoundedCornerShape(t.radiusMd))
-            .clickable { onClick() }
-            .padding(horizontal = t.space3, vertical = t.space2),
+            .clickable { onClick() },
+        // 原型 .s14-toggle{padding:0} + min-height:44px：行自身零内边距。
+        // 注意 modifier 链的顺序 —— heightIn 在 padding 之前时，44 约束的是**内容区**，
+        // 总高会变成 44+padding（真机实测多出 8dp，四行累计就很明显了）
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(t.space3),
     ) {
@@ -532,8 +570,8 @@ private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = FIELD_ROW_MIN_H)
-            .padding(horizontal = t.space3, vertical = t.space2),
+            .heightIn(min = FIELD_ROW_MIN_H),
+        // 同上：备注行也是 .s14-toggle，零内边距 + min-height 44
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(t.space3),
     ) {
@@ -601,7 +639,8 @@ private fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(t.radiusLg))
+            // 原型 .btn{border-radius:var(--radius-md)} = 12dp（不是 radius-lg 的 18dp）
+            .clip(RoundedCornerShape(t.radiusMd))
             .background(if (enabled) t.accent else t.accent.copy(alpha = 0.45f))
             .clickable(interactionSource = interaction, indication = null) { if (enabled) onClick() }
             .padding(vertical = t.space3),
@@ -627,7 +666,7 @@ private fun GhostButton(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(t.radiusLg))
+            .clip(RoundedCornerShape(t.radiusMd))
             .background(background)
             .clickable { onClick() }
             .padding(vertical = t.space3),
@@ -658,6 +697,9 @@ private fun initialTimeParts(editing: Transaction?, fromMonth: String?): RecordF
     val last = runCatching { YearMonth.parse(month).atEndOfMonth().toString() }.getOrNull() ?: return base
     return base.copy(date = last)
 }
+
+/** 金额字距（原型 .s14a-input 的 letter-spacing:-.02em，56px 下约 -1.12px） */
+private val AMOUNT_LETTER_SPACING = (-0.02).em
 
 /** 原型 s05-edge：备注 200 字上限 */
 private const val REMARK_MAX_LEN = 200
