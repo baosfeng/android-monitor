@@ -24,30 +24,41 @@ class FinanceManager internal constructor(context: Context) {
 
     suspend fun addTransaction(tx: Transaction): Long = withContext(Dispatchers.IO) {
         val id = dao.insertTransaction(tx)
-        applyBalanceDelta(tx.accountName, balanceEffectOf(tx))
+        applyTransactionEffect(tx, sign = 1.0)
         id
     }
 
     suspend fun deleteTransaction(id: Long) = withContext(Dispatchers.IO) {
         val existing = dao.getTransactionById(id)
         dao.deleteTransaction(id)
-        if (existing != null) applyBalanceDelta(existing.accountName, -balanceEffectOf(existing))
+        if (existing != null) applyTransactionEffect(existing, sign = -1.0)
     }
 
     suspend fun updateTransaction(tx: Transaction) = withContext(Dispatchers.IO) {
         val old = dao.getTransactionById(tx.id)
         dao.updateTransaction(tx)
-        if (old != null && old.accountName != tx.accountName) {
-            // 换账户：旧账户回冲，新账户计入
-            applyBalanceDelta(old.accountName, -balanceEffectOf(old))
-            applyBalanceDelta(tx.accountName, balanceEffectOf(tx))
-        } else {
-            applyBalanceDelta(tx.accountName, balanceEffectOf(tx) - (old?.let { balanceEffectOf(it) } ?: 0.0))
-        }
+        // 先按旧值回冲、再按新值计入：换账户 / 改金额 / 支出↔转账互转都由这一条路径覆盖
+        if (old != null) applyTransactionEffect(old, sign = -1.0)
+        applyTransactionEffect(tx, sign = 1.0)
     }
 
     /** 交易对账户余额的影响（收入为正、支出为负；退款交易 amount 本身为负，故回冲为正）。 */
     private fun balanceEffectOf(tx: Transaction): Double = if (tx.isIncome) tx.amount else -tx.amount
+
+    /**
+     * 把一笔交易对余额的影响作用于账户（[sign] = 1 计入、-1 回冲）。
+     *
+     * 转账（[Transaction.isTransfer]）是**两个账户的一进一出**：转出账户扣、转入账户加。
+     * 转入账户缺失（老记录 / 用户未选）时只动转出侧，不让差额凭空落到别的账户。
+     */
+    private suspend fun applyTransactionEffect(tx: Transaction, sign: Double) {
+        if (tx.isTransfer) {
+            applyBalanceDelta(tx.accountName, -tx.amount * sign)
+            applyBalanceDelta(tx.toAccountName, tx.amount * sign)
+            return
+        }
+        applyBalanceDelta(tx.accountName, balanceEffectOf(tx) * sign)
+    }
 
     /**
      * 账户余额随交易增减（接上原先零调用的 [FinanceDao.updateAccountBalance]）。

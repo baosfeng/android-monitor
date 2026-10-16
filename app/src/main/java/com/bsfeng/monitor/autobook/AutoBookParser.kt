@@ -204,8 +204,8 @@ object AutoBookParser {
 
     /** 页面交易时间的两种格式（ISO / 中文年月日），见 [normalizeTradeTime] */
     private val TRADE_TIME_PATTERNS = listOf(
-        Regex("(\\d{4})-(\\d{1,2})-(\\d{1,2})\\s+(\\d{1,2}):(\\d{2})"),
-        Regex("(\\d{4})年(\\d{1,2})月(\\d{1,2})日\\s+(\\d{1,2}):(\\d{2})")
+        Regex("(\\d{4})-(\\d{1,2})-(\\d{1,2})\\s+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?"),
+        Regex("(\\d{4})年(\\d{1,2})月(\\d{1,2})日\\s+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
     )
 
     /** 订单号标签 */
@@ -823,7 +823,7 @@ object AutoBookParser {
     }
 
     /**
-     * 页面交易时间 → `yyyy-MM-dd HH:mm`；解析不出来返回 null。
+     * 页面交易时间 → `yyyy-MM-dd HH:mm:ss`（**精确到秒**）；解析不出来返回 null。
      *
      * 页面给两种格式（真机实测）：支付宝 `2026-10-16 18:32:21`、微信 `2026年10月16日 18:32:42`。
      *
@@ -834,10 +834,15 @@ object AutoBookParser {
     fun normalizeTradeTime(timeText: String): String? {
         if (timeText.isBlank()) return null
         for (pattern in TRADE_TIME_PATTERNS) {
-            val match = pattern.find(timeText) ?: continue
-            val (y, mo, d, h, mi) = match.destructured
-            return "%04d-%02d-%02d %02d:%02d".format(
-                y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt()
+            val m = pattern.find(timeText) ?: continue
+            // 秒可能缺失（部分模板只给到分），缺失时补 00 —— 精度按页面能给到的最高为准
+            return "%04d-%02d-%02d %02d:%02d:%02d".format(
+                m.groupValues[1].toInt(),
+                m.groupValues[2].toInt(),
+                m.groupValues[3].toInt(),
+                m.groupValues[4].toInt(),
+                m.groupValues[5].toInt(),
+                m.groupValues[6].toIntOrNull() ?: 0
             )
         }
         return null

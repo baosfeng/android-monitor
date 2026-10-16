@@ -39,6 +39,9 @@ object TransactionEntity {
     const val COL_PLATFORM_CATEGORY = "platform_category"
     const val COL_TRADE_TIME = "trade_time"
 
+    // ===== V3 新增：转账的转入账户 =====
+    const val COL_TO_ACCOUNT_NAME = "to_account_name"
+
     /** 建表 SQL */
     const val CREATE_TABLE = """
         CREATE TABLE $TABLE_NAME (
@@ -60,7 +63,8 @@ object TransactionEntity {
             $COL_PAY_METHOD TEXT NOT NULL DEFAULT '',
             $COL_ORDER_ID TEXT NOT NULL DEFAULT '',
             $COL_PLATFORM_CATEGORY TEXT NOT NULL DEFAULT '',
-            $COL_TRADE_TIME TEXT NOT NULL DEFAULT ''
+            $COL_TRADE_TIME TEXT NOT NULL DEFAULT '',
+            $COL_TO_ACCOUNT_NAME TEXT NOT NULL DEFAULT ''
         )
     """
 
@@ -84,6 +88,7 @@ object TransactionEntity {
         put(COL_ORDER_ID, tx.orderId)
         put(COL_PLATFORM_CATEGORY, tx.platformCategory)
         put(COL_TRADE_TIME, tx.tradeTime)
+        put(COL_TO_ACCOUNT_NAME, tx.toAccountName)
     }
 
     /** Cursor → Transaction */
@@ -106,7 +111,8 @@ object TransactionEntity {
         payMethod = cursor.getString(cursor.getColumnIndexOrThrow(COL_PAY_METHOD)),
         orderId = cursor.getString(cursor.getColumnIndexOrThrow(COL_ORDER_ID)),
         platformCategory = cursor.getString(cursor.getColumnIndexOrThrow(COL_PLATFORM_CATEGORY)),
-        tradeTime = cursor.getString(cursor.getColumnIndexOrThrow(COL_TRADE_TIME))
+        tradeTime = cursor.getString(cursor.getColumnIndexOrThrow(COL_TRADE_TIME)),
+        toAccountName = cursor.getString(cursor.getColumnIndexOrThrow(COL_TO_ACCOUNT_NAME))
     )
 
     /** Cursor → List<Transaction> */

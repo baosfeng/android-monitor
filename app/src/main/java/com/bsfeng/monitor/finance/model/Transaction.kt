@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter
  * @param orderId 订单号 / 交易单号，跨源对账用
  * @param platformCategory 平台自带分类原文（如「餐饮美食」），用于校准我们自己的分类映射
  * @param tradeTime 页面上的**原始交易时间**（如 `2026-10-16 18:32:21`）；[date] / [dateTime] 是它的规范化结果
+ * @param toAccountName 转入账户名（仅 [type]=2 转账使用）：[accountName] 是转出账户，本字段是转入账户
  */
 data class Transaction(
     val id: Long = 0,
@@ -35,7 +36,8 @@ data class Transaction(
     val payMethod: String = "",
     val orderId: String = "",
     val platformCategory: String = "",
-    val tradeTime: String = ""
+    val tradeTime: String = "",
+    val toAccountName: String = ""
 ) {
     val isExpense: Boolean get() = type == 0
     val isIncome: Boolean get() = type == 1
@@ -61,7 +63,7 @@ data class Transaction(
 
     companion object {
         /**
-         * 组合「日期 + 时刻」为交易时间戳（yyyy-MM-dd HH:mm）。
+         * 组合「日期 + 时刻」为交易时间戳（yyyy-MM-dd HH:mm:ss，**精确到秒**）。
          *
          * ⚠️ 时刻必须取自 [LocalDateTime] / [LocalTime]。用 [java.time.LocalDate] 去
          * `format("HH:mm")` 会抛 UnsupportedTemporalTypeException（Unsupported field: HourOfDay），
@@ -69,6 +71,6 @@ data class Transaction(
          * 表面现象很像「点保存跳到了别的 App」（2026-10 真机踩坑）。
          */
         fun buildDateTime(date: String, now: LocalDateTime = LocalDateTime.now()): String =
-            "$date ${now.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+            "$date ${now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}"
     }
 }
