@@ -16,8 +16,9 @@ import org.robolectric.annotation.Config
 /**
  * [FinanceManager] 交易 ↔ 账户余额联动（Robolectric，真实 SQLite）。
  *
- * 口径（见 FinanceManager 的 balanceEffectOf / applyBalanceDelta）：
+ * 口径（见 FinanceManager 的 applyTransactionEffect / applyBalanceDelta）：
  * 收入按金额加上、支出按金额扣减；负数支出（退款抵扣）反向加上；
+ * 转账在转出账户扣、转入账户加（缺转入账户时只扣转出侧，不让差额凭空消失）；
  * 删 / 改按签名金额回冲或补差；换账户时旧账户回冲、新账户计入；
  * 账户名为空或账户不存在时跳过联动。
  */
@@ -129,12 +130,61 @@ class FinanceAccountBalanceTest {
     }
 
     @Test
-    fun `非收入类型（转账退款）按支出方向计入余额`() = runBlocking {
+    fun `转账在转出账户扣减并在转入账户增加`() = runBlocking {
+        seedAccount("支付宝", 100.0)
+        seedAccount("现金钱包", 50.0)
+
+        manager.addTransaction(
+            tx(amount = 30.0, type = 2, account = "支付宝").copy(toAccountName = "现金钱包")
+        )
+
+        assertEquals("转出账户扣减", 70.0, balanceOf("支付宝"), 0.0001)
+        assertEquals("转入账户增加", 80.0, balanceOf("现金钱包"), 0.0001)
+    }
+
+    @Test
+    fun `转账缺转入账户时只扣转出侧`() = runBlocking {
         seedAccount("支付宝", 100.0)
 
         manager.addTransaction(tx(amount = 50.0, type = 2))
+
+        assertEquals("老记录没有转入账户，只扣转出侧", 50.0, balanceOf("支付宝"), 0.0001)
+    }
+
+    @Test
+    fun `删除转账后两个账户都回冲`() = runBlocking {
+        seedAccount("支付宝", 100.0)
+        seedAccount("现金钱包", 50.0)
+        val id = manager.addTransaction(
+            tx(amount = 30.0, type = 2, account = "支付宝").copy(toAccountName = "现金钱包")
+        )
+
+        manager.deleteTransaction(id)
+
+        assertEquals(100.0, balanceOf("支付宝"), 0.0001)
+        assertEquals(50.0, balanceOf("现金钱包"), 0.0001)
+    }
+
+    @Test
+    fun `改转账金额只按差额补正`() = runBlocking {
+        seedAccount("支付宝", 100.0)
+        seedAccount("现金钱包", 50.0)
+        val id = manager.addTransaction(
+            tx(amount = 30.0, type = 2, account = "支付宝").copy(toAccountName = "现金钱包")
+        )
+
+        manager.updateTransaction(manager.getTransactionById(id)!!.copy(amount = 10.0))
+
+        assertEquals(90.0, balanceOf("支付宝"), 0.0001)
+        assertEquals(60.0, balanceOf("现金钱包"), 0.0001)
+    }
+
+    @Test
+    fun `退款类型仍按支出方向计入余额`() = runBlocking {
+        seedAccount("支付宝", 100.0)
+
         manager.addTransaction(tx(amount = 20.0, type = 3))
 
-        assertEquals("只有收入类型加余额，其余按金额扣减", 30.0, balanceOf("支付宝"), 0.0001)
+        assertEquals(80.0, balanceOf("支付宝"), 0.0001)
     }
 }

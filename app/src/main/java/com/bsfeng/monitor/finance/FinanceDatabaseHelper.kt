@@ -22,8 +22,10 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
          * - V1：初始版本（交易 + 分类 + 账户 + 预算 + 标签）
          * - V2：[TransactionEntity] 增 6 列，把原先只能挤进 remark 的结构化信息拆开
          *   （商户 / 商品说明 / 付款方式 / 订单号 / 平台分类 / 原始交易时间），便于统计与分析
+         * - V3：[TransactionEntity] 增 1 列 to_account_name —— 转账（type=2）需要「转出 → 转入」
+         *   两个账户才能把余额算对（[com.bsfeng.monitor.finance.FinanceManager] 按此双向增减）
          */
-        internal const val DATABASE_VERSION = 2
+        internal const val DATABASE_VERSION = 3
 
         @Volatile
         private var INSTANCE: FinanceDatabaseHelper? = null
@@ -69,6 +71,14 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
             db.execSQL("ALTER TABLE $t ADD COLUMN ${TransactionEntity.COL_TRADE_TIME} TEXT NOT NULL DEFAULT ''")
             // 按商户 / 付款方式做统计要分组，先建索引
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_finance_tx_merchant ON $t(${TransactionEntity.COL_MERCHANT})")
+        }
+        // V2 → V3：转账的转入账户。同样 NOT NULL DEFAULT ''，老数据（含熊猫导入）为空串；
+        // 空串时 FinanceManager 会跳过该侧的余额变动，不会把差额算到别的账户上。
+        if (oldVersion < 3) {
+            db.execSQL(
+                "ALTER TABLE ${TransactionEntity.TABLE_NAME} ADD COLUMN " +
+                    "${TransactionEntity.COL_TO_ACCOUNT_NAME} TEXT NOT NULL DEFAULT ''"
+            )
         }
     }
 

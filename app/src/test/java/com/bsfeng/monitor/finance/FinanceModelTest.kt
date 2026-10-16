@@ -132,19 +132,19 @@ class FinanceModelTest {
 
     @Test
     fun `交易时间戳拼接日期与时刻`() {
-        val now = LocalDateTime.of(2026, 10, 14, 9, 5)
-        assertEquals("2026-10-14 09:05", Transaction.buildDateTime("2026-10-14", now))
+        val now = LocalDateTime.of(2026, 10, 14, 9, 5, 7)
+        assertEquals("2026-10-14 09:05:07", Transaction.buildDateTime("2026-10-14", now))
     }
 
     @Test
-    fun `交易时间戳边界取自午夜与一天最后一分钟`() {
+    fun `交易时间戳边界取自午夜与一天最后一秒`() {
         assertEquals(
-            "2026-10-14 00:00",
-            Transaction.buildDateTime("2026-10-14", LocalDateTime.of(2026, 10, 14, 0, 0)),
+            "2026-10-14 00:00:00",
+            Transaction.buildDateTime("2026-10-14", LocalDateTime.of(2026, 10, 14, 0, 0, 0)),
         )
         assertEquals(
-            "2026-10-14 23:59",
-            Transaction.buildDateTime("2026-10-14", LocalDateTime.of(2026, 10, 14, 23, 59)),
+            "2026-10-14 23:59:59",
+            Transaction.buildDateTime("2026-10-14", LocalDateTime.of(2026, 10, 14, 23, 59, 59)),
         )
     }
 
@@ -152,16 +152,16 @@ class FinanceModelTest {
     fun `交易时间戳支持跨日组合且不抛 UnsupportedTemporalTypeException`() {
         // 回归：曾用 LocalDate.now().format("HH:mm") 取时刻，
         // 抛 UnsupportedTemporalTypeException 导致保存交易时 App 崩溃
-        val now = LocalDateTime.of(2026, 1, 1, 8, 30)
-        assertEquals("2025-12-31 08:30", Transaction.buildDateTime("2025-12-31", now))
+        val now = LocalDateTime.of(2026, 1, 1, 8, 30, 15)
+        assertEquals("2025-12-31 08:30:15", Transaction.buildDateTime("2025-12-31", now))
     }
 
     @Test
-    fun `交易时间戳默认使用当前时刻`() {
+    fun `交易时间戳精确到秒且默认使用当前时刻`() {
         val text = Transaction.buildDateTime("2026-10-14")
         assertTrue(
-            "格式应为 yyyy-MM-dd HH:mm，实际: $text",
-            Regex("""\d{4}-\d{2}-\d{2} \d{2}:\d{2}""").matches(text),
+            "格式应为 yyyy-MM-dd HH:mm:ss（精确到秒），实际: $text",
+            Regex("""\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}""").matches(text),
         )
         assertTrue(text.startsWith("2026-10-14 "))
     }

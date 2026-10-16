@@ -461,8 +461,10 @@ class AutoBookParserTest {
     @Test
     fun `交易时间规范化支持支付宝与微信两种格式`() {
         // 支付宝给 ISO，微信给中文年月日（真机实测两种都出现过）
-        assertEquals("2026-10-16 18:32", AutoBookParser.normalizeTradeTime("2026-10-16 18:32:21"))
-        assertEquals("2026-10-10 14:01", AutoBookParser.normalizeTradeTime("2026年10月10日 14:01:42"))
+        assertEquals("2026-10-16 18:32:21", AutoBookParser.normalizeTradeTime("2026-10-16 18:32:21"))
+        assertEquals("2026-10-10 14:01:42", AutoBookParser.normalizeTradeTime("2026年10月10日 14:01:42"))
+        // 页面只给到分时补 00（精度取页面能给到的最高，不编造秒）
+        assertEquals("2026-10-16 18:32:00", AutoBookParser.normalizeTradeTime("2026-10-16 18:32"))
         // 认不出来时返回 null，由调用方退回记账时刻（宁可时间降级，也不能记错日期）
         assertNull(AutoBookParser.normalizeTradeTime(""))
         assertNull(AutoBookParser.normalizeTradeTime("昨天 14:01"))
