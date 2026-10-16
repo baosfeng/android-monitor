@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
@@ -206,6 +207,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         if (best.isEmpty()) {
             Log.d(TAG, "未取到 $packageName 的有内容窗口，候选=[${tried.joinToString(", ")}]")
+            // 光凭「候选=[]」分不清「窗口不在清单里」和「窗口在但树是空的」，这两者应对完全不同
+            logWindowDiagnostics(packageName, windows)
         }
         return best
     }
@@ -267,6 +270,41 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 runCatching { root.recycle() }
             }
         }
+    }
+
+    /**
+     * 诊断：把「无障碍交互窗口清单」原样打进日志。
+     *
+     * 读不到页面时，只靠 `候选=[]` 无法区分两种成因，而它们的应对完全不同：
+     * - **清单里根本没有目标 App 的窗口** → 窗口枚举被系统或第三方悬浮窗影响
+     *   （真机踩过：熊猫记账的悬浮窗会顶掉根窗口，见 docs/踩坑/第三方悬浮窗顶掉无障碍根窗口.md）；
+     * - **窗口在，但 `childCount=0` / 文本数为 0** → App 端把节点树藏起来了（微信就是这种）。
+     *
+     * 真机实测（小米 14 / HyperOS，2026-10-16）微信「支付成功」页与微信首页都落在第二种，
+     * 完整证据与可行通道见 docs/记账/微信支付页识别调研.md。
+     */
+    private fun logWindowDiagnostics(packageName: String, windows: List<AccessibilityWindowInfo>) {
+        val parts = windows.map { window ->
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                null
+            }
+            try {
+                val pkg = root?.packageName?.toString() ?: "null"
+                val childCount = root?.childCount ?: -1
+                val textCount = if (root != null) NodeTextCollector.collect(root).size else -1
+                "type=${window.type},pkg=$pkg,childCount=$childCount,文本=$textCount"
+            } catch (e: Exception) {
+                "type=${window.type},读取异常=${e.message}"
+            } finally {
+                runCatching { root?.recycle() }
+            }
+        }
+        Log.d(
+            TAG,
+            "窗口诊断: 目标=$packageName, 交互窗口共 ${windows.size} 个 -> [${parts.joinToString("; ")}]"
+        )
     }
 
     /** 这一笔是否已经落过库（持久化去重兜底） */
