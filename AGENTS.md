@@ -66,7 +66,7 @@
 | 后台服务 | 无障碍服务(前台轮询+开屏跳过)、健康检查、AlarmReceiver 定时保活(每分钟) → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
 | 开屏跳过 | CSS 风格选择器 DSL、节点匹配器、规则引擎、内置规则库、规则管理、坐标点击降级 → [设计](docs/开屏跳过/设计.md) · [后续计划](docs/开屏跳过/后续计划.md) · [业界调研与改进方案](docs/开屏跳过/业界调研与改进方案.md)（改跳过代码/规则前必读） · [兜底方案调研](docs/开屏跳过/兜底方案调研.md)（无文本/无稳定 ID 场景与 OCR 决策） · [规则实测记录](docs/开屏跳过/规则实测记录.md)（逐 App 调优产出与快照工具用法） | `com.bsfeng.monitor.skip` |
 | 记账模块 | 账目分类/账户/交易/预算、FinanceDao、熊猫记账导入、统计图表 → [文档](docs/记账/概述.md)（改记账代码前必读） | `com.bsfeng.monitor.finance` |
-| 自动记账 | 无障碍识别微信/支付宝**单笔账单页**（账单页门禁 + 视觉行解析）→ 弹确认浮窗（跟随 8 套主题）→ 同一笔短时间去重 → 用户确认后幂等落库 → [文档](docs/记账/自动记账.md)（改识别规则前必读） · [业界调研](docs/记账/自动记账调研.md) · [微信支付页识别调研](docs/记账/微信支付页识别调研.md)（**微信支付页被无障碍封锁的根因与可行通道**） | `com.bsfeng.monitor.autobook` |
+| 自动记账 | 无障碍识别微信/支付宝**单笔账单页**（账单页门禁 + 视觉行解析）→ 弹确认浮窗（跟随 8 套主题）→ 同一笔短时间去重 → 用户确认后幂等落库 → [文档](docs/记账/自动记账.md)（改识别规则前必读） · [业界调研](docs/记账/自动记账调研.md) · [微信支付页识别调研](docs/记账/微信支付页识别调研.md)（**微信按服务身份封锁节点、改用白名单身份注册后放行的机制与真机证据**） | `com.bsfeng.monitor.autobook` |
 | UI 界面 | Jetpack Compose 四标签界面:实时事件流、广告跳过、记账、设置 | `com.bsfeng.monitor.ui` |
 | 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 | `com.bsfeng.monitor.util` |
 
@@ -126,7 +126,8 @@
 | 修改自动记账的节点采集 / 视觉行合成 | `app/src/main/java/com/bsfeng/monitor/autobook/NodeTextCollector.kt` + `PageLines.kt` |
 | 修改自动记账浮窗 UI | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookConfirmSheet.kt` |
 | 修改自动记账浮窗窗口参数 / 面板宿主 | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookOverlay.kt` |
-| 修改自动记账触发时机 / 窗口选择 / 落库 | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookEngine.kt` |
+| 修改自动记账触发时机 / 窗口选择 / 落库 / 窗口诊断 | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookEngine.kt` |
+| 修改无障碍服务的**注册身份**（微信白名单伪装壳） | `app/src/main/java/com/google/android/accessibility/selecttospeak/SelectToSpeakService.kt` + `app/src/main/AndroidManifest.xml` + `app/src/main/java/com/bsfeng/monitor/util/AccessibilityStatus.kt` |
 | 修改应用配置 | `app/src/main/java/com/bsfeng/monitor/AppConfig.kt` |
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` |
 | 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` |
