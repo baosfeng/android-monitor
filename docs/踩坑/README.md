@@ -14,3 +14,4 @@
 | 6 | [LocalDate 格式化 HH:mm 导致记账保存崩溃](LocalDate格式化HH-mm导致记账保存崩溃.md) | 记账 / 时间 API | ⚠️ 崩溃（现象易误判为跳到其它 App） |
 | 7 | [第三方悬浮窗顶掉无障碍根窗口](第三方悬浮窗顶掉无障碍根窗口.md) | 自动记账 / 无障碍 | ⚠️ 功能完全失效且用户无感 |
 | 8 | [uiautomator dump 会踢掉无障碍服务](uiautomator踢掉无障碍服务.md) | 自动记账 / ADB 调试 | ℹ️ 只影响验证取证（易误判为功能失效） |
+| 9 | [自绘 BottomSheet 传 align 定位失效](自绘BottomSheet传align定位失效.md) | UI 组件 / 各处抽屉 | ⚠️ 抽屉贴顶（无报错、编译与单测全绿） |
