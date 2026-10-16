@@ -6,6 +6,13 @@
 
     ⚠️ canTakeScreenshot 目前是 false。若后续要覆盖「微信支付页读不到节点」的场景，
     需要改成 true 并走「takeScreenshot + 本地 OCR」通道（Android 11+ 正规 API，有 333ms 节流）。
+
+    ⚠️ 不要加 android:isAccessibilityTool="true"：已于 2026-10-16 真机实验证伪并移除。
+    加上之后，微信「支付成功」页（前台焦点窗口 com.tencent.mm/.framework.app.UIPageFragmentActivity）
+    在 22 秒内被读 12 次全部为空，连「忽略坐标」的诊断探针也读不到 —— 说明微信不是把节点标记为
+    不可见，而是根本不给节点。实验前提已确认真实生效（服务重连日志打印 isAccessibilityTool=true），
+    不是假阴性。它还会把「本服务是残障用户无障碍工具」这一不实声明带进 APK。
+    详见 docs/记账/微信支付页识别调研.md 的「实验 2」。
 -->
 <accessibility-service
     xmlns:android="http://schemas.android.com/apk/res/android"
