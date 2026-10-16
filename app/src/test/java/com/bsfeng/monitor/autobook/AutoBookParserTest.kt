@@ -425,6 +425,49 @@ class AutoBookParserTest {
         )
     }
 
+    @Test
+    fun `账本备注带上商品说明与付款方式`() {
+        // 真机（2026-10-16 支付宝账单详情页）：商户名只是平台名「淘宝闪购」，
+        // 真正说明这笔钱花在哪的是商品说明；付款方式说明从哪张卡扣的。
+        // 用户反馈「详情信息没记录正确」就是因为这两项原先全丢。
+        val lines = listOf(
+            "返回 全部账单", "账单详情", "淘宝闪购", "支出23.9元", "交易成功",
+            "支付时间 2026-10-16 18:32:21", "付款方式 招商银行信用卡(8888)",
+            "商品说明 某某湘菜馆(示例店)外卖订单", "账单分类 餐饮美食"
+        )
+        val draft = AutoBookParser.parse(alipay, lines, 1L)
+        requireNotNull(draft)
+        assertEquals("淘宝闪购", draft.merchant)
+        assertEquals("某某湘菜馆(示例店)外卖订单", draft.productDesc)
+        assertEquals(
+            "备注不带前缀，直接以商户名开头",
+            "淘宝闪购·某某湘菜馆(示例店)外卖订单·招商银行信用卡(8888)",
+            draft.remark()
+        )
+    }
+
+    @Test
+    fun `商户名取不到时用商品说明顶替备注`() {
+        val lines = listOf(
+            "交易成功", "支出23.9元", "支付时间 2026-10-16 18:32:21",
+            "商品说明 某某湘菜馆(示例店)外卖订单"
+        )
+        val draft = AutoBookParser.parse(alipay, lines, 1L)
+        requireNotNull(draft)
+        assertEquals("这个模板没有商户字段", "", draft.merchant)
+        assertEquals("某某湘菜馆(示例店)外卖订单", draft.remark())
+    }
+
+    @Test
+    fun `交易时间规范化支持支付宝与微信两种格式`() {
+        // 支付宝给 ISO，微信给中文年月日（真机实测两种都出现过）
+        assertEquals("2026-10-16 18:32", AutoBookParser.normalizeTradeTime("2026-10-16 18:32:21"))
+        assertEquals("2026-10-10 14:01", AutoBookParser.normalizeTradeTime("2026年10月10日 14:01:42"))
+        // 认不出来时返回 null，由调用方退回记账时刻（宁可时间降级，也不能记错日期）
+        assertNull(AutoBookParser.normalizeTradeTime(""))
+        assertNull(AutoBookParser.normalizeTradeTime("昨天 14:01"))
+    }
+
     // ==================== 标签取值 ====================
 
     @Test
@@ -532,6 +575,25 @@ class AutoBookParserTest {
         val fuzzy = keys.first { it.value.startsWith("sum:") }
         val precise = keys.first { it.value.startsWith("order:") }
         assertTrue("兜底指纹窗口必须更短，否则会吞掉同金额的另一笔交易", fuzzy.ttlMs < precise.ttlMs)
+    }
+
+    @Test
+    fun `图标字体的私有区码位被剥掉，页面标题不再混进商户名`() {
+        // 真机实测（2026-10-16 支付宝账单详情页）：顶部栏节点文本是「\ue642 账单详情」——
+        // 图标字符让整行既不等于任何标签、也不以标签开头，躲过了噪声表，
+        // 被兜底逻辑当成商户名写进账本（备注成了「自动记账·\ue642 账单详情」）。
+        val nodes = listOf(
+            NodeText("\ue642 账单详情", 75, 225),
+            NodeText("全部账单", 960, 228),
+            NodeText("淘宝闪购", 500, 365),
+            NodeText("-23.90", 500, 445),
+            NodeText("交易成功", 500, 510)
+        )
+        val lines = PageLines.toLines(nodes)
+        assertEquals("图标字符应被剥掉、余下文字保留", "账单详情 全部账单", lines[0])
+
+        // 剥掉图标后顶部栏被噪声表挡住，兜底才能取到真正的商户名（页面顶部居中大标题）
+        assertEquals("淘宝闪购", AutoBookParser.extractMerchant(lines))
     }
 
     // ==================== 视觉行合成（PageLines） ====================
