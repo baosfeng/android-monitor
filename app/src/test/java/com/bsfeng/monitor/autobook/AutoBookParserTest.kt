@@ -387,6 +387,44 @@ class AutoBookParserTest {
         )
     }
 
+    @Test
+    fun `微信红包发送结果页被识别为账单`() {
+        // 真机实测（2026-10-16，微信 8.0.79）：红包付款成功后**没有**「支付成功」锚点页 ——
+        // 转账有，红包发完直接回聊天页，而聊天页的红包气泡不含金额。
+        // 金额只在这个极简结果页里出现过，不认它红包就永远记不上。
+        val draft = AutoBookParser.parse(wechat, listOf("返回", "微信红包", "￥0.01", "微信支付"), 1L)
+        requireNotNull(draft)
+        assertEquals(0.01, draft.amount, 0.001)
+        assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
+        assertEquals("红包结果页没有收款方字段，商户应留空而不是写产品名", "", draft.merchant)
+    }
+
+    @Test
+    fun `红包发送前与付款中的页面不得被识别`() {
+        // 输入页（塞钱进红包 / 未领取的红包）
+        assertNull(
+            "塞钱进红包的输入页不得弹窗",
+            AutoBookParser.parse(
+                wechat,
+                listOf(
+                    "更多信息", "发红包", "金额", "恭喜发财，大吉大利", "添加表情", "红包封面",
+                    "¥0.01", "塞钱进红包", "未领取的红包，将于24小时后发起退款"
+                ),
+                1L
+            )
+        )
+        // 收银台（使用密码）
+        assertNull(
+            "收银台页面不得弹窗",
+            AutoBookParser.parse(wechat, listOf("关闭 使用密码", "￥0.01 微信红包"), 1L)
+        )
+        // 指纹验证页
+        assertNull(
+            "指纹验证页不得弹窗",
+            AutoBookParser.parse(wechat, listOf("返回", "请验证指纹"), 1L)
+        )
+    }
+
     // ==================== 标签取值 ====================
 
     @Test

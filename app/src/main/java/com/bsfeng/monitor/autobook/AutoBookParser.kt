@@ -343,6 +343,16 @@ object AutoBookParser {
         "^\\s*(\\d{1,2}月\\d{1,2}日|周[一二三四五六日])\\s+\\d{1,2}:\\d{2}\\s*$"
     )
 
+    /**
+     * 红包**发送前 / 付款中**页面的特征词：出现任一即说明这笔还没付出去。
+     *
+     * 用来把「红包结果页」和「塞钱进红包输入页 / 收银台 / 指纹验证页」区分开 ——
+     * 少了这道区分，红包就会在**付款之前**弹窗。
+     */
+    private val RED_PACKET_PRE_PAY_WORDS = listOf(
+        "塞钱进红包", "未领取的红包", "发红包", "使用密码", "请验证指纹", "输入支付密码"
+    )
+
     /** 结果页收尾按钮：独占的支付结果页一定有一个「离开」入口 */
     private val RESULT_PAGE_ACTIONS = listOf("完成", "账单详情", "查看账单", "查看详情", "返回首页", "我知道了")
 
@@ -400,7 +410,8 @@ object AutoBookParser {
      * 1. **多笔痕迹** → 拒（流水列表 / 支付消息列表，哪怕它带了详情标签）；
      * 2. **账单详情页** → 放行（有「标签 → 值」结构，支付宝账单详情页就是这种）；
      * 3. **列表 / 摘要页** → 拒（首页「最近消息」的历史消息摘要靠这条挡掉）；
-     * 4. **独占结果页** → 放行（整行状态锚点 + 收尾按钮，付款后立即跳出的那页）。
+     * 4. **独占结果页** → 放行（整行状态锚点 + 收尾按钮，付款后立即跳出的那页）；
+     * 5. **微信红包结果页** → 放行（红包没有锚点页，见 [isRedPacketResultPage]）。
      *
      * 公开给 [AutoBookEngine] 做诊断用：识别失败时要能区分「门禁拒绝」和「是账单页但字段没认出来」。
      */
@@ -408,7 +419,8 @@ object AutoBookParser {
         if (hasMultipleTransactions(lines)) return false
         if (hasDetailStructure(lines)) return true
         if (isListOrSummaryPage(lines)) return false
-        return isStandaloneResultPage(lines)
+        if (isStandaloneResultPage(lines)) return true
+        return isRedPacketResultPage(lines)
     }
 
     /** 有任意一个账单字段标签取到了值 */
@@ -426,6 +438,27 @@ object AutoBookParser {
         val hasAnchor = lines.any { STATUS_ANCHOR.matches(it.trim()) }
         if (!hasAnchor) return false
         return lines.any { line -> RESULT_PAGE_ACTIONS.any { line.contains(it) } }
+    }
+
+    /**
+     * 是否**微信红包发送结果页**。
+     *
+     * 真机实测（2026-10-16，微信 8.0.79）：红包付款成功后**没有**「支付成功」锚点页 ——
+     * 转账有（`支付成功` + `完成`），红包发完直接回聊天页；而**聊天页的红包气泡不含金额**
+     * （只写「恭喜发财，大吉…」+「微信红包」）。金额只在这个极简结果页里出现过：
+     *
+     * `   [返回 | 微信红包 | ￥0.01 | 微信支付]`
+     *
+     * 因此不认这一页，红包就永远记不上（真机复现：用户发红包后浮窗不弹）。
+     *
+     * ⚠️ 必须叠加 [RED_PACKET_PRE_PAY_WORDS] 排除，否则会在**付款之前**弹窗。
+     */
+    private fun isRedPacketResultPage(lines: List<String>): Boolean {
+        val joined = lines.joinToString(" ")
+        if (!joined.contains("红包")) return false
+        if (!joined.contains("微信支付")) return false
+        if (RED_PACKET_PRE_PAY_WORDS.any { joined.contains(it) }) return false
+        return extractAmount(lines) != null
     }
 
     /**
@@ -643,7 +676,9 @@ object AutoBookParser {
             "账单详情", "立即领取", "联系商家", "更多", "请选择", "添加",
             "松开刷新", "下拉刷新", "搜索", "刷新", "扫一扫", "收付款", "卡包", "首页", "我的", "消息", "操作",
             // 真机实测（微信支付链路各页）：这些是页面按钮 / 状态文案，兜底逻辑会把它们当商户名
-            "返回", "关闭", "取消", "支付", "付款", "收款", "转账"
+            "返回", "关闭", "取消", "支付", "付款", "收款", "转账",
+            // 红包结果页上「微信红包」是产品名，不是收款方（真机实测该页没有商户字段）
+            "微信红包"
         )
         return noise.none { trimmed == it || trimmed.startsWith(it) }
     }
@@ -704,8 +739,9 @@ object AutoBookParser {
      *
      * 因此：
      * - **精确指纹**（订单号 / 交易时间）安静期长 —— 它们来自账单自身，跨时间稳定；
-     * - **兜底指纹**（渠道 + 方向 + 金额，**刻意不含商户名**）安静期短 ——
-     *   短时间内同渠道同金额再来一笔会一起被挡，但窗口只有 [FUZZY_KEY_TTL_MS]，代价可控。
+     * - **兜底指纹**（渠道 + 方向 + 金额，**刻意不含商户名**）标为 `precise = false` ——
+     *   它分不清「同一笔」和「另一笔同金额」，所以只做「刚弹过」的短暂防抖，
+     *   **不参与**「已忽略 / 已记账」的长期记忆（否则后一笔同金额的真实消费会被静默吞掉，真机踩过）。
      *
      * @return 至少一条指纹
      */
@@ -723,7 +759,7 @@ object AutoBookParser {
         if (timeText.isNotEmpty()) {
             keys += DedupKey("time:$channel:$type:$amount:$timeText", PRECISE_KEY_TTL_MS)
         }
-        keys += DedupKey("sum:$channel:$type:$amount", FUZZY_KEY_TTL_MS)
+        keys += DedupKey("sum:$channel:$type:$amount", FUZZY_KEY_TTL_MS, precise = false)
         return keys
     }
 
