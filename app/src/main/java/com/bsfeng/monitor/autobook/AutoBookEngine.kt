@@ -89,7 +89,10 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         val lines = collectPageLines(packageName)
         if (lines.isEmpty()) {
-            // 支付结果页刚切换时拿不到内容，等下一次事件即可（节流会挡住高频重复）
+            // 支付结果页刚切换时拿不到内容，等下一次事件即可（节流会挡住高频重复）。
+            // 顺带看一眼「节点是不是被标记成不可见了」——微信就是这么藏支付页的，
+            // 两种成因的应对完全不同，别白排查（见 docs/记账/微信支付页识别调研.md）。
+            logInvisibleNodesIfAny(packageName)
             Log.d(TAG, "未收集到页面文本，跳过: $packageName")
             return
         }
@@ -222,6 +225,47 @@ class AutoBookEngine(private val service: AccessibilityService) {
             }
             // 回到主线程挂 View（WindowManager 操作要求在同一线程，无障碍服务的主线程即主 Looper）
             service.mainExecutor.execute { display(draft, loaded) }
+        }
+    }
+
+    /**
+     * 诊断：页面文本为空时，再看一眼**节点是不是被 App 标记成不可见**了。
+     *
+     * 微信会按「无障碍服务身份」把支付页 / 聊天页 / WebView 页的节点标记为不可见并把 bounds 归零，
+     * 于是正常收集为空。此时忽略坐标再读一遍，结果能区分两种成因：
+     * - **能读到文本** → 节点树还在，只是被标记不可见 → 改采集策略还有救；
+     * - **仍然是空** → 节点树被系统裁掉了 → 只能换通道（通知 / 截图 OCR / 伪装服务）。
+     *
+     * 详见 docs/记账/微信支付页识别调研.md 的「待真机验证的实验清单」。
+     */
+    private fun logInvisibleNodesIfAny(packageName: String) {
+        val windows = try {
+            service.windows
+        } catch (e: Exception) {
+            null
+        } ?: return
+
+        for (window in windows) {
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            try {
+                if (root.packageName?.toString() != packageName) continue
+                val invisible = NodeTextCollector.collect(root, ignoreBounds = true)
+                if (invisible.isNotEmpty()) {
+                    val sample = invisible.take(12).joinToString(" | ") { it.text }
+                    Log.d(
+                        TAG,
+                        "诊断：$packageName 有 ${invisible.size} 个文本节点被标记为不可见（bounds 归零），样本=[$sample]"
+                    )
+                }
+            } catch (e: Exception) {
+                // 诊断失败绝不能影响主流程
+            } finally {
+                runCatching { root.recycle() }
+            }
         }
     }
 
