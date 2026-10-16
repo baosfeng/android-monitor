@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +50,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 
 /**
@@ -230,56 +235,105 @@ fun Scrim(visible: Boolean, onDismiss: () -> Unit) {
     )
 }
 
-/** 底部 sheet：进入 220ms / 退出 150ms（契约 §7）；底 = --surface-warm + --elev-3 + grip（原型 .sheet）。 */
+/**
+ * 底部抽屉：**窗口级全屏**承载（[Dialog]，关闭平台默认宽度、让窗口自己贴系统栏）。
+ *
+ * 为什么走窗口：宿主 MainActivity 已 enableEdgeToEdge，但 Scaffold 未接管 contentWindowInsets，
+ * 组合在页面内的浮层只能画到系统栏之内 —— 真机表现是「遮罩盖不住状态栏与手势条、顶部仍是亮的」，
+ * 不像模态（系统栏区域的触摸还会落到下层页面）。窗口级浮层天然覆盖整屏，也把触摸整体拦在抽屉外。
+ * Scaffold 的 insets 保持不动（改它会牵动所有页面）。
+ *
+ * 遮罩：--scrim 只有 34% 不透明度，单层盖不住下层表单（真机反馈：背景内容清清楚楚）。这里叠两层，
+ * 合成后 ≈ 1 − (1 − 0.34)² ≈ 0.56 —— 这是**对原型 0.34 的有意偏离**：抽屉是模态操作面板，
+ * 可读性优先于装饰语言。
+ *
+ * 面板底色：glassmorphism 的 --surface-warm 是 rgba(238,246,255,0.72)，半透明会让下层「保存」
+ * 按钮透出来；这里用 [compositeOver] 把 alpha 压到不透明（等价于叠在 --surface 上）——同样是对
+ * glassmorphism 主题语言的**有意偏离**，理由同上。
+ *
+ * 手势条：面板底色铺到屏幕底（延伸到手势条之下），内容用 navigationBarsPadding 上抬，
+ * 否则「确定 / 关闭」会被手势条压住。
+ *
+ * 交互：点遮罩 = [onDismiss]；返回键 / 系统返回手势 = Dialog 的 onDismissRequest = [onDismiss]。
+ * 入场 220ms 滑入 + 淡入（契约 §7）；关闭即时卸载。
+ */
 @Composable
 fun BottomSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     showGrip: Boolean = true,
+    /** 遮罩节点的 testTag：原型对照屏（ProtoRecordSheets）用它落 s14a-*-sheet 锚点。 */
+    scrimTag: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val t = LocalDesignTokens.current
     if (!visible) return
-    androidx.compose.animation.AnimatedVisibility(
-        visible = visible,
-        // ⚠️ modifier 必须作用在 AnimatedVisibility（本组件的根节点）上：调用方普遍写
-        // Modifier.align(Alignment.BottomCenter) 来把 sheet 贴底，而 align 是 Box 的 parentData ——
-        // 只有落在 Box 的**直接子节点**上才会被读取。此前它被传给内部的 Column，Box 读不到，
-        // 于是所有抽屉都退回默认的 TopStart（真机表现：抽屉贴在屏幕顶部）。
-        modifier = modifier,
-        enter = androidx.compose.animation.slideInVertically(
-            animationSpec = androidx.compose.animation.core.tween(t.durOverlayIn)
-        ) + androidx.compose.animation.fadeIn(
-            animationSpec = androidx.compose.animation.core.tween(t.durOverlayIn)
-        ),
-        exit = androidx.compose.animation.slideOutVertically(
-            animationSpec = androidx.compose.animation.core.tween(t.durOverlayOut)
-        ) + androidx.compose.animation.fadeOut(
-            animationSpec = androidx.compose.animation.core.tween(t.durOverlayOut)
+    val t = LocalDesignTokens.current
+    // 面板底色合成到不透明（见上方注释：对 glassmorphism 的有意偏离）
+    val sheetColor = t.surfaceWarm.compositeOver(t.surface)
+    val sheetShape = RoundedCornerShape(topStart = t.radiusLg, topEnd = t.radiusLg)
+    // 先补一帧再置 true，AnimatedVisibility 才会真正播放入场动画（首次组合即 true 时不播）
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
         ),
     ) {
-        val sheetShape = RoundedCornerShape(topStart = t.radiusLg, topEnd = t.radiusLg)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .tokenShadow(3, sheetShape)
-                .clip(sheetShape)
-                .background(t.surfaceWarm)
-                .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space6),
-        ) {
-            if (showGrip) {
-                Box(
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(SHEET_GRIP_W)
-                        .height(SHEET_GRIP_H)
-                        .clip(RoundedCornerShape(t.radiusPill))
-                        .background(t.border)
-                )
-                Spacer(Modifier.height(t.space3))
+        Box(Modifier.fillMaxSize()) {
+            // 遮罩：铺满整屏（含状态栏与手势条），点即关
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (scrimTag != null) Modifier.testTag(scrimTag) else Modifier)
+                    .background(t.scrim)
+                    .background(t.scrim)
+                    .clickable { onDismiss() },
+            )
+            AnimatedVisibility(
+                visible = entered,
+                // ⚠️ modifier 必须作用在 AnimatedVisibility（Box 的**直接子节点**）上：调用方普遍写
+                // Modifier.align(Alignment.BottomCenter) 来把抽屉贴底，而 align 是 Box 的 parentData ——
+                // 落在子节点上才会被读取（此前它被传给内部的 Column，所有抽屉都退回 TopStart）。
+                modifier = Modifier.align(Alignment.BottomCenter).then(modifier),
+                enter = slideInVertically(
+                    animationSpec = tween(t.durOverlayIn)
+                ) + fadeIn(
+                    animationSpec = tween(t.durOverlayIn)
+                ),
+                exit = slideOutVertically(
+                    animationSpec = tween(t.durOverlayOut)
+                ) + fadeOut(
+                    animationSpec = tween(t.durOverlayOut)
+                ),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tokenShadow(3, sheetShape)
+                        .clip(sheetShape)
+                        .background(sheetColor)
+                        .navigationBarsPadding()
+                        .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space6),
+                ) {
+                    if (showGrip) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .width(SHEET_GRIP_W)
+                                .height(SHEET_GRIP_H)
+                                .clip(RoundedCornerShape(t.radiusPill))
+                                .background(t.border)
+                        )
+                        Spacer(Modifier.height(t.space3))
+                    }
+                    content()
+                }
             }
-            content()
         }
     }
 }

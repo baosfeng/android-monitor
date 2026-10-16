@@ -58,7 +58,6 @@ import com.bsfeng.monitor.ui.live.DetailRow
 import com.bsfeng.monitor.ui.live.FiveStateDemo
 import com.bsfeng.monitor.ui.live.FiveStateDemoBar
 import com.bsfeng.monitor.ui.live.MetaText
-import com.bsfeng.monitor.ui.live.OverlayScrim
 import com.bsfeng.monitor.ui.live.PLACEHOLDER
 import com.bsfeng.monitor.ui.live.ScreenHead
 import com.bsfeng.monitor.ui.live.StackRow
@@ -311,8 +310,8 @@ fun AdScreen(
         )
 
         selected?.let { record ->
+            // 遮罩由 BottomSheet 的窗口级全屏浮层承担（页内遮罩盖不住状态栏/手势条，且会叠成两层）
             Box(Modifier.fillMaxSize()) {
-                OverlayScrim(onDismiss = { selected = null })
                 BottomSheet(
                     visible = true,
                     onDismiss = { selected = null },

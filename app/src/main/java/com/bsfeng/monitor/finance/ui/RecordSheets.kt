@@ -473,10 +473,12 @@ internal fun BoxScope.ReceiptSheet(
 }
 
 /**
- * 抽屉外壳：遮罩（点即关）+ 底部面板 + 标题（原型 .scrim.is-bottom > .sheet + .h3）。
+ * 抽屉外壳：底部面板 + 标题（原型 .scrim.is-bottom > .sheet + .h3）。
  *
- * 声明成 [BoxScope] 扩展是为了 BottomSheet 的底对齐 —— 遮罩铺满、面板贴底，
- * 两者必须在同一个 Box 里（原型 .scrim.is-bottom 的 flex-end 就是这件事）。
+ * 遮罩不在页面里自绘：[BottomSheet] 走窗口级全屏承载，遮罩与面板一起覆盖整屏（含状态栏与手势条）；
+ * 页面内的遮罩只能画到系统栏之内（真机表现为顶部仍亮、不像模态），还会与窗口遮罩叠成两层。
+ *
+ * 声明成 [BoxScope] 扩展是为了 [BottomSheet] 的底对齐（align 是 Box 的 parentData）。
  */
 @Composable
 private fun BoxScope.SheetShell(
@@ -485,7 +487,6 @@ private fun BoxScope.SheetShell(
     content: @Composable () -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    FinanceScrim(onDismiss = onDismiss)
     BottomSheet(
         visible = true,
         onDismiss = onDismiss,
