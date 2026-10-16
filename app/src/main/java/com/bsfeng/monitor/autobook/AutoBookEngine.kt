@@ -4,8 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
@@ -89,21 +87,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
         if (now - lastRunAtMs < THROTTLE_MS) return
         lastRunAtMs = now
 
-        val root = resolveTargetRoot(packageName)
-        if (root == null) {
-            // 支付结果页刚切换时 root 常为 null，等下一次事件即可（节流会挡住高频重复）
-            Log.d(TAG, "未取到 $packageName 的窗口，本次跳过")
-            return
-        }
-        val lines = try {
-            NodeTextCollector.collectLines(root)
-        } catch (e: Exception) {
-            Log.w(TAG, "收集页面文本失败: ${e.message}")
-            emptyList()
-        } finally {
-            runCatching { root.recycle() }
-        }
+        val lines = collectPageLines(packageName)
         if (lines.isEmpty()) {
+            // 支付结果页刚切换时拿不到内容，等下一次事件即可（节流会挡住高频重复）
             Log.d(TAG, "未收集到页面文本，跳过: $packageName")
             return
         }
@@ -147,17 +133,20 @@ class AutoBookEngine(private val service: AccessibilityService) {
     }
 
     /**
-     * 取目标 App 的窗口根节点。
+     * 取目标 App 的页面文本。
      *
      * ⚠️ **不能用 `rootInActiveWindow` 直接读**：它返回的是「活动窗口」，只要有第三方悬浮窗盖在
      * 支付页上（真机实测：熊猫记账的记账确认窗一直在支付宝页面上），读到的就是那个悬浮窗的文本，
-     * 支付页一个字段都拿不到。正确做法是从 `windows` 里按**包名**挑应用窗口。
+     * 支付页一个字段都拿不到。
+     *
+     * ⚠️ **也不能只取「第一个包名匹配的窗口」**：微信会同时挂好几个窗口（真机实测
+     * `LauncherUI` / `MallIndexUIv2` / `UIPageFragmentActivity` / `MMWebViewUI`），
+     * 栈底那个 `LauncherUI` 往往是个读不出内容的空壳 —— 于是出现「明明停在支付成功页/转账详情页，
+     * 却一直提示未收集到页面文本」。这里逐个候选窗口试读，**取内容最丰富的那个**。
      *
      * 依赖无障碍配置里的 `flagRetrieveInteractiveWindows`（本项目已开启）。
-     *
-     * @return 目标包的根节点；调用方负责 recycle
      */
-    private fun resolveTargetRoot(packageName: String): AccessibilityNodeInfo? {
+    private fun collectPageLines(packageName: String): List<String> {
         val windows = try {
             service.windows
         } catch (e: Exception) {
@@ -165,37 +154,57 @@ class AutoBookEngine(private val service: AccessibilityService) {
             null
         }
 
-        if (!windows.isNullOrEmpty()) {
-            // 第一轮：优先应用类型窗口（排除输入法、系统面板、悬浮窗）
-            for (window in windows) {
-                if (window.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
-                val root = window.root ?: continue
-                if (root.packageName?.toString() == packageName) return root
-                runCatching { root.recycle() }
-            }
-            // 第二轮：放宽到任意类型窗口，只要包名匹配
-            for (window in windows) {
-                val root = window.root ?: continue
-                if (root.packageName?.toString() == packageName) return root
-                runCatching { root.recycle() }
+        if (windows.isNullOrEmpty()) {
+            // 兜底：活动窗口恰好就是目标 App（没有第三方悬浮窗时走这里）
+            val active = try {
+                service.rootInActiveWindow
+            } catch (e: Exception) {
+                null
+            } ?: return emptyList()
+            return try {
+                if (active.packageName?.toString() == packageName) {
+                    NodeTextCollector.collectLines(active)
+                } else {
+                    emptyList()
+                }
+            } finally {
+                runCatching { active.recycle() }
             }
         }
 
-        // 兜底：活动窗口恰好就是目标 App（没有第三方悬浮窗时走这里）
-        val active = service.rootInActiveWindow
-        if (active != null && active.packageName?.toString() == packageName) return active
-        runCatching { active?.recycle() }
+        // 活动窗口优先试，其余保持系统给的顺序
+        val ordered = windows.sortedByDescending { window ->
+            (if (window.isActive) 2 else 0) + (if (window.isFocused) 1 else 0)
+        }
 
-        // 取不到时打印窗口清单：这样才能区分「页面没开」和「被别的悬浮窗顶掉了」
-        Log.d(
-            TAG,
-            "未取到 $packageName 的窗口，当前窗口=[" +
-                (windows ?: emptyList()).joinToString(", ") { w ->
-                    val pkg = runCatching { w.root?.packageName?.toString() ?: "?" }.getOrElse { "err" }
-                    "type=" + w.type + ":" + pkg
-                } + "]"
-        )
-        return null
+        var best: List<String> = emptyList()
+        val tried = mutableListOf<String>()
+        for (window in ordered) {
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            val lines = try {
+                if (root.packageName?.toString() == packageName) {
+                    NodeTextCollector.collectLines(root)
+                } else {
+                    emptyList()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "收集页面文本失败: ${e.message}")
+                emptyList()
+            } finally {
+                runCatching { root.recycle() }
+            }
+            if (lines.isNotEmpty()) tried += "type=${window.type}:${lines.size}行"
+            if (lines.size > best.size) best = lines
+        }
+
+        if (best.isEmpty()) {
+            Log.d(TAG, "未取到 $packageName 的有内容窗口，候选=[${tried.joinToString(", ")}]")
+        }
+        return best
     }
 
     /**
