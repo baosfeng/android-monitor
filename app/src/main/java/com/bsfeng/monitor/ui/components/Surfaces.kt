@@ -243,6 +243,11 @@ fun BottomSheet(
     if (!visible) return
     androidx.compose.animation.AnimatedVisibility(
         visible = visible,
+        // ⚠️ modifier 必须作用在 AnimatedVisibility（本组件的根节点）上：调用方普遍写
+        // Modifier.align(Alignment.BottomCenter) 来把 sheet 贴底，而 align 是 Box 的 parentData ——
+        // 只有落在 Box 的**直接子节点**上才会被读取。此前它被传给内部的 Column，Box 读不到，
+        // 于是所有抽屉都退回默认的 TopStart（真机表现：抽屉贴在屏幕顶部）。
+        modifier = modifier,
         enter = androidx.compose.animation.slideInVertically(
             animationSpec = androidx.compose.animation.core.tween(t.durOverlayIn)
         ) + androidx.compose.animation.fadeIn(
@@ -256,7 +261,7 @@ fun BottomSheet(
     ) {
         val sheetShape = RoundedCornerShape(topStart = t.radiusLg, topEnd = t.radiusLg)
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .tokenShadow(3, sheetShape)
                 .clip(sheetShape)
