@@ -250,10 +250,11 @@ fun AddTransactionScreen(
                                 onSelect = { txType = it },
                             )
                             Spacer(Modifier.height(t.space2))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            // 原型 .s14a-amt 是 baseline 对齐：¥ 用 --text-xl(28px)/600，金额用 --text-3xl(56px)/700
+                            Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
                                     "¥",
-                                    style = MaterialTheme.typography.headlineSmall,
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = t.textXl),
                                     color = t.muted,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -264,8 +265,11 @@ fun AddTransactionScreen(
                                         amountText = input.filter { c -> c.isDigit() || c == '.' }
                                     },
                                     textStyle = MaterialTheme.typography.headlineLarge.copy(
+                                        fontSize = t.text3xl,
                                         fontWeight = FontWeight.Bold,
-                                        color = amountColorOf(txType, t.expenseText, t.incomeText, t.fg),
+                                        // 原型 .s14a-input 用 --fg：金额本身不染色，
+                                        // 方向由上面那排类型段（支出/收入/转账）表达
+                                        color = t.fg,
                                     ),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
@@ -276,7 +280,10 @@ fun AddTransactionScreen(
                                             if (amountText.isEmpty()) {
                                                 Text(
                                                     "0.00",
-                                                    style = MaterialTheme.typography.headlineLarge,
+                                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                                        fontSize = t.text3xl,
+                                                        fontWeight = FontWeight.Bold,
+                                                    ),
                                                     color = t.muted,
                                                 )
                                             }
@@ -355,7 +362,10 @@ fun AddTransactionScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, t.bg)))
+                            // 原型 .s14a-actions：linear-gradient(to top, --surface 62%, transparent)
+                            .background(
+                                Brush.verticalGradient(0f to Color.Transparent, 0.38f to t.surface),
+                            )
                             .padding(horizontal = t.space4, vertical = t.space3),
                     ) {
                         PrimaryButton(
@@ -469,8 +479,8 @@ fun AddTransactionScreen(
 /** 字段行最小高度（原型 .s14-toggle min-height:44px = --tap-min） */
 private val FIELD_ROW_MIN_H = 44.dp
 
-/** 标签列宽（原型 .screen.s14a .s14-label flex:0 0 44px，这里按中文标签留宽一点） */
-private val FIELD_LABEL_W = 56.dp
+/** 标签列宽（原型 .screen.s14a .s14-label：flex 0 0 44px = --tap-min；两字中文放得下） */
+private val FIELD_LABEL_W = 44.dp
 
 /** 一手可点：标签 + 值 + ▸（原型 .s14-toggle） */
 @Composable
@@ -563,15 +573,14 @@ private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
     }
 }
 
+/** 行分隔线：原型是 .s14-toggle:not(:first-child){border-top} —— **整行宽**，不从标签右侧起 */
 @Composable
 private fun FieldDivider() {
-    val t = LocalDesignTokens.current
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(start = t.space3 + FIELD_LABEL_W + t.space3)
             .height(1.dp)
-            .background(t.borderSoft),
+            .background(LocalDesignTokens.current.borderSoft),
     )
 }
 
@@ -634,13 +643,6 @@ private fun isTransferType(type: Int): Boolean = type == RecordForm.TYPE_TRANSFE
 
 /** 编辑已有交易时的类型（供 [isTransfer] 之类的初值判断） */
 private fun txTypeOfValue(editing: Transaction?): Int = editing?.type ?: RecordForm.TYPE_EXPENSE
-
-/** 金额颜色：支出红 / 收入绿 / 转账中性色（转账不是花掉，不该染成支出色） */
-private fun amountColorOf(type: Int, expense: Color, income: Color, neutral: Color): Color = when (type) {
-    RecordForm.TYPE_EXPENSE -> expense
-    RecordForm.TYPE_INCOME -> income
-    else -> neutral
-}
 
 /**
  * 表单的初始时间。
