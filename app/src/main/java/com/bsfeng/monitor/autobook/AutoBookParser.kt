@@ -26,6 +26,12 @@ data class AutoBookDraft(
     val accountName: String,
     /** 页面上的付款方式（余额宝 / 零钱 / 某银行卡），仅作展示与对账线索 */
     val payMethod: String,
+    /** 页面上的商品说明（「某某湘菜馆(示例店)外卖订单」），对账时信息量最大 */
+    val productDesc: String = "",
+    /** 页面上的订单号 / 交易单号原文，跨源对账用 */
+    val orderId: String = "",
+    /** 平台自带的分类原文（「餐饮美食」），用于校准我们自己的分类映射 */
+    val platformCategory: String = "",
     val timeText: String,
     val sourceId: String,
     /** 弹窗去重指纹（多道，任一命中即视为「这笔刚处理过」），见 [AutoBookParser.buildDedupKeys] */
@@ -50,14 +56,33 @@ data class AutoBookDraft(
 
     val isIncome: Boolean get() = type == TYPE_INCOME
 
-    /** 浮窗备注：来源 + 商户 */
-    fun remark(): String =
-        if (merchant.isBlank()) "自动记账·$channelLabel" else "自动记账·$merchant"
+    /**
+     * 账本备注：把页面上**能拿到的信息尽量带上** —— 商户 + 商品说明 + 付款方式（不带任何前缀）。
+     *
+     * 真机反馈「详情信息没记录正确」：原来备注只写商户名，而支付宝账单详情页里
+     * 商品说明（`某某湘菜馆(示例店)外卖订单`）与付款方式
+     * （`招商银行信用卡(8888)`）这些对账时最有用的信息**全部丢失**。
+     *
+     * 按信息量降序拼接，只有超出 [REMARK_MAX_LENGTH] 才截断：
+     * 商户名取不到时用商品说明顶上，两者都没有才退回渠道名。
+     */
+    fun remark(): String {
+        val parts = mutableListOf<String>()
+        val main = merchant.ifBlank { productDesc }
+        if (main.isNotBlank()) parts += main
+        if (productDesc.isNotBlank() && productDesc != main) parts += productDesc
+        if (payMethod.isNotBlank()) parts += payMethod
+        if (parts.isEmpty()) parts += channelLabel
+        return parts.joinToString("·").take(REMARK_MAX_LENGTH)
+    }
 
     companion object {
         const val TYPE_EXPENSE = 0
         const val TYPE_INCOME = 1
         const val TYPE_TRANSFER = 2
+
+        /** 备注长度上限：账本列表里一行能看清的宽度；超出只截断尾部，主要信息都在前面 */
+        const val REMARK_MAX_LENGTH = 80
     }
 }
 
@@ -164,6 +189,24 @@ object AutoBookParser {
 
     /** 平台分类标签（支付宝/微信自带分类，如「日用百货」） */
     private val CATEGORY_LABELS = listOf("账单分类", "交易分类", "分类")
+
+    /**
+     * 商品说明标签。
+     *
+     * 真机实测（支付宝账单详情页）：`商品说明 某某湘菜馆(示例店)外卖订单` ——
+     * 这是整页**对账信息量最大**的字段（商户名常常只是平台名，如「淘宝闪购」）。
+     * 顺序有讲究：`商品说明` 必须排在 `商品` 前面，否则被短标签抢占。
+     */
+    private val PRODUCT_LABELS = listOf("商品说明", "订单说明", "交易说明", "商品")
+
+    /** 商品说明保留长度：商品名可能很长，超出截断 */
+    private const val PRODUCT_DESC_MAX_LENGTH = 40
+
+    /** 页面交易时间的两种格式（ISO / 中文年月日），见 [normalizeTradeTime] */
+    private val TRADE_TIME_PATTERNS = listOf(
+        Regex("(\\d{4})-(\\d{1,2})-(\\d{1,2})\\s+(\\d{1,2}):(\\d{2})"),
+        Regex("(\\d{4})年(\\d{1,2})月(\\d{1,2})日\\s+(\\d{1,2}):(\\d{2})")
+    )
 
     /** 订单号标签 */
     private val ORDER_LABELS = listOf("订单号", "交易单号", "商户单号", "交易号", "流水号", "账单号", "业务交易号")
@@ -282,6 +325,7 @@ object AutoBookParser {
         val type = detectType(lines, amount.first)
         val merchant = extractMerchant(lines)
         val payMethod = extractAccount(lines).orEmpty()
+        val productDesc = extractProductDesc(lines)
         val timeText = extractTime(lines) ?: ""
         val platformCategory = labelValue(lines, CATEGORY_LABELS)
         val category = mapCategory(platformCategory, merchant, type)
@@ -297,6 +341,9 @@ object AutoBookParser {
             categoryName = category,
             accountName = rule.accountName,
             payMethod = payMethod,
+            productDesc = productDesc,
+            orderId = orderId,
+            platformCategory = platformCategory.orEmpty(),
             timeText = timeText,
             sourceId = sourceId,
             dedupKeys = dedupKeys,
@@ -555,6 +602,18 @@ object AutoBookParser {
         return ""
     }
 
+    /**
+     * 商品说明：支付宝账单详情页的「商品说明 → 具体商品/订单」。
+     *
+     * 商户名在线上支付场景常常只是平台名（真机：顶部大标题是「淘宝闪购」），
+     * 真正说明这笔钱花在哪的是商品说明，因此它要进账本备注。
+     */
+    fun extractProductDesc(lines: List<String>): String {
+        val value = labelValue(lines, PRODUCT_LABELS)?.trim().orEmpty()
+        if (value.isEmpty() || PRODUCT_LABELS.contains(value)) return ""
+        return value.take(PRODUCT_DESC_MAX_LENGTH)
+    }
+
     /** 账户：优先页面上的付款方式（余额宝/零钱/某银行卡） */
     fun extractAccount(lines: List<String>): String? {
         val value = labelValue(lines, ACCOUNT_LABELS) ?: return null
@@ -761,6 +820,27 @@ object AutoBookParser {
         }
         keys += DedupKey("sum:$channel:$type:$amount", FUZZY_KEY_TTL_MS, precise = false)
         return keys
+    }
+
+    /**
+     * 页面交易时间 → `yyyy-MM-dd HH:mm`；解析不出来返回 null。
+     *
+     * 页面给两种格式（真机实测）：支付宝 `2026-10-16 18:32:21`、微信 `2026年10月16日 18:32:42`。
+     *
+     * ⚠️ 落库的 [Transaction.date] / [Transaction.dateTime] **必须优先用页面上的交易时间**：
+     * 用「点记一笔的时刻」会让同一笔在不同时间被识别时算出不同的落库键（真机就出现过
+     * 同一笔 18:32 的交易被记成 20:51、21:00 两条），而且对账时日期是错的。
+     */
+    fun normalizeTradeTime(timeText: String): String? {
+        if (timeText.isBlank()) return null
+        for (pattern in TRADE_TIME_PATTERNS) {
+            val match = pattern.find(timeText) ?: continue
+            val (y, mo, d, h, mi) = match.destructured
+            return "%04d-%02d-%02d %02d:%02d".format(
+                y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt()
+            )
+        }
+        return null
     }
 
     /** MD5 十六进制摘要（与项目其它幂等键实现同一种写法） */

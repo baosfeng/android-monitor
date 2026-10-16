@@ -29,6 +29,22 @@ object PageLines {
     private const val MAX_TEXTS_PER_LINE = 6
 
     /**
+     * **图标字体的私有区码位**（Unicode BMP Private Use Area，U+E000–U+F8FF）。
+     *
+     * 支付页大量用图标字体画小图标（返回箭头、商户 logo、右箭头），这些码位会混进节点文本里：
+     * 真机实测支付宝账单详情页顶部栏就是 `\ue642 账单详情` —— 图标字符让整行既不等于
+     * 任何标签、也不以标签开头，于是「账单详情」这个页面标题躲过了噪声表，被兜底逻辑当成了商户名，
+     * 账本备注里写下「自动记账·\ue642 账单详情」（用户报「详情信息没记录正确」）。
+     *
+     * 剥掉它们（而不是丢弃整行）可以让余下的文字重新参与标签 / 噪声判定。
+     */
+    private val ICON_FONT_RANGE = Regex("[\uE000-\uF8FF]")
+
+    /** 剥掉图标字体字符并把空白折叠成单个空格 */
+    private fun stripIconFont(text: String): String =
+        text.replace(ICON_FONT_RANGE, "").replace(Regex("\\s+"), " ").trim()
+
+    /**
      * @return 自上而下的视觉行文本，行内按从左到右拼接
      */
     fun toLines(nodes: List<NodeText>): List<String> {
@@ -44,10 +60,11 @@ object PageLines {
         // 按 top 排序会把「值」排在「标签」前面，拼出「阿里云计算有限公司 收款方全称」这种反序行。
         fun flush() {
             if (group.isNotEmpty()) {
-                val text = group.sortedBy { it.left }
-                    .take(MAX_TEXTS_PER_LINE)
-                    .joinToString(" ") { it.text }
-                    .trim()
+                val text = stripIconFont(
+                    group.sortedBy { it.left }
+                        .take(MAX_TEXTS_PER_LINE)
+                        .joinToString(" ") { it.text }
+                )
                 if (text.isNotEmpty()) lines.add(text)
                 group = ArrayList()
             }

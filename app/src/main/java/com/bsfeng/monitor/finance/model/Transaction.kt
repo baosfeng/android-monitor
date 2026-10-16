@@ -8,6 +8,13 @@ import java.time.format.DateTimeFormatter
  *
  * @param type 0=支出, 1=收入, 2=转账, 3=退款
  * @param source 来源标记, 如 "manual"（手动录入）, "panda_import"（熊猫记账导入）
+ * @param merchant 商户名（自动记账从页面上取，手动录入为空）
+ * @param productDesc 商品说明（对账信息量最大的字段，如「某某湘菜馆(示例店)外卖订单」）
+ * @param payMethod 实际付款方式（如「招商银行信用卡(8888)」/「余额宝」/「零钱」），与 [accountName] 不同：
+ *                  [accountName] 是记账账户（支付宝 / 微信钱包，用于算余额），本字段是资金来源（用于按卡统计）
+ * @param orderId 订单号 / 交易单号，跨源对账用
+ * @param platformCategory 平台自带分类原文（如「餐饮美食」），用于校准我们自己的分类映射
+ * @param tradeTime 页面上的**原始交易时间**（如 `2026-10-16 18:32:21`）；[date] / [dateTime] 是它的规范化结果
  */
 data class Transaction(
     val id: Long = 0,
@@ -22,7 +29,13 @@ data class Transaction(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val source: String = "manual",
-    val sourceId: String = ""
+    val sourceId: String = "",
+    val merchant: String = "",
+    val productDesc: String = "",
+    val payMethod: String = "",
+    val orderId: String = "",
+    val platformCategory: String = "",
+    val tradeTime: String = ""
 ) {
     val isExpense: Boolean get() = type == 0
     val isIncome: Boolean get() = type == 1

@@ -113,6 +113,11 @@ class AutoBookEngine(private val service: AccessibilityService) {
             return
         }
 
+        // 字段取错时的唯一诊断依据，**必须放在去重判定之前** ——
+        // 已记账 / 已忽略的笔会提前 return，放在后面就看不到行文本了。
+        // （真机踩过：商户名取成「账单详情」「返回 全部账单」，不看原始行根本定位不到）
+        Log.d(TAG, "识别到账单页面行: ${lines.joinToString(" | ").take(600)}")
+
         lastDraft = draft
 
         // 浮窗还开着且就是这一笔：不要重建（会把用户正在填的类型/分类冲掉）
@@ -368,7 +373,12 @@ class AutoBookEngine(private val service: AccessibilityService) {
             }
 
             val now = LocalDateTime.now()
-            val date = now.toLocalDate().toString()
+            // 交易时间优先用**页面上的**（对账口径）；页面没给或格式不认识才退回记账时刻。
+            // 用「点记一笔的时刻」会让同一笔在不同时间被识别时算出不同的落库键
+            // （真机出现过同一笔 18:32 的交易被记成 20:51、21:00 两条）。
+            val dateTime = AutoBookParser.normalizeTradeTime(draft.timeText)
+                ?: Transaction.buildDateTime(now.toLocalDate().toString(), now)
+            val date = dateTime.substringBefore(" ")
             val transaction = Transaction(
                 type = type,
                 categoryName = categoryName,
@@ -376,9 +386,15 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 accountName = draft.accountName,
                 remark = draft.remark(),
                 date = date,
-                dateTime = Transaction.buildDateTime(date, now),
+                dateTime = dateTime,
                 source = source,
-                sourceId = draft.sourceId
+                sourceId = draft.sourceId,
+                merchant = draft.merchant,
+                productDesc = draft.productDesc,
+                payMethod = draft.payMethod,
+                orderId = draft.orderId,
+                platformCategory = draft.platformCategory,
+                tradeTime = draft.timeText
             )
 
             val id = financeManager.addTransaction(transaction)

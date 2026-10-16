@@ -31,6 +31,14 @@ object TransactionEntity {
     const val COL_SOURCE = "source"
     const val COL_SOURCE_ID = "source_id"
 
+    // ===== V2 新增：把原先只能挤进 remark 的结构化信息拆成独立列，便于统计与分析 =====
+    const val COL_MERCHANT = "merchant"
+    const val COL_PRODUCT_DESC = "product_desc"
+    const val COL_PAY_METHOD = "pay_method"
+    const val COL_ORDER_ID = "order_id"
+    const val COL_PLATFORM_CATEGORY = "platform_category"
+    const val COL_TRADE_TIME = "trade_time"
+
     /** 建表 SQL */
     const val CREATE_TABLE = """
         CREATE TABLE $TABLE_NAME (
@@ -46,7 +54,13 @@ object TransactionEntity {
             $COL_CREATED_AT INTEGER NOT NULL,
             $COL_UPDATED_AT INTEGER NOT NULL,
             $COL_SOURCE TEXT NOT NULL DEFAULT 'manual',
-            $COL_SOURCE_ID TEXT NOT NULL DEFAULT ''
+            $COL_SOURCE_ID TEXT NOT NULL DEFAULT '',
+            $COL_MERCHANT TEXT NOT NULL DEFAULT '',
+            $COL_PRODUCT_DESC TEXT NOT NULL DEFAULT '',
+            $COL_PAY_METHOD TEXT NOT NULL DEFAULT '',
+            $COL_ORDER_ID TEXT NOT NULL DEFAULT '',
+            $COL_PLATFORM_CATEGORY TEXT NOT NULL DEFAULT '',
+            $COL_TRADE_TIME TEXT NOT NULL DEFAULT ''
         )
     """
 
@@ -64,6 +78,12 @@ object TransactionEntity {
         put(COL_UPDATED_AT, tx.updatedAt)
         put(COL_SOURCE, tx.source)
         put(COL_SOURCE_ID, tx.sourceId)
+        put(COL_MERCHANT, tx.merchant)
+        put(COL_PRODUCT_DESC, tx.productDesc)
+        put(COL_PAY_METHOD, tx.payMethod)
+        put(COL_ORDER_ID, tx.orderId)
+        put(COL_PLATFORM_CATEGORY, tx.platformCategory)
+        put(COL_TRADE_TIME, tx.tradeTime)
     }
 
     /** Cursor → Transaction */
@@ -80,7 +100,13 @@ object TransactionEntity {
         createdAt = cursor.getLong(cursor.getColumnIndexOrThrow(COL_CREATED_AT)),
         updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow(COL_UPDATED_AT)),
         source = cursor.getString(cursor.getColumnIndexOrThrow(COL_SOURCE)),
-        sourceId = cursor.getString(cursor.getColumnIndexOrThrow(COL_SOURCE_ID))
+        sourceId = cursor.getString(cursor.getColumnIndexOrThrow(COL_SOURCE_ID)),
+        merchant = cursor.getString(cursor.getColumnIndexOrThrow(COL_MERCHANT)),
+        productDesc = cursor.getString(cursor.getColumnIndexOrThrow(COL_PRODUCT_DESC)),
+        payMethod = cursor.getString(cursor.getColumnIndexOrThrow(COL_PAY_METHOD)),
+        orderId = cursor.getString(cursor.getColumnIndexOrThrow(COL_ORDER_ID)),
+        platformCategory = cursor.getString(cursor.getColumnIndexOrThrow(COL_PLATFORM_CATEGORY)),
+        tradeTime = cursor.getString(cursor.getColumnIndexOrThrow(COL_TRADE_TIME))
     )
 
     /** Cursor → List<Transaction> */
