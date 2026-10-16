@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -39,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,9 +70,6 @@ import kotlin.math.roundToInt
  * 由「确定」关闭（用户明确要求过这一点）。
  */
 
-/** 抽屉里的一行：标签 + 值 + ▸（原型 .s14-toggle，min-height 44px） */
-private val SHEET_ROW_MIN_H: Dp = 44.dp
-
 /** 时间滚轮：一屏 3 格（原型 .s14a-wheel-wrap height:132px / 每格 44px） */
 private val WHEEL_H: Dp = 132.dp
 private val WHEEL_ITEM_H: Dp = 44.dp
@@ -76,8 +77,11 @@ private val WHEEL_ITEM_H: Dp = 44.dp
 /** 分类网格图标尺寸（原型 .s14a-grid .cat-icon：44×44） */
 private val GRID_ICON_SIZE: Dp = 44.dp
 
-/** 分类网格最大高度（原型 max-height:46vh，换算成抽屉内的固定上限，超出可滚） */
-private val GRID_MAX_H: Dp = 360.dp
+/** 分类网格最大高度 = 屏高的 46%（原型 .s14a-grid 的 max-height:46vh） */
+private const val GRID_MAX_H_RATIO = 0.46f
+
+/** 日期 chip 最小宽度（原型 .s14a-strip .chip 的 min-width:48px） */
+private val CHIP_MIN_W: Dp = 48.dp
 
 /** 选择分类（4 列网格，一屏 20 个 —— 原型 A 版的核心优势） */
 @Composable
@@ -92,7 +96,10 @@ internal fun BoxScope.CategorySheet(
     SheetShell(title = "选择分类", onDismiss = onDismiss) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(RecordForm.CATEGORY_GRID_COLUMNS),
-            modifier = Modifier.fillMaxWidth().heightIn(max = GRID_MAX_H),
+            // 原型是 max-height:46vh —— 按屏高比例算，别写死（小屏会占满、大屏会显小）
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp * GRID_MAX_H_RATIO).dp),
             horizontalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space3),
             verticalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space3),
         ) {
@@ -151,8 +158,19 @@ internal fun BoxScope.AccountSheet(
     onDismiss: () -> Unit,
 ) {
     if (!visible) return
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusLg)
     SheetShell(title = title, onDismiss = onDismiss) {
-        Column(Modifier.fillMaxWidth()) {
+        // 原型是 .group：整组一个卡片（surface 底 + 1px --border-soft + radius-lg + 左右 --space-4），
+        // 不是裸列表 —— 裸列表会和下面的 sheet 底同色，三行看不出是一组
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(t.surface)
+                .border(1.dp, t.borderSoft, shape)
+                .padding(horizontal = t.space4),
+        ) {
             accounts.forEachIndexed { index, account ->
                 AccountSheetRow(
                     account = account,
@@ -162,7 +180,7 @@ internal fun BoxScope.AccountSheet(
                 if (index != accounts.lastIndex) {
                     HorizontalDivider(
                         thickness = DividerDefaults.Thickness,
-                        color = LocalDesignTokens.current.borderSoft,
+                        color = t.borderSoft,
                     )
                 }
             }
@@ -176,24 +194,38 @@ private fun AccountSheetRow(account: Account, selected: Boolean, onClick: () -> 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = SHEET_ROW_MIN_H)
+            // 原型 .row：min-height --row-min-h(52px) + 上下 padding --space-2。
+            // 必须用 defaultMinSize 而不是 heightIn —— CSS 的 min-height **含** padding，
+            // Compose 的 heightIn 约束的是 padding **之内**的内容区（会多出一个 padding 的高度）。
+            .defaultMinSize(minHeight = t.rowMinH)
             .clip(RoundedCornerShape(t.radiusMd))
             .clickable { onClick() }
-            .padding(horizontal = t.space2, vertical = t.space2),
+            .padding(vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            // 原型 .row-body{gap:2px}：标题与副标题之间只有 2px
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             Text(
                 account.name,
-                style = MaterialTheme.typography.titleSmall,
+                // 原型 .row-title 用 CSS line-height(l.25) 定行高；Compose 默认 includeFontPadding
+                // 会给每个 Text 额外留几 dp，两行叠起来比原型高一截（实测 63dp vs 原型 58px）
+                style = MaterialTheme.typography.titleSmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
                 color = t.fg,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
             Text(
+                // 原型 .row-sub：--text-sm(14px) + --muted
                 "余额 ¥" + account.displayBalance,
-                style = MaterialTheme.typography.labelSmall,
-                color = t.meta,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
+                color = t.muted,
                 maxLines = 1,
             )
         }
@@ -264,8 +296,10 @@ internal fun BoxScope.TimeSheet(
             )
             Text(
                 ":",
-                style = MaterialTheme.typography.headlineSmall,
+                // 原型 .s14a-colon：--text-xl(28px)/600/--muted
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = t.textXl),
                 color = t.muted,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = t.space3),
             )
             WheelColumn(
@@ -290,12 +324,16 @@ internal fun BoxScope.TimeSheet(
 @Composable
 private fun DateChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusPill)
+    // 原型 .chip：底透明 + 1px --border + --fg-2 字；
+    // 选中 .chip.is-on = 底 color-mix(fg 7%) + 边 color-mix(fg 24%) + --fg 字 600（不是黑底白字）
     Box(
         modifier = Modifier
+            .widthIn(min = CHIP_MIN_W)
             .heightIn(min = t.tapMin)
-            .clip(RoundedCornerShape(t.radiusPill))
-            .background(if (selected) t.fg else t.surface)
-            .border(1.dp, if (selected) t.fg else t.borderSoft, RoundedCornerShape(t.radiusPill))
+            .clip(shape)
+            .background(if (selected) t.fgFade(7) else Color.Transparent)
+            .border(1.dp, if (selected) t.fgFade(24) else t.border, shape)
             .clickable { onClick() }
             .padding(horizontal = t.space3),
         contentAlignment = Alignment.Center,
@@ -303,7 +341,7 @@ private fun DateChip(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
-            color = if (selected) t.accentOn else t.fg2,
+            color = if (selected) t.fg else t.fg2,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
         )
@@ -358,9 +396,10 @@ private fun WheelColumn(
                 .align(Alignment.Center)
                 .fillMaxWidth()
                 .height(WHEEL_ITEM_H)
-                .padding(horizontal = t.space2)
+                // 原型 .s14a-wheel-band：left/right 6px、底 color-mix(fg 8%)、圆角 radius-sm
+                .padding(horizontal = WHEEL_BAND_INSET)
                 .clip(RoundedCornerShape(t.radiusSm))
-                .background(t.fgFade(6)),
+                .background(t.fgFade(8)),
         )
         LazyColumn(
             state = listState,
@@ -376,7 +415,8 @@ private fun WheelColumn(
                 ) {
                     Text(
                         values[index],
-                        style = MaterialTheme.typography.bodySmall,
+                        // 原型 .s14a-wheel button：--text-lg(21px)；选中 --fg/600，未选 --muted/400
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = t.textLg),
                         color = if (selected) t.fg else t.muted,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     )
@@ -461,14 +501,15 @@ private fun BoxScope.SheetShell(
 @Composable
 private fun SheetGhostButton(text: String, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
-    val shape = RoundedCornerShape(t.radiusLg)
+    // 原型 .btn{border-radius:var(--radius-md)} = 12dp
+    val shape = RoundedCornerShape(t.radiusMd)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .border(1.dp, t.border, shape)
             .clickable { onClick() }
-            .padding(vertical = t.space3),
+            .padding(vertical = t.space3),   // 原型 .btn 的 min-height:48px 由「上下 --space-3 + 17px 行高」达成
         contentAlignment = Alignment.Center,
     ) {
         Text(text, style = MaterialTheme.typography.titleSmall, color = t.fg)
@@ -499,6 +540,9 @@ private fun SheetPrimaryButton(text: String, onClick: () -> Unit) {
 
 /** 滚轮宽度（原型 .s14a-wheel-wrap width:104px） */
 private val WHEEL_WIDTH: Dp = 104.dp
+
+/** 滚轮高亮带左右内缩（原型 .s14a-wheel-band 的 left/right:6px，非 token 值） */
+private val WHEEL_BAND_INSET: Dp = 6.dp
 
 /** 单据标签列宽（与表单标签列同宽，保证两处对齐） */
 private val SHEET_LABEL_W: Dp = 64.dp
