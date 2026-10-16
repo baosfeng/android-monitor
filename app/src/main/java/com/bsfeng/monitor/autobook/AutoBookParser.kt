@@ -12,7 +12,9 @@ import java.security.MessageDigest
  *             浮窗还允许用户改成 2=转账）
  * @param accountName 账户名：优先取页面上的付款方式（如「余额宝」），取不到用 App 默认账户
  * @param timeText 页面上的交易时间原文，浮窗直接展示
- * @param sourceId 幂等键：同一笔交易重复识别只落一条
+ * @param sourceId **账单身份键**：短期去重（[AutoBookDedup]）与落库幂等（finance_transactions）共用，
+ *                 同一笔交易在短时间内重复识别只弹一次、只落一条。
+ *                 生成规则见 [AutoBookParser.buildSourceId]，**不含当前时间**，跨时间稳定。
  */
 data class AutoBookDraft(
     val channel: String,
@@ -26,6 +28,8 @@ data class AutoBookDraft(
     val payMethod: String,
     val timeText: String,
     val sourceId: String,
+    /** 弹窗去重指纹（多道，任一命中即视为「这笔刚处理过」），见 [AutoBookParser.buildDedupKeys] */
+    val dedupKeys: List<DedupKey>,
     val markers: List<String>
 ) {
     /** 来源显示名：支付宝 / 微信 */
@@ -70,8 +74,22 @@ data class AutoBookDraft(
  */
 object AutoBookParser {
 
-    /** 同金额同商户的合并时间窗：5 分钟内的重复识别视为同一笔 */
-    const val DEDUP_WINDOW_MS = 5 * 60 * 1000L
+    /**
+     * 落库幂等键的兜底时间窗：既没订单号也没交易时间时，5 分钟内的重复识别视为同一笔。
+     *
+     * ⚠️ 这个时间桶**只用于落库防重**，不参与弹窗去重 —— 桶边界会让同一笔跨桶换键，
+     * 正是改造前「同一笔反复弹窗」的根因（弹窗去重见 [buildDedupKeys]）。
+     */
+    const val FALLBACK_WINDOW_MS = 5 * 60 * 1000L
+
+    /** 精确指纹（订单号 / 交易时间）的安静期：10 分钟内同一笔不再弹 */
+    const val PRECISE_KEY_TTL_MS = 10 * 60 * 1000L
+
+    /** 兜底指纹（渠道 + 方向 + 金额）的安静期：短窗口，避免吞掉同金额的另一笔交易 */
+    const val FUZZY_KEY_TTL_MS = 2 * 60 * 1000L
+
+    /** 一屏出现多少处交易痕迹就判定为「列表页」（单笔账单页只会出现 1 处） */
+    private const val MULTI_TRANSACTION_THRESHOLD = 2
 
     /** 带方向前缀的金额：`支出3元` / `已支付 ¥12.34` / `收入 5.00 元` */
     private val PREFIXED_AMOUNT = Regex(
@@ -122,9 +140,15 @@ object AutoBookParser {
         "余额", "额度", "限额", "可用", "积分", "优惠", "抵扣", "手续费", "剩余", "冻结", "红包", "立减", "原价"
     )
 
-    /** 商户名标签：命中后取同一行右侧内容 */
+    /**
+     * 商户名标签：命中后取同一行右侧内容。
+     *
+     * ⚠️ 这里**不放「付款方」**：它是「付款方式」的前缀，会从 `付款方式 招商银行信用卡(8888)`
+     * 这行取出「式 招商银行信用卡(8888)」当商户名（真机实测踩到）。而且付款方是转账的转出方，
+     * 本来也不是商户。
+     */
     private val MERCHANT_LABELS = listOf(
-        "收款方全称", "商户全称", "商户名称", "收款方", "付款方", "交易对方", "对方", "商家", "店铺", "商户"
+        "收款方全称", "商户全称", "商户名称", "收款方", "交易对方", "对方", "商家", "店铺", "商户"
     )
 
     /**
@@ -143,6 +167,17 @@ object AutoBookParser {
 
     /** 订单号标签 */
     private val ORDER_LABELS = listOf("订单号", "交易单号", "商户单号", "交易号", "流水号", "账单号", "业务交易号")
+
+    /**
+     * 订单号标签的**行内**出现形式。
+     *
+     * ⚠️ 真机实测：支付宝账单详情页并不给订单号单独一行，而是把它塞在别的值里 ——
+     * `商品说明 充值:阿里云服务购买,业务交易号:CFP000000000000000000`。
+     * 只按「标签 → 整行值」取会漏掉，必须再扫一遍行内标签。
+     */
+    private val ORDER_LABEL_INLINE = Regex(
+        "(业务交易号|交易单号|商户单号|订单号|交易号|流水号|账单号)[:：]?"
+    )
 
     private val ORDER_ID = Regex("[A-Za-z0-9]{12,}")
 
@@ -188,19 +223,43 @@ object AutoBookParser {
     )
 
     /**
-     * 解析一屏视觉行文本。
+     * 解析一屏视觉行文本（**页面入口**）。
+     *
+     * ⚠️ **只在账单 / 交易页上才认账**。真机实测（支付宝首页）：首页「最近消息」卡片里的
+     * **历史消息摘要** `付款成功￥3.00` 长得和支付结果页一模一样，会被认成一笔新支出，
+     * 浮窗直接盖在首页上（用户反馈「识别有误」）。因此这里加了一道页面结构门禁
+     * [isBillPage]：要么是有字段标签的账单详情页，要么是有收尾按钮的独占结果页。
      *
      * @param rule 命中的 App 规则（包名已匹配）
-     * @param lines 视觉行文本（[NodeTextCollector.toLines] 的产物）
-     * @param nowMs 事件时间戳，用于去重时间窗与无订单号时的幂等键
-     * @return 识别到的一笔账；页面上没有交易信号时返回 null（不弹浮窗）
+     * @param lines 视觉行文本（[PageLines.toLines] 的产物）
+     * @param nowMs 事件时间戳，只用于「既无订单号也无交易时间」时的落库幂等兜底
+     * @return 识别到的一笔账；页面上没有交易信号、或当前不是账单页时返回 null（不弹浮窗）
      */
-    fun parse(rule: AutoBookRule, lines: List<String>, nowMs: Long): AutoBookDraft? {
+    fun parse(rule: AutoBookRule, lines: List<String>, nowMs: Long): AutoBookDraft? =
+        parseInternal(rule, lines, nowMs, requireBillPage = true)
+
+    /**
+     * 解析通知文本（**通知入口**，供后续接入 NotificationListenerService 使用）。
+     *
+     * 通知由系统直接投递、来源明确，不存在「首页消息摘要」这类混淆，因此不做页面门禁。
+     */
+    fun parseNotification(rule: AutoBookRule, lines: List<String>, nowMs: Long): AutoBookDraft? =
+        parseInternal(rule, lines, nowMs, requireBillPage = false)
+
+    private fun parseInternal(
+        rule: AutoBookRule,
+        lines: List<String>,
+        nowMs: Long,
+        requireBillPage: Boolean
+    ): AutoBookDraft? {
         if (lines.isEmpty()) return null
 
         val markers = rule.pageMarkers.filter { marker -> lines.any { it.contains(marker) } }
         if (markers.isEmpty()) return null
         if (rule.excludeMarkers.any { marker -> lines.any { it.contains(marker) } }) return null
+
+        // 页面门禁：只在账单 / 交易页识别，挡掉首页消息摘要、账单流水列表这类误触发
+        if (requireBillPage && !isBillPage(lines)) return null
 
         val joined = lines.joinToString(" ")
         // 未来时态（活动预告、待扣款提醒）不是已发生的交易，整条放弃
@@ -218,7 +277,8 @@ object AutoBookParser {
         val platformCategory = labelValue(lines, CATEGORY_LABELS)
         val category = mapCategory(platformCategory, merchant, type)
         val orderId = extractOrderId(lines)
-        val sourceId = buildSourceId(rule.channel, type, amount.second, merchant, orderId, nowMs)
+        val sourceId = buildSourceId(rule.channel, type, amount.second, merchant, orderId, timeText, nowMs)
+        val dedupKeys = buildDedupKeys(rule.channel, type, amount.second, orderId, timeText)
 
         return AutoBookDraft(
             channel = rule.channel,
@@ -230,8 +290,101 @@ object AutoBookParser {
             payMethod = payMethod,
             timeText = timeText,
             sourceId = sourceId,
+            dedupKeys = dedupKeys,
             markers = markers
         )
+    }
+
+    // ==================== 账单页门禁 ====================
+
+    /**
+     * 账单页结构标签：账单 / 交易详情页靠这些「标签 → 值」成对呈现。
+     *
+     * 命中任意一个**并且取到了值**，就说明当前确实是账单详情页，而不是首页消息流。
+     */
+    private val DETAIL_LABELS: List<String> =
+        TIME_LABELS + ACCOUNT_LABELS + CATEGORY_LABELS + ORDER_LABELS + MERCHANT_LABELS +
+            listOf("商品说明", "交易状态", "交易详情", "付款详情", "转账详情")
+
+    /**
+     * 列表 / 摘要页特征词。
+     *
+     * 真机实测支付宝首页：「最近消息」「还有3条未读服务消息」+ 下拉刷新的「松开刷新」提示，
+     * 这些词一出现就说明当前是消息流，而不是账单详情页。
+     */
+    private val LIST_PAGE_WORDS = listOf(
+        "最近消息", "未读服务消息", "松开刷新", "下拉刷新", "上拉加载", "加载更多"
+    )
+
+    /** 相对时间（`9小时前` / `2分钟前`）：账单详情页给的是绝对时间，只有列表项才给相对时间 */
+    private val RELATIVE_TIME = Regex("(刚刚|\\d+\\s*(分钟|小时|天|周|个月)前)")
+
+    /** 结果页收尾按钮：独占的支付结果页一定有一个「离开」入口 */
+    private val RESULT_PAGE_ACTIONS = listOf("完成", "账单详情", "查看账单", "查看详情", "返回首页", "我知道了")
+
+    /**
+     * 整行就是一个状态锚点（`支付成功` / `付款成功￥3.00`）。
+     *
+     * ⚠️ 注意它**认不出**消息摘要：首页那条历史摘要 `付款成功￥3.00` 单独成行也照样匹配，
+     * 所以本锚点只能当必要条件，必须再叠加 [RESULT_PAGE_ACTIONS] 才放行。
+     */
+    private val STATUS_ANCHOR = Regex(
+        "^(支付成功|付款成功|交易成功|转账成功|收款成功|还款成功|退款成功|已支付)[¥￥]?[0-9,.\\s]*元?$"
+    )
+
+    /**
+     * 单笔交易的状态词：一屏里出现多次，说明这是流水 / 消息列表而不是单笔账单页。
+     */
+    private val STATUS_WORDS = listOf(
+        "支付成功", "付款成功", "交易成功", "转账成功", "收款成功", "还款成功", "退款成功",
+        "还款到账成功", "已支付"
+    )
+
+    /**
+     * 一屏里出现 ≥ [MULTI_TRANSACTION_THRESHOLD] 处多笔交易的痕迹。
+     *
+     * 真机实测支付宝「支付消息」列表：每张卡片都自带一份「付款方式」，也各自有「付款成功」——
+     * 只看「有没有详情标签」会把它误判成账单详情页，而且列表第一条的金额商户**恰好也能提取出来**，
+     * 于是弹出一个「看起来是对的」的浮窗。所以多笔信号必须**优先于**详情结构判定。
+     */
+    private fun hasMultipleTransactions(lines: List<String>): Boolean {
+        val statusHits = lines.count { line -> STATUS_WORDS.any { line.contains(it) } }
+        if (statusHits >= MULTI_TRANSACTION_THRESHOLD) return true
+        val labelHits = lines.count { line -> ACCOUNT_LABELS.any { line.contains(it) } }
+        return labelHits >= MULTI_TRANSACTION_THRESHOLD
+    }
+
+    /**
+     * 当前页面是不是**单笔**账单 / 交易页。
+     *
+     * 判定顺序（顺序本身就是设计）：
+     * 1. **多笔痕迹** → 拒（流水列表 / 支付消息列表，哪怕它带了详情标签）；
+     * 2. **账单详情页** → 放行（有「标签 → 值」结构，支付宝账单详情页就是这种）；
+     * 3. **列表 / 摘要页** → 拒（首页「最近消息」的历史消息摘要靠这条挡掉）；
+     * 4. **独占结果页** → 放行（整行状态锚点 + 收尾按钮，付款后立即跳出的那页）。
+     *
+     * 公开给 [AutoBookEngine] 做诊断用：识别失败时要能区分「门禁拒绝」和「是账单页但字段没认出来」。
+     */
+    fun isBillPage(lines: List<String>): Boolean {
+        if (hasMultipleTransactions(lines)) return false
+        if (hasDetailStructure(lines)) return true
+        if (isListOrSummaryPage(lines)) return false
+        return isStandaloneResultPage(lines)
+    }
+
+    /** 有任意一个账单字段标签取到了值 */
+    private fun hasDetailStructure(lines: List<String>): Boolean =
+        DETAIL_LABELS.any { label -> labelValue(lines, listOf(label)) != null }
+
+    private fun isListOrSummaryPage(lines: List<String>): Boolean =
+        lines.any { line ->
+            LIST_PAGE_WORDS.any { line.contains(it) } || RELATIVE_TIME.containsMatchIn(line)
+        }
+
+    private fun isStandaloneResultPage(lines: List<String>): Boolean {
+        val hasAnchor = lines.any { STATUS_ANCHOR.matches(it.trim()) }
+        if (!hasAnchor) return false
+        return lines.any { line -> RESULT_PAGE_ACTIONS.any { line.contains(it) } }
     }
 
     /**
@@ -351,11 +504,22 @@ object AutoBookParser {
         return null
     }
 
-    /** 订单号：命中标签后取同行/下一行的长字母数字串 */
+    /**
+     * 订单号：先按独立标签取，再扫行内标签。
+     *
+     * ⚠️ 真机实测：支付宝账单详情页并不给订单号单独一行，而是把它塞在别的值里 ——
+     * `商品说明 充值:阿里云服务购买,业务交易号:CFP000000000000000000`。
+     * 订单号一漏，去重就退化成「金额 + 商户」的模糊匹配，而商户名在渲染中间态下会抖。
+     */
     fun extractOrderId(lines: List<String>): String {
         for (label in ORDER_LABELS) {
             val value = labelValue(lines, listOf(label)) ?: continue
             ORDER_ID.find(value)?.let { return it.value }
+        }
+        for (line in lines) {
+            val match = ORDER_LABEL_INLINE.find(line) ?: continue
+            val tail = line.substring(match.range.last + 1)
+            ORDER_ID.find(tail)?.let { return it.value }
         }
         return ""
     }
@@ -373,6 +537,13 @@ object AutoBookParser {
                 val at = line.indexOf(label)
                 if (at < 0) continue
 
+                // 前缀误命中防护：短标签会命中长标签并取出半截值
+                // （「付款方」命中「付款方式」→「式 招商银行信用卡(8888)」；
+                //   「收款方」命中「收款方全称」→「全称 阿里云计算有限公司」）。
+                // 标签后面紧跟汉字即视为更长词的片段，跳过；紧跟冒号 / 空格 / 字母数字仍然放行。
+                val after = at + label.length
+                if (after < line.length && isCjkIdeograph(line[after])) continue
+
                 // 同行右侧：去掉标签本身与冒号
                 val inline = line.substring(at + label.length)
                     .trim()
@@ -388,6 +559,9 @@ object AutoBookParser {
         return null
     }
 
+    /** 是否是汉字（判断标签后面是否紧跟了更长词的片段；全角标点不算） */
+    private fun isCjkIdeograph(ch: Char): Boolean = ch.code in 0x4E00..0x9FFF
+
     private fun isLabelLike(text: String): Boolean {
         val labels = MERCHANT_LABELS + ACCOUNT_LABELS + TIME_LABELS + CATEGORY_LABELS + ORDER_LABELS +
             listOf("账单管理", "商品说明", "支付奖励", "标签", "备注", "计入收支", "为您推荐")
@@ -396,13 +570,19 @@ object AutoBookParser {
 
     private fun isUsableMerchant(text: String): Boolean {
         val trimmed = text.trim()
-        if (trimmed.length !in 2..40) return false
+        if (trimmed.length !in 2..20) return false
         if (trimmed.all { it.isDigit() || it == '.' || it == ',' || it == '-' }) return false
         if (SYMBOL_AMOUNT.containsMatchIn(trimmed) || YUAN_AMOUNT.containsMatchIn(trimmed)) return false
         if (DATE_TIME.containsMatchIn(trimmed)) return false
+        // 真机踩坑：首页渲染中间态会把一串 UI 文案拼成
+        // 「上海 搜索框 搜索服务或小程序 搜索 更多操作」当作商户名。
+        // 中文商户名几乎不含空格，多个空格一律判为拼接产物（只 1 个空格的中英文名如
+        // `Starbucks Coffee` 仍然放行）。
+        if (trimmed.count { it == ' ' } >= 2) return false
         val noise = listOf(
             "支付成功", "付款成功", "交易成功", "交易失败", "完成", "详情", "查看", "确认", "全部账单",
-            "账单详情", "立即领取", "联系商家", "更多", "请选择", "添加"
+            "账单详情", "立即领取", "联系商家", "更多", "请选择", "添加",
+            "松开刷新", "下拉刷新", "搜索", "刷新", "扫一扫", "收付款", "卡包", "首页", "我的", "消息", "操作"
         )
         return noise.none { trimmed == it || trimmed.startsWith(it) }
     }
@@ -426,8 +606,13 @@ object AutoBookParser {
     }
 
     /**
-     * 生成幂等键：有订单号用订单号（最精确），否则用「渠道 + 方向 + 金额 + 商户 + 5 分钟桶」，
-     * 保证同一页面反复触发事件也只弹一次。
+     * 生成**落库幂等键**（同一笔只写一条记录）。
+     *
+     * 优先级：订单号 > 交易时间 > 「渠道 + 方向 + 金额 + 商户 + 5 分钟桶」。
+     *
+     * ⚠️ 最后一档是**故意保留时间桶**的：落库这一侧宁可重复也不要漏账 ——
+     * 若拿「渠道 + 方向 + 金额」当唯一键，用户连着买两笔 3 元会被合并成一笔，那是真丢账。
+     * 「同一笔反复弹窗」这个痛点由 [buildDedupKeys] + [AutoBookDedup] 单独解决，不靠这个键。
      */
     fun buildSourceId(
         channel: String,
@@ -435,15 +620,50 @@ object AutoBookParser {
         amount: Double,
         merchant: String,
         orderId: String,
+        timeText: String,
         nowMs: Long
     ): String {
-        val seed = if (orderId.isNotEmpty()) {
-            "order:$channel:$orderId"
-        } else {
-            val window = nowMs / DEDUP_WINDOW_MS
-            "win:$channel:$type:$amount:$merchant:$window"
+        val seed = when {
+            orderId.isNotEmpty() -> "order:$channel:$orderId"
+            timeText.isNotEmpty() -> "time:$channel:$type:$amount:$merchant:$timeText"
+            else -> {
+                val window = nowMs / FALLBACK_WINDOW_MS
+                "win:$channel:$type:$amount:$merchant:$window"
+            }
         }
         return md5(seed)
+    }
+
+    /**
+     * 生成**弹窗去重指纹**（多道，任一命中即视为「这笔刚处理过」）。
+     *
+     * 为什么是多道而不是一个键：页面在渲染中间态下字段会抖 —— 真机实测同一笔在支付宝首页
+     * 两次识别出的商户名完全不同（一次「松开刷新」，一次「上海 搜索框 搜索服务或小程序 搜索 更多操作」）。
+     * 指纹里只要掺了商户名这种易抖字段，同一笔就会算出两个键，去重失效、浮窗连弹两次。
+     *
+     * 因此：
+     * - **精确指纹**（订单号 / 交易时间）安静期长 —— 它们来自账单自身，跨时间稳定；
+     * - **兜底指纹**（渠道 + 方向 + 金额，**刻意不含商户名**）安静期短 ——
+     *   短时间内同渠道同金额再来一笔会一起被挡，但窗口只有 [FUZZY_KEY_TTL_MS]，代价可控。
+     *
+     * @return 至少一条指纹
+     */
+    fun buildDedupKeys(
+        channel: String,
+        type: Int,
+        amount: Double,
+        orderId: String,
+        timeText: String
+    ): List<DedupKey> {
+        val keys = mutableListOf<DedupKey>()
+        if (orderId.isNotEmpty()) {
+            keys += DedupKey("order:$channel:$orderId", PRECISE_KEY_TTL_MS)
+        }
+        if (timeText.isNotEmpty()) {
+            keys += DedupKey("time:$channel:$type:$amount:$timeText", PRECISE_KEY_TTL_MS)
+        }
+        keys += DedupKey("sum:$channel:$type:$amount", FUZZY_KEY_TTL_MS)
+        return keys
     }
 
     /** MD5 十六进制摘要（与项目其它幂等键实现同一种写法） */
