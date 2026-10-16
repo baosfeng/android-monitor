@@ -494,6 +494,7 @@ private fun TransactionRow(
 ) {
     val t = LocalDesignTokens.current
     val amountIsPositive = !transaction.isExpense || transaction.isRefundEntry
+    val isTransfer = transaction.isTransfer
     val enterModifier = if (enterIndex >= 0) rememberStaggerEnter(enterIndex) else Modifier
     Row(
         modifier = Modifier
@@ -508,7 +509,8 @@ private fun TransactionRow(
         Spacer(Modifier.width(t.space3))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                transaction.categoryName,
+                // 转账没有分类：标题显示「转出账户 → 转入账户」，否则这一行会是空的
+                if (isTransfer) RecordForm.transferTitle(transaction) else transaction.categoryName,
                 style = MaterialTheme.typography.titleSmall,
                 color = t.fg,
                 fontWeight = FontWeight.Medium,
@@ -522,10 +524,16 @@ private fun TransactionRow(
         }
         Spacer(Modifier.width(t.space2))
         Text(
-            text = (if (amountIsPositive) "+" else "-") + "¥" + transaction.displayAmount,
+            // 转账既不是花掉也不是赚到：不带正负号、用中性色（账户余额仍按双向真实增减）
+            text = if (isTransfer) "¥" + transaction.displayAmount
+            else (if (amountIsPositive) "+" else "-") + "¥" + transaction.displayAmount,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Medium,
-            color = if (amountIsPositive) t.incomeText else t.expenseText,
+            color = when {
+                isTransfer -> t.muted
+                amountIsPositive -> t.incomeText
+                else -> t.expenseText
+            },
         )
     }
 }
