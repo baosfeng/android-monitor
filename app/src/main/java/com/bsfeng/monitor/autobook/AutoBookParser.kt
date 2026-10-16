@@ -181,7 +181,16 @@ object AutoBookParser {
 
     private val ORDER_ID = Regex("[A-Za-z0-9]{12,}")
 
-    private val DATE_TIME = Regex("\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{2}(?::\\d{2})?")
+    /**
+     * 日期时间串。
+     *
+     * ⚠️ **两种格式都要认**：支付宝写 `2026-10-15 23:14:43`，微信写 `2026年10月10日 14:01:42`
+     * （都是真机原文）。只认前者会让微信详情页取不到交易时间，去重就退化成 2 分钟的金额兜底指纹。
+     */
+    private val DATE_TIME = Regex(
+        "\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{2}(?::\\d{2})?" +
+            "|\\d{4}年\\d{1,2}月\\d{1,2}日\\s*\\d{1,2}:\\d{2}(?::\\d{2})?"
+    )
 
     /** 平台分类 → 本 App 分类 的映射（取不到就按商户关键词猜，再兜底「其他」） */
     private val PLATFORM_CATEGORY_MAP = listOf(
@@ -301,10 +310,15 @@ object AutoBookParser {
      * 账单页结构标签：账单 / 交易详情页靠这些「标签 → 值」成对呈现。
      *
      * 命中任意一个**并且取到了值**，就说明当前确实是账单详情页，而不是首页消息流。
+     *
+     * ⚠️ **不要放「交易详情 / 付款详情 / 转账详情」**：真机实测微信支付**会话页**的支付消息卡片，
+     * 会把按钮文字拼进整张卡片的 content-desc —— `使用零钱支付￥43.00交易详情`，
+     * 于是「交易详情」被当成字段标签、又顺手取到了下一行的值，会话页就被误判成详情页、当场弹窗。
+     * 它们是标题 / 按钮，不是「标签 → 值」字段。
      */
     private val DETAIL_LABELS: List<String> =
         TIME_LABELS + ACCOUNT_LABELS + CATEGORY_LABELS + ORDER_LABELS + MERCHANT_LABELS +
-            listOf("商品说明", "交易状态", "交易详情", "付款详情", "转账详情")
+            listOf("商品说明", "交易状态", "当前状态")
 
     /**
      * 列表 / 摘要页特征词。
@@ -318,6 +332,16 @@ object AutoBookParser {
 
     /** 相对时间（`9小时前` / `2分钟前`）：账单详情页给的是绝对时间，只有列表项才给相对时间 */
     private val RELATIVE_TIME = Regex("(刚刚|\\d+\\s*(分钟|小时|天|周|个月)前)")
+
+    /**
+     * **消息流的时间分隔行**（`10月10日 14:01` / `周一 10:29`）—— 微信支付会话页每条消息上方都有一条。
+     *
+     * ⚠️ 必须**整行锚定**：详情页写的是 `2026年10月10日 14:01:42`，它**包含** `10月10日 14:01` 这个子串，
+     * 用 `contains` 判定会把好好的详情页一起否掉。另外详情页的时间行前面还挂着「支付时间」标签，也匹配不上整行锚点。
+     */
+    private val CHAT_TIME_DIVIDER = Regex(
+        "^\\s*(\\d{1,2}月\\d{1,2}日|周[一二三四五六日])\\s+\\d{1,2}:\\d{2}\\s*$"
+    )
 
     /** 结果页收尾按钮：独占的支付结果页一定有一个「离开」入口 */
     private val RESULT_PAGE_ACTIONS = listOf("完成", "账单详情", "查看账单", "查看详情", "返回首页", "我知道了")
@@ -351,8 +375,23 @@ object AutoBookParser {
         val statusHits = lines.count { line -> STATUS_WORDS.any { line.contains(it) } }
         if (statusHits >= MULTI_TRANSACTION_THRESHOLD) return true
         val labelHits = lines.count { line -> ACCOUNT_LABELS.any { line.contains(it) } }
-        return labelHits >= MULTI_TRANSACTION_THRESHOLD
+        if (labelHits >= MULTI_TRANSACTION_THRESHOLD) return true
+        // 单笔详情页一屏只有一个金额；出现两个就说明这是消息流 / 流水列表
+        // （真机：微信支付会话页同屏有 ￥43.00 与 ￥26.00 两条消息卡片）
+        return countAmountLines(lines) >= MULTI_TRANSACTION_THRESHOLD
     }
+
+    /**
+     * 一屏里的金额候选数。
+     *
+     * 只数**带货币符号或带「元」**的金额，不数裸小数（`-43.00` 是详情页大号金额专用的形态），
+     * 并且跳过余额 / 优惠 / 手续费等上下文（[isAmountNoise]），避免详情页被自己的优惠行误伤。
+     */
+    private fun countAmountLines(lines: List<String>): Int =
+        lines.count { line ->
+            !isAmountNoise(line) &&
+                (SYMBOL_AMOUNT.containsMatchIn(line) || YUAN_AMOUNT.containsMatchIn(line))
+        }
 
     /**
      * 当前页面是不是**单笔**账单 / 交易页。
@@ -378,7 +417,9 @@ object AutoBookParser {
 
     private fun isListOrSummaryPage(lines: List<String>): Boolean =
         lines.any { line ->
-            LIST_PAGE_WORDS.any { line.contains(it) } || RELATIVE_TIME.containsMatchIn(line)
+            LIST_PAGE_WORDS.any { line.contains(it) } ||
+                RELATIVE_TIME.containsMatchIn(line) ||
+                CHAT_TIME_DIVIDER.matches(line.trim())
         }
 
     private fun isStandaloneResultPage(lines: List<String>): Boolean {

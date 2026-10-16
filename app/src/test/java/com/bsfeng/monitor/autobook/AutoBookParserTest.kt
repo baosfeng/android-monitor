@@ -94,6 +94,51 @@ class AutoBookParserTest {
         "付款方式 招商银行储蓄卡(4995)"
     )
 
+    /**
+     * 真机 dump 还原：微信支付**服务号会话页**（不该弹窗）。
+     *
+     * 危险点：支付消息卡片的 content-desc 是整张卡片的描述 ——
+     * `使用零钱支付￥43.00交易详情`，
+     * 「交易详情」只是卡片上的按钮文字，却会被当成「详情页字段标签」，
+     * 于是会话页被误判成详情页、当场弹窗（商户名还取成了消息时间 `10月10日 14:01`）。
+     */
+    private fun wechatChatLines(): List<String> = listOf(
+        "10月10日 14:01",
+        "滴滴出行",
+        "使用零钱支付￥43.00交易详情 使用零钱支付",
+        "￥ 43.00",
+        "周一 10:29",
+        "收款到账通知",
+        "收款金额￥26.00 收款金额",
+        "￥ 26.00",
+        "收款场景 企业微信红包",
+        "备注 成功领取来自史高霜的企业微信红包，已存入零钱。点击可查看详情",
+        "我的账单 支付服务 优惠"
+    )
+
+    /**
+     * 真机 dump 还原：微信**交易详情页**（该弹窗）。
+     *
+     * 与会话页的分水岭是**成对的字段标签**：当前状态 / 支付时间 / 商户全称 / 支付方式 / 交易单号。
+     * 注意微信的时间是中文年月日 `2026年10月10日 14:01:42`，与支付宝的 `2026-10-15 23:14:43` 不同。
+     */
+    private fun wechatDetailLines(): List<String> = listOf(
+        "滴滴出行",
+        "服务 会员 交易详情",
+        "-43.00",
+        "滴滴出行",
+        "当前状态 支付成功",
+        "支付时间 2026年10月10日 14:01:42",
+        "商品 费用",
+        "商户全称 某出行服务公司",
+        "收单机构 北京滴滴支付技术有限公司",
+        "支付方式 零钱",
+        "交易单号 4200003144202610109050475236",
+        "商户单号 2026101014013615565510575279",
+        "交易服务",
+        "对订单有疑惑 发起群收款"
+    )
+
     // ==================== 正常路径 ====================
 
     @Test
@@ -237,6 +282,43 @@ class AutoBookParserTest {
         assertNull(
             "一屏有多笔交易的列表页不是单笔账单页",
             AutoBookParser.parse(alipay, alipayMessageListLines(), 1L)
+        )
+    }
+
+    @Test
+    fun `微信支付会话页不得被识别成账单`() {
+        assertNull(
+            "会话页消息卡片上的「交易详情」是按钮文字，不是详情页字段",
+            AutoBookParser.parse(wechat, wechatChatLines(), 1L)
+        )
+    }
+
+    @Test
+    fun `门禁能区分微信会话页与交易详情页`() {
+        // 两者都含「交易详情」「零钱」「支付成功」这些字眼，靠「成对字段标签」与「一屏多笔」区分
+        assertFalse(AutoBookParser.isBillPage(wechatChatLines()))
+        assertTrue(AutoBookParser.isBillPage(wechatDetailLines()))
+    }
+
+    @Test
+    fun `微信交易详情页：中文年月日时间与全部字段`() {
+        val draft = AutoBookParser.parse(wechat, wechatDetailLines(), 1L)
+        requireNotNull(draft) { "微信交易详情页应当能识别" }
+        assertEquals(43.0, draft.amount, 0.0001)
+        assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
+        assertEquals("某出行服务公司", draft.merchant)
+        assertEquals("零钱", draft.payMethod)
+        assertEquals("2026年10月10日 14:01:42", draft.timeText)
+        assertEquals("微信钱包", draft.accountName)
+    }
+
+    @Test
+    fun `微信详情页的交易单号进落库键`() {
+        val draft = AutoBookParser.parse(wechat, wechatDetailLines(), 1L)
+        requireNotNull(draft)
+        assertTrue(
+            "有交易单号时，落库键与精确指纹都应当以订单号为准",
+            draft.dedupKeys.any { it.value == "order:wechat:4200003144202610109050475236" }
         )
     }
 
