@@ -34,8 +34,16 @@
             </intent-filter>
         </activity>
 
+        <!--
+            ⚠️ 这里注册的不是 com.bsfeng.monitor.service.MonitorAccessibilityService，而是它在
+            com.google.android.accessibility.selecttospeak 包下的伪装子类。原因：微信对不在它白名单里的
+            第三方无障碍服务隐藏整棵页面节点树（真机实测 root.childCount == 0），而白名单只比对
+            服务 ID 的后半段类名、不校验包名（AutoJs6 issue #463）。详见该子类的 KDoc
+            与 docs/记账/微信支付页识别调研.md。
+            ⚠️ 换类名会让用户**已开启的旧无障碍服务失效**，需要在系统设置里重新开启一次。
+        -->
         <service
-            android:name=".service.MonitorAccessibilityService"
+            android:name="com.google.android.accessibility.selecttospeak.SelectToSpeakService"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>

@@ -60,8 +60,16 @@ class AccessibilityStatusTest {
     // ==================== 边界条件 ====================
 
     @Test
-    fun `类名为相对写法时仍能识别`() {
+    fun `伪装身份注册后旧的服务类名不再被当成已开启`() {
+        // 服务已改用微信白名单身份注册（跨包的 com.google.android.accessibility.selecttospeak...），
+        // 应用包内的相对写法展开后不再等于真实注册的类名，因此不应被判为已开启。
         putEnabledServices(component(".service.MonitorAccessibilityService"))
+        assertFalse(AccessibilityStatus.isEnabledInSettings(context))
+    }
+
+    @Test
+    fun `伪装身份的服务类名被识别为已开启`() {
+        putEnabledServices(component("com.google.android.accessibility.selecttospeak.SelectToSpeakService"))
         assertTrue(AccessibilityStatus.isEnabledInSettings(context))
     }
 
