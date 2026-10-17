@@ -211,6 +211,37 @@ class AutoBookParserTest {
     }
 
     @Test
+    fun `微信「已选择零钱，更改」只保留零钱`() {
+        // 真机原文（微信收银台）：付款方式,已选择零钱,更改 更改 ——
+        // 改造前这个值会原样进浮窗与账本备注，出现「，已选择零钱，更改」这种脏值。
+        val lines = listOf(
+            "支付成功",
+            "-¥0.01",
+            "商户全称 星巴克咖啡",
+            "付款方式,已选择零钱,更改 更改",
+            "支付时间 2026-10-16 12:06:11"
+        )
+        val draft = AutoBookParser.parse(wechat, lines, 1L)
+        requireNotNull(draft)
+        assertEquals("零钱", draft.payMethod)
+        assertEquals("星巴克咖啡·零钱", draft.remark())
+    }
+
+    @Test
+    fun `付款方式值前的逗号与「更改」入口都会被清掉`() {
+        assertEquals(
+            "已选择零钱,更改 更改",
+            AutoBookParser.labelValue(listOf("付款方式,已选择零钱,更改 更改"), listOf("付款方式"))
+        )
+        assertEquals("零钱", AutoBookParser.extractAccount(listOf("付款方式，已选择零钱，更改")))
+        assertEquals("零钱", AutoBookParser.extractAccount(listOf("付款方式 零钱")))
+        assertEquals(
+            "招商银行信用卡(8888)",
+            AutoBookParser.extractAccount(listOf("付款方式 招商银行信用卡(8888)"))
+        )
+    }
+
+    @Test
     fun `微信「向X付款」句式判为支出`() {
         val lines = listOf("微信支付", "向 麦当劳 付款 12.30 元")
         val draft = AutoBookParser.parseNotification(wechat, lines, 1L)

@@ -617,10 +617,18 @@ object AutoBookParser {
     /** 账户：优先页面上的付款方式（余额宝/零钱/某银行卡） */
     fun extractAccount(lines: List<String>): String? {
         val value = labelValue(lines, ACCOUNT_LABELS) ?: return null
-        val trimmed = value.trim()
+        var method = value.trim().trimStart('，', ',', '、', ';', '；', ' ')
         // 「付款方式」标签自身会被误取，过滤掉纯标签值
-        if (trimmed.isEmpty() || ACCOUNT_LABELS.contains(trimmed)) return null
-        return trimmed.take(20)
+        if (method.isEmpty() || ACCOUNT_LABELS.contains(method)) return null
+
+        // 微信收银台 / 支付结果页把付款方式渲染成「已选择零钱，更改」——
+        // 「更改」是一个可点入口，跟着进浮窗和账本备注就会变成「，已选择零钱，更改」脏值。
+        // 展示层只要「零钱」：去掉「已选择」前缀与「更改」尾巴，再去掉残留标点。
+        method = method.removePrefix("已选择").trim()
+        method = method.substringBefore("更改").trim()
+            .trimEnd('，', ',', '、', ';', '；', ' ')
+        if (method.isEmpty() || ACCOUNT_LABELS.contains(method)) return null
+        return method.take(20)
     }
 
     /** 交易时间：优先标签行的值，其次全页首个日期时间串 */
@@ -677,15 +685,18 @@ object AutoBookParser {
                 val after = at + label.length
                 if (after < line.length && isCjkIdeograph(line[after])) continue
 
-                // 同行右侧：去掉标签本身与冒号
+                // 同行右侧：去掉标签本身、冒号与可能多出来的逗号
+                // （微信收银台原文是 `付款方式,已选择零钱,更改 更改`，逗号会粘在值前面）
                 val inline = line.substring(at + label.length)
                     .trim()
-                    .trimStart('：', ':', ' ', '　')
+                    .trimStart('：', ':', ' ', '　', ',', '，', '、', ';', '；')
                     .trim()
                 if (inline.isNotEmpty() && !isLabelLike(inline)) return inline
 
                 // 下一行
                 val next = lines.getOrNull(index + 1)?.trim()
+                    ?.trimStart(',', '，', '、', ';', '；')
+                    ?.trim()
                 if (!next.isNullOrEmpty() && !isLabelLike(next)) return next
             }
         }
