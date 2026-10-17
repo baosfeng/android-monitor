@@ -6,8 +6,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDateTime
-import java.time.ZoneId
 
 /**
  * 自动记账解析器测试（纯 JVM，不依赖 Android）。
@@ -364,12 +362,42 @@ class AutoBookParserTest {
             "语音 发送消息... 表情 更多",
             "图片 灵感回复 红包 转账"
         )
-        val draft = AutoBookParser.parseSentRedPacketChat(alipay, chat, pre, 2_000L)
+        val draft = AutoBookParser.parseSentRedPacketChat(
+            alipay, chat, pre, 2_000L, redPacketFlowPending = true
+        )
         requireNotNull(draft)
         assertEquals(0.01, draft.amount, 0.0001)
         assertEquals("领取人应作为商户名", "张三", draft.merchant)
         assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
         assertEquals("红包已发出", draft.markers.single())
+    }
+
+    @Test
+    fun `没走过红包付款流程时聊天页不得识别`() {
+        // 打开历史聊天 / 取消发红包后回到聊天：没有「刚走过红包付款页」的事实，不能弹。
+        val chat = listOf(
+            "返回 资金往来记录 聊天设置",
+            "红包已被领取",
+            "icon 张三领取了你的 红包",
+            "支付宝红包 16:28",
+            "¥0.01",
+            "语音 发送消息... 表情 更多"
+        )
+        val pre = PrePaymentDraft(
+            channel = AutoBookRules.CHANNEL_ALIPAY,
+            type = AutoBookDraft.TYPE_EXPENSE,
+            amount = 0.01,
+            merchant = "",
+            payMethod = "",
+            remark = "",
+            capturedAtMs = 1_000L
+        )
+        assertNull(
+            AutoBookParser.parseSentRedPacketChat(
+                alipay, chat, pre, 2_000L,
+                redPacketFlowPending = false, allowBubbleOnly = true
+            )
+        )
     }
 
     @Test
@@ -381,8 +409,10 @@ class AutoBookParserTest {
             "语音 发送消息... 表情 更多"
         )
         assertNull(
-            "没有预采集就没有金额，宁可漏记也不能猜",
-            AutoBookParser.parseSentRedPacketChat(alipay, chat, null, 1L)
+            "没有预采集、气泡也没有金额，宁可漏记也不能猜",
+            AutoBookParser.parseSentRedPacketChat(
+                alipay, chat, null, 1L, redPacketFlowPending = true
+            )
         )
         val expired = PrePaymentDraft(
             channel = AutoBookRules.CHANNEL_ALIPAY,
@@ -399,15 +429,16 @@ class AutoBookParserTest {
                 alipay,
                 chat,
                 expired,
-                AutoBookDraftMerger.PRE_DRAFT_TTL_MS + 2
+                AutoBookDraftMerger.PRE_DRAFT_TTL_MS + 2,
+                redPacketFlowPending = true
             )
         )
     }
 
     @Test
     fun `红包刚出现（对方未领取）时气泡也能识别`() {
-        // 真机 2026-10-17 16:37 原文：气泡未领取，但页面给出了 `支付宝红包 + ¥0.01 + 留言`。
-        // allowBubbleOnly 由「刚走过红包付款前页面」决定，避免历史聊天里的旧红包误弹。
+        // 真机 2026-10-17 16:49 原文：气泡未领取，页面给出 `支付宝红包 + ¥0.01 + 留言`。
+        // allowBubbleOnly 由「红包流程已到指纹页」决定，避免在发红包页取消后打开旧聊天误弹。
         val pre = PrePaymentDraft(
             channel = AutoBookRules.CHANNEL_ALIPAY,
             type = AutoBookDraft.TYPE_EXPENSE,
@@ -417,55 +448,51 @@ class AutoBookParserTest {
             remark = "",
             capturedAtMs = 1_000L
         )
-        val now = LocalDateTime.of(2026, 10, 17, 16, 45)
-        val nowMs = now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val hhmm = "%02d:%02d".format(now.hour, now.minute)
-        val fresh = pre.copy(capturedAtMs = nowMs - 1_000)
         val chat = listOf(
-            "16:28",
             "返回 资金往来记录 聊天设置",
             "张三",
-            "支付宝红包 $hhmm",
+            "支付宝红包",
             "清风明月",
             "¥0.01",
             "示例留言",
             "语音 发送消息... 表情 更多"
         )
         val draft = AutoBookParser.parseSentRedPacketChat(
-            alipay, chat, fresh, nowMs, allowBubbleOnly = true
+            alipay, chat, pre, 2_000L,
+            redPacketFlowPending = true, allowBubbleOnly = true
         )
         requireNotNull(draft)
         assertEquals(0.01, draft.amount, 0.0001)
         assertEquals("张三(***)", draft.merchant)
-        // 没走「刚发过红包」标记时，只有气泡不能弹
-        assertNull(AutoBookParser.parseSentRedPacketChat(alipay, chat, pre, nowMs))
+        // 只走过发红包输入页、还没到指纹页时，气泡不能单独触发
+        assertNull(
+            AutoBookParser.parseSentRedPacketChat(
+                alipay, chat, pre, 2_000L,
+                redPacketFlowPending = true, allowBubbleOnly = false
+            )
+        )
     }
 
     @Test
     fun `预采集丢失时用红包气泡自己的金额补记`() {
-        // 服务重启 / 事件丢失会把预采集清空；但气泡本身带 `¥0.01`，只要刚走完红包付款流程就仍应能记。
-        val now = LocalDateTime.of(2026, 10, 17, 16, 45)
-        val nowMs = now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val hhmm = "%02d:%02d".format(now.hour, now.minute)
+        // 服务重启 / 事件丢失会把预采集清空；但气泡本身带 `¥0.01`，只要已验过指纹就仍应能记。
         val chat = listOf(
-            "16:28",
             "返回 资金往来记录 聊天设置",
             "张三",
-            "支付宝红包 $hhmm",
+            "支付宝红包",
             "清风明月",
             "¥0.01",
             "示例留言",
             "语音 发送消息... 表情 更多"
         )
         val draft = AutoBookParser.parseSentRedPacketChat(
-            alipay, chat, null, nowMs, allowBubbleOnly = true
+            alipay, chat, null, 2_000L,
+            redPacketFlowPending = true, allowBubbleOnly = true
         )
         requireNotNull(draft)
         assertEquals(0.01, draft.amount, 0.0001)
         assertEquals("张三", draft.merchant)
         assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
-        // 没有「刚发红包」标记时不能仅凭历史气泡弹窗
-        assertNull(AutoBookParser.parseSentRedPacketChat(alipay, chat, null, nowMs))
     }
 
     @Test
@@ -479,18 +506,16 @@ class AutoBookParserTest {
             remark = "",
             capturedAtMs = 1_000L
         )
-        val now = LocalDateTime.of(2026, 10, 17, 16, 45)
-        val nowMs = now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val hhmm = "%02d:%02d".format(now.hour, now.minute)
         val chat = listOf(
             "返回 资金往来记录 聊天设置",
-            "支付宝红包 $hhmm",
+            "支付宝红包",
             "¥0.50",
             "语音 发送消息... 表情 更多"
         )
         assertNull(
             AutoBookParser.parseSentRedPacketChat(
-                alipay, chat, pre.copy(capturedAtMs = nowMs - 1_000), nowMs, allowBubbleOnly = true
+                alipay, chat, pre, 2_000L,
+                redPacketFlowPending = true, allowBubbleOnly = true
             )
         )
     }
@@ -516,6 +541,11 @@ class AutoBookParserTest {
             "语音 发送消息... 表情 更多"
         )
         assertFalse("聊天页底部也有「发红包」入口，不能被当成付款前页面", AutoBookParser.isRedPacketPrePayPage(chat))
+
+        // 指纹页 / 密码页是「离付款成功只差一步」的标记
+        assertTrue(AutoBookParser.isRedPacketFingerprintPage(listOf("取消 使用密码", "请验证指纹")))
+        assertTrue(AutoBookParser.isRedPacketFingerprintPage(listOf("取消 使用密码", "正在校验指纹...")))
+        assertFalse(AutoBookParser.isRedPacketFingerprintPage(listOf("返回 资金往来记录 聊天设置")))
     }
 
     @Test
@@ -529,15 +559,24 @@ class AutoBookParserTest {
             remark = "",
             capturedAtMs = 1_000L
         )
-        // 聊天页有红包气泡，但还没人领取；也没有「发红包」输入页特征 —— 不能凭猜弹窗
+        // 聊天页有红包气泡，但还没人领取；也没到指纹页 —— 不能凭猜弹窗
         val chat = listOf(
             "返回 资金往来记录 聊天设置",
             "支付宝红包 16:28",
             "语音 发送消息... 表情 更多"
         )
-        assertNull(AutoBookParser.parseSentRedPacketChat(alipay, chat, pre, 2_000L))
+        assertNull(
+            AutoBookParser.parseSentRedPacketChat(
+                alipay, chat, pre, 2_000L, redPacketFlowPending = true
+            )
+        )
         // 微信红包走独立结果页，不走这条聊天页兜底
-        assertNull(AutoBookParser.parseSentRedPacketChat(wechat, chat, pre, 2_000L))
+        assertNull(
+            AutoBookParser.parseSentRedPacketChat(
+                wechat, chat, pre, 2_000L,
+                redPacketFlowPending = true, allowBubbleOnly = true
+            )
+        )
     }
 
     @Test

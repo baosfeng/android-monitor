@@ -1,9 +1,6 @@
 package com.bsfeng.monitor.autobook
 
 import java.security.MessageDigest
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
 import kotlin.math.abs
 /**
  * 一笔待确认的自动记账草稿。
@@ -424,11 +421,13 @@ object AutoBookParser {
         lines: List<String>,
         pre: PrePaymentDraft?,
         nowMs: Long,
+        redPacketFlowPending: Boolean = false,
         allowBubbleOnly: Boolean = false
     ): AutoBookDraft? {
+        if (!redPacketFlowPending) return null
         if (rule.channel != AutoBookRules.CHANNEL_ALIPAY) return null
         if (pre != null && nowMs - pre.capturedAtMs > AutoBookDraftMerger.PRE_DRAFT_TTL_MS) return null
-        if (!isSentRedPacketChatPage(lines, allowBubbleOnly, nowMs)) return null
+        if (!isSentRedPacketChatPage(lines, allowBubbleOnly)) return null
 
         // 只有气泡、没有「已领取」强信号时，再用气泡金额核对一次：
         // 聊天记录里旧红包金额对不上，就不能当成本笔（宁可漏记也不能记错）。
@@ -495,37 +494,22 @@ object AutoBookParser {
      *   弱信号只在 [allowBubbleOnly] 为 true 时启用，而它由「刚刚走过红包付款前页面」
      *   （[isRedPacketPrePayPage]）决定，避免用户在历史聊天记录里看到旧红包就误弹。
      */
-    private fun isSentRedPacketChatPage(
-        lines: List<String>,
-        allowBubbleOnly: Boolean,
-        nowMs: Long
-    ): Boolean {
+    private fun isSentRedPacketChatPage(lines: List<String>, allowBubbleOnly: Boolean): Boolean {
         val joined = lines.joinToString(" ")
         if (!joined.contains("红包")) return false
         if (!CHAT_PAGE_WORDS.any { joined.contains(it) }) return false
         if (PRE_PAY_WORDS.any { joined.contains(it) }) return false
         if (RED_PACKET_SENT_WORDS.any { joined.contains(it) }) return true
-        // 对方还没领取：只有 `支付宝红包 HH:mm` 气泡。用「气泡时间 ≈ 当前时间」区分新旧。
-        return allowBubbleOnly &&
-            joined.contains("支付宝红包") &&
-            hasFreshRedPacketBubbleTime(lines, nowMs)
+        // 对方还没领取：只有 `支付宝红包` 气泡。必须已经「验过指纹/密码」才算付款成功，
+        // 避免在发红包页取消后打开旧聊天被历史红包触发。
+        return allowBubbleOnly && joined.contains("支付宝红包")
     }
 
-    /** 聊天页里是否有「刚发出」的红包气泡时间（`支付宝红包 16:45`）。 */
-    private fun hasFreshRedPacketBubbleTime(lines: List<String>, nowMs: Long): Boolean {
-        val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMs), ZoneId.systemDefault())
-        val nowMinutes = now.hour * 60 + now.minute
-        for (line in lines) {
-            val match = RED_PACKET_BUBBLE_TIME.find(line) ?: continue
-            val hour = match.groupValues[1].toIntOrNull() ?: continue
-            val minute = match.groupValues[2].toIntOrNull() ?: continue
-            if (hour !in 0..23 || minute !in 0..59) continue
-            val bubbleMinutes = hour * 60 + minute
-            val diff = abs(bubbleMinutes - nowMinutes)
-            if (minOf(diff, 24 * 60 - diff) <= RED_PACKET_BUBBLE_FRESH_MINUTES) return true
+    /** 红包付款流程里是否已经到了指纹 / 密码验证页（离付款成功只差一步）。 */
+    fun isRedPacketFingerprintPage(lines: List<String>): Boolean =
+        lines.any { line ->
+            RED_PACKET_FINGERPRINT_WORDS.any { line.contains(it) }
         }
-        return false
-    }
 
     /**
      * 从红包气泡邻域取金额：`支付宝红包 / 清风明月 / ¥0.01 / 示例留言` → 0.01。
@@ -631,6 +615,11 @@ object AutoBookParser {
         "红包封面", "未被领取", "红包金额", "红包记录"
     )
 
+    /** 红包付款前的验证页：到这一步说明用户已经确认付款，聊天页气泡出现的概率极高 */
+    private val RED_PACKET_FINGERPRINT_WORDS = listOf(
+        "请验证指纹", "正在校验指纹", "验证指纹", "请输入支付密码", "输入支付密码"
+    )
+
     /** 红包付款前页面上的金额（收银台：`付款金额0.01元人民币`；确认页：`金额 0.01 元`） */
     private val RED_PACKET_AMOUNT_TEXT = Regex("(?:付款金额|红包金额|金额)[^0-9]{0,6}([0-9]+(?:\\.[0-9]{1,2})?)")
 
@@ -658,16 +647,6 @@ object AutoBookParser {
     /** 红包气泡上的金额（`¥0.01` / `0.01`），只在气泡邻域里找 */
     private val RED_PACKET_BUBBLE_AMOUNT = Regex("[¥￥]\\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)")
 
-    /**
-     * 聊天页红包气泡上的发送时间（`支付宝红包 16:45`）。
-     *
-     * 只有**刚发出去**的那个气泡才带当前 HH:mm；聊天记录里的旧红包带的是旧时间。
-     * 用它把「新气泡」和「历史红包」区分开，避免取消发红包后打开旧聊天就误弹。
-     */
-    private val RED_PACKET_BUBBLE_TIME = Regex("支付宝红包[\\s:：]*([0-9]{1,2}):([0-9]{2})")
-
-    /** 气泡时间允许偏差：从付款到回聊天页通常几秒，给 3 分钟（含跨零点取模） */
-    private const val RED_PACKET_BUBBLE_FRESH_MINUTES = 3
     /**
      * 付款前页面的特征词：收银台 / 指纹验证 / 密码输入。
      *
