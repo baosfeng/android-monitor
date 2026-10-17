@@ -57,13 +57,26 @@ class AutoBookDedupTest {
     }
 
     @Test
-    fun `浮窗弹过后只做短暂防抖`() {
+    fun `浮窗弹过后金额模糊指纹只做 5 秒防抖`() {
         val dedup = AutoBookDedup()
-        val keys = listOf(key("sum:wechat:0:12.3", 2 * 60 * 1000L))
+        val keys = listOf(fuzzyKey("sum:wechat:0:12.3"))
+        dedup.markShown(keys, 0L)
+
+        assertFalse(dedup.shouldShow(keys, 4_000L))
+        assertTrue(
+            "5 秒后允许再弹 —— 下一笔同金额交易不能被静默吞掉（真机 2026-10-17）",
+            dedup.shouldShow(keys, 5_001L)
+        )
+    }
+
+    @Test
+    fun `精确指纹的弹窗防抖仍是 30 秒`() {
+        val dedup = AutoBookDedup()
+        val keys = listOf(key("order:alipay:CFP001"))
         dedup.markShown(keys, 0L)
 
         assertFalse(dedup.shouldShow(keys, 29_000L))
-        assertTrue("30 秒后允许再弹（用户没操作，可能只是浮窗被系统收起）", dedup.shouldShow(keys, 30_000L))
+        assertTrue("30 秒后允许再弹（用户没操作，可能只是浮窗被系统收起）", dedup.shouldShow(keys, 30_001L))
     }
 
     @Test
@@ -140,8 +153,8 @@ class AutoBookDedupTest {
         val keys = listOf(fuzzyKey("sum:wechat:0:0.01"))
         dedup.markShown(keys, 0L)
 
-        assertFalse("刚弹过，10 秒内不复弹", dedup.shouldShow(keys, 10_000L))
-        assertTrue("30 秒防抖窗口后放行", dedup.shouldShow(keys, 30_000L))
+        assertFalse("刚弹过，5 秒内不复弹", dedup.shouldShow(keys, 4_000L))
+        assertTrue("5 秒防抖窗口后放行（同金额的下一笔要能弹）", dedup.shouldShow(keys, 6_000L))
     }
 
     @Test
