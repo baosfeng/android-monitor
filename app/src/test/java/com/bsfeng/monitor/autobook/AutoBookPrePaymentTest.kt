@@ -64,6 +64,54 @@ class AutoBookPrePaymentTest {
     }
 
     @Test
+    fun `备注弹窗能捕获用户输入`() {
+        assertEquals(
+            "随便",
+            AutoBookParser.parseRemarkDialog(listOf("添加备注", "随便", "取消 确定"))
+        )
+        assertEquals(
+            "空备注返回 null",
+            null,
+            AutoBookParser.parseRemarkDialog(listOf("添加备注", "备注", "取消 确定"))
+        )
+        assertEquals(
+            "不是备注弹窗（没有取消/确定）",
+            null,
+            AutoBookParser.parseRemarkDialog(listOf("付款给个人", "张三", "付款"))
+        )
+    }
+
+    @Test
+    fun `付款页的入口文案与键盘行不会被当成备注`() {
+        val lines = listOf(
+            "付款给个人 头像",
+            "张三(***)",
+            "金额",
+            "¥ 0.01",
+            "备注 修⁠改", // 真机原文：零宽字符 + 「修改」入口
+            "付款",
+            "1 2 3 删除",
+            "4 5 6",
+            "7 8 9",
+            "0 ."
+        )
+        val pre = AutoBookParser.parsePrePayment(wechat, lines, 1L)
+        requireNotNull(pre)
+        assertEquals("备注必须是空，不能是「付款」或「1 2 3 删除」", "", pre.remark)
+    }
+
+    @Test
+    fun `收款方后面粘的按钮文字会被去掉`() {
+        val pre = AutoBookParser.parsePrePayment(
+            wechat,
+            listOf("付款给张三(***) 返回", "￥0.01", "请验证指纹"),
+            1L
+        )
+        requireNotNull(pre)
+        assertEquals("张三(***)", pre.merchant)
+    }
+
+    @Test
     fun `收银台也能预采集收款方与付款方式`() {
         val pre = AutoBookParser.parsePrePayment(wechat, wechatCashier(), 1L)
         requireNotNull(pre)

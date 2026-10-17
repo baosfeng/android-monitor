@@ -83,6 +83,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
      */
     private var preDraft: PrePaymentDraft? = null
 
+    /** 微信「添加备注」弹窗里用户填的备注（弹窗没有金额，单独捕获后并进预采集）。 */
+    private var pendingRemark: String? = null
+
     /** 延迟到点：复核支付结果页仍是同一笔后再弹 */
     private val showPendingOverlay = Runnable { firePendingOverlay() }
 
@@ -142,6 +145,19 @@ class AutoBookEngine(private val service: AccessibilityService) {
             null
         }
         if (draft == null) {
+            // 微信「添加备注」弹窗：没有金额，不会进预采集；但用户填的备注只在这里可见。
+            val dialogRemark = try {
+                AutoBookParser.parseRemarkDialog(lines)
+            } catch (e: Exception) {
+                null
+            }
+            if (dialogRemark != null) {
+                pendingRemark = dialogRemark
+                preDraft = preDraft?.copy(remark = dialogRemark)
+                Log.d(TAG, "捕获备注弹窗: $dialogRemark")
+                return
+            }
+
             // 付款前页面（转账输入 / 收银台 / 指纹 / 确认付款）：**不弹窗**，只预采集。
             // 收款方、付款方式、用户备注这些信息只在付款前页面出现；成功页通常只给金额。
             val pre = try {
@@ -151,12 +167,17 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 null
             }
             if (pre != null) {
+                // 备注弹窗先于本页出现时，把备注补进来
+                val savedRemark = pendingRemark
+                val withRemark = if (pre.remark.isBlank() && !savedRemark.isNullOrBlank()) {
+                    pre.copy(remark = savedRemark)
+                } else pre
                 // 付款前是分步的（输入页 → 收银台 → 指纹）：按字段累积，后一页不能把备注冲掉
-                preDraft = preDraft?.let { AutoBookDraftMerger.accumulate(it, pre) } ?: pre
+                preDraft = preDraft?.let { AutoBookDraftMerger.accumulate(it, withRemark) } ?: withRemark
                 Log.d(
                     TAG,
-                    "付款前页面预采集: amount=${pre.amount} merchant=${pre.merchant} " +
-                        "payMethod=${pre.payMethod} remark=${pre.remark}"
+                    "付款前页面预采集: amount=${withRemark.amount} merchant=${withRemark.merchant} " +
+                        "payMethod=${withRemark.payMethod} remark=${withRemark.remark}"
                 )
                 return
             }
@@ -218,10 +239,11 @@ class AutoBookEngine(private val service: AccessibilityService) {
     }
 
     /**
-     * 延迟到点：**重新采集一次页面**再决定弹不弹。
+     * 延迟到点：页面还在就再采集一次（字段可能更全）；页面已经关了也照弹。
      *
-     * 1s 内用户可能已经返回 / 切走 / 又付了一笔 —— 只认「页面还在 + 仍是同一笔」，
-     * 否则宁可不弹（用户下次进入该页还能重新识别），避免浮窗盖到别的页面上。
+     * 真机（2026-10-17 16:14:59）：支付成功页出现后用户马上点「完成」回聊天页，
+     * 1s 复核时页面已经不在 —— 但识别成功本身已经证明这笔支付发生过，不能因为
+     * 页面关了就把账丢掉。旧实现「复核失败就取消」正是「支付完成也不出现」的最后一环。
      */
     private fun firePendingOverlay() {
         val draft = pendingDraft ?: return
@@ -233,17 +255,20 @@ class AutoBookEngine(private val service: AccessibilityService) {
         val recheck = try {
             AutoBookParser.parse(rule, collectPageLines(rule.packageName), System.currentTimeMillis())
         } catch (e: Exception) {
-            Log.w(TAG, "延迟复核解析失败，放弃本次弹窗: ${e.message}")
+            Log.w(TAG, "延迟复核解析失败，按排队草稿继续弹窗: ${e.message}")
             null
         }
-        if (recheck == null || recheck.sourceId != draft.sourceId) {
-            Log.d(TAG, "延迟复核：支付结果页已变化，取消弹窗: ${draft.sourceId}")
-            return
+        val finalDraft = if (recheck != null && recheck.sourceId == draft.sourceId) {
+            recheck
+        } else {
+            // 成功页被用户点「完成」关掉 / 自动返回聊天页：识别已经成立，不能丢账
+            Log.i(TAG, "延迟复核：结果页已离开，仍按已识别的结果弹窗: ${draft.sourceId}")
+            draft
         }
         // 复核期间浮窗可能已经被别的路径弹出来了，避免重复展示
-        if (overlay.currentDraft?.sourceId == recheck.sourceId) return
-        Log.d(TAG, "延迟复核通过，弹窗: ${recheck.sourceId}")
-        showOverlay(recheck)
+        if (overlay.currentDraft?.sourceId == finalDraft.sourceId) return
+        Log.d(TAG, "延迟复核通过，弹窗: ${finalDraft.sourceId}")
+        showOverlay(finalDraft)
     }
 
     /**
@@ -445,6 +470,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
             shownCount++
             // 浮窗已展示：预采集完成使命，清掉避免串到之后的同金额交易
             preDraft = null
+            pendingRemark = null
         } catch (e: Exception) {
             // 浮窗挂不上（例如系统限制）不能静默：记日志，下一笔还会再试
             Log.e(TAG, "浮窗展示失败: ${e.message}", e)
@@ -518,6 +544,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         pendingDraft = null
         pendingRule = null
         preDraft = null
+        pendingRemark = null
         overlay.hide()
         dedup.clear()
         scope.cancel()
