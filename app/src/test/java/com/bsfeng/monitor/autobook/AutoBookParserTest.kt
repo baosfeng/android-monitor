@@ -281,6 +281,72 @@ class AutoBookParserTest {
     }
 
     @Test
+    fun `支付宝支付成功页标题与正文重复「支付成功」不得误杀`() {
+        // 真机 2026-10-17：这一页被旧 hasMultipleTransactions 的 statusHits 判成列表，
+        // 日志是 `非账单页,门禁拒绝 行数=6`，支付宝付完永远不弹窗。
+        val lines = listOf(
+            "支付成功￥0.01 回首页",
+            "支付成功",
+            "0.01",
+            "楠楠的开心杂货铺 ￥0.01",
+            "交易方式 余额宝(转出资金付款)",
+            "完成"
+        )
+        assertTrue(
+            "同一个金额重复三行是单笔结果页的正常形态，不能按金额行数判列表",
+            AutoBookParser.isBillPage(lines)
+        )
+        val draft = AutoBookParser.parse(alipay, lines, 1L)
+        requireNotNull(draft)
+        assertEquals(0.01, draft.amount, 0.0001)
+        assertEquals("余额宝(转出资金付款)", draft.payMethod)
+    }
+
+    @Test
+    fun `支付宝转账输入页与备注弹窗不得被识别成账单`() {
+        // 真机 2026-10-17：输入页 / 备注弹窗同样带金额与「付款」，旧门禁在 16:20:32 误弹，
+        // 商户名还取成了首页天气「多云 27℃」。
+        val input = listOf(
+            "付款给个人",
+            "楠楠的开心杂货铺(**生)",
+            "输入付款金额",
+            "0.01",
+            "推荐付款方式",
+            "添加备注",
+            "1 2 3 删除",
+            "付款"
+        )
+        assertFalse("转账输入页不是账单页", AutoBookParser.isBillPage(input))
+        assertNull(AutoBookParser.parse(alipay, input, 1L))
+
+        val pre = AutoBookParser.parsePrePayment(alipay, input, 1L)
+        requireNotNull(pre)
+        assertEquals(0.01, pre.amount, 0.0001)
+        assertEquals("楠楠的开心杂货铺(**生)", pre.merchant)
+
+        val noteDialog = listOf("添加备注", "备注一下", "取消 确认")
+        assertNull(AutoBookParser.parse(alipay, noteDialog, 1L))
+        assertNull("只有占位文案，没有用户备注", AutoBookParser.parseRemarkDialog(noteDialog))
+    }
+
+    @Test
+    fun `支付宝备注弹窗能捕获用户输入`() {
+        assertEquals(
+            "午饭",
+            AutoBookParser.parseRemarkDialog(listOf("添加备注", "午饭", "取消 确认"))
+        )
+        // 混进首页长文本的「弹窗」不可信：宁可不要备注，也不能写「多云 27℃」
+        assertNull(
+            AutoBookParser.parseRemarkDialog(
+                listOf(
+                    "上海 搜索框", "多云 27℃", "付款给个人", "输入付款金额", "0.01",
+                    "添加备注", "收款人可见，最多20个字", "取消 确认", "付款", "首页", "消息"
+                )
+            )
+        )
+    }
+
+    @Test
     fun `微信「向X付款」句式判为支出`() {
         val lines = listOf("微信支付", "向 麦当劳 付款 12.30 元")
         val draft = AutoBookParser.parseNotification(wechat, lines, 1L)
