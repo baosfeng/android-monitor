@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>自动记账 · 支付后确认浮窗 v2（沉浸式 / 实心面板 / 1s 延迟）</title>
+<title>自动记账 · 支付后确认浮窗 v2（沉浸式 / 实心面板 / 检测即弹）</title>
 <style>
 /* ── Token：apple（默认）与 glassmorphism 两套，均取自 DesignTokenTable.kt ── */
 :root{
@@ -173,19 +173,19 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
 
 <div class="page-head">
   <h1>自动记账 · 支付后确认浮窗 v2</h1>
-  <p>按真机反馈重做三处：<b>出现时机</b>（支付成功页稳定 1s 后再弹）、<b>沉浸式</b>（遮罩铺满含状态栏）、
+  <p>按真机反馈重做三处：<b>出现时机</b>（检测到支付成功页立即弹）、<b>沉浸式</b>（遮罩铺满含状态栏）、
      <b>实心面板</b>（玻璃主题下也不透出支付页）。背景为真机实测的支付宝 / 微信支付结果页原文。</p>
   <div class="changes">
-    <span class="change"><b>①</b> 支付结果页出现后 <b>1s</b> 再弹</span>
+    <span class="change"><b>①</b> 检测到支付成功页 · <b>立即弹出</b></span>
     <span class="change"><b>②</b> 全屏遮罩覆盖状态栏</span>
     <span class="change"><b>③</b> 面板实心 · 不透底</span>
   </div>
 </div>
 
 <div class="timeline">
-  <div class="node"><span class="dot"></span><b>0ms</b> 支付成功页出现 · 不弹窗</div>
-  <div class="line"><i>等待 1000ms</i></div>
-  <div class="node is-on"><span class="dot"></span><b>≥1000ms</b> 遮罩 + 确认卡滑入</div>
+  <div class="node"><span class="dot"></span><b>检测到</b> 支付成功页</div>
+  <div class="line"><i>立即</i></div>
+  <div class="node is-on"><span class="dot"></span><b>立即</b> 遮罩 + 确认卡滑入</div>
 </div>
 
 <div class="stage">
@@ -305,14 +305,14 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
 </div>
 
 <div class="controls">
-  <button id="replay">重播 1s 时序</button>
-  <span id="phase">当前：支付成功 +1000ms · 遮罩与确认卡已出现</span>
+  <button id="replay">重播出现时序</button>
+  <span id="phase">当前：检测到支付成功页 · 遮罩与确认卡已出现</span>
 </div>
 
 <div class="spec">
   <h2>落实现格（给实现侧）</h2>
   <table>
-    <tr><th>出现时机</th><td>识别到支付结果页后 <b>延迟 1000ms</b> 再显示；到点重新采集页面，页面已变 / 已离开 → <b>取消</b>，不弹。</td></tr>
+    <tr><th>出现时机</th><td>识别到支付成功页后 <b>立即展示</b>（2026-10-17 用户要求去掉 1s 延迟）；付款前页面由 <code>PRE_PAY_WORDS</code> 拒绝，只做预采集，不会提前弹。</td></tr>
     <tr><th>遮罩</th><td><code>scrim</code> 叠两层 ≈ <b>0.56</b>（对原型 0.34 的有意加深），窗口铺满含状态栏、挖孔区与手势条；点遮罩 = 忽略。</td></tr>
     <tr><th>面板</th><td><code>surface-warm</code> 合成到 <b>不透明</b>（玻璃主题下 <code>#f2f8ff</code>）；顶部圆角 18dp、<code>--elev-sheet</code> 阴影；内容区加 <code>navigationBarsPadding()</code>。</td></tr>
     <tr><th>状态栏</th><td>浮层窗口声明边到边（<code>setFitInsetsTypes(0)</code> + 挖孔区 SHORT_EDGES/ALWAYS），遮罩画到状态栏下方；状态栏图标由系统绘制，目标切浅色。</td></tr>
@@ -331,11 +331,11 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
   function replay() {
     if (timer) clearTimeout(timer);
     phones.forEach(function (p) { p.classList.remove('is-open'); });
-    phase.textContent = '0ms：支付成功页出现 · 浮窗不出现';
+    phase.textContent = '检测到支付成功页 · 立即弹出';
     timer = setTimeout(function () {
       phones.forEach(function (p) { p.classList.add('is-open'); });
-      phase.textContent = '支付成功 +1000ms · 遮罩与确认卡已出现';
-    }, 1000);
+      phase.textContent = '检测到支付成功页 · 遮罩与确认卡已出现';
+    }, 60);
   }
   document.getElementById('replay').addEventListener('click', replay);
 })();

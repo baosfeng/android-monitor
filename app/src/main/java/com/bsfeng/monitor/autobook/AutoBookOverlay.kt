@@ -56,7 +56,8 @@ import com.bsfeng.monitor.ui.theme.MonitorTheme
  * 2. **面板实心**：确认卡底色用 surfaceWarm → surface → bg 依次合成到 100% 不透明 ——
  *    玻璃拟态主题的 surface 是 rgba(255,255,255,.74)，直接用会透出支付页文字
  *    （真机反馈「背景还是透明的，容易干扰」）。
- * 3. **延迟 1s 弹出**：由 [AutoBookEngine.SHOW_DELAY_MS] 控制，这里只负责展示。
+ * 3. **检测到即弹**：识别到支付成功页后立即展示（不再延迟 1s）；付款前页面由
+ *    [AutoBookParser.isBillPage] 的 PRE_PAY_WORDS 挡在门外，不会提前弹。
  *
  * 入场：遮罩淡入 180ms + 卡片从底部滑入 220ms；关闭即时卸载（保持既有行为）。
  */
