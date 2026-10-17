@@ -242,6 +242,45 @@ class AutoBookParserTest {
     }
 
     @Test
+    fun `微信收银台与指纹页不得被识别成账单`() {
+        // 真机日志（2026-10-17 16:06）：这两页都有「付款方式 + 零钱 + 金额」，
+        // 旧门禁照样放行 —— 用户还没付款，浮窗就已经排上队了。
+        val cashier = listOf(
+            "关闭 使用密码",
+            "付款给张三(***)",
+            "￥0.01",
+            "付款方式,已选择零钱,更改 付款方式 更改",
+            "零钱",
+            "支付"
+        )
+        assertFalse("收银台不是支付结果页", AutoBookParser.isBillPage(cashier))
+        assertNull(AutoBookParser.parse(wechat, cashier, 1L))
+
+        val fingerprint = listOf(
+            "使用密码",
+            "返回",
+            "付款给张三(***)",
+            "￥0.01 请验证指纹",
+            "付款方式,已选择零钱,更改 更改",
+            "零钱",
+            "支付"
+        )
+        assertFalse("指纹验证页不是支付结果页", AutoBookParser.isBillPage(fingerprint))
+        assertNull(AutoBookParser.parse(wechat, fingerprint, 1L))
+    }
+
+    @Test
+    fun `支付宝收银台不得被识别成账单`() {
+        assertNull(
+            AutoBookParser.parse(
+                alipay,
+                listOf("确认付款", "付款金额 3.00", "余额宝", "立即支付"),
+                1L
+            )
+        )
+    }
+
+    @Test
     fun `微信「向X付款」句式判为支出`() {
         val lines = listOf("微信支付", "向 麦当劳 付款 12.30 元")
         val draft = AutoBookParser.parseNotification(wechat, lines, 1L)

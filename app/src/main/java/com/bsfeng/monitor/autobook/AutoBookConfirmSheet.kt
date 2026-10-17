@@ -175,6 +175,10 @@ fun AutoBookConfirmSheet(
         if (draft.timeText.isNotBlank()) {
             MetaRow("时间", draft.timeText)
         }
+        // 付款前页面上用户填的转账说明 / 备注（成功页不展示，靠预采集带过来）
+        if (draft.userRemark.isNotBlank()) {
+            MetaRow("备注", draft.userRemark)
+        }
 
         Spacer(Modifier.height(MonitorSpacing.lg))
 

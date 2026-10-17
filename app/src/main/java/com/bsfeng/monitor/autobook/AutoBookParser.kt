@@ -36,7 +36,13 @@ data class AutoBookDraft(
     val sourceId: String,
     /** 弹窗去重指纹（多道，任一命中即视为「这笔刚处理过」），见 [AutoBookParser.buildDedupKeys] */
     val dedupKeys: List<DedupKey>,
-    val markers: List<String>
+    val markers: List<String>,
+    /**
+     * 付款前页面上用户填的备注（微信「转账说明」/ 支付宝「备注」）。
+     *
+     * 结果页通常不展示这行字，只能在付款前页面预采集 —— 见 [PrePaymentDraft]。
+     */
+    val userRemark: String = ""
 ) {
     /** 来源显示名：支付宝 / 微信 */
     val channelLabel: String
@@ -71,6 +77,7 @@ data class AutoBookDraft(
         val main = merchant.ifBlank { productDesc }
         if (main.isNotBlank()) parts += main
         if (productDesc.isNotBlank() && productDesc != main) parts += productDesc
+        if (userRemark.isNotBlank() && userRemark != main && userRemark != productDesc) parts += userRemark
         if (payMethod.isNotBlank()) parts += payMethod
         if (parts.isEmpty()) parts += channelLabel
         return parts.joinToString("·").take(REMARK_MAX_LENGTH)
@@ -85,6 +92,23 @@ data class AutoBookDraft(
         const val REMARK_MAX_LENGTH = 80
     }
 }
+
+/**
+ * 付款前页面（转账输入 / 收银台 / 指纹 / 确认付款）上**预采集**到的草稿。
+ *
+ * 真机背景（2026-10-17）：微信转账的收款方、用户填的「转账说明」只在付款前页面出现；
+ * 支付成功页是极简静态页，这些信息拿不到。因此识别到付款前页面时**不弹窗**，只把数据缓存，
+ * 等支付成功页出现后由 [AutoBookDraftMerger] 合并。
+ */
+data class PrePaymentDraft(
+    val channel: String,
+    val type: Int,
+    val amount: Double,
+    val merchant: String,
+    val payMethod: String,
+    val remark: String,
+    val capturedAtMs: Long
+)
 
 /**
  * 自动记账解析器：把「一屏视觉行文本」解析成 [AutoBookDraft]。
@@ -400,6 +424,28 @@ object AutoBookParser {
         "塞钱进红包", "未领取的红包", "发红包", "使用密码", "请验证指纹", "输入支付密码"
     )
 
+    /**
+     * 付款前页面的特征词：收银台 / 指纹验证 / 密码输入。
+     *
+     * 真机实测（2026-10-17，微信转账）：这两页同样带「付款方式 + 零钱 + 金额」，
+     * 旧门禁把它们当成账单页 —— 用户还在指纹页时就识别了一次、付款前又识别一次。
+     * 只要出现这些词，字段再齐全也不是结果页。
+     */
+    private val PRE_PAY_WORDS = listOf(
+        "请验证指纹", "验证指纹", "使用密码", "输入支付密码", "面容验证", "识别面容",
+        "立即支付", "确认付款", "确认支付"
+    )
+
+    /**
+     * 预采集识别的词：比 [PRE_PAY_WORDS] 宽 —— 转账**输入页**没有密码/指纹，
+     * 但同样属于「付款前」，而且收款方与用户备注恰恰只在这里出现。
+     *
+     * 只用于 [parsePrePayment]（调用方在结果页解析失败后才走到它），不会放宽账单门禁。
+     */
+    private val PRE_PAY_PAGE_WORDS = PRE_PAY_WORDS + listOf(
+        "付款给", "添加备注", "转账说明", "转账金额", "付款金额", "输入金额", "确认转账"
+    )
+
     /** 结果页收尾按钮：独占的支付结果页一定有一个「离开」入口 */
     private val RESULT_PAGE_ACTIONS = listOf("完成", "账单详情", "查看账单", "查看详情", "返回首页", "我知道了")
 
@@ -463,6 +509,9 @@ object AutoBookParser {
      * 公开给 [AutoBookEngine] 做诊断用：识别失败时要能区分「门禁拒绝」和「是账单页但字段没认出来」。
      */
     fun isBillPage(lines: List<String>): Boolean {
+        // 先排掉付款前页面（收银台 / 指纹 / 密码）：它们也有「付款方式 + 金额」，
+        // 不先挡掉就会在用户付款前弹窗（真机反馈「我当前还没完成支付」）。
+        if (lines.any { line -> PRE_PAY_WORDS.any { line.contains(it) } }) return false
         if (hasMultipleTransactions(lines)) return false
         if (hasDetailStructure(lines)) return true
         if (isListOrSummaryPage(lines)) return false
@@ -630,6 +679,85 @@ object AutoBookParser {
         if (method.isEmpty() || ACCOUNT_LABELS.contains(method)) return null
         return method.take(20)
     }
+
+    /**
+     * 是否是付款前页面（收银台 / 指纹 / 密码输入 / 转账确认）。
+     *
+     * 注意：它**不是**账单页 —— [isBillPage] 会拒绝它；这里只用于预采集。
+     */
+    fun isPrePaymentPage(lines: List<String>): Boolean =
+        extractAmount(lines) != null &&
+            lines.any { line -> PRE_PAY_PAGE_WORDS.any { line.contains(it) } }
+
+    /**
+     * 预采集付款前页面：金额 / 收款方 / 付款方式 / 用户备注。
+     *
+     * 这些字段在支付结果页往往缺失（微信转账成功页尤其极简），只能趁用户还在付款页时抓到。
+     * 返回 null 表示「不是付款前页面」或「金额都取不到」，调用方不应缓存。
+     */
+    fun parsePrePayment(rule: AutoBookRule, lines: List<String>, nowMs: Long): PrePaymentDraft? {
+        if (!isPrePaymentPage(lines)) return null
+        val amount = extractAmount(lines) ?: return null
+        return PrePaymentDraft(
+            channel = rule.channel,
+            type = detectType(lines, amount.first),
+            amount = amount.second,
+            merchant = extractPrePaymentMerchant(lines),
+            payMethod = extractAccount(lines).orEmpty(),
+            remark = extractPrePaymentRemark(lines),
+            capturedAtMs = nowMs
+        )
+    }
+
+    /**
+     * 付款前页面的收款方。
+     *
+     * 微信：「付款给张三(***)」直接取后半段；「付款给个人」则取下一行（真机实测样例：
+     * `付款给个人 头像` → `张三(***)`）。
+     * 支付宝：走「收款方 / 商户名称」标签。
+     */
+    private fun extractPrePaymentMerchant(lines: List<String>): String {
+        for ((index, line) in lines.withIndex()) {
+            val at = line.indexOf("付款给")
+            if (at < 0) continue
+            val tail = stripZeroWidth(line.substring(at + 3))
+            if (tail.isNotEmpty() && !tail.startsWith("个人")) return tail.take(40)
+            val next = lines.getOrNull(index + 1)?.let { stripZeroWidth(it) }
+            if (!next.isNullOrEmpty() && !isLabelLike(next)) return next.take(40)
+        }
+        val labeled = labelValue(lines, listOf("收款方", "收款方全称", "收款人", "商户名称", "商户全称"))
+        if (!labeled.isNullOrBlank()) return labeled.take(40)
+        return ""
+    }
+
+    /**
+     * 付款前页面上用户填的备注。
+     *
+     * 真机原文形如 `备注 修⁠改`（含零宽字符）或 `备注 午饭`；「修改 / 添加备注」是入口文案，
+     * 不能当成备注内容。
+     */
+    private fun extractPrePaymentRemark(lines: List<String>): String {
+        for ((index, line) in lines.withIndex()) {
+            val at = line.indexOf("备注")
+            if (at < 0) continue
+            val tail = stripZeroWidth(line.substring(at + 2)).trimStart('：', ':').trim()
+            if (tail.isEmpty()) {
+                val next = lines.getOrNull(index + 1)?.let { stripZeroWidth(it) }.orEmpty()
+                if (next.isNotEmpty() && next !in REMARK_PLACEHOLDERS) return next.take(40)
+                continue
+            }
+            if (tail in REMARK_PLACEHOLDERS) continue
+            return tail.take(40)
+        }
+        return ""
+    }
+
+    /** 去掉零宽字符（真机「修改」两个字之间夹了一个 U+2060，直接比较永远不相等）。 */
+    private fun stripZeroWidth(text: String): String =
+        text.replace(Regex("[\u200B-\u200D\u2060\uFEFF]"), "").trim()
+
+    /** 备注行的占位文案（不是用户填的内容）。 */
+    private val REMARK_PLACEHOLDERS = setOf("修改", "添加备注", "添加", "编辑", "填写备注", "无")
 
     /** 交易时间：优先标签行的值，其次全页首个日期时间串 */
     fun extractTime(lines: List<String>): String? {
