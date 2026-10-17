@@ -1,7 +1,8 @@
 package com.bsfeng.monitor.autobook
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
@@ -53,6 +54,24 @@ class AutoBookEngine(private val service: AccessibilityService) {
      * 现在改成按指纹记录三种结局（已记账 / 已忽略 / 刚弹过），各有安静期。
      */
     private val dedup = AutoBookDedup()
+
+    /**
+     * 「支付结果页稳定 1s 后再弹」门控（纯逻辑见 [AutoBookShowGate]）。
+     *
+     * 真机反馈：支付成功页刚出现浮窗就弹，挡住支付动画、也让人误以为「还没付完就弹」。
+     * 现在识别后先排队 [SHOW_DELAY_MS]，到点复核页面仍是同一笔才真正展示。
+     */
+    private val showGate = AutoBookShowGate()
+
+    /** 延迟任务所在的主线程 Handler（无障碍事件本身就在主线程） */
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** 排队中的草稿与规则：到点复核要用 */
+    private var pendingDraft: AutoBookDraft? = null
+    private var pendingRule: AutoBookRule? = null
+
+    /** 延迟到点：复核支付结果页仍是同一笔后再弹 */
+    private val showPendingOverlay = Runnable { firePendingOverlay() }
 
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
@@ -138,7 +157,51 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 "account=${draft.accountName} markers=${draft.markers}"
         )
 
-        showOverlay(draft)
+        scheduleOverlay(draft, rule)
+    }
+
+    /**
+     * 识别成功后不立刻弹，先排队 [SHOW_DELAY_MS]（真机反馈：支付结果页刚出现就弹太早）。
+     *
+     * ⚠️ 同一笔重复事件**不能重置计时**：支付结果页会连续抛 CONTENT_CHANGED，
+     * 若每次事件都重新 postDelayed，浮窗会被无限推迟（[AutoBookShowGate] 负责挡住这种情况）。
+     */
+    private fun scheduleOverlay(draft: AutoBookDraft, rule: AutoBookRule) {
+        if (!showGate.schedule(draft.sourceId)) return
+        pendingDraft = draft
+        pendingRule = rule
+        mainHandler.removeCallbacks(showPendingOverlay)
+        mainHandler.postDelayed(showPendingOverlay, SHOW_DELAY_MS)
+        Log.d(TAG, "账单已识别，${SHOW_DELAY_MS}ms 后复核页面并弹窗: ${draft.sourceId}")
+    }
+
+    /**
+     * 延迟到点：**重新采集一次页面**再决定弹不弹。
+     *
+     * 1s 内用户可能已经返回 / 切走 / 又付了一笔 —— 只认「页面还在 + 仍是同一笔」，
+     * 否则宁可不弹（用户下次进入该页还能重新识别），避免浮窗盖到别的页面上。
+     */
+    private fun firePendingOverlay() {
+        val draft = pendingDraft ?: return
+        val rule = pendingRule ?: return
+        pendingDraft = null
+        pendingRule = null
+        if (!showGate.consume(draft.sourceId)) return
+
+        val recheck = try {
+            AutoBookParser.parse(rule, collectPageLines(rule.packageName), System.currentTimeMillis())
+        } catch (e: Exception) {
+            Log.w(TAG, "延迟复核解析失败，放弃本次弹窗: ${e.message}")
+            null
+        }
+        if (recheck == null || recheck.sourceId != draft.sourceId) {
+            Log.d(TAG, "延迟复核：支付结果页已变化，取消弹窗: ${draft.sourceId}")
+            return
+        }
+        // 复核期间浮窗可能已经被别的路径弹出来了，避免重复展示
+        if (overlay.currentDraft?.sourceId == recheck.sourceId) return
+        Log.d(TAG, "延迟复核通过，弹窗: ${recheck.sourceId}")
+        showOverlay(recheck)
     }
 
     /**
@@ -404,8 +467,12 @@ class AutoBookEngine(private val service: AccessibilityService) {
         }
     }
 
-    /** 服务销毁时清理浮窗、去重表与协程 */
+    /** 服务销毁时清理浮窗、延迟任务、去重表与协程 */
     fun release() {
+        mainHandler.removeCallbacks(showPendingOverlay)
+        showGate.cancel()
+        pendingDraft = null
+        pendingRule = null
         overlay.hide()
         dedup.clear()
         scope.cancel()
@@ -416,6 +483,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         /** 同包名事件节流窗口：支付结果页会连续抛出多个内容变化事件 */
         const val THROTTLE_MS = 800L
+
+        /**
+         * 支付结果页出现后延迟多久再弹确认浮窗。
+         *
+         * 用户原话：「我当前还没完成支付，需要 1s 之后再出现」—— 结果页刚出现时先让支付动画走完，
+         * 到点再复核页面（见 [firePendingOverlay]），页面变了就不弹。
+         */
+        const val SHOW_DELAY_MS = 1000L
 
         /** 落库来源前缀，最终 source 形如 auto_alipay / auto_wechat */
         const val SOURCE_PREFIX = "auto_"
