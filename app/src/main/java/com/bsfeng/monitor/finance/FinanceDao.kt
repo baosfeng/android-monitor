@@ -112,6 +112,25 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     }
 
     /**
+     * 自动记账记录里按「来源 + 金额」找候选（交易详情页补全用）。
+     *
+     * 详情页发生在记账之后，无法用 sourceId 精确定位（结果页往往没有订单号/时间），
+     * 因此先按来源（`auto_alipay` / `auto_wechat`）+ 金额捞一小批，再由纯逻辑按时间挑最近的一笔。
+     */
+    fun findAutoTransactionsByAmount(source: String, amount: Double, limit: Int = 20): List<Transaction> {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            TransactionEntity.TABLE_NAME, null,
+            "${TransactionEntity.COL_SOURCE} = ? AND ABS(${TransactionEntity.COL_AMOUNT} - ?) < 0.005",
+            arrayOf(source, amount.toString()),
+            null, null,
+            "${TransactionEntity.COL_DATE_TIME} DESC",
+            limit.toString()
+        )
+        return TransactionEntity.listFromCursor(cursor)
+    }
+
+    /**
      * 同一商户最近一笔交易（自动记账「上次选过的类型 / 分类」默认值用）。
      *
      * 精确匹配商户名：自动记账落库的商户来自同一页面，跨次稳定；手工录入的商户名与页面

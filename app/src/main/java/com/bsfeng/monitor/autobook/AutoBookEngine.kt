@@ -2,6 +2,7 @@ package com.bsfeng.monitor.autobook
 
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
+import android.widget.Toast
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import com.bsfeng.monitor.finance.FinanceManager
@@ -13,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 自动记账引擎。
@@ -84,6 +86,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
      * 被历史红包气泡误触发一笔不存在的记账。
      */
     private var redPacketFingerprintArmed: Boolean = false
+
+    /** 交易详情页补全同一时间只跑一个（详情页会连续抛多个事件） */
+    private val detailEnriching = AtomicBoolean(false)
 
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
@@ -228,6 +233,13 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         lastDraft = merged
 
+        // 交易详情页：如果这笔已经自动记过账，不再弹记账浮窗，而是把详情页字段补进已有记录 + Toast。
+        // 未匹配到已记账记录时保持原行为（正常弹窗）。
+        if (AutoBookParser.isDetailPage(lines)) {
+            handleDetailPage(merged)
+            return
+        }
+
         // 浮窗还开着且就是这一笔：不要重建（会把用户正在填的类型/分类冲掉）
         val showing = overlay.currentDraft
         if (showing != null && showing.sourceId == merged.sourceId) return
@@ -326,6 +338,61 @@ class AutoBookEngine(private val service: AccessibilityService) {
             logWindowDiagnostics(packageName, windows)
         }
         return best
+    }
+
+    /**
+     * 交易详情页：匹配已记账的那笔并补全字段。
+     *
+     * 用户需求（2026-10-17）：详情页信息更全（订单号 / 精确时间 / 商品说明 / 商户全称），
+     * 已经记过账的那笔不要再弹记账浮窗，而是补全已有记录，并弹 Toast「详情信息已补全」。
+     *
+     * 匹配不到已记账记录时，说明这笔是第一次见 —— 走原来的弹窗流程（含去重）。
+     * 详情页会连续抛多个事件，用 [detailEnriching] 保证同一时间只跑一个；补全后重复事件
+     * 不会再有字段变化，因此不会重复 Toast。
+     */
+    private fun handleDetailPage(draft: AutoBookDraft) {
+        if (!detailEnriching.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                val source = SOURCE_PREFIX + draft.channel
+                val candidates = financeManager.dao.findAutoTransactionsByAmount(source, draft.amount)
+                val match = AutoBookDetailEnricher.findMatch(
+                    candidates, draft, System.currentTimeMillis()
+                )
+                if (match == null) {
+                    Log.d(TAG, "详情页没有匹配到已记账记录，按新账单处理")
+                    val blocked = dedup.blockedReason(draft.dedupKeys, System.currentTimeMillis())
+                    if (blocked != null) {
+                        Log.d(TAG, "去重命中，本次不弹窗：$blocked")
+                        return@launch
+                    }
+                    showOverlay(draft)
+                    return@launch
+                }
+
+                val result = AutoBookDetailEnricher.enrich(
+                    match, draft, System.currentTimeMillis()
+                )
+                if (!result.changed) {
+                    Log.d(TAG, "详情页没有新增信息，不提示: id=${match.id}")
+                    return@launch
+                }
+                financeManager.dao.updateTransaction(result.transaction)
+                Log.i(
+                    TAG,
+                    "已记账笔补全详情: id=${match.id} merchant=${result.transaction.merchant} " +
+                        "payMethod=${result.transaction.payMethod} orderId=${result.transaction.orderId} " +
+                        "time=${result.transaction.dateTime}"
+                )
+                service.mainExecutor.execute {
+                    Toast.makeText(service, "详情信息已补全", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "详情页补全失败: ${e.message}")
+            } finally {
+                detailEnriching.set(false)
+            }
+        }
     }
 
     /**
