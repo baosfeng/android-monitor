@@ -77,6 +77,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
      */
     private var redPacketPaymentPending: Boolean = false
 
+    /**
+     * 红包付款流程已经走到指纹 / 密码验证页（离付款成功只差一步）。
+     *
+     * 聊天页气泡只在「已验过指纹」后才认，避免用户在发红包页取消后打开旧聊天、
+     * 被历史红包气泡误触发一笔不存在的记账。
+     */
+    private var redPacketFingerprintArmed: Boolean = false
+
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
     private var categoriesByType: Map<Int, List<Category>> = emptyMap()
@@ -138,6 +146,10 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 redPacketPaymentPending = true
                 Log.d(TAG, "红包付款前页面：等待发出后聊天页的红包气泡")
             }
+            if (redPacketPaymentPending && AutoBookParser.isRedPacketFingerprintPage(lines)) {
+                redPacketFingerprintArmed = true
+                Log.d(TAG, "红包付款已验证指纹/密码：允许从聊天页气泡补记")
+            }
             // 微信「添加备注」弹窗：没有金额，不会进预采集；但用户填的备注只在这里可见。
             val dialogRemark = try {
                 AutoBookParser.parseRemarkDialog(lines)
@@ -157,7 +169,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
             draft = try {
                 AutoBookParser.parseSentRedPacketChat(
                     rule, lines, preDraft, now,
-                    allowBubbleOnly = redPacketPaymentPending
+                    redPacketFlowPending = redPacketPaymentPending,
+                    allowBubbleOnly = redPacketFingerprintArmed
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "红包聊天页解析失败: ${e.message}")
@@ -455,6 +468,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
             preDraft = null
             pendingRemark = null
             redPacketPaymentPending = false
+            redPacketFingerprintArmed = false
         } catch (e: Exception) {
             // 浮窗挂不上（例如系统限制）不能静默：记日志，下一笔还会再试
             Log.e(TAG, "浮窗展示失败: ${e.message}", e)
@@ -526,6 +540,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         preDraft = null
         pendingRemark = null
         redPacketPaymentPending = false
+        redPacketFingerprintArmed = false
         overlay.hide()
         dedup.clear()
         scope.cancel()
