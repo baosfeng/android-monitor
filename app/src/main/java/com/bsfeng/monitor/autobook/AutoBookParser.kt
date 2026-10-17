@@ -720,7 +720,8 @@ object AutoBookParser {
         for ((index, line) in lines.withIndex()) {
             val at = line.indexOf("付款给")
             if (at < 0) continue
-            val tail = stripZeroWidth(line.substring(at + 3))
+            // 尾部可能粘着按钮文字（真机：`付款给张三(***) 返回`）—— 收款方不含空格，取第一个词
+            val tail = stripZeroWidth(line.substring(at + 3)).substringBefore(" ").trim()
             if (tail.isNotEmpty() && !tail.startsWith("个人")) return tail.take(40)
             val next = lines.getOrNull(index + 1)?.let { stripZeroWidth(it) }
             if (!next.isNullOrEmpty() && !isLabelLike(next)) return next.take(40)
@@ -737,19 +738,46 @@ object AutoBookParser {
      * 不能当成备注内容。
      */
     private fun extractPrePaymentRemark(lines: List<String>): String {
-        for ((index, line) in lines.withIndex()) {
+        for (line in lines) {
             val at = line.indexOf("备注")
             if (at < 0) continue
             val tail = stripZeroWidth(line.substring(at + 2)).trimStart('：', ':').trim()
-            if (tail.isEmpty()) {
-                val next = lines.getOrNull(index + 1)?.let { stripZeroWidth(it) }.orEmpty()
-                if (next.isNotEmpty() && next !in REMARK_PLACEHOLDERS) return next.take(40)
-                continue
-            }
-            if (tail in REMARK_PLACEHOLDERS) continue
+            // 只认同一行的值：真机的「备注」行后面会跟「付款」按钮 / 数字键盘 /「修改」入口，
+            // 取下一行会得到 `付款`、`1 2 3 删除` 这种脏值（2026-10-17 真机日志）。
+            if (tail.isEmpty() || tail in REMARK_PLACEHOLDERS || looksLikeUiText(tail)) continue
             return tail.take(40)
         }
         return ""
+    }
+
+    /** 备注行里混进的 UI 文案 / 键盘行（不是用户输入）。 */
+    private fun looksLikeUiText(text: String): Boolean =
+        text.any { it.isDigit() } ||
+            listOf("付款", "取消", "确定", "删除", "支付", "返回").any { text.contains(it) }
+
+    /**
+     * 微信「添加备注」弹窗：`添加备注 | 随便 | 取消 确定`。
+     *
+     * 这个弹窗**没有金额**，不会走预采集；但用户填的备注只在这里可见 —— 单独抓出来，
+     * 由 [AutoBookEngine] 并进当前预采集。
+     *
+     * @return 用户输入；不是备注弹窗（或只是空备注）返回 null
+     */
+    fun parseRemarkDialog(lines: List<String>): String? {
+        val hasTitle = lines.any { it.contains("添加备注") || it.trim() == "备注" }
+        if (!hasTitle) return null
+        val hasCancel = lines.any { it.contains("取消") }
+        val hasConfirm = lines.any { it.contains("确定") }
+        if (!hasCancel || !hasConfirm) return null
+        for (line in lines) {
+            val text = stripZeroWidth(line)
+            if (text.isEmpty()) continue
+            if (text.contains("添加备注") || text == "备注") continue
+            if (text.contains("取消") || text.contains("确定")) continue
+            if (text in REMARK_PLACEHOLDERS) continue
+            return text.take(40)
+        }
+        return null
     }
 
     /** 去掉零宽字符（真机「修改」两个字之间夹了一个 U+2060，直接比较永远不相等）。 */
