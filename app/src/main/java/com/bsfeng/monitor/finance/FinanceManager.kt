@@ -88,6 +88,11 @@ class FinanceManager internal constructor(context: Context) {
         dao.searchTransactions(query, limit)
     }
 
+    /** 同一商户最近一笔交易：自动记账记住上次选的类型 / 分类 */
+    suspend fun getLastTransactionByMerchant(merchant: String): Transaction? = withContext(Dispatchers.IO) {
+        dao.findLastByMerchant(merchant)
+    }
+
     // ========== 统计 ==========
 
     suspend fun getMonthlyStats(yearMonth: String): FinanceStats = withContext(Dispatchers.IO) {

@@ -295,8 +295,24 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 Log.d(TAG, "该笔已记账（查库命中），不再弹窗: ${draft.sourceId}")
                 return@launch
             }
+            // 同一家店上次确认时选的类型 / 分类：默认勾选（没有历史就保持解析器结果）
+            val history = try {
+                if (draft.merchant.isBlank()) null
+                else financeManager.getLastTransactionByMerchant(draft.merchant)
+            } catch (e: Exception) {
+                Log.w(TAG, "查询商户历史失败（按无历史处理）: ${e.message}")
+                null
+            }
+            val enriched = AutoBookDefaults.apply(draft, history)
+            if (history != null) {
+                Log.d(
+                    TAG,
+                    "商户「${draft.merchant}」上次选择: type=${history.type} " +
+                        "category=${history.categoryName} → 默认勾选"
+                )
+            }
             // 回到主线程挂 View（WindowManager 操作要求在同一线程，无障碍服务的主线程即主 Looper）
-            service.mainExecutor.execute { display(draft, loaded) }
+            service.mainExecutor.execute { display(enriched, loaded) }
         }
     }
 
