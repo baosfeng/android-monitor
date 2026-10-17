@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +40,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorRadius
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.categoryDot
+import com.bsfeng.monitor.ui.theme.opaquePanel
 
 /**
  * 自动记账确认卡片（浮窗内容）。
@@ -70,7 +72,11 @@ fun AutoBookConfirmSheet(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = MonitorRadius.lg, topEnd = MonitorRadius.lg))
-            .background(tokens.surface)
+            // 实心面板：玻璃主题的 surface 是 74% alpha，直接用会透出下面的支付页文字。
+            // opaquePanel 把 surface-warm → surface → bg 合成到 100% 不透明（有意偏离玻璃语言）。
+            .background(tokens.opaquePanel)
+            // 浮窗已铺满全屏：底色铺到屏幕底，内容上抬到手势条之上，否则「记一笔」会被压住
+            .navigationBarsPadding()
             .padding(horizontal = MonitorSpacing.lg)
             .padding(top = MonitorSpacing.md, bottom = MonitorSpacing.xl)
     ) {

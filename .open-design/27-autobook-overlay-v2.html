@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>自动记账 · 支付后确认浮窗 v2（沉浸式 / 实心面板 / 1s 延迟）</title>
+<style>
+/* ── Token：apple（默认）与 glassmorphism 两套，均取自 DesignTokenTable.kt ── */
+:root{
+  --page-bg:#e9eaee;
+  --text-xs:12px; --text-sm:14px; --text-base:17px; --text-xl:28px; --text-2xl:40px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:18px; --radius-pill:980px;
+  --font-body:-apple-system,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"SF Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d1f;
+     padding:40px 24px 72px;display:flex;flex-direction:column;align-items:center;gap:24px}
+.page-head{text-align:center;max-width:860px}
+.page-head h1{font-size:25px;margin:0 0 10px;font-weight:600;letter-spacing:-.01em}
+.page-head p{margin:0;color:#5b5b60;font-size:14px;line-height:1.7}
+.changes{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.change{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #dcdce2;
+        border-radius:var(--radius-pill);padding:7px 15px;font-size:13px;color:#3a3a3f;
+        box-shadow:0 4px 14px rgba(20,20,30,.05)}
+.change b{color:#0071e3;font-weight:700}
+.change.warn b{color:#c2410c}
+
+/* ── 1s 时序条 ── */
+.timeline{display:flex;align-items:center;gap:0;background:#fff;border:1px solid #e2e2e8;border-radius:14px;
+          padding:12px 18px;box-shadow:0 6px 22px rgba(20,20,30,.06);font-size:12.5px;color:#5b5b60}
+.timeline .node{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.timeline .node b{color:#1d1d1f}
+.timeline .dot{width:8px;height:8px;border-radius:50%;background:#c7c7cf;display:block}
+.timeline .node.is-on .dot{background:#0071e3;box-shadow:0 0 0 4px rgba(0,113,227,.14)}
+.timeline .line{width:130px;height:1px;background:#d8d8df;margin:0 14px;position:relative}
+.timeline .line i{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-style:normal;
+                 font-family:var(--font-mono);font-size:11px;color:#0071e3;background:#fff;padding:0 6px}
+
+/* ── 设备框 ── */
+.stage{display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:14px}
+.col-tag{font-size:13px;font-weight:600;color:#3a3a3f;background:#fff;border:1px solid #dcdce2;
+         padding:7px 16px;border-radius:var(--radius-pill);box-shadow:0 4px 14px rgba(20,20,30,.05)}
+.col-tag b{color:#0071e3}
+.col-note{font-size:12px;color:#6e6e73;max-width:393px;text-align:center;line-height:1.7}
+
+.phone{width:393px;height:852px;background:#fff;border-radius:44px;position:relative;overflow:hidden;
+       box-shadow:0 24px 60px rgba(0,0,0,.18),0 0 0 10px #1c1c1e,0 0 0 11px #3a3a3c;
+       --fg:#1d1d1f; --fg2:#424245; --muted:#6e6e73; --meta:#86868b;
+       --accent:#0071e3; --accent-on:#fff; --danger:#dc2626; --success:#16a34a;
+       --border:#d2d2d7; --border-soft:#e8e8ed;
+       --sheet:#fbfbfd; --seg-bg:#f2f2f5; --chip-bg:#f2f2f5; --sep:#e8e8ed;
+       --scrim:rgba(29,29,31,.56); --sheet-shadow:0 -8px 40px rgba(0,0,0,.16);
+       --ease:cubic-bezier(.28,0,.22,1)}
+.phone.glass{background:#eef6ff;
+       --fg:#102033; --fg2:#34465f; --muted:#60708a; --meta:#4f8cff;
+       --accent:#3e6ec9; --accent-on:#fff; --danger:#ef4444; --success:#22c55e;
+       --border:rgba(255,255,255,.64); --border-soft:rgba(16,32,51,.10);
+       /* surface-warm .72 → surface .74 → bg 合成后的不透明色（100%） */
+       --sheet:#f2f8ff; --seg-bg:rgba(16,32,51,.06); --chip-bg:rgba(16,32,51,.06); --sep:rgba(16,32,51,.08);
+       --scrim:rgba(16,32,51,.56); --sheet-shadow:0 -18px 60px rgba(79,140,255,.22)}
+.punch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:11px;height:11px;border-radius:50%;
+       background:#111;z-index:60}
+.statusbar{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;
+           justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;z-index:55;
+           color:var(--fg);transition:color .18s ease}
+.phone.is-open .statusbar{color:#fff}
+.statusbar .icons{display:flex;gap:5px;align-items:center;font-size:12px}
+.gesturebar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:4px;
+            border-radius:2px;background:rgba(0,0,0,.35);z-index:70}
+
+/* 背景层：支付成功页（真机 dump 原文） */
+.paypage{position:absolute;inset:0;background:#fff;padding-top:44px;color:#1d1d1f}
+.phone.glass .paypage{background:#eef6ff}
+.paynav{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:16px}
+.paynav .back{font-size:20px}
+.paynav .title{font-weight:600}
+.paynav .right{font-size:14px;color:var(--accent)}
+.payhero{text-align:center;padding:20px 0 6px}
+.paylogo{width:56px;height:56px;border-radius:14px;background:#1a1a1a;color:#fff;display:grid;place-items:center;
+         margin:0 auto 10px;font-size:22px}
+.paymerchant{font-size:15px;color:var(--fg2);margin-bottom:6px}
+.payamount{font-family:var(--font-mono);font-size:40px;font-weight:700;letter-spacing:-.02em;color:var(--fg)}
+.paystatus{font-size:13px;color:var(--meta);margin-top:4px}
+.payrows{margin-top:18px;padding:0 20px}
+.payrow{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-top:1px solid var(--border-soft);
+        font-size:14px}
+.payrow .k{color:var(--meta);flex:0 0 auto}
+.payrow .v{color:var(--fg2);text-align:right}
+
+/* ── 遮罩：铺满整屏（含状态栏），点遮罩 = 忽略 ── */
+.scrim{position:absolute;inset:0;z-index:30;background:var(--scrim);opacity:0;transition:opacity .18s ease}
+.phone.is-open .scrim{opacity:1}
+
+/* ── 确认卡：实心面板，从底部滑入 ── */
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:40;background:var(--sheet);
+       border-radius:22px 22px 0 0;padding:10px 20px 24px;
+       box-shadow:var(--sheet-shadow);opacity:0;transform:translateY(36px);
+       transition:opacity .22s ease,transform .22s var(--ease)}
+.phone.is-open .sheet{opacity:1;transform:translateY(0)}
+.grip{width:38px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 14px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.sheet-head .t{font-size:15px;font-weight:600;color:var(--fg)}
+.src-chip{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-pill);
+          padding:4px 10px 4px 5px;font-size:12px;font-weight:600;
+          background:rgba(0,113,227,.12);color:var(--accent)}
+.phone.glass .src-chip{background:rgba(62,110,201,.14)}
+.src-chip .dot{width:17px;height:17px;border-radius:5px;background:var(--accent);color:#fff;
+               display:grid;place-items:center;font-size:10px;font-weight:700}
+.src-chip.wechat{background:rgba(7,193,96,.13);color:#07934b}
+.src-chip.wechat .dot{background:#07c160}
+.hero{display:flex;align-items:flex-end;gap:10px;margin-bottom:4px}
+.hero .amt{font-family:var(--font-mono);font-size:40px;font-weight:700;letter-spacing:-.02em;
+           color:var(--danger);line-height:1}
+.hero .cur{font-size:20px;font-weight:600;color:var(--danger);padding-bottom:4px}
+.merchant{font-size:15px;color:var(--fg2);margin-bottom:18px}
+.sep{height:1px;background:var(--sep);margin:16px 0}
+.label{font-size:12px;color:var(--muted);margin-bottom:8px}
+.segmented{display:flex;background:var(--seg-bg);border-radius:10px;padding:3px;gap:3px}
+.segmented .seg{flex:1;text-align:center;font-size:14px;padding:7px 0;border-radius:8px;
+                color:var(--fg2);font-weight:500}
+.segmented .seg.is-on{background:#fff;color:var(--fg);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.10)}
+.phone.glass .segmented .seg.is-on{background:rgba(255,255,255,.92)}
+.chips{display:flex;gap:8px;overflow:hidden}
+.chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:7px 13px 7px 9px;
+      border-radius:var(--radius-pill);background:var(--chip-bg);color:var(--fg2);font-size:14px;white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;display:block}
+.chip.is-on{color:var(--accent);font-weight:600;background:rgba(0,113,227,.10);
+            box-shadow:inset 0 0 0 1px rgba(0,113,227,.35)}
+.phone.glass .chip.is-on{background:rgba(62,110,201,.12);box-shadow:inset 0 0 0 1px rgba(62,110,201,.4)}
+.meta-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:7px 0}
+.meta-row .v{color:var(--fg2);font-weight:500}
+.btn-row{display:flex;gap:10px;margin-top:20px}
+.btn{border:0;border-radius:14px;font-family:inherit;font-size:16px;font-weight:600;padding:13px 20px;cursor:pointer}
+.btn-ghost{background:var(--seg-bg);color:var(--fg2)}
+.btn-primary{background:var(--accent);color:var(--accent-on);flex:1}
+.phone.glass .btn-primary{box-shadow:0 8px 22px rgba(62,110,201,.30)}
+
+/* 说明 / 规格 */
+.controls{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e2e2e8;border-radius:14px;
+          padding:10px 14px;box-shadow:0 6px 22px rgba(20,20,30,.06)}
+.controls button{border:0;background:#0071e3;color:#fff;font-family:inherit;font-size:13px;font-weight:600;
+                 padding:9px 16px;border-radius:10px;cursor:pointer}
+.controls span{font-size:12.5px;color:#6e6e73}
+.spec{max-width:1100px;width:100%;background:#fff;border:1px solid #e2e2e8;border-radius:16px;
+      padding:18px 22px;box-shadow:0 6px 22px rgba(20,20,30,.06)}
+.spec h2{font-size:14px;margin:0 0 12px;font-weight:600}
+.spec table{width:100%;border-collapse:collapse;font-size:12.5px}
+.spec th,.spec td{text-align:left;padding:8px 10px;border-top:1px solid #eeeef2;vertical-align:top}
+.spec th{color:#6e6e73;font-weight:500;width:150px}
+.spec td{color:#3a3a3f}
+.spec code{font-family:var(--font-mono);font-size:11.5px;background:#f4f4f7;padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>自动记账 · 支付后确认浮窗 v2</h1>
+  <p>按真机反馈重做三处：<b>出现时机</b>（支付成功页稳定 1s 后再弹）、<b>沉浸式</b>（遮罩铺满含状态栏）、
+     <b>实心面板</b>（玻璃主题下也不透出支付页）。背景为真机实测的支付宝 / 微信支付结果页原文。</p>
+  <div class="changes">
+    <span class="change"><b>①</b> 支付结果页出现后 <b>1s</b> 再弹</span>
+    <span class="change"><b>②</b> 全屏遮罩覆盖状态栏</span>
+    <span class="change"><b>③</b> 面板实心 · 不透底</span>
+  </div>
+</div>
+
+<div class="timeline">
+  <div class="node"><span class="dot"></span><b>0ms</b> 支付成功页出现 · 不弹窗</div>
+  <div class="line"><i>等待 1000ms</i></div>
+  <div class="node is-on"><span class="dot"></span><b>≥1000ms</b> 遮罩 + 确认卡滑入</div>
+</div>
+
+<div class="stage">
+
+  <!-- ══ 支付宝 · Apple 主题 ══ -->
+  <div class="col">
+    <div class="col-tag">支付宝 · <b>Apple 主题</b></div>
+    <div class="phone is-open" data-od-id="phone-alipay">
+      <div class="punch"></div>
+
+      <div class="paypage">
+        <div class="paynav"><span class="back">‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero">
+          <div class="paylogo">☁</div>
+          <div class="paymerchant">阿里云</div>
+          <div class="payamount">-3.00</div>
+          <div class="paystatus">交易成功</div>
+        </div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-15 23:14:43</span></div>
+          <div class="payrow"><span class="k">付款方式</span><span class="v">余额宝</span></div>
+          <div class="payrow"><span class="k">收款方全称</span><span class="v">阿里云计算有限公司</span></div>
+          <div class="payrow"><span class="k">账单分类</span><span class="v">日用百货</span></div>
+        </div>
+      </div>
+
+      <div class="scrim" data-od-id="scrim"></div>
+      <div class="statusbar"><span>23:14</span><span class="icons">5G ▮▮▮ 88</span></div>
+
+      <div class="sheet" data-od-id="sheet">
+        <div class="grip"></div>
+        <div class="sheet-head">
+          <span class="t">识别到一笔支出</span>
+          <span class="src-chip"><span class="dot">支</span>支付宝</span>
+        </div>
+        <div class="hero"><span class="amt">-¥3.00</span></div>
+        <div class="merchant">阿里云计算有限公司</div>
+        <div class="label">类型</div>
+        <div class="segmented">
+          <div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div>
+        </div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on"><i style="background:#10b981"></i>日用</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
+          <span class="chip"><i style="background:#ef4444"></i>零食</span>
+        </div>
+        <div class="sep"></div>
+        <div class="meta-row"><span>账户</span><span class="v">支付宝</span></div>
+        <div class="meta-row"><span>支付方式</span><span class="v">余额宝</span></div>
+        <div class="meta-row"><span>时间</span><span class="v">2026-10-15 23:14:43</span></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost">忽略</button>
+          <button class="btn btn-primary">记一笔</button>
+        </div>
+      </div>
+
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">遮罩铺满状态栏与手势条；面板 #fbfbfd 完全不透明。滑入前支付页保持可见，方便核对。</div>
+  </div>
+
+  <!-- ══ 微信 · 玻璃拟态主题 ══ -->
+  <div class="col">
+    <div class="col-tag">微信 · <b>玻璃拟态主题</b>（面板同样实心）</div>
+    <div class="phone glass is-open" data-od-id="phone-wechat">
+      <div class="punch"></div>
+
+      <div class="paypage">
+        <div class="paynav"><span class="back">‹</span><span class="title">账单详情</span><span class="right">全部账单</span></div>
+        <div class="payhero">
+          <div class="paylogo" style="background:#07c160">✓</div>
+          <div class="paymerchant">星巴克咖啡</div>
+          <div class="payamount">-25.00</div>
+          <div class="paystatus">支付成功</div>
+        </div>
+        <div class="payrows">
+          <div class="payrow"><span class="k">支付时间</span><span class="v">2026-10-16 12:06:11</span></div>
+          <div class="payrow"><span class="k">支付方式</span><span class="v">零钱</span></div>
+          <div class="payrow"><span class="k">商户全称</span><span class="v">上海星巴克咖啡经营有限公司</span></div>
+          <div class="payrow"><span class="k">商品</span><span class="v">拿铁 大杯</span></div>
+        </div>
+      </div>
+
+      <div class="scrim" data-od-id="scrim"></div>
+      <div class="statusbar"><span>12:06</span><span class="icons">5G ▮▮▮ 88</span></div>
+
+      <div class="sheet" data-od-id="sheet">
+        <div class="grip"></div>
+        <div class="sheet-head">
+          <span class="t">识别到一笔支出</span>
+          <span class="src-chip wechat"><span class="dot">微</span>微信</span>
+        </div>
+        <div class="hero"><span class="amt">-¥25.00</span></div>
+        <div class="merchant">上海星巴克咖啡经营有限公司</div>
+        <div class="label">类型</div>
+        <div class="segmented">
+          <div class="seg is-on">支出</div><div class="seg">收入</div><div class="seg">转账</div>
+        </div>
+        <div class="sep"></div>
+        <div class="label">分类</div>
+        <div class="chips">
+          <span class="chip is-on"><i style="background:#e8833a"></i>餐饮</span>
+          <span class="chip"><i style="background:#ef4444"></i>零食</span>
+          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
+          <span class="chip"><i style="background:#84cc16"></i>休闲娱乐</span>
+          <span class="chip"><i style="background:#64748b"></i>其他</span>
+        </div>
+        <div class="sep"></div>
+        <div class="meta-row"><span>账户</span><span class="v">微信钱包</span></div>
+        <div class="meta-row"><span>支付方式</span><span class="v">零钱</span></div>
+        <div class="meta-row"><span>时间</span><span class="v">2026-10-16 12:06:11</span></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost">忽略</button>
+          <button class="btn btn-primary">记一笔</button>
+        </div>
+      </div>
+
+      <div class="gesturebar"></div>
+    </div>
+    <div class="col-note">玻璃主题的 surface 是 <code>rgba(255,255,255,.74)</code>、surface-warm 是 <code>rgba(238,246,255,.72)</code> ——
+      确认卡把两层合成到 <b>100% 不透明</b>（<code>#f2f8ff</code>），不再透出支付页文字。</div>
+  </div>
+
+</div>
+
+<div class="controls">
+  <button id="replay">重播 1s 时序</button>
+  <span id="phase">当前：支付成功 +1000ms · 遮罩与确认卡已出现</span>
+</div>
+
+<div class="spec">
+  <h2>落实现格（给实现侧）</h2>
+  <table>
+    <tr><th>出现时机</th><td>识别到支付结果页后 <b>延迟 1000ms</b> 再显示；到点重新采集页面，页面已变 / 已离开 → <b>取消</b>，不弹。</td></tr>
+    <tr><th>遮罩</th><td><code>scrim</code> 叠两层 ≈ <b>0.56</b>（对原型 0.34 的有意加深），窗口铺满含状态栏、挖孔区与手势条；点遮罩 = 忽略。</td></tr>
+    <tr><th>面板</th><td><code>surface-warm</code> 合成到 <b>不透明</b>（玻璃主题下 <code>#f2f8ff</code>）；顶部圆角 18dp、<code>--elev-sheet</code> 阴影；内容区加 <code>navigationBarsPadding()</code>。</td></tr>
+    <tr><th>状态栏</th><td>浮层窗口声明边到边（<code>setFitInsetsTypes(0)</code> + 挖孔区 SHORT_EDGES/ALWAYS），遮罩画到状态栏下方；状态栏图标由系统绘制，目标切浅色。</td></tr>
+    <tr><th>动效</th><td>遮罩淡入 180ms；确认卡 220ms 从底部滑入（36px → 0）。关闭即时卸载（保持现状）。</td></tr>
+    <tr><th>不改的部分</th><td>字段结构与顺序（类型 / 分类 / 账户 / 支付方式 / 时间）、按钮层级（忽略次级 + 记一笔主色）、跟随 8 套主题。</td></tr>
+  </table>
+</div>
+
+<script>
+(function () {
+  var phones = Array.prototype.slice.call(document.querySelectorAll('.phone'));
+  var phase = document.getElementById('phase');
+  var timer = null;
+  function replay() {
+    if (timer) clearTimeout(timer);
+    phones.forEach(function (p) { p.classList.remove('is-open'); });
+    phase.textContent = '0ms：支付成功页出现 · 浮窗不出现';
+    timer = setTimeout(function () {
+      phones.forEach(function (p) { p.classList.add('is-open'); });
+      phase.textContent = '支付成功 +1000ms · 遮罩与确认卡已出现';
+    }, 1000);
+  }
+  document.getElementById('replay').addEventListener('click', replay);
+})();
+</script>
+</body>
+</html>
