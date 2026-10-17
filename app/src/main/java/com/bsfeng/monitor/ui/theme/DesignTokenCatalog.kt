@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import com.bsfeng.monitor.domain.model.RecordType
 
@@ -65,6 +66,16 @@ fun DesignTokens.eventColor(type: RecordType): Color = when (type) {
 
 /** 强色填充上的文字色（替代散落的 Color.White）。 */
 val DesignTokens.onAccent: Color get() = accentOn
+
+/**
+ * 浮层面板底色：surface-warm → surface → bg 依次合成，保证 **100% 不透明**。
+ *
+ * 为什么不能只写 surfaceWarm：玻璃拟态主题的 surface-warm 是 rgba(238,246,255,.72)、
+ * surface 是 rgba(255,255,255,.74)，两层叠完 alpha 仍有 0.927，会轻微透出下层文字。
+ * 再压一层不透明的 bg（8 套主题的 bg 都是实色）才是真的实底。
+ */
+val DesignTokens.opaquePanel: Color
+    get() = surfaceWarm.compositeOver(surface).compositeOver(bg)
 
 /** 强调色弱化填充：color-mix(in srgb, accent p%, surface)，对齐 Material container 槽位。 */
 fun DesignTokens.accentSoftFill(percent: Int = 14): Color =
