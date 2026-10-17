@@ -122,6 +122,7 @@
 | 修改自动记账的字段提取（金额/商户/分类/订单号） | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookParser.kt` |
 | 修改自动记账的**账单页门禁**（只认账单页，挡首页/列表页） | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookParser.kt` → `isBillPage()` |
 | 修改自动记账的**去重键与指纹**（弹窗指纹 / 落库幂等键） | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookParser.kt` → `buildDedupKeys()` / `buildSourceId()` |
+| 修改自动记账的**交易详情页补全**（匹配已记账记录 / 字段合并 / Toast） | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookDetailEnricher.kt` + `AutoBookEngine.kt` → `handleDetailPage()` |
 | 修改自动记账的**短期去重表**（安静期 / 容量） | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookDedup.kt` |
 | 修改自动记账的节点采集 / 视觉行合成 | `app/src/main/java/com/bsfeng/monitor/autobook/NodeTextCollector.kt` + `PageLines.kt` |
 | 修改自动记账浮窗 UI | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookConfirmSheet.kt` |
