@@ -572,6 +572,16 @@ object AutoBookParser {
             listOf("商品说明", "交易状态", "当前状态")
 
     /**
+     * **交易详情页**的强字段标签（用于「已记账笔补全详情」）。
+     *
+     * 不能复用 [DETAIL_LABELS]：支付宝/微信的**支付成功结果页**也带 `交易方式 余额宝…`，
+     * 用宽标签集会把结果页误判成详情页，刚记完的账一回到结果页就被当成「补全」。
+     * 这里只放详情页才有的字段：支付时间 / 订单号 / 商品说明 / 商户全称 / 账单分类。
+     */
+    private val STRONG_DETAIL_LABELS: List<String> = TIME_LABELS + ORDER_LABELS + PRODUCT_LABELS +
+        listOf("商户全称", "收款方全称", "账单分类", "交易状态", "当前状态")
+
+    /**
      * 列表 / 摘要页特征词。
      *
      * 真机实测支付宝首页：「最近消息」「还有3条未读服务消息」+ 下拉刷新的「松开刷新」提示，
@@ -736,6 +746,21 @@ object AutoBookParser {
         if (isListOrSummaryPage(lines)) return false
         if (isStandaloneResultPage(lines)) return true
         return isRedPacketResultPage(lines)
+    }
+
+    /**
+     * 当前页面是不是**交易详情页**（比结果页信息更全：支付时间 / 订单号 / 商品说明 / 商户全称）。
+     *
+     * 用于「已经记过账的那笔，用户后来打开详情页」：不再弹记账浮窗，而是把详情页字段补进已有记录。
+     * 判定比 [isBillPage] 更严 —— 结果页只有 `交易方式` 这类弱字段，不能算详情页。
+     */
+    fun isDetailPage(lines: List<String>): Boolean {
+        if (lines.isEmpty()) return false
+        if (lines.any { line -> PRE_PAY_WORDS.any { line.contains(it) } }) return false
+        if (hasMultipleTransactions(lines)) return false
+        if (isListOrSummaryPage(lines)) return false
+        if (FUTURE_WORDS.any { word -> lines.any { it.contains(word) } }) return false
+        return STRONG_DETAIL_LABELS.any { label -> labelValue(lines, listOf(label)) != null }
     }
 
     /** 有任意一个账单字段标签取到了值 */
@@ -1104,7 +1129,11 @@ object AutoBookParser {
 
     private fun isLabelLike(text: String): Boolean {
         val labels = MERCHANT_LABELS + ACCOUNT_LABELS + TIME_LABELS + CATEGORY_LABELS + ORDER_LABELS +
-            listOf("账单管理", "商品说明", "支付奖励", "标签", "备注", "计入收支", "为您推荐")
+            listOf(
+                "账单管理", "商品说明", "支付奖励", "标签", "备注", "计入收支", "为您推荐",
+                // 支付宝红包账单详情页（2026-10-17 真机）：这些是字段标签 / 求助入口，不是商户名
+                "红包说明", "对此订单有疑问"
+            )
         return labels.any { text == it || text.startsWith("$it ") }
     }
 
@@ -1146,7 +1175,10 @@ object AutoBookParser {
             // 真机实测（微信支付链路各页）：这些是页面按钮 / 状态文案，兜底逻辑会把它们当商户名
             "返回", "关闭", "取消", "支付", "付款", "收款", "转账",
             // 红包结果页上「微信红包」是产品名，不是收款方（真机实测该页没有商户字段）
-            "微信红包"
+            "微信红包", "支付宝红包",
+            // 支付宝红包账单详情页的状态行（2026-10-17 真机）：`领取中` 不是商户名，
+            // 详情页本身没有收款方字段，补全时应保留记账时的商户（如「张三」）。
+            "领取中", "已领取", "待领取", "未领取", "已退回", "已过期"
         )
         return noise.none { trimmed == it || trimmed.startsWith(it) }
     }

@@ -580,6 +580,49 @@ class AutoBookParserTest {
     }
 
     @Test
+    fun `交易详情页与支付成功结果页要能区分`() {
+        // 详情页有支付时间 / 订单号 / 商品说明 / 商户全称；结果页只有「交易方式」这类弱字段。
+        assertTrue("支付宝账单详情页", AutoBookParser.isDetailPage(alipayDetailLines()))
+        val wechatDetail = listOf(
+            "微信支付", "支付成功", "-¥25.00",
+            "商户全称 上海星巴克咖啡经营有限公司",
+            "支付方式 零钱",
+            "支付时间 2026-10-16 12:06:11"
+        )
+        assertTrue("微信交易详情页", AutoBookParser.isDetailPage(wechatDetail))
+
+        val resultPage = listOf(
+            "支付成功￥0.01 回首页", "支付成功", "0.01",
+            "楠楠的开心杂货铺 ￥0.01", "交易方式 余额宝(转出资金付款)", "完成"
+        )
+        assertFalse("结果页不是详情页", AutoBookParser.isDetailPage(resultPage))
+
+        val chat = listOf(
+            "返回 资金往来记录 聊天设置", "张三", "¥0.01",
+            "支付宝红包 16:45", "语音 发送消息... 表情 更多"
+        )
+        assertFalse("聊天页不是详情页", AutoBookParser.isDetailPage(chat))
+
+        assertFalse(
+            "付款前页面不是详情页",
+            AutoBookParser.isDetailPage(listOf("请验证指纹", "付款金额0.01"))
+        )
+    }
+
+    @Test
+    fun `支付宝红包账单详情页不得把「领取中」当商户名`() {
+        // 真机 2026-10-17 16:55 原文：详情页没有收款方字段，状态行是「领取中」。
+        // 补全时应保留记账时的商户（张三），不能让状态词覆盖。
+        val lines = listOf(
+            "返回 全部账单", "账单详情", "支付宝红包", "支出0.01元", "领取中",
+            "创建时间 2026-10-17 16:51:24", "付款方式 余额宝", "红包说明 发普通红包",
+            "更多", "账单管理", "账单分类 转账红包", "标签 请选择", "为您推荐 发红包",
+            "计入收支 开关", "备注 添加", "对此订单有疑问"
+        )
+        assertEquals("", AutoBookParser.extractMerchant(lines))
+    }
+
+    @Test
     fun `支付宝转账输入页与备注弹窗不得被识别成账单`() {
         // 真机 2026-10-17：输入页 / 备注弹窗同样带金额与「付款」，旧门禁在 16:20:32 误弹，
         // 商户名还取成了首页天气「多云 27℃」。
