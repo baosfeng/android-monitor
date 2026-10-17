@@ -69,6 +69,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
     /** 微信「添加备注」弹窗里用户填的备注（弹窗没有金额，单独捕获后并进预采集）。 */
     private var pendingRemark: String? = null
 
+    /**
+     * 刚刚走过「支付宝红包付款前页面」。
+     *
+     * 支付宝红包付款成功后没有结果页，聊天页里本来就有历史红包气泡；只有记住
+     * 「这几分钟里用户确实在发红包」，才敢把刚出现的气泡当成这笔新交易（金额取预采集）。
+     */
+    private var redPacketPaymentPending: Boolean = false
+
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
     private var categoriesByType: Map<Int, List<Category>> = emptyMap()
@@ -118,13 +126,18 @@ class AutoBookEngine(private val service: AccessibilityService) {
             return
         }
 
-        val draft = try {
+        var draft = try {
             AutoBookParser.parse(rule, lines, now)
         } catch (e: Exception) {
             Log.w(TAG, "解析失败: ${e.message}")
             null
         }
         if (draft == null) {
+            // 记住「刚走过红包付款前页面」：聊天页兜底只用它的金额，并据此区分新旧红包气泡
+            if (AutoBookParser.isRedPacketPrePayPage(lines)) {
+                redPacketPaymentPending = true
+                Log.d(TAG, "红包付款前页面：等待发出后聊天页的红包气泡")
+            }
             // 微信「添加备注」弹窗：没有金额，不会进预采集；但用户填的备注只在这里可见。
             val dialogRemark = try {
                 AutoBookParser.parseRemarkDialog(lines)
@@ -138,6 +151,26 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 return
             }
 
+            // 支付宝红包兜底：付款成功后没有结果页，而是回到聊天页（气泡不带金额）。
+            // 必须排在付款前页面预采集之前 —— 聊天页底部有「发红包」快捷入口，
+            // 但它不含金额/付款页特征，不会进预采集；这里只用付款前缓存的金额。
+            draft = try {
+                AutoBookParser.parseSentRedPacketChat(
+                    rule, lines, preDraft, now,
+                    allowBubbleOnly = redPacketPaymentPending
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "红包聊天页解析失败: ${e.message}")
+                null
+            }
+            if (draft != null) {
+                Log.d(
+                    TAG,
+                    "聊天页识别到已发出的红包: amount=${draft.amount} 领取人=${draft.merchant}"
+                )
+            }
+        }
+        if (draft == null) {
             // 付款前页面（转账输入 / 收银台 / 指纹 / 确认付款）：**不弹窗**，只预采集。
             // 收款方、付款方式、用户备注这些信息只在付款前页面出现；成功页通常只给金额。
             val pre = try {
@@ -421,6 +454,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
             // 浮窗已展示：预采集完成使命，清掉避免串到之后的同金额交易
             preDraft = null
             pendingRemark = null
+            redPacketPaymentPending = false
         } catch (e: Exception) {
             // 浮窗挂不上（例如系统限制）不能静默：记日志，下一笔还会再试
             Log.e(TAG, "浮窗展示失败: ${e.message}", e)
@@ -491,6 +525,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
     fun release() {
         preDraft = null
         pendingRemark = null
+        redPacketPaymentPending = false
         overlay.hide()
         dedup.clear()
         scope.cancel()

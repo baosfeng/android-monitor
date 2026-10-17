@@ -1,7 +1,10 @@
 package com.bsfeng.monitor.autobook
 
 import java.security.MessageDigest
-
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.math.abs
 /**
  * 一笔待确认的自动记账草稿。
  *
@@ -159,6 +162,29 @@ object AutoBookParser {
 
     /** 明确的支出语义 */
     private val EXPENSE_WORDS = listOf("付款", "支付", "消费", "转出", "已付", "扣款", "还款", "支出", "提现")
+
+    /**
+     * 方向词出现在**标签 / 提示语**里时先抹掉，否则整页方向会判反。
+     *
+     * 真机事故（2026-10-17，支付宝转账成功页）：页面是
+     * `转账成功￥0.01 回首页 | 转账成功 | 0.01 | 收款方 张三(***) | 交易方式 余额宝(转出资金付款) | 完成`。
+     * 「收款方」是**收款人标签**（这笔钱是用户付出去的），但 [INCOME_WORDS] 里的「收款」先命中、
+     * 且位置早于「转出资金付款」里的「付款」，于是整笔被记成**收入**。
+     *
+     * 这些词只做标签，不表达方向，必须在判定前替换掉。
+     */
+    private val DIRECTION_LABEL_NOISE = listOf(
+        "收款方", "付款方", "收款人", "付款人", "收款账户", "付款账户",
+        "付款方式", "收款方式", "交易方式"
+    )
+
+    /**
+     * 付款方视角的「等待对方确认收款」提示（微信转账成功页：`待李四确认收款`）。
+     *
+     * 这里面的「收款」描述的是**对方**的动作，不是用户收入；不抹掉会把支出判成收入。
+     * ⚠️ 不能只抹「确认收款」：收款方自己点「确认收款」时那是真收入。
+     */
+    private val PENDING_RECEIPT = Regex("待.{0,15}?确认收款")
 
     /** 品牌名清洗表：这些词含「支付/收款」二字，判定方向前先抹掉（否则「支付宝 | 20元」被记成支出） */
     private val BRAND_WORDS = listOf("支付宝", "微信支付", "微信", "云闪付", "财付通", "银联", "数字人民币")
@@ -379,6 +405,172 @@ object AutoBookParser {
         )
     }
 
+    /**
+     * 支付宝红包发出后的**聊天页**识别（成功页不存在的兜底通道）。
+     *
+     * 背景（真机 2026-10-17 16:28 / 16:37）：支付宝发红包付款成功后没有任何结果页，直接回到聊天页；
+     * 红包气泡给 `红包已被领取` / `张三领取了你的 红包`，有时也带 `支付宝红包` + `¥0.01 + 留言`。
+     * 金额、付款方式、备注仍以付款前页面预采集的 [pre] 为准（气泡金额只用来核对）。
+     *
+     * 防误判：
+     * - 只认支付宝（微信红包有独立结果页，走 [isRedPacketResultPage]）；
+     * - 必须是**聊天页**（发红包输入页 / 收银台 / 指纹页都不含「发送消息」这类会话特征）；
+     * - 光有「红包」两个字不算：要么有「已领取」强信号，要么 [allowBubbleOnly]（刚走过红包付款页）
+     *   且页面出现 `支付宝红包` 气泡、金额与预采集一致；
+     * - 预采集必须在 [AutoBookDraftMerger.PRE_DRAFT_TTL_MS] 内。
+     */
+    fun parseSentRedPacketChat(
+        rule: AutoBookRule,
+        lines: List<String>,
+        pre: PrePaymentDraft?,
+        nowMs: Long,
+        allowBubbleOnly: Boolean = false
+    ): AutoBookDraft? {
+        if (rule.channel != AutoBookRules.CHANNEL_ALIPAY) return null
+        if (pre != null && nowMs - pre.capturedAtMs > AutoBookDraftMerger.PRE_DRAFT_TTL_MS) return null
+        if (!isSentRedPacketChatPage(lines, allowBubbleOnly, nowMs)) return null
+
+        // 只有气泡、没有「已领取」强信号时，再用气泡金额核对一次：
+        // 聊天记录里旧红包金额对不上，就不能当成本笔（宁可漏记也不能记错）。
+        val joined = lines.joinToString(" ")
+        val hasClaimSignal = RED_PACKET_SENT_WORDS.any { joined.contains(it) }
+        val bubbleAmount = extractRedPacketBubbleAmount(lines)
+        val amount = when {
+            pre != null && pre.amount > 0.0 -> {
+                if (bubbleAmount != null && !hasClaimSignal && abs(bubbleAmount - pre.amount) > 0.01) {
+                    return null
+                }
+                pre.amount
+            }
+            // 预采集可能因为服务重启 / 事件丢失为空；气泡自带金额时仍要能记（用户要求「红包出现就记」）。
+            // 这条路径只允许在「刚走过红包付款页」时启用，避免历史聊天里的旧红包误弹。
+            allowBubbleOnly && bubbleAmount != null && bubbleAmount > 0.0 -> bubbleAmount
+            else -> return null
+        }
+        val merchant = pre?.merchant?.ifBlank { null }
+            ?: extractRedPacketClaimer(lines).ifBlank { extractChatContact(lines) }
+        val type = AutoBookDraft.TYPE_EXPENSE
+        return AutoBookDraft(
+            channel = rule.channel,
+            type = type,
+            amount = amount,
+            merchant = merchant,
+            categoryName = mapCategory(null, merchant, type),
+            accountName = rule.accountName,
+            payMethod = pre?.payMethod.orEmpty(),
+            productDesc = "",
+            orderId = "",
+            platformCategory = "",
+            timeText = "",
+            sourceId = buildSourceId(rule.channel, type, amount, merchant, "", "", nowMs),
+            dedupKeys = buildDedupKeys(rule.channel, type, amount, "", ""),
+            markers = listOf("红包已发出")
+        )
+    }
+
+    /**
+     * 红包付款前页面（输入页 / 塞钱页 / 确认页）—— 用于给 [parseSentRedPacketChat] 打「这笔是红包」标记。
+     *
+     * 为什么要单独认：支付宝红包付款成功后没有结果页，聊天页里本来就有历史红包气泡；
+     * 只有「刚刚走过红包付款流程」这一事实，才能把新气泡和旧气泡区分开。
+     */
+    fun isRedPacketPrePayPage(lines: List<String>): Boolean {
+        if (lines.isEmpty()) return false
+        val joined = lines.joinToString(" ")
+        if (!joined.contains("红包")) return false
+        // 聊天页底部也有「发红包」快捷入口，必须排除会话页
+        if (CHAT_PAGE_WORDS.any { joined.contains(it) }) return false
+        if (RED_PACKET_ENTRY_WORDS.none { joined.contains(it) }) return false
+        // 收银台把金额写在「付款金额0.01元人民币」里，而这一行同时含「红包」——
+        // extractAmount 会按金额噪声跳过它，所以这里用红包专用正则再兜一次。
+        return extractAmount(lines) != null || RED_PACKET_AMOUNT_TEXT.containsMatchIn(joined)
+    }
+
+    /**
+     * 聊天页上是否已有「我发出的红包」信号。
+     *
+     * 两种信号：
+     * - 强信号：`红包已被领取` / `领取了你的红包`（对方已领取，金额直接取预采集）；
+     * - 弱信号：聊天页里出现 `支付宝红包` 气泡 —— 对方**还没领取**时只有这一种。
+     *   弱信号只在 [allowBubbleOnly] 为 true 时启用，而它由「刚刚走过红包付款前页面」
+     *   （[isRedPacketPrePayPage]）决定，避免用户在历史聊天记录里看到旧红包就误弹。
+     */
+    private fun isSentRedPacketChatPage(
+        lines: List<String>,
+        allowBubbleOnly: Boolean,
+        nowMs: Long
+    ): Boolean {
+        val joined = lines.joinToString(" ")
+        if (!joined.contains("红包")) return false
+        if (!CHAT_PAGE_WORDS.any { joined.contains(it) }) return false
+        if (PRE_PAY_WORDS.any { joined.contains(it) }) return false
+        if (RED_PACKET_SENT_WORDS.any { joined.contains(it) }) return true
+        // 对方还没领取：只有 `支付宝红包 HH:mm` 气泡。用「气泡时间 ≈ 当前时间」区分新旧。
+        return allowBubbleOnly &&
+            joined.contains("支付宝红包") &&
+            hasFreshRedPacketBubbleTime(lines, nowMs)
+    }
+
+    /** 聊天页里是否有「刚发出」的红包气泡时间（`支付宝红包 16:45`）。 */
+    private fun hasFreshRedPacketBubbleTime(lines: List<String>, nowMs: Long): Boolean {
+        val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMs), ZoneId.systemDefault())
+        val nowMinutes = now.hour * 60 + now.minute
+        for (line in lines) {
+            val match = RED_PACKET_BUBBLE_TIME.find(line) ?: continue
+            val hour = match.groupValues[1].toIntOrNull() ?: continue
+            val minute = match.groupValues[2].toIntOrNull() ?: continue
+            if (hour !in 0..23 || minute !in 0..59) continue
+            val bubbleMinutes = hour * 60 + minute
+            val diff = abs(bubbleMinutes - nowMinutes)
+            if (minOf(diff, 24 * 60 - diff) <= RED_PACKET_BUBBLE_FRESH_MINUTES) return true
+        }
+        return false
+    }
+
+    /**
+     * 从红包气泡邻域取金额：`支付宝红包 / 清风明月 / ¥0.01 / 示例留言` → 0.01。
+     *
+     * 不能对整页 [extractAmount]：聊天记录里可能还有别的转账/红包气泡金额，页面上先出现的未必是这一笔。
+     * 只取「支付宝红包」标签后的 5 行，命中带货币符号 / 两位小数的金额。
+     */
+    private fun extractRedPacketBubbleAmount(lines: List<String>): Double? {
+        val index = lines.indexOfFirst { it.contains("支付宝红包") }
+        if (index < 0) return null
+        val end = minOf(lines.size, index + 5)
+        for (i in index until end) {
+            val line = lines[i]
+            if (isAmountNoise(line)) continue
+            val match = RED_PACKET_BUBBLE_AMOUNT.find(line) ?: continue
+            toAmount(match.groupValues[1])?.let { return it }
+        }
+        return null
+    }
+
+    /** 聊天页顶部联系人名（`返回 资金往来记录 聊天设置` 的下一行，如 `张三`） */
+    private fun extractChatContact(lines: List<String>): String {
+        val index = lines.indexOfFirst { it.contains("资金往来记录") || it.contains("聊天设置") }
+        if (index < 0) return ""
+        val end = minOf(lines.size, index + 4)
+        for (i in index + 1 until end) {
+            val value = lines[i].trim()
+            if (value.isEmpty() || value.length > 20) continue
+            if (value.contains("红包") || value.contains("表情") || value.contains("消息")) continue
+            if (value.matches(Regex("^[0-9:：\\s]+$"))) continue
+            return value
+        }
+        return ""
+    }
+
+    /** 从领取提示里取领取人：`icon 张三领取了你的 红包` → `张三` */
+    private fun extractRedPacketClaimer(lines: List<String>): String {
+        for (line in lines) {
+            val m = RED_PACKET_CLAIMED_BY.find(line) ?: continue
+            val name = m.groupValues[1].trim().trimStart('，', ',', '、', ' ')
+            if (name.isNotEmpty() && !name.contains("你") && !name.contains("红包")) return name.take(20)
+        }
+        return ""
+    }
+
     // ==================== 账单页门禁 ====================
 
     /**
@@ -428,6 +620,54 @@ object AutoBookParser {
         "塞钱进红包", "未领取的红包", "发红包", "使用密码", "请验证指纹", "输入支付密码"
     )
 
+    /**
+     * 支付宝红包**付款前**页面的入口特征词（比 [RED_PACKET_PRE_PAY_WORDS] 宽）。
+     *
+     * 真机 2026-10-17 16:38：确认页按钮是「发红包」、页脚是「24小时内未被领取，红包金额将退回」，
+     * 收银台写的是「发普通红包」（不是「发红包」）—— 只认「发红包」会在收银台丢掉红包标记。
+     */
+    private val RED_PACKET_ENTRY_WORDS = listOf(
+        "塞钱进红包", "未领取的红包", "发红包", "发普通红包",
+        "红包封面", "未被领取", "红包金额", "红包记录"
+    )
+
+    /** 红包付款前页面上的金额（收银台：`付款金额0.01元人民币`；确认页：`金额 0.01 元`） */
+    private val RED_PACKET_AMOUNT_TEXT = Regex("(?:付款金额|红包金额|金额)[^0-9]{0,6}([0-9]+(?:\\.[0-9]{1,2})?)")
+
+    /**
+     * 支付宝红包**发出后**聊天页上的「已发出 / 已被领取」信号。
+     *
+     * 真机实测（2026-10-17 16:28 / 16:45，支付宝）：发红包付款成功后**没有**任何结果页 ——
+     * 直接回到聊天页。气泡文案有两种：
+     * - 对方已领取：`红包已被领取`、`icon 张三领取了你的 红包`；
+     * - 对方未领取：`支付宝红包 16:45` + `¥0.01` + 留言。
+     * 金额优先取付款前页面预采集到的 [PrePaymentDraft]，缺失时用气泡金额兜底。
+     */
+    private val RED_PACKET_SENT_WORDS = listOf("红包已被领取", "领取了你的")
+
+    /**
+     * 聊天 / 会话页特征词：用来把「红包气泡所在的聊天页」和「发红包输入页」区分开。
+     *
+     * ⚠️ 不能用「发红包」—— 聊天页底部的快捷入口也叫「发红包」，用了会把聊天页当成付款前页面。
+     */
+    private val CHAT_PAGE_WORDS = listOf("发送消息", "资金往来记录", "聊天设置")
+
+    /** 从 `icon 张三领取了你的 红包` 里取领取人（= 收红包的人，可当商户名） */
+    private val RED_PACKET_CLAIMED_BY = Regex("(?:icon\\s*)?([^\\s|]{1,20}?)\\s*领取了你的\\s*红包")
+
+    /** 红包气泡上的金额（`¥0.01` / `0.01`），只在气泡邻域里找 */
+    private val RED_PACKET_BUBBLE_AMOUNT = Regex("[¥￥]\\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)")
+
+    /**
+     * 聊天页红包气泡上的发送时间（`支付宝红包 16:45`）。
+     *
+     * 只有**刚发出去**的那个气泡才带当前 HH:mm；聊天记录里的旧红包带的是旧时间。
+     * 用它把「新气泡」和「历史红包」区分开，避免取消发红包后打开旧聊天就误弹。
+     */
+    private val RED_PACKET_BUBBLE_TIME = Regex("支付宝红包[\\s:：]*([0-9]{1,2}):([0-9]{2})")
+
+    /** 气泡时间允许偏差：从付款到回聊天页通常几秒，给 3 分钟（含跨零点取模） */
+    private const val RED_PACKET_BUBBLE_FRESH_MINUTES = 3
     /**
      * 付款前页面的特征词：收银台 / 指纹验证 / 密码输入。
      *
@@ -605,15 +845,15 @@ object AutoBookParser {
      * 顺序很重要（借鉴开源实现的经验）：
      * 1. 金额所在行自带方向词（`支出3元`）—— 直接采信；
      * 2. 先查收入词再查支出词 —— 「转账」「红包」本身无方向，收入短语更明确；
-     * 3. 判定前清洗品牌名，避免「支付宝」的「支付」二字把收入记成支出；
+     * 3. 判定前清洗品牌名与方向标签，避免「支付宝」的「支付」二字 / 「收款方」的「收款」二字把方向判反；
      * 4. 都没命中时按支出处理：宁可让用户改一次类型，也不要漏记一笔支出。
      */
     fun detectType(lines: List<String>, amountLine: String): Int {
-        val amountLineClean = cleanBrand(amountLine)
+        val amountLineClean = neutralizeDirectionWords(cleanBrand(amountLine))
         if (INCOME_WORDS.any { amountLineClean.contains(it) }) return AutoBookDraft.TYPE_INCOME
         if (EXPENSE_WORDS.any { amountLineClean.contains(it) }) return AutoBookDraft.TYPE_EXPENSE
 
-        val joined = cleanBrand(lines.joinToString(" "))
+        val joined = neutralizeDirectionWords(cleanBrand(lines.joinToString(" ")))
         val incomeIndex = INCOME_WORDS.map { joined.indexOf(it) }.filter { it >= 0 }.minOrNull()
         val expenseIndex = EXPENSE_WORDS.map { joined.indexOf(it) }.filter { it >= 0 }.minOrNull()
         return when {
@@ -630,6 +870,15 @@ object AutoBookParser {
             result = result.replace(brand, "▢")
         }
         return result
+    }
+
+    /** 抹掉只表达「谁收谁付」的标签词，保留真正的方向语义（见 [DIRECTION_LABEL_NOISE]）。 */
+    private fun neutralizeDirectionWords(text: String): String {
+        var result = text
+        for (label in DIRECTION_LABEL_NOISE) {
+            result = result.replace(label, "▢")
+        }
+        return PENDING_RECEIPT.replace(result, "▢")
     }
 
     /**
