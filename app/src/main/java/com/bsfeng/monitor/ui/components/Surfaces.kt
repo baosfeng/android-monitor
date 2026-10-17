@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.opaquePanel
 import com.bsfeng.monitor.ui.theme.sparkHeight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -49,7 +50,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.compositeOver
 import kotlinx.coroutines.delay
 
 /**
@@ -233,7 +233,7 @@ fun Scrim(visible: Boolean, onDismiss: () -> Unit) {
  *
  * 沉浸式遮罩 / 返回键 / 点外部关闭的口径全部在 [WindowOverlay]（含「为什么必须走窗口」的说明）。
  *
- * 面板：surfaceWarm 合成到不透明（glassmorphism 下的有意偏离，理由见 [WindowOverlay]）
+ * 面板：opaquePanel（surface-warm → surface → bg 合成到 100% 不透明，玻璃主题下也不透底）
  * + topStart/topEnd 圆角 + --elev-3 阴影 + grip；贴底面板加 `navigationBarsPadding()`，
  * 面板底色铺到屏幕底、内容上抬，否则「确定 / 关闭」会被手势条压住。
  * 入场 220ms 滑入 + 淡入（契约 §7）；关闭即时卸载。
@@ -247,7 +247,7 @@ fun BottomSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    val sheetColor = t.surfaceWarm.compositeOver(t.surface)
+    val sheetColor = t.opaquePanel
     val sheetShape = RoundedCornerShape(topStart = t.radiusLg, topEnd = t.radiusLg)
     // 每次打开都从「未进入」开始，AnimatedVisibility 才会真正播放入场动画
     // （首次组合即 visible = true 时它不播，等于没有动画）
@@ -391,7 +391,7 @@ fun AppDialog(
                     .clip(shape)
                     // 面板底合成到不透明：glassmorphism 的 --surface-warm 带 72% alpha，
                     // 弹窗里是要读的字，不能透出下层内容（有意偏离该主题语言）
-                    .background(t.surfaceWarm.compositeOver(t.surface))
+                    .background(t.opaquePanel)
                     // 卡片自身吞掉点击，避免点内容触发遮罩关闭
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
