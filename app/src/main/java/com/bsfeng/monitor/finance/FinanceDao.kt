@@ -111,6 +111,26 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         return TransactionEntity.listFromCursor(cursor)
     }
 
+    /**
+     * 同一商户最近一笔交易（自动记账「上次选过的类型 / 分类」默认值用）。
+     *
+     * 精确匹配商户名：自动记账落库的商户来自同一页面，跨次稳定；手工录入的商户名与页面
+     * 不一致时自然不命中 —— 宁可回落到解析器默认分类，也不能把别家店的分类套过来。
+     */
+    fun findLastByMerchant(merchant: String): Transaction? {
+        if (merchant.isBlank()) return null
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            TransactionEntity.TABLE_NAME, null,
+            "${TransactionEntity.COL_MERCHANT} = ?",
+            arrayOf(merchant),
+            null, null,
+            "${TransactionEntity.COL_DATE_TIME} DESC, ${TransactionEntity.COL_ID} DESC",
+            "1"
+        )
+        return TransactionEntity.listFromCursor(cursor).firstOrNull()
+    }
+
     /** 搜索交易（按备注或分类名模糊匹配） */
     fun searchTransactions(query: String, limit: Int = 50): List<Transaction> {
         val db = dbHelper.readableDatabase

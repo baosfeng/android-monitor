@@ -60,6 +60,7 @@ class FinanceDaoTest {
         tag: String = "",
         source: String = "manual",
         sourceId: String = "",
+        merchant: String = "",
     ) = Transaction(
         type = type,
         categoryName = category,
@@ -71,7 +72,22 @@ class FinanceDaoTest {
         dateTime = dateTime,
         source = source,
         sourceId = sourceId,
+        merchant = merchant,
     )
+
+    @Test
+    fun `同一商户取最近一笔的类型与分类`() {
+        dao.insertTransaction(tx(category = "购物", dateTime = "2026-01-01 10:00", merchant = "星巴克咖啡"))
+        dao.insertTransaction(tx(category = "餐饮", dateTime = "2026-01-20 10:00", merchant = "星巴克咖啡"))
+        dao.insertTransaction(tx(category = "出行", dateTime = "2026-01-21 10:00", merchant = "滴滴出行"))
+
+        val last = dao.findLastByMerchant("星巴克咖啡")
+        assertNotNull("同一家店应该能取到历史", last)
+        assertEquals("餐饮", last!!.categoryName)
+        assertEquals("2026-01-20 10:00", last.dateTime)
+        assertNull(dao.findLastByMerchant("没扫过的店"))
+        assertNull("空商户名不能命中任何记录", dao.findLastByMerchant(""))
+    }
 
     // ==================== 交易 CRUD ====================
 
