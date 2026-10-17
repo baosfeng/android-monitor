@@ -127,7 +127,15 @@ class AutoBookDedup(
             // 若让它记住「用户已忽略 / 已记账」，后一笔同金额的真实消费会被静默吞掉
             // （真机踩过：忽略 ¥0.01 转账后 11 秒发的 ¥0.01 红包没弹窗）
             if (!key.precise && outcome != Outcome.SHOWN) continue
-            entries[key.value] = Entry(outcome, nowMs, minOf(outcomeTtl, key.ttlMs))
+            // 模糊指纹（同一金额）分不清「同一笔」和「另一笔同金额」，只能做 5 秒防抖：
+            // 30 秒会把「刚弹完一笔 ¥0.01、20 秒后又付一笔 ¥0.01」的第二笔静默吞掉
+            // （真机 2026-10-17：第二笔日志 `去重命中 ... 剩余 8s`，用户以为二维码入口失效）。
+            val ttl = if (key.precise) {
+                minOf(outcomeTtl, key.ttlMs)
+            } else {
+                minOf(FUZZY_SHOWN_TTL_MS, key.ttlMs)
+            }
+            entries[key.value] = Entry(outcome, nowMs, ttl)
         }
     }
 
@@ -156,7 +164,15 @@ class AutoBookDedup(
         /** 已忽略：与改造前保持一致，10 分钟安静期 */
         const val DISMISSED_TTL_MS = 10 * 60 * 1000L
 
-        /** 弹过但用户没操作（浮窗被收起）：只做短暂防抖 */
+        /** 弹过但用户没操作（浮窗被收起）：精确指纹做 30 秒防抖 */
         const val SHOWN_TTL_MS = 30 * 1000L
+
+        /**
+         * 金额模糊指纹的弹窗防抖：**只够挡住同一页面的重复事件**。
+         *
+         * 不能用 30 秒 —— 它分不清同一笔和下一笔同金额交易。真机 2026-10-17：
+         * 16:15:40 弹过一笔 ¥0.01，16:16:02 另一笔 ¥0.01 被 `sum:wechat:0:0.01` 吞掉。
+         */
+        const val FUZZY_SHOWN_TTL_MS = 5 * 1000L
     }
 }
