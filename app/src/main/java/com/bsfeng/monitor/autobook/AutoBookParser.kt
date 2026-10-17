@@ -206,7 +206,11 @@ object AutoBookParser {
      * ⚠️ 不要把「零钱」「余额宝」这类**值**放进来：标签表同时用于「排除值看起来像标签」的判断，
      * 放进来会让「支付方式 零钱」取不到值（真机/单测都踩过）。
      */
-    private val ACCOUNT_LABELS = listOf("付款方式", "支付方式", "付款账户", "支付账户", "扣款方式", "付款渠道")
+    private val ACCOUNT_LABELS = listOf(
+        "付款方式", "支付方式", "付款账户", "支付账户", "扣款方式", "付款渠道",
+        // 支付宝支付成功页的付款方式标签
+        "交易方式"
+    )
 
     /** 交易时间标签 */
     private val TIME_LABELS = listOf("支付时间", "交易时间", "付款时间", "创建时间", "转账时间")
@@ -433,7 +437,10 @@ object AutoBookParser {
      */
     private val PRE_PAY_WORDS = listOf(
         "请验证指纹", "验证指纹", "使用密码", "输入支付密码", "面容验证", "识别面容",
-        "立即支付", "确认付款", "确认支付"
+        "立即支付", "确认付款", "确认支付",
+        // 支付宝转账输入页 / 添加备注弹窗（真机 2026-10-17）：这些页同样有金额与「付款」，
+        // 不挡掉会在用户付款前弹窗（甚至把天气「多云 27℃」当商户）
+        "付款给个人", "输入付款金额", "推荐付款方式", "添加备注", "备注一下", "收款人可见"
     )
 
     /**
@@ -460,14 +467,6 @@ object AutoBookParser {
     )
 
     /**
-     * 单笔交易的状态词：一屏里出现多次，说明这是流水 / 消息列表而不是单笔账单页。
-     */
-    private val STATUS_WORDS = listOf(
-        "支付成功", "付款成功", "交易成功", "转账成功", "收款成功", "还款成功", "退款成功",
-        "还款到账成功", "已支付"
-    )
-
-    /**
      * 一屏里出现 ≥ [MULTI_TRANSACTION_THRESHOLD] 处多笔交易的痕迹。
      *
      * 真机实测支付宝「支付消息」列表：每张卡片都自带一份「付款方式」，也各自有「付款成功」——
@@ -475,26 +474,27 @@ object AutoBookParser {
      * 于是弹出一个「看起来是对的」的浮窗。所以多笔信号必须**优先于**详情结构判定。
      */
     private fun hasMultipleTransactions(lines: List<String>): Boolean {
-        val statusHits = lines.count { line -> STATUS_WORDS.any { line.contains(it) } }
-        if (statusHits >= MULTI_TRANSACTION_THRESHOLD) return true
+        // ⚠️ 不再数「支付成功」出现次数：支付宝结果页标题与正文各有一处
+        // （`支付成功￥0.01 回首页` + `支付成功`），旧实现把这个单笔页误杀成「非账单页」
+        // （真机 2026-10-17：支付宝付完不弹窗）。
         val labelHits = lines.count { line -> ACCOUNT_LABELS.any { line.contains(it) } }
         if (labelHits >= MULTI_TRANSACTION_THRESHOLD) return true
-        // 单笔详情页一屏只有一个金额；出现两个就说明这是消息流 / 流水列表
-        // （真机：微信支付会话页同屏有 ￥43.00 与 ￥26.00 两条消息卡片）
-        return countAmountLines(lines) >= MULTI_TRANSACTION_THRESHOLD
+        // 单笔页一屏只有一个**不同的**金额；出现两个不同金额才是流水 / 列表。
+        // 结果页的标题 / 正文 / 商户行会重复同一个金额，按「行数」数会误伤。
+        return countDistinctAmounts(lines) >= MULTI_TRANSACTION_THRESHOLD
     }
 
     /**
-     * 一屏里的金额候选数。
+     * 一屏里**不同金额值**的个数。
      *
-     * 只数**带货币符号或带「元」**的金额，不数裸小数（`-43.00` 是详情页大号金额专用的形态），
-     * 并且跳过余额 / 优惠 / 手续费等上下文（[isAmountNoise]），避免详情页被自己的优惠行误伤。
+     * 支付宝结果页 `支付成功￥0.01 回首页 | 0.01 | 楠楠… ￥0.01` 三行都是同一笔 0.01；
+     * 支付消息列表则是 3.00 / 81.00 / 849.53 三个不同值。
      */
-    private fun countAmountLines(lines: List<String>): Int =
-        lines.count { line ->
-            !isAmountNoise(line) &&
-                (SYMBOL_AMOUNT.containsMatchIn(line) || YUAN_AMOUNT.containsMatchIn(line))
-        }
+    private fun countDistinctAmounts(lines: List<String>): Int =
+        lines.asSequence()
+            .mapNotNull { line -> extractAmount(listOf(line))?.second }
+            .toSet()
+            .size
 
     /**
      * 当前页面是不是**单笔**账单 / 交易页。
@@ -677,6 +677,8 @@ object AutoBookParser {
         method = method.substringBefore("更改").trim()
             .trimEnd('，', ',', '、', ';', '；', ' ')
         if (method.isEmpty() || ACCOUNT_LABELS.contains(method)) return null
+        // 兜底：值不能是纯数字（「推荐付款方式」后面紧跟的金额行）
+        if (method.toDoubleOrNull() != null) return null
         return method.take(20)
     }
 
@@ -753,7 +755,10 @@ object AutoBookParser {
     /** 备注行里混进的 UI 文案 / 键盘行（不是用户输入）。 */
     private fun looksLikeUiText(text: String): Boolean =
         text.any { it.isDigit() } ||
-            listOf("付款", "取消", "确定", "删除", "支付", "返回").any { text.contains(it) }
+            listOf(
+                "付款", "取消", "确定", "删除", "支付", "返回",
+                "修改", "添加备注", "备注一下", "收款人可见"
+            ).any { text.contains(it) }
 
     /**
      * 微信「添加备注」弹窗：`添加备注 | 随便 | 取消 确定`。
@@ -764,16 +769,20 @@ object AutoBookParser {
      * @return 用户输入；不是备注弹窗（或只是空备注）返回 null
      */
     fun parseRemarkDialog(lines: List<String>): String? {
+        // 只认「弹窗自己」的紧凑行集：支付宝的转账浮层会和首页文本混在一个窗口里，
+        // 行数一多就分不清哪一行是用户备注（真机 2026-10-17：首页「多云 27℃」被当备注候选）
+        if (lines.size > 8) return null
         val hasTitle = lines.any { it.contains("添加备注") || it.trim() == "备注" }
         if (!hasTitle) return null
         val hasCancel = lines.any { it.contains("取消") }
-        val hasConfirm = lines.any { it.contains("确定") }
+        // 微信按钮是「确定」，支付宝是「确认」——两个都要认
+        val hasConfirm = lines.any { it.contains("确定") || it.contains("确认") }
         if (!hasCancel || !hasConfirm) return null
         for (line in lines) {
             val text = stripZeroWidth(line)
             if (text.isEmpty()) continue
             if (text.contains("添加备注") || text == "备注") continue
-            if (text.contains("取消") || text.contains("确定")) continue
+            if (text.contains("取消") || text.contains("确定") || text.contains("确认")) continue
             if (text in REMARK_PLACEHOLDERS) continue
             return text.take(40)
         }
@@ -785,7 +794,7 @@ object AutoBookParser {
         text.replace(Regex("[\u200B-\u200D\u2060\uFEFF]"), "").trim()
 
     /** 备注行的占位文案（不是用户填的内容）。 */
-    private val REMARK_PLACEHOLDERS = setOf("修改", "添加备注", "添加", "编辑", "填写备注", "无")
+    private val REMARK_PLACEHOLDERS = setOf("修改", "添加备注", "添加", "编辑", "填写备注", "备注一下", "无")
 
     /** 交易时间：优先标签行的值，其次全页首个日期时间串 */
     fun extractTime(lines: List<String>): String? {
@@ -840,6 +849,9 @@ object AutoBookParser {
                 // 标签后面紧跟汉字即视为更长词的片段，跳过；紧跟冒号 / 空格 / 字母数字仍然放行。
                 val after = at + label.length
                 if (after < line.length && isCjkIdeograph(line[after])) continue
+                // 标签前面紧跟汉字 = 它是更长词的后半段（真机 2026-10-17：
+                // 「推荐付款方式」里的「付款方式」被当标签，下一行金额 0.01 被当成付款方式）
+                if (at > 0 && isCjkIdeograph(line[at - 1])) continue
 
                 // 同行右侧：去掉标签本身、冒号与可能多出来的逗号
                 // （微信收银台原文是 `付款方式,已选择零钱,更改 更改`，逗号会粘在值前面）
@@ -901,6 +913,8 @@ object AutoBookParser {
             "支付成功", "付款成功", "交易成功", "交易失败", "完成", "详情", "查看", "确认", "全部账单",
             "账单详情", "立即领取", "联系商家", "更多", "请选择", "添加",
             "松开刷新", "下拉刷新", "搜索", "刷新", "扫一扫", "收付款", "卡包", "首页", "我的", "消息", "操作",
+            // 支付宝结果页的字段标签 / 收尾按钮，不是商户
+            "交易方式", "回首页",
             // 真机实测（微信支付链路各页）：这些是页面按钮 / 状态文案，兜底逻辑会把它们当商户名
             "返回", "关闭", "取消", "支付", "付款", "收款", "转账",
             // 红包结果页上「微信红包」是产品名，不是收款方（真机实测该页没有商户字段）
