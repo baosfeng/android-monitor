@@ -42,8 +42,13 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     private val overlay = AutoBookOverlay(service)
 
-    /** 上次处理事件的时间，用于节流 */
-    private var lastRunAtMs = 0L
+    /**
+     * 事件节流：只有 CONTENT_CHANGED 走 800ms 窗口；WINDOW_STATE_CHANGED 永远放行。
+     *
+     * 真机事故（2026-10-17）：支付成功页的 WINDOW_STATE_CHANGED 在指纹页之后 402ms 到达，
+     * 被旧实现的 800ms 节流丢掉；结果页是静态的、之后不再有事件 —— 那一笔永远不弹窗。
+     */
+    private val eventThrottle = AutoBookEventThrottle()
 
     /**
      * 短期去重表：**同一笔账单短时间只弹一次浮窗**。
@@ -69,6 +74,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
     /** 排队中的草稿与规则：到点复核要用 */
     private var pendingDraft: AutoBookDraft? = null
     private var pendingRule: AutoBookRule? = null
+
+    /**
+     * 付款前页面预采集：收款方 / 付款方式 / 用户备注等结果页拿不到的信息。
+     *
+     * 付款前页面**不弹窗**（用户还没付完），只缓存；等支付成功页到了由
+     * [AutoBookDraftMerger] 合并。有效期见 [AutoBookDraftMerger.PRE_DRAFT_TTL_MS]。
+     */
+    private var preDraft: PrePaymentDraft? = null
 
     /** 延迟到点：复核支付结果页仍是同一笔后再弹 */
     private val showPendingOverlay = Runnable { firePendingOverlay() }
@@ -104,8 +117,13 @@ class AutoBookEngine(private val service: AccessibilityService) {
         val rule = AutoBookRules.forPackage(packageName) ?: return
 
         val now = System.currentTimeMillis()
-        if (now - lastRunAtMs < THROTTLE_MS) return
-        lastRunAtMs = now
+        // 页面切换（WINDOW_STATE_CHANGED）是低频且关键的事件，不能被内容变化节流吃掉；
+        // 否则「指纹页 → 支付成功页」这种 400ms 内的切换会永远漏掉（真机已复现）。
+        if (!eventThrottle.shouldProcess(
+                isWindowStateChange = eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                nowMs = now,
+            )
+        ) return
 
         val lines = collectPageLines(packageName)
         if (lines.isEmpty()) {
@@ -124,6 +142,25 @@ class AutoBookEngine(private val service: AccessibilityService) {
             null
         }
         if (draft == null) {
+            // 付款前页面（转账输入 / 收银台 / 指纹 / 确认付款）：**不弹窗**，只预采集。
+            // 收款方、付款方式、用户备注这些信息只在付款前页面出现；成功页通常只给金额。
+            val pre = try {
+                AutoBookParser.parsePrePayment(rule, lines, now)
+            } catch (e: Exception) {
+                Log.w(TAG, "付款前页面预采集失败: ${e.message}")
+                null
+            }
+            if (pre != null) {
+                // 付款前是分步的（输入页 → 收银台 → 指纹）：按字段累积，后一页不能把备注冲掉
+                preDraft = preDraft?.let { AutoBookDraftMerger.accumulate(it, pre) } ?: pre
+                Log.d(
+                    TAG,
+                    "付款前页面预采集: amount=${pre.amount} merchant=${pre.merchant} " +
+                        "payMethod=${pre.payMethod} remark=${pre.remark}"
+                )
+                return
+            }
+
             // 诊断刚需：能区分「没收到事件」「不是账单页（门禁挡掉）」「是账单页但字段没认出来」。
             // 打印实际文本（截断），否则无法判断是页面结构变了还是节点被系统裁剪。
             val preview = lines.joinToString(" | ").take(400)
@@ -132,19 +169,24 @@ class AutoBookEngine(private val service: AccessibilityService) {
             return
         }
 
+        // 支付成功页 + 付款前页面预采集：成功页空白的字段用预采集补齐（收款方 / 付款方式 / 备注）。
+        // 预采集不在这里清空：成功页可能重复抛事件，清早了后续解析就拿不到备注；
+        // 等浮窗真正展示（[display]）后再清，失败路径还能复用。
+        val merged = AutoBookDraftMerger.merge(draft, preDraft, now)
+
         // 字段取错时的唯一诊断依据，**必须放在去重判定之前** ——
         // 已记账 / 已忽略的笔会提前 return，放在后面就看不到行文本了。
         // （真机踩过：商户名取成「账单详情」「返回 全部账单」，不看原始行根本定位不到）
         Log.d(TAG, "识别到账单页面行: ${lines.joinToString(" | ").take(600)}")
 
-        lastDraft = draft
+        lastDraft = merged
 
         // 浮窗还开着且就是这一笔：不要重建（会把用户正在填的类型/分类冲掉）
         val showing = overlay.currentDraft
-        if (showing != null && showing.sourceId == draft.sourceId) return
+        if (showing != null && showing.sourceId == merged.sourceId) return
 
         // 短期去重：同一笔（已记账 / 已忽略 / 刚弹过）在各自安静期内不再弹
-        val blocked = dedup.blockedReason(draft.dedupKeys, now)
+        val blocked = dedup.blockedReason(merged.dedupKeys, now)
         if (blocked != null) {
             Log.d(TAG, "去重命中，本次不弹窗：$blocked")
             return
@@ -152,12 +194,12 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         Log.i(
             TAG,
-            "识别到账单 channel=${draft.channel} type=${draft.typeLabel} amount=${draft.amount} " +
-                "merchant=${draft.merchant} category=${draft.categoryName} " +
-                "account=${draft.accountName} markers=${draft.markers}"
+            "识别到账单 channel=${merged.channel} type=${merged.typeLabel} amount=${merged.amount} " +
+                "merchant=${merged.merchant} category=${merged.categoryName} " +
+                "account=${merged.accountName} remark=${merged.userRemark} markers=${merged.markers}"
         )
 
-        scheduleOverlay(draft, rule)
+        scheduleOverlay(merged, rule)
     }
 
     /**
@@ -401,6 +443,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
             )
             dedup.markShown(draft.dedupKeys, System.currentTimeMillis())
             shownCount++
+            // 浮窗已展示：预采集完成使命，清掉避免串到之后的同金额交易
+            preDraft = null
         } catch (e: Exception) {
             // 浮窗挂不上（例如系统限制）不能静默：记日志，下一笔还会再试
             Log.e(TAG, "浮窗展示失败: ${e.message}", e)
@@ -473,6 +517,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         showGate.cancel()
         pendingDraft = null
         pendingRule = null
+        preDraft = null
         overlay.hide()
         dedup.clear()
         scope.cancel()
@@ -480,9 +525,6 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     private companion object {
         const val TAG = "AutoBook"
-
-        /** 同包名事件节流窗口：支付结果页会连续抛出多个内容变化事件 */
-        const val THROTTLE_MS = 800L
 
         /**
          * 支付结果页出现后延迟多久再弹确认浮窗。

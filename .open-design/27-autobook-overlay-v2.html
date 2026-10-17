@@ -289,6 +289,7 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
         <div class="meta-row"><span>账户</span><span class="v">微信钱包</span></div>
         <div class="meta-row"><span>支付方式</span><span class="v">零钱</span></div>
         <div class="meta-row"><span>时间</span><span class="v">2026-10-16 12:06:11</span></div>
+        <div class="meta-row"><span>备注</span><span class="v">午饭</span></div>
         <div class="btn-row">
           <button class="btn btn-ghost">忽略</button>
           <button class="btn btn-primary">记一笔</button>
@@ -316,6 +317,7 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
     <tr><th>面板</th><td><code>surface-warm</code> 合成到 <b>不透明</b>（玻璃主题下 <code>#f2f8ff</code>）；顶部圆角 18dp、<code>--elev-sheet</code> 阴影；内容区加 <code>navigationBarsPadding()</code>。</td></tr>
     <tr><th>状态栏</th><td>浮层窗口声明边到边（<code>setFitInsetsTypes(0)</code> + 挖孔区 SHORT_EDGES/ALWAYS），遮罩画到状态栏下方；状态栏图标由系统绘制，目标切浅色。</td></tr>
     <tr><th>动效</th><td>遮罩淡入 180ms；确认卡 220ms 从底部滑入（36px → 0）。关闭即时卸载（保持现状）。</td></tr>
+    <tr><th>备注</th><td>付款前页面预采集到用户备注时（微信「转账说明」/ 支付宝「备注」），浮窗多显示一行「备注 午饭」；没有则整行不显示。成功页通常不展示这行字，靠预采集带过来。</td></tr>
     <tr><th>分类区域</th><td>改为 <b>4 列图标网格</b>（与「记一笔」同一套分类格）：一屏 3 行（默认 12 个分类全可见），分类更多时上下滑，选中项自动滚入可视区；不再用单行 chips，避免最后一个分类被截掉。</td></tr>
     <tr><th>不改的部分</th><td>字段结构与顺序（类型 / 分类 / 账户 / 支付方式 / 时间）、按钮层级（忽略次级 + 记一笔主色）、跟随 8 套主题。</td></tr>
   </table>
