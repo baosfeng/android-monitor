@@ -1,8 +1,6 @@
 package com.bsfeng.monitor.autobook
 
 import android.accessibilityservice.AccessibilityService
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
@@ -61,21 +59,6 @@ class AutoBookEngine(private val service: AccessibilityService) {
     private val dedup = AutoBookDedup()
 
     /**
-     * 「支付结果页稳定 1s 后再弹」门控（纯逻辑见 [AutoBookShowGate]）。
-     *
-     * 真机反馈：支付成功页刚出现浮窗就弹，挡住支付动画、也让人误以为「还没付完就弹」。
-     * 现在识别后先排队 [SHOW_DELAY_MS]，到点复核页面仍是同一笔才真正展示。
-     */
-    private val showGate = AutoBookShowGate()
-
-    /** 延迟任务所在的主线程 Handler（无障碍事件本身就在主线程） */
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    /** 排队中的草稿与规则：到点复核要用 */
-    private var pendingDraft: AutoBookDraft? = null
-    private var pendingRule: AutoBookRule? = null
-
-    /**
      * 付款前页面预采集：收款方 / 付款方式 / 用户备注等结果页拿不到的信息。
      *
      * 付款前页面**不弹窗**（用户还没付完），只缓存；等支付成功页到了由
@@ -85,9 +68,6 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     /** 微信「添加备注」弹窗里用户填的备注（弹窗没有金额，单独捕获后并进预采集）。 */
     private var pendingRemark: String? = null
-
-    /** 延迟到点：复核支付结果页仍是同一笔后再弹 */
-    private val showPendingOverlay = Runnable { firePendingOverlay() }
 
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
@@ -220,55 +200,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 "account=${merged.accountName} remark=${merged.userRemark} markers=${merged.markers}"
         )
 
-        scheduleOverlay(merged, rule)
-    }
-
-    /**
-     * 识别成功后不立刻弹，先排队 [SHOW_DELAY_MS]（真机反馈：支付结果页刚出现就弹太早）。
-     *
-     * ⚠️ 同一笔重复事件**不能重置计时**：支付结果页会连续抛 CONTENT_CHANGED，
-     * 若每次事件都重新 postDelayed，浮窗会被无限推迟（[AutoBookShowGate] 负责挡住这种情况）。
-     */
-    private fun scheduleOverlay(draft: AutoBookDraft, rule: AutoBookRule) {
-        if (!showGate.schedule(draft.sourceId)) return
-        pendingDraft = draft
-        pendingRule = rule
-        mainHandler.removeCallbacks(showPendingOverlay)
-        mainHandler.postDelayed(showPendingOverlay, SHOW_DELAY_MS)
-        Log.d(TAG, "账单已识别，${SHOW_DELAY_MS}ms 后复核页面并弹窗: ${draft.sourceId}")
-    }
-
-    /**
-     * 延迟到点：页面还在就再采集一次（字段可能更全）；页面已经关了也照弹。
-     *
-     * 真机（2026-10-17 16:14:59）：支付成功页出现后用户马上点「完成」回聊天页，
-     * 1s 复核时页面已经不在 —— 但识别成功本身已经证明这笔支付发生过，不能因为
-     * 页面关了就把账丢掉。旧实现「复核失败就取消」正是「支付完成也不出现」的最后一环。
-     */
-    private fun firePendingOverlay() {
-        val draft = pendingDraft ?: return
-        val rule = pendingRule ?: return
-        pendingDraft = null
-        pendingRule = null
-        if (!showGate.consume(draft.sourceId)) return
-
-        val recheck = try {
-            AutoBookParser.parse(rule, collectPageLines(rule.packageName), System.currentTimeMillis())
-        } catch (e: Exception) {
-            Log.w(TAG, "延迟复核解析失败，按排队草稿继续弹窗: ${e.message}")
-            null
-        }
-        val finalDraft = if (recheck != null && recheck.sourceId == draft.sourceId) {
-            recheck
-        } else {
-            // 成功页被用户点「完成」关掉 / 自动返回聊天页：识别已经成立，不能丢账
-            Log.i(TAG, "延迟复核：结果页已离开，仍按已识别的结果弹窗: ${draft.sourceId}")
-            draft
-        }
-        // 复核期间浮窗可能已经被别的路径弹出来了，避免重复展示
-        if (overlay.currentDraft?.sourceId == finalDraft.sourceId) return
-        Log.d(TAG, "延迟复核通过，弹窗: ${finalDraft.sourceId}")
-        showOverlay(finalDraft)
+        // 检测到支付成功页就立即展示（2026-10-17 用户要求去掉 1s 延迟）：
+        // 付款前页面已经由 PRE_PAY_WORDS 挡在门外，不会再出现「没付完就弹」。
+        showOverlay(merged)
     }
 
     /**
@@ -537,12 +471,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
         }
     }
 
-    /** 服务销毁时清理浮窗、延迟任务、去重表与协程 */
+    /** 服务销毁时清理浮窗、预采集、去重表与协程 */
     fun release() {
-        mainHandler.removeCallbacks(showPendingOverlay)
-        showGate.cancel()
-        pendingDraft = null
-        pendingRule = null
         preDraft = null
         pendingRemark = null
         overlay.hide()
@@ -552,14 +482,6 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     private companion object {
         const val TAG = "AutoBook"
-
-        /**
-         * 支付结果页出现后延迟多久再弹确认浮窗。
-         *
-         * 用户原话：「我当前还没完成支付，需要 1s 之后再出现」—— 结果页刚出现时先让支付动画走完，
-         * 到点再复核页面（见 [firePendingOverlay]），页面变了就不弹。
-         */
-        const val SHOW_DELAY_MS = 1000L
 
         /** 落库来源前缀，最终 source 形如 auto_alipay / auto_wechat */
         const val SOURCE_PREFIX = "auto_"
