@@ -3,7 +3,6 @@ package com.bsfeng.monitor.autobook
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,11 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -24,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,15 +35,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.Category
-import com.bsfeng.monitor.finance.ui.categorySlotOf
+import com.bsfeng.monitor.finance.ui.categoryColorOf
+import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorRadius
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
-import com.bsfeng.monitor.ui.theme.categoryDot
 import com.bsfeng.monitor.ui.theme.opaquePanel
 
 /**
@@ -151,22 +157,14 @@ fun AutoBookConfirmSheet(
 
         Divider()
 
-        // 分类
+        // 分类：4 列图标网格（与「记一笔」同一套分类格）。
+        // 不再用单行 chips —— 一屏摆得下更多、不会把最后一个字截掉，选中项也能一眼看到。
         Label("分类")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm)
-        ) {
-            categories.take(12).forEach { item ->
-                CategoryChip(
-                    name = item.name,
-                    dotIndex = categorySlotOf(item.name),
-                    selected = item.name == category
-                ) { category = item.name }
-            }
-        }
+        CategoryGrid(
+            categories = categories,
+            selectedName = category,
+            onSelect = { category = it },
+        )
 
         Divider()
 
@@ -280,45 +278,76 @@ private fun SegmentItem(
     }
 }
 
+/**
+ * 分类网格：4 列，图标 + 名称，一屏约 2.5 行（露出第三行一角提示还能滑）。
+ *
+ * 与「记一笔」的 [com.bsfeng.monitor.finance.ui] 分类抽屉同一套视觉：图标外描边 = 选中，
+ * 右上角没有横向滚动条，也不会把长分类名截在屏幕外。
+ */
 @Composable
-private fun CategoryChip(
-    name: String,
-    dotIndex: Int,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun CategoryGrid(
+    categories: List<Category>,
+    selectedName: String,
+    onSelect: (String) -> Unit,
 ) {
     val tokens = LocalDesignTokens.current
-    Row(
+    val gridState = rememberLazyGridState()
+    // 分类很多时选中项可能在首屏之外：一打开就把它滚进可视区
+    LaunchedEffect(selectedName, categories) {
+        val index = categories.indexOfFirst { it.name == selectedName }
+        if (index >= 0) gridState.scrollToItem(index)
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(4),
+        state = gridState,
         modifier = Modifier
-            .clip(RoundedCornerShape(MonitorRadius.circle))
-            .background(if (selected) tokens.accent.copy(alpha = 0.12f) else tokens.fg.copy(alpha = 0.06f))
-            .then(
-                if (selected) {
-                    Modifier.border(
-                        width = 1.dp,
-                        color = tokens.accent.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(MonitorRadius.circle)
-                    )
-                } else {
-                    Modifier
-                }
+            .fillMaxWidth()
+            // 3 行完整可见（默认 12 个分类一屏摆下）；分类更多时第四行探出一角提示可滑
+            .heightIn(max = 176.dp),
+        horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(MonitorSpacing.sm),
+    ) {
+        items(categories, key = { it.id }) { item ->
+            CategoryGridCell(
+                name = item.name,
+                selected = item.name == selectedName,
+                onClick = { onSelect(item.name) },
             )
-            .clickable(onClick = onClick)
-            .padding(start = 9.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        }
+    }
+}
+
+@Composable
+private fun CategoryGridCell(
+    name: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val tokens = LocalDesignTokens.current
+    val shape = RoundedCornerShape(MonitorRadius.md)
+    Column(
+        modifier = Modifier
+            .clip(shape)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(tokens.categoryDot(dotIndex))
-        )
-        Spacer(Modifier.width(6.dp))
+                .clip(shape)
+                .border(2.dp, if (selected) tokens.accent else Color.Transparent, shape)
+                .padding(2.dp),
+        ) {
+            CategoryIcon(name = name, color = categoryColorOf(name), size = 30.dp)
+        }
+        Spacer(Modifier.height(MonitorSpacing.xxs))
         Text(
             text = name,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) tokens.accent else tokens.fg,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) tokens.accentText else tokens.fg2,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }

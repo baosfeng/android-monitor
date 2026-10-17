@@ -11,6 +11,10 @@
   --text-xs:12px; --text-sm:14px; --text-base:17px; --text-xl:28px; --text-2xl:40px;
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
   --radius-sm:8px; --radius-md:12px; --radius-lg:18px; --radius-pill:980px;
+  --chart-1:#e8833a; --chart-2:#3b82f6; --chart-3:#8b5cf6; --chart-4:#10b981;
+  --chart-5:#ef4444; --chart-6:#d9a832; --chart-7:#06b6d4; --chart-8:#ec4899;
+  --chart-9:#84cc16; --chart-10:#6366f1; --chart-11:#14b8a6; --chart-12:#f97316;
+  --chart-13:#a855f7; --chart-14:#0ea5e9; --chart-15:#22c55e; --chart-16:#eab308;
   --font-body:-apple-system,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
   --font-mono:"SF Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
@@ -123,13 +127,24 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
                 color:var(--fg2);font-weight:500}
 .segmented .seg.is-on{background:#fff;color:var(--fg);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.10)}
 .phone.glass .segmented .seg.is-on{background:rgba(255,255,255,.92)}
-.chips{display:flex;gap:8px;overflow:hidden}
-.chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:7px 13px 7px 9px;
-      border-radius:var(--radius-pill);background:var(--chip-bg);color:var(--fg2);font-size:14px;white-space:nowrap}
-.chip i{width:8px;height:8px;border-radius:50%;display:block}
-.chip.is-on{color:var(--accent);font-weight:600;background:rgba(0,113,227,.10);
-            box-shadow:inset 0 0 0 1px rgba(0,113,227,.35)}
-.phone.glass .chip.is-on{background:rgba(62,110,201,.12);box-shadow:inset 0 0 0 1px rgba(62,110,201,.4)}
+/* 分类：4 列图标网格（与「记一笔」同一套分类格） */
+.cat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 8px;
+          max-height:172px;overflow-y:auto;padding-bottom:2px;scrollbar-width:none}
+.cat-grid::-webkit-scrollbar{display:none}
+.cat-item{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:transparent;
+          padding:0;font:inherit;color:var(--fg2);cursor:pointer;min-width:0}
+.cat-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+          background:color-mix(in srgb,var(--k,var(--fg)) 12%,transparent);
+          color:color-mix(in srgb,var(--k,var(--fg2)) 78%,var(--fg))}
+.cat-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;
+              stroke-linecap:round;stroke-linejoin:round}
+.cat-item.is-on{color:var(--accent)}
+.cat-item.is-on .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+.cat-name{font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.s1{--k:var(--chart-1)} .s2{--k:var(--chart-2)} .s3{--k:var(--chart-3)} .s4{--k:var(--chart-4)}
+.s5{--k:var(--chart-5)} .s6{--k:var(--chart-6)} .s7{--k:var(--chart-7)} .s8{--k:var(--chart-8)}
+.s9{--k:var(--chart-9)} .s10{--k:var(--chart-10)} .s11{--k:var(--chart-11)} .s12{--k:var(--chart-12)}
+.s13{--k:var(--chart-13)} .s14{--k:var(--chart-14)} .s15{--k:var(--chart-15)} .s16{--k:var(--chart-16)}
 .meta-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:7px 0}
 .meta-row .v{color:var(--fg2);font-weight:500}
 .btn-row{display:flex;gap:10px;margin-top:20px}
@@ -214,13 +229,7 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
         </div>
         <div class="sep"></div>
         <div class="label">分类</div>
-        <div class="chips">
-          <span class="chip is-on"><i style="background:#10b981"></i>日用</span>
-          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
-          <span class="chip"><i style="background:#e8833a"></i>餐饮</span>
-          <span class="chip"><i style="background:#3b82f6"></i>出行</span>
-          <span class="chip"><i style="background:#ef4444"></i>零食</span>
-        </div>
+        <div class="cat-grid" data-selected="日用" data-od-id="cat-grid-alipay"></div>
         <div class="sep"></div>
         <div class="meta-row"><span>账户</span><span class="v">支付宝</span></div>
         <div class="meta-row"><span>支付方式</span><span class="v">余额宝</span></div>
@@ -275,13 +284,7 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
         </div>
         <div class="sep"></div>
         <div class="label">分类</div>
-        <div class="chips">
-          <span class="chip is-on"><i style="background:#e8833a"></i>餐饮</span>
-          <span class="chip"><i style="background:#ef4444"></i>零食</span>
-          <span class="chip"><i style="background:#8b5cf6"></i>购物</span>
-          <span class="chip"><i style="background:#84cc16"></i>休闲娱乐</span>
-          <span class="chip"><i style="background:#64748b"></i>其他</span>
-        </div>
+        <div class="cat-grid" data-selected="餐饮" data-od-id="cat-grid-wechat"></div>
         <div class="sep"></div>
         <div class="meta-row"><span>账户</span><span class="v">微信钱包</span></div>
         <div class="meta-row"><span>支付方式</span><span class="v">零钱</span></div>
@@ -313,6 +316,7 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
     <tr><th>面板</th><td><code>surface-warm</code> 合成到 <b>不透明</b>（玻璃主题下 <code>#f2f8ff</code>）；顶部圆角 18dp、<code>--elev-sheet</code> 阴影；内容区加 <code>navigationBarsPadding()</code>。</td></tr>
     <tr><th>状态栏</th><td>浮层窗口声明边到边（<code>setFitInsetsTypes(0)</code> + 挖孔区 SHORT_EDGES/ALWAYS），遮罩画到状态栏下方；状态栏图标由系统绘制，目标切浅色。</td></tr>
     <tr><th>动效</th><td>遮罩淡入 180ms；确认卡 220ms 从底部滑入（36px → 0）。关闭即时卸载（保持现状）。</td></tr>
+    <tr><th>分类区域</th><td>改为 <b>4 列图标网格</b>（与「记一笔」同一套分类格）：一屏 3 行（默认 12 个分类全可见），分类更多时上下滑，选中项自动滚入可视区；不再用单行 chips，避免最后一个分类被截掉。</td></tr>
     <tr><th>不改的部分</th><td>字段结构与顺序（类型 / 分类 / 账户 / 支付方式 / 时间）、按钮层级（忽略次级 + 记一笔主色）、跟随 8 套主题。</td></tr>
   </table>
 </div>
@@ -332,6 +336,45 @@ body{margin:0;background:var(--page-bg);font-family:var(--font-body);color:#1d1d
     }, 1000);
   }
   document.getElementById('replay').addEventListener('click', replay);
+})();
+</script>
+
+<script>
+/* 分类网格数据：与 res 里的 22 个线描图标同源，这里取默认支出分类前 16 个做演示 */
+(function () {
+  var CATEGORIES = [
+    { name: '餐饮', slot: 1, svg: '<path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/>' },
+    { name: '出行', slot: 2, svg: '<rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/>' },
+    { name: '购物', slot: 3, svg: '<path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/>' },
+    { name: '日用', slot: 4, svg: '<path d="M10 2.6h4v3.6l2.2 3v12.2H7.8V9.2l2.2-3z"/><path d="M7.8 13.6h8.4"/>' },
+    { name: '零食', slot: 5, svg: '<path d="M6.8 10.2a5.2 5.2 0 0 1 10.4 0z"/><path d="M6.8 10.2h10.4L12 21.4z"/>' },
+    { name: '水果', slot: 6, svg: '<path d="M12 7.6c-4.2 0-7.2 2.6-7.2 6.6s3 6.8 7.2 6.8 7.2-2.8 7.2-6.8-3-6.6-7.2-6.6z"/><path d="M12 7.6V4.2M12 4.2c1.4-1.6 3.4-1.2 3.4-1.2"/>' },
+    { name: '水电', slot: 7, svg: '<path d="M12 2.6c3.2 4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.8-7 6-11z"/>' },
+    { name: '就医', slot: 8, svg: '<rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/>' },
+    { name: '通讯', slot: 9, svg: '<rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.6 5.6h2.8M10.8 18.4h2.4"/>' },
+    { name: '衣物', slot: 10, svg: '<path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/>' },
+    { name: '美妆', slot: 11, svg: '<rect x="9" y="11.2" width="6" height="10.2" rx="1.4"/><path d="M9.8 11.2V7.6c0-1.3 1-2.6 2.2-2.6s2.2 1.3 2.2 2.6v3.6"/>' },
+    { name: '房租还贷', slot: 12, svg: '<path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/><circle cx="12" cy="14.6" r="1.8"/>' },
+    { name: '休闲娱乐', slot: 13, svg: '<rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/>' },
+    { name: '打车', slot: 14, svg: '<path d="M3.2 15.6v-4.2l2.4-4.8h12.8l2.4 4.8v4.2z"/><circle cx="7.2" cy="16.4" r="1.8"/><circle cx="16.8" cy="16.4" r="1.8"/><path d="M5.6 11.4h12.8"/>' },
+    { name: '住宿', slot: 15, svg: '<path d="M3.2 19.4V10h11.6a4.4 4.4 0 0 1 4.4 4.4v5"/><path d="M3.2 15.2h17.6"/><circle cx="7.6" cy="11.6" r="2"/>' },
+    { name: '旅游度假', slot: 16, svg: '<path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/>' }
+  ];
+  document.querySelectorAll('.cat-grid').forEach(function (grid) {
+    var selected = grid.getAttribute('data-selected');
+    CATEGORIES.forEach(function (cat) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cat-item' + (cat.name === selected ? ' is-on' : '');
+      btn.innerHTML = '<span class="cat-icon s' + cat.slot + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + cat.svg + '</svg></span>' +
+                      '<span class="cat-name">' + cat.name + '</span>';
+      btn.addEventListener('click', function () {
+        grid.querySelectorAll('.cat-item').forEach(function (x) { x.classList.remove('is-on'); });
+        btn.classList.add('is-on');
+      });
+      grid.appendChild(btn);
+    });
+  });
 })();
 </script>
 </body>
