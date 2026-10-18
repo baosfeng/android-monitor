@@ -2,12 +2,14 @@ package com.bsfeng.monitor.transfer.service
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import android.os.StatFs
 import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.domain.transfer.CONFIRM_TIMEOUT_MS
+import com.bsfeng.monitor.domain.transfer.NO_PROGRESS_TIMEOUT_MS
 import com.bsfeng.monitor.domain.transfer.DeletedTask
 import com.bsfeng.monitor.domain.transfer.DeviceTypes
 import com.bsfeng.monitor.domain.transfer.PeerDevice
@@ -19,6 +21,8 @@ import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskDeletion
 import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
+import com.bsfeng.monitor.data.DatabaseHelper
+import com.bsfeng.monitor.transfer.data.TransferTaskStore
 import com.bsfeng.monitor.transfer.discovery.DeviceRegistry
 import com.bsfeng.monitor.transfer.discovery.UdpDiscoveryService
 import com.bsfeng.monitor.transfer.transport.ApiResponse
@@ -67,6 +71,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class TransferEngine private constructor(
     private val appContext: Context,
     private val confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS,
+    private val noProgressTimeoutMs: Long = NO_PROGRESS_TIMEOUT_MS,
+    private val tickMs: Long = DEVICE_TICK_MS,
 ) : TransferRoutes {
 
     private val settings = TransferSettings(appContext)
@@ -74,8 +80,14 @@ class TransferEngine private constructor(
     private val downloads = DownloadsSink(appContext)
     private val client = MiniHttpClient()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val taskStore: TransferTaskStore by lazy {
+        TransferTaskStore(DatabaseHelper.getInstance(appContext))
+    }
 
     private val started = AtomicBoolean(false)
+
+    /** 历史是否已从库中恢复（首次进入前台 / 首次启动服务时加载一次）。 */
+    private val historyLoaded = AtomicBoolean(false)
 
     @Volatile
     private var server: MiniHttpServer? = null
@@ -159,11 +171,22 @@ class TransferEngine private constructor(
                 }
                 _discoverable.value = settings.discoverable
                 scope.launch { tickerLoop() }
+                historyLoaded.set(true)
+                scope.launch { loadPersistedHistory() }
                 _running.value = true
                 Log.i(TAG, "传送服务已启动，HTTP 端口 $boundPort")
             } else {
                 started.set(false)
             }
+        } else if (ServiceModePolicy.shouldRunDiscovery(
+                backgroundReceive = settings.backgroundReceive,
+                appVisible = appVisible,
+                discoverable = settings.discoverable,
+            )
+        ) {
+            // 服务已在运行：补齐发现线程。首次启动时 App 可见性可能晚于点击，
+            // 不补这一步会出现「HTTP 端口在跑、组播/广播却不发」的半启动状态。
+            ensureDiscovery()
         }
         return localPort
     }
@@ -192,15 +215,30 @@ class TransferEngine private constructor(
         settings.discoverable = enabled
         _discoverable.value = enabled
         if (!started.get()) return
-        val udp = discovery
         if (enabled &&
             ServiceModePolicy.shouldRunDiscovery(settings.backgroundReceive, appVisible, discoverable = true)
         ) {
-            if (udp != null && !udp.isRunning()) udp.start(scope)
+            // 发现线程可能尚未创建（服务启动时 App 可见性还是 false），统一走 ensureDiscovery
+            ensureDiscovery()
         } else {
-            udp?.stop()
+            discovery?.stop()
             discovery = null
             refreshDevices()
+        }
+    }
+
+    /**
+     * 修改本机名称（对端设备列表里显示的名字）。
+     *
+     * 发现线程在构造时取别名，因此改名后重建一次公告线程，下一轮公告即生效。
+     */
+    fun setAlias(value: String) {
+        settings.alias = value
+        if (!started.get()) return
+        discovery?.stop()
+        discovery = null
+        if (ServiceModePolicy.shouldRunDiscovery(settings.backgroundReceive, appVisible, settings.discoverable)) {
+            ensureDiscovery()
         }
     }
 
@@ -212,6 +250,11 @@ class TransferEngine private constructor(
      */
     fun setAppVisible(visible: Boolean) {
         appVisible = visible
+        // 历史任务与「接收开关」无关：进入前台就恢复一次。
+        // 否则重启 App 后要先去点「开启接收」才能看到上次的传输记录（用户会以为记录丢了）。
+        if (visible && historyLoaded.compareAndSet(false, true)) {
+            scope.launch { loadPersistedHistory() }
+        }
         val shouldDiscover = ServiceModePolicy.shouldRunDiscovery(
             backgroundReceive = settings.backgroundReceive,
             appVisible = visible,
@@ -261,10 +304,43 @@ class TransferEngine private constructor(
 
     private suspend fun tickerLoop() {
         while (scope.isActive) {
-            delay(DEVICE_TICK_MS)
+            delay(tickMs)
             refreshDevices()
+            enforceTimeouts()
             pruneExpiredSessions()
         }
+    }
+
+    /**
+     * 超时收敛：确认超时（4007）与「传输中长时间无进展」都统一落为 FAILED，
+     * 任务随之从「进行中」移出（模块的单一状态出口，UI 不再自己判断）。
+     */
+    private fun enforceTimeouts() {
+        val now = System.currentTimeMillis()
+        sessions.values.toList().forEach { session ->
+            when {
+                // 确认超时保持任务 message = "failed"（协议线值），沿用既有口径
+                session.state == TransferStatus.AWAITING_CONFIRM && now >= session.confirmDeadlineMs ->
+                    failSession(session, TransferErrorCode.CONFIRM_TIMEOUT, "")
+
+                session.state == TransferStatus.TRANSFERRING &&
+                    now - session.lastProgressAtMs >= noProgressTimeoutMs ->
+                    failSession(session, TransferErrorCode.CONFIRM_TIMEOUT, "长时间无进展")
+            }
+        }
+    }
+
+    /** 会话失败收敛（幂等）：改状态 + 写任务行 + 清 PIN 弹层。 */
+    private fun failSession(session: IncomingSession, code: Int, message: String) {
+        if (session.state.isTerminal) return
+        session.state = TransferStatus.FAILED
+        session.failureCode = code
+        session.failureMessage = message
+        session.pin = null
+        // 先同步任务行再清 PIN 弹层：观察者看到弹层消失时任务状态已经是最终态
+        refreshSessionTasks(session)
+        if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
+        Log.i(TAG, "会话 ${session.sessionId} 失败：${message.ifBlank { "确认超时" }}（$code）")
     }
 
     private fun refreshDevices() {
@@ -392,6 +468,7 @@ class TransferEngine private constructor(
     }
 
     override suspend fun offerStatus(sessionId: String): ApiResponse {
+        enforceTimeouts()
         val session = sessions[sessionId] ?: return ApiResponse.error(TransferErrorCode.SESSION_EXPIRED)
         return ApiResponse.ok(
             JSONObject().apply {
@@ -460,6 +537,7 @@ class TransferEngine private constructor(
                     onChunk = { copied ->
                         val received = targetOffset + copied
                         incoming.received = received
+                        session.lastProgressAtMs = System.currentTimeMillis()
                         patchTask(sessionId, fileId) {
                             val now = System.currentTimeMillis()
                             it.copy(
@@ -515,6 +593,9 @@ class TransferEngine private constructor(
         val actualSha = StreamCopier.sha256Of(part)
         if (!actualSha.equals(incoming.file.sha256, ignoreCase = true) && incoming.file.sha256.isNotBlank()) {
             part.delete()
+            // 校验失败是终态：立刻落 FAILED/4005，而不是让任务挂在「进行中」等 60s 无进展超时
+            session.state = TransferStatus.FAILED
+            failTask(session.sessionId, incoming.file.fileId, TransferErrorCode.SHA256_MISMATCH, "文件校验失败")
             return@withContext ApiResponse.error(TransferErrorCode.SHA256_MISMATCH)
         }
         val displayName = StreamCopier.uniqueFileName(
@@ -522,9 +603,17 @@ class TransferEngine private constructor(
             downloads.existingNames()::contains,
         )
         val uri = downloads.createPending(displayName, incoming.file.mime)
-            ?: return@withContext ApiResponse.error(TransferErrorCode.DISK_FULL, "无法创建目标文件")
+            ?: run {
+                session.state = TransferStatus.FAILED
+                failTask(session.sessionId, incoming.file.fileId, TransferErrorCode.DISK_FULL, "无法创建目标文件")
+                return@withContext ApiResponse.error(TransferErrorCode.DISK_FULL, "无法创建目标文件")
+            }
         val output = downloads.openOutput(uri)
-            ?: return@withContext ApiResponse.error(TransferErrorCode.DISK_FULL, "无法打开目标文件")
+            ?: run {
+                session.state = TransferStatus.FAILED
+                failTask(session.sessionId, incoming.file.fileId, TransferErrorCode.DISK_FULL, "无法打开目标文件")
+                return@withContext ApiResponse.error(TransferErrorCode.DISK_FULL, "无法打开目标文件")
+            }
         try {
             part.inputStream().use { input ->
                 output.use { out -> StreamCopier.copy(input, out, incoming.file.size) }
@@ -536,6 +625,8 @@ class TransferEngine private constructor(
         } catch (e: IOException) {
             downloads.delete(uri)
             Log.w(TAG, "落盘失败: ${e.message}")
+            session.state = TransferStatus.FAILED
+            failTask(session.sessionId, incoming.file.fileId, TransferErrorCode.DISK_FULL, "落盘失败")
             return@withContext ApiResponse.error(TransferErrorCode.DISK_FULL, "落盘失败：${e.message}")
         }
 
@@ -578,6 +669,7 @@ class TransferEngine private constructor(
                     file = TransferFile("f${index + 1}", source.name, source.size, source.sha256, source.mime),
                     status = TransferStatus.OFFERED,
                     updatedAtMs = System.currentTimeMillis(),
+                    createdAtMs = System.currentTimeMillis(),
                 ),
             )
         }
@@ -907,6 +999,11 @@ class TransferEngine private constructor(
         ) ?: return null
         _tasks.update { TransferTaskDeletion.without(it, deleted) }
         deletedSnapshots[deleted.deletionId] = deleted
+        scope.launch {
+            runCatching {
+                taskStore.delete(deleted.task.sessionId, deleted.task.file.fileId)
+            }.onFailure { Log.w(TAG, "任务历史删除失败: ${it.message}") }
+        }
         return deleted
     }
 
@@ -919,6 +1016,7 @@ class TransferEngine private constructor(
     fun undoDelete(deletionId: String): DeletedTask? {
         val deleted = deletedSnapshots.remove(deletionId) ?: return null
         _tasks.update { TransferTaskDeletion.restore(it, deleted) }
+        persistTask(deleted.task, publishedFiles[taskKey(deleted.task.sessionId, deleted.task.file.fileId)]?.toString())
         return deleted
     }
 
@@ -959,6 +1057,7 @@ class TransferEngine private constructor(
                     file = it,
                     status = TransferStatus.OFFERED,
                     updatedAtMs = System.currentTimeMillis(),
+                    createdAtMs = System.currentTimeMillis(),
                 ),
             )
         }
@@ -972,6 +1071,7 @@ class TransferEngine private constructor(
         }
         session.state = TransferStatus.TRANSFERRING
         session.pin = null
+        session.lastProgressAtMs = System.currentTimeMillis()
         if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
         refreshSessionTasks(session)
         return approvedResponse(session, persistedPairKey)
@@ -1037,6 +1137,10 @@ class TransferEngine private constructor(
     fun clearReceivedHistory(): Int {
         val removed = downloads.clearAll()
         publishedFiles.clear()
+        scope.launch {
+            runCatching { taskStore.deleteReceived() }
+                .onFailure { Log.w(TAG, "接收历史清空失败: ${it.message}") }
+        }
         _tasks.update { list ->
             list.filterNot { it.direction == TransferDirection.RECV && it.status == TransferStatus.COMPLETED }
         }
@@ -1074,9 +1178,11 @@ class TransferEngine private constructor(
             ) {
                 session.state = TransferStatus.FAILED
                 session.pin = null
-                if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
+                // 先落任务终态、再收起弹层：外部（UI / 测试）看到弹层消失时任务一定已经不在「进行中」，
+                // 不会出现「弹层没了、卡片还显示等待确认」的中间态。
                 // 超时只静默收起 PIN 弹层：不播失败音、不震（避免打扰）
                 refreshSessionTasks(session, notifyFailure = false)
+                if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
                 Log.i(TAG, "会话 ${session.sessionId} 确认超时（${confirmTimeoutMs}ms）")
             }
         }
@@ -1097,11 +1203,15 @@ class TransferEngine private constructor(
                     status = session.state,
                     receivedBytes = incoming.received,
                     errorCode = if (session.state == TransferStatus.FAILED) {
-                        TransferErrorCode.CONFIRM_TIMEOUT
+                        session.failureCode ?: TransferErrorCode.CONFIRM_TIMEOUT
                     } else {
                         null
                     },
-                    message = session.state.wire,
+                    message = if (session.state == TransferStatus.FAILED) {
+                        session.failureMessage.ifBlank { session.state.wire }
+                    } else {
+                        session.state.wire
+                    },
                     updatedAtMs = System.currentTimeMillis(),
                 )
             }
@@ -1233,8 +1343,11 @@ class TransferEngine private constructor(
                 it.sessionId == task.sessionId && it.file.fileId == task.file.fileId
             }
             if (index < 0) {
+                maybePersist(previous = null, updated = task)
                 listOf(task) + current
             } else {
+                val previous = current[index]
+                maybePersist(previous = previous, updated = task)
                 current.toMutableList().also { it[index] = task }
             }
         }
@@ -1252,8 +1365,59 @@ class TransferEngine private constructor(
             if (index < 0) {
                 current
             } else {
-                current.toMutableList().also { it[index] = transform(it[index]) }
+                val previous = current[index]
+                val updated = transform(previous)
+                maybePersist(previous = previous, updated = updated)
+                current.toMutableList().also { it[index] = updated }
             }
+        }
+    }
+
+    /**
+     * 任务历史落库：**首次出现**与**进入终态**各写一次，进度推进不写库
+     * （64 KiB 一块的进度每块写一次 SQLite 不划算，重启后未完成的任务按失败处理）。
+     */
+    private fun maybePersist(previous: TransferTask?, updated: TransferTask) {
+        val firstSeen = previous == null
+        val becameTerminal = updated.status.isTerminal && (previous == null || !previous.status.isTerminal)
+        if (!firstSeen && !becameTerminal) return
+        val uri = publishedFiles[taskKey(updated.sessionId, updated.file.fileId)]?.toString()
+        persistTask(updated, uri)
+    }
+
+    private fun persistTask(task: TransferTask, fileUri: String?) {
+        scope.launch {
+            runCatching { taskStore.upsert(TransferTaskStore.Entry(task = task, fileUri = fileUri)) }
+                .onFailure { Log.w(TAG, "任务历史写库失败: ${it.message}") }
+        }
+    }
+
+    /** 启动时加载历史（终态保留；崩溃残留的非终态按失败展示）。 */
+    internal suspend fun loadPersistedHistory() {
+        val entries = runCatching { withContext(Dispatchers.IO) { taskStore.loadRecent() } }
+            .onFailure { Log.w(TAG, "任务历史读取失败: ${it.message}") }
+            .getOrDefault(emptyList())
+        if (entries.isEmpty()) return
+        val restored = entries.map { entry ->
+            val task = entry.task
+            if (task.status.isTerminal) {
+                task
+            } else {
+                task.copy(
+                    status = TransferStatus.FAILED,
+                    errorCode = TransferErrorCode.SESSION_EXPIRED,
+                    message = "上次未完成",
+                    updatedAtMs = System.currentTimeMillis(),
+                )
+            }
+        }
+        _tasks.update { current ->
+            val existing = current.map { it.sessionId to it.file.fileId }.toSet()
+            restored.filterNot { (it.sessionId to it.file.fileId) in existing } + current
+        }
+        entries.forEach { entry ->
+            val uri = entry.fileUri?.let { runCatching { it.toUri() }.getOrNull() }
+            if (uri != null) publishedFiles[taskKey(entry.task.sessionId, entry.task.file.fileId)] = uri
         }
     }
 
@@ -1309,6 +1473,13 @@ class TransferEngine private constructor(
     ) {
         var pin: String? = null
         var confirmDeadlineMs: Long = System.currentTimeMillis() + CONFIRM_TIMEOUT_MS
+
+        /** 最近一次字节进展时刻（「长时间无进展」判定）。 */
+        var lastProgressAtMs: Long = createdAtMs
+
+        /** 失败错误码 / 文案（供任务行展示）。 */
+        var failureCode: Int? = null
+        var failureMessage: String = ""
     }
 
     private class IncomingFile(val file: TransferFile) {
@@ -1392,7 +1563,10 @@ class TransferEngine private constructor(
         internal fun createForTesting(
             context: Context,
             confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS,
-        ): TransferEngine = TransferEngine(context.applicationContext, confirmTimeoutMs)
+            noProgressTimeoutMs: Long = NO_PROGRESS_TIMEOUT_MS,
+            tickMs: Long = DEVICE_TICK_MS,
+        ): TransferEngine =
+            TransferEngine(context.applicationContext, confirmTimeoutMs, noProgressTimeoutMs, tickMs)
 
         /**
          * 单例复位（仅供测试）。

@@ -4,6 +4,7 @@ import com.bsfeng.monitor.domain.transfer.OFFLINE_AFTER_MS
 import com.bsfeng.monitor.domain.transfer.OFFER_REPLY_WINDOW_MS
 import com.bsfeng.monitor.domain.transfer.PeerDevice
 import com.bsfeng.monitor.domain.transfer.REMOVE_AFTER_MS
+import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
 
 /**
  * 设备表与离线判定（协议 §3：15s 未收到公告标记离线，60s 未收到从列表移除）。
@@ -32,7 +33,7 @@ class DeviceRegistry(
     fun onSeen(message: DiscoveryMessage, hostAddress: String, nowMs: Long): PeerDevice {
         val device = PeerDevice(
             deviceId = message.deviceId,
-            alias = message.alias.ifBlank { message.deviceId },
+            alias = message.alias.trim().ifBlank { UNKNOWN_PEER_ALIAS },
             deviceType = message.deviceType,
             hostAddress = hostAddress,
             port = message.port,
