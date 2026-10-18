@@ -238,6 +238,8 @@ data class TransferTask(
     val errorCode: Int? = null,
     val message: String = "",
     val updatedAtMs: Long = 0L,
+    /** 任务创建时刻（持久化排序用；0 = 未记录）。 */
+    val createdAtMs: Long = 0L,
 ) {
     /** 0f..1f；总量未知（0）时返回 0。 */
     val fraction: Float
