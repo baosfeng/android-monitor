@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 局域网互传：接收组播必须持有 MulticastLock（协议 §3 的 Android 特有约束） -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- 局域网互传：端口常驻前台服务（dataSync 类型，targetSdk 34 要求显式声明） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".MonitorApp"
@@ -53,6 +58,12 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!-- 局域网互传：HTTP 端口 53319~53328 + UDP 发现 53318 常驻（协议 §2） -->
+        <service
+            android:name=".transfer.service.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- 定时保活检查 + 周期上报触发(每分钟一次) -->
         <receiver

@@ -21,6 +21,7 @@
 | 调研 Android / 澎湃 OS AI 能力 | → **[AI 能力调研](docs/开发指南/AI能力调研.md)** — Android 16 + 澎湃 OS 3 AI 相关 API |
 | **修改任何 UI 代码（颜色/字号/间距/组件）** | → **[UI 设计规范](docs/UI设计/设计规范.md)** — 主题 Token、组件、动效、震动规范 |
 | **审查 UI 代码变更** | → **[UI 审查清单](docs/UI设计/审查清单.md)** — 逐条核对硬编码颜色/字号/间距/震动 |
+| **修改/新增局域网文件互传代码** | → **[局域网互传协议](docs/网络通信/局域网互传协议.md)** — 端口/组播/四路由/错误码、落盘续传、动效音效、落点与验收 |
 
 ## 项目简介
 - **版本:** 1.0.0
@@ -62,6 +63,7 @@
 | 记录系统 | Record 数据模型、RecordType(11 种)、采集器(RecordCollector)、广播接收(RecordReceiver)、存储与合并(RecordStore)、使用时长追踪(UsageTracker) → [文档](docs/事件采集/概述.md) | `com.bsfeng.monitor.record` |
 | 领域模型 | domain 模块:Record/RecordType/RecordHandler、Selector DSL/SkipRule 数据模型、Repository 接口 → [文档](docs/概览/架构总览.md) | `com.bsfeng.monitor.domain` |
 | 网络通信 | HttpURLConnection + org.json:设备注册、心跳、事件批量上报(上传为二期桩实现)、ApiService → [文档](docs/网络通信/概述.md) | `com.bsfeng.monitor.network` |
+| 局域网互传 | UDP 组播发现(MulticastSocket+MulticastLock)、HTTP 传输(ServerSocket/HttpURLConnection)、流式落盘+sha256、前台服务、PIN 配对、动效音效 → [协议](docs/网络通信/局域网互传协议.md)（改互传代码前必读） | `com.bsfeng.monitor.transfer` |
 | 数据持久化 | SQLiteOpenHelper 本地数据库(records 表,版本 3),Repository 实现 → [文档](docs/数据持久化/概述.md) | `com.bsfeng.monitor.data` |
 | 后台服务 | 无障碍服务(前台轮询+开屏跳过)、健康检查、AlarmReceiver 定时保活(每分钟) → [文档](docs/后台服务/概述.md) | `com.bsfeng.monitor.service` |
 | 开屏跳过 | CSS 风格选择器 DSL、节点匹配器、规则引擎、内置规则库、规则管理、坐标点击降级 → [设计](docs/开屏跳过/设计.md) · [后续计划](docs/开屏跳过/后续计划.md) · [业界调研与改进方案](docs/开屏跳过/业界调研与改进方案.md)（改跳过代码/规则前必读） · [兜底方案调研](docs/开屏跳过/兜底方案调研.md)（无文本/无稳定 ID 场景与 OCR 决策） · [规则实测记录](docs/开屏跳过/规则实测记录.md)（逐 App 调优产出与快照工具用法） | `com.bsfeng.monitor.skip` |
