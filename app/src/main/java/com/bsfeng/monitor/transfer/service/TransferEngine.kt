@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.View
 import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.domain.transfer.CONFIRM_TIMEOUT_MS
+import com.bsfeng.monitor.domain.transfer.DeletedTask
 import com.bsfeng.monitor.domain.transfer.DeviceTypes
 import com.bsfeng.monitor.domain.transfer.PeerDevice
 import com.bsfeng.monitor.domain.transfer.RETRY_DELAYS_MS
@@ -16,6 +17,8 @@ import com.bsfeng.monitor.domain.transfer.TransferErrorCode
 import com.bsfeng.monitor.domain.transfer.TransferFile
 import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
+import com.bsfeng.monitor.domain.transfer.TransferTaskDeletion
+import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
 import com.bsfeng.monitor.transfer.discovery.DeviceRegistry
 import com.bsfeng.monitor.transfer.discovery.UdpDiscoveryService
 import com.bsfeng.monitor.transfer.transport.ApiResponse
@@ -28,8 +31,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -55,8 +61,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - 发：`MiniHttpClient` 逐文件续传，断网按 1s/2s/4s 退避重试 3 次。
  *
  * 线程模型：所有网络 / 磁盘操作跑在 [scope]（IO）；公开方法可在任意线程调用。
+ *
+ * [confirmTimeoutMs] 默认取协议 §4.1 的 60s；测试通过 [createForTesting] 注入短超时验证 4007。
  */
-class TransferEngine private constructor(private val appContext: Context) : TransferRoutes {
+class TransferEngine private constructor(
+    private val appContext: Context,
+    private val confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS,
+) : TransferRoutes {
 
     private val settings = TransferSettings(appContext)
     private val registry = DeviceRegistry()
@@ -75,10 +86,24 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
     @Volatile
     private var hapticTarget: WeakReference<View>? = null
 
+    /** App 是否在前台可见（「后台接收」关闭时据此启停服务与发现线程）。 */
+    @Volatile
+    private var appVisible: Boolean = false
+
     private val _devices = MutableStateFlow<List<PeerDevice>>(emptyList())
     private val _tasks = MutableStateFlow<List<TransferTask>>(emptyList())
     private val _pinPrompt = MutableStateFlow<PinPrompt?>(null)
     private val _running = MutableStateFlow(false)
+    private val _discoverable = MutableStateFlow(false)
+    private val _deletedTasks = MutableSharedFlow<DeletedTask>(extraBufferCapacity = DELETED_EVENT_BUFFER)
+
+    /**
+     * 删除事件（UI 用它开 5s 撤销窗口）。
+     *
+     * 任务列表是进程内内存态（协议未要求任务持久化）：删除只保证进程内一致，
+     * 进程被回收后记录与撤销窗口一起消失。见 [TransferTaskDeletion]。
+     */
+    val deletedTasks: SharedFlow<DeletedTask> = _deletedTasks.asSharedFlow()
 
     /** 在线设备（在线优先、最近出现在前）。 */
     val devices: StateFlow<List<PeerDevice>> = _devices.asStateFlow()
@@ -91,6 +116,9 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
 
     /** 端口是否已常驻。 */
     val running: StateFlow<Boolean> = _running.asStateFlow()
+
+    /** 是否参与发现（「可被发现」开关）。 */
+    val discoverable: StateFlow<Boolean> = _discoverable.asStateFlow()
 
     /** 本端设置（UI 读写提示音开关）。 */
     fun settings(): TransferSettings = settings
@@ -126,7 +154,10 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                     onDeviceSeen = { refreshDevices() },
                 )
                 discovery = udp
-                udp.start(scope)
+                if (ServiceModePolicy.shouldRunDiscovery(settings.backgroundReceive, appVisible, settings.discoverable)) {
+                    udp.start(scope)
+                }
+                _discoverable.value = settings.discoverable
                 scope.launch { tickerLoop() }
                 _running.value = true
                 Log.i(TAG, "传送服务已启动，HTTP 端口 $boundPort")
@@ -152,6 +183,81 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         _running.value = false
         refreshDevices()
     }
+
+    /**
+     * 「可被发现」开关：关闭后停止 UDP 公告与应答（对端列表随之清空），HTTP 端口继续常驻，
+     * 已配对设备仍可直接按地址发送。
+     */
+    fun setDiscoverable(enabled: Boolean) {
+        settings.discoverable = enabled
+        _discoverable.value = enabled
+        if (!started.get()) return
+        val udp = discovery
+        if (enabled &&
+            ServiceModePolicy.shouldRunDiscovery(settings.backgroundReceive, appVisible, discoverable = true)
+        ) {
+            if (udp != null && !udp.isRunning()) udp.start(scope)
+        } else {
+            udp?.stop()
+            discovery = null
+            refreshDevices()
+        }
+    }
+
+    /**
+     * App 前后台切换：更新可见标记，并按 [ServiceModePolicy] 启停发现线程。
+     *
+     * 「后台接收」关闭时，退到后台就停掉组播接收线程（服务本身由 UI 层 stopSelf）；
+     * 常驻模式下发现线程保持运行。
+     */
+    fun setAppVisible(visible: Boolean) {
+        appVisible = visible
+        val shouldDiscover = ServiceModePolicy.shouldRunDiscovery(
+            backgroundReceive = settings.backgroundReceive,
+            appVisible = visible,
+            discoverable = settings.discoverable,
+        )
+        val udp = discovery
+        if (shouldDiscover) {
+            if (started.get() && settings.discoverable && (udp == null || !udp.isRunning())) {
+                ensureDiscovery()
+            }
+        } else {
+            udp?.stop()
+            refreshDevices()
+        }
+    }
+
+    /** 按当前设置重建发现线程（服务 / 可见性变化后调用）。 */
+    private fun ensureDiscovery() {
+        if (!started.get()) return
+        if (discovery?.isRunning() == true) return
+        val udp = UdpDiscoveryService(
+            context = appContext,
+            deviceId = settings.deviceId,
+            alias = settings.alias,
+            appVersion = appVersion(),
+            httpPort = { localPort },
+            registry = registry,
+            onDeviceSeen = { refreshDevices() },
+        )
+        discovery = udp
+        udp.start(scope)
+    }
+
+    /** 通知快捷动作：暂停接收 [minutes] 分钟（期间 offer 直接拒绝、不弹 PIN）。 */
+    fun pauseOffers(minutes: Int = PAUSE_MINUTES) {
+        settings.pauseOffers(minutes)
+        _pinPrompt.value = null
+    }
+
+    /** 通知快捷动作：立即恢复接收。 */
+    fun resumeOffers() {
+        settings.resumeOffers()
+    }
+
+    /** 当前是否处于暂停窗口。 */
+    fun isOffersPaused(nowMs: Long = System.currentTimeMillis()): Boolean = settings.isOffersPaused(nowMs)
 
     private suspend fun tickerLoop() {
         while (scope.isActive) {
@@ -190,7 +296,15 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         if (senderDeviceId.isBlank()) {
             return ApiResponse.error(ApiResponse.PROTOCOL_ERROR, "缺少 senderDeviceId")
         }
-        val senderAlias = body.optString("senderAlias", senderDeviceId)
+        // 别名优先取 offer 自身的 senderAlias，发现层表仅作兜底；两者都空才回落「未知设备」
+        // （发现层在 alias 为空时会用 deviceId 占位，这种占位不算真实别名）
+        val senderAlias = body.optString("senderAlias", "").trim()
+            .ifBlank {
+                registry.find(senderDeviceId)?.alias?.trim()
+                    ?.takeIf { it.isNotBlank() && it != senderDeviceId }
+                    .orEmpty()
+            }
+            .ifBlank { UNKNOWN_PEER_ALIAS }
         val filesJson = body.optJSONArray("files") ?: return ApiResponse.error(
             ApiResponse.PROTOCOL_ERROR,
             "缺少 files",
@@ -203,6 +317,18 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         val totalBytes = files.sumOf { it.size }
         if (freeBytes() < totalBytes + DISK_MARGIN_BYTES) {
             return ApiResponse.error(TransferErrorCode.DISK_FULL)
+        }
+        // 暂停接收（通知上的「暂停 5 分钟」）：不建会话、不弹 PIN，直接回 denied
+        if (settings.isOffersPaused()) {
+            return ApiResponse.ok(
+                JSONObject().apply {
+                    put("sessionId", "")
+                    put("token", "")
+                    put("state", TransferStatus.DENIED.wire)
+                    put("accepted", JSONArray())
+                    put("message", "接收端已暂停")
+                },
+            )
         }
 
         val requestedSessionId = body.optString("sessionId", "").takeIf { it.isNotBlank() }
@@ -226,6 +352,13 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         if (pairKeyOk) {
             return approve(session, persistedPairKey = null)
         }
+        // 免配对窗口 / 体积阈值（OR）：命中即免 PIN，顺带建立配对便于后续免确认
+        if (settings.shouldAutoApprove(totalBytes)) {
+            if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
+            val newKey = TransferSettings.generatePairingKey()
+            settings.savePairingKey(senderDeviceId, newKey)
+            return approve(session, persistedPairKey = newKey)
+        }
         if (pin != null) {
             if (session.state != TransferStatus.AWAITING_CONFIRM) {
                 // 没有待确认会话时收到 PIN：复位为待确认再校验，避免时序竞态
@@ -239,10 +372,10 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
             return pendingResponse(session, "PIN 不正确")
         }
 
-        // 未配对且没有 PIN：生成 PIN 并等待（30s 超时）
+        // 未配对且没有 PIN：生成 PIN 并等待（协议 §4.1：60s 超时 → 4007）
         if (session.pin == null || System.currentTimeMillis() > session.confirmDeadlineMs) {
             session.pin = TransferSettings.generatePin()
-            session.confirmDeadlineMs = System.currentTimeMillis() + CONFIRM_TIMEOUT_MS
+            session.confirmDeadlineMs = System.currentTimeMillis() + confirmTimeoutMs
             scheduleConfirmTimeout(session)
         }
         session.state = TransferStatus.AWAITING_CONFIRM
@@ -252,6 +385,7 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
             direction = TransferDirection.RECV,
             pin = session.pin,
             fileName = files.first().name,
+            expiresAtMs = session.confirmDeadlineMs,
         )
         refreshSessionTasks(session)
         return pendingResponse(session, "")
@@ -327,7 +461,12 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                         val received = targetOffset + copied
                         incoming.received = received
                         patchTask(sessionId, fileId) {
-                            it.copy(receivedBytes = received, updatedAtMs = System.currentTimeMillis())
+                            val now = System.currentTimeMillis()
+                            it.copy(
+                                receivedBytes = received,
+                                bytesPerSecond = speedFor(it, received, now),
+                                updatedAtMs = now,
+                            )
                         }
                         lastPatched = received
                     },
@@ -392,6 +531,8 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
             }
             downloads.publish(uri)
             part.delete()
+            // 记录落盘产物：用户删除这条已完成任务时一并删除（发送任务不登记，源文件不删）
+            publishedFiles[taskKey(session.sessionId, incoming.file.fileId)] = uri
         } catch (e: IOException) {
             downloads.delete(uri)
             Log.w(TAG, "落盘失败: ${e.message}")
@@ -479,7 +620,7 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                 renameTasks(sessionId, remoteSessionId)
                 _pinPrompt.value = PinPrompt(
                     sessionId = remoteSessionId,
-                    peerAlias = peer.alias,
+                    peerAlias = peer.alias.trim().ifBlank { UNKNOWN_PEER_ALIAS },
                     direction = TransferDirection.SEND,
                     pin = null,
                     fileName = sources.first().name,
@@ -596,10 +737,13 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                         headers = mapOf(TokenHeader to token),
                         onProgress = { progress ->
                             patchTask(sessionId, fileId) {
+                                val now = System.currentTimeMillis()
+                                val received = offset + progress
                                 it.copy(
-                                    receivedBytes = offset + progress,
+                                    receivedBytes = received,
+                                    bytesPerSecond = speedFor(it, received, now),
                                     status = TransferStatus.TRANSFERRING,
-                                    updatedAtMs = System.currentTimeMillis(),
+                                    updatedAtMs = now,
                                 )
                             }
                         },
@@ -616,6 +760,7 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                     it.copy(
                         status = TransferStatus.COMPLETED,
                         receivedBytes = source.size,
+                        bytesPerSecond = 0L,
                         updatedAtMs = System.currentTimeMillis(),
                     )
                 }
@@ -728,6 +873,60 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
     /** 已配对设备 id 列表（设置区展示）。 */
     fun pairedDeviceIds(): Set<String> = settings.pairingKeys().keys
 
+    // ─────────────────────────── 删除 / 撤销 ───────────────────────────
+
+    /**
+     * 删除一条已终结任务（记录 + 已落盘接收文件），完成后经 [deletedTasks] 通知 UI 展示撤销窗口。
+     *
+     * 进行中任务在 [deleteTaskNow] 处被拒绝（UI 侧滑动回弹），不会产生事件。
+     */
+    fun deleteTask(sessionId: String, fileId: String) {
+        scope.launch {
+            deleteTaskNow(sessionId, fileId)?.let { _deletedTasks.emit(it) }
+        }
+    }
+
+    /**
+     * 删除的同步实现（IO 线程调用；测试可直接调用不走 Flow）。
+     *
+     * @return 删除快照；任务不存在或仍在进行中时返回 `null`，列表保持不变。
+     */
+    internal fun deleteTaskNow(sessionId: String, fileId: String): DeletedTask? {
+        val key = taskKey(sessionId, fileId)
+        val deleted = TransferTaskDeletion.delete(
+            tasks = _tasks.value,
+            sessionId = sessionId,
+            fileId = fileId,
+            deletionId = UUID.randomUUID().toString(),
+            removeReceivedFile = {
+                val uri = publishedFiles.remove(key) ?: return@delete false
+                downloads.delete(uri)
+                // 只要登记过落盘产物，撤销时就无法把文件恢复到 Downloads（可能已被系统清理）
+                true
+            },
+        ) ?: return null
+        _tasks.update { TransferTaskDeletion.without(it, deleted) }
+        deletedSnapshots[deleted.deletionId] = deleted
+        return deleted
+    }
+
+    /**
+     * 撤销删除：把任务按原下标放回列表。
+     *
+     * @return 删除快照；撤销窗口已结束 / 已撤销过时返回 `null`。
+     *   快照的 [DeletedTask.fileDeleted] 为 true 时，UI 另提示「文件已删除，仅恢复记录」。
+     */
+    fun undoDelete(deletionId: String): DeletedTask? {
+        val deleted = deletedSnapshots.remove(deletionId) ?: return null
+        _tasks.update { TransferTaskDeletion.restore(it, deleted) }
+        return deleted
+    }
+
+    /** 撤销窗口结束：丢弃快照，记录不再恢复。 */
+    fun commitDelete(deletionId: String) {
+        deletedSnapshots.remove(deletionId)
+    }
+
     // ─────────────────────────── 内部工具 ───────────────────────────
 
     private fun createIncomingSession(
@@ -813,6 +1012,38 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
     }
 
     /**
+     * 速度估算：本次增量 / 时间差，再与上次值做 3:1 指数平滑（避免进度条数字乱跳）。
+     *
+     * 终态任务不推进度，UI 只显示总体积，因此这里不需要归零逻辑。
+     */
+    private fun speedFor(previous: TransferTask, received: Long, nowMs: Long): Long {
+        val deltaTime = nowMs - previous.updatedAtMs
+        if (deltaTime <= 0L) return previous.bytesPerSecond
+        val deltaBytes = received - previous.receivedBytes
+        if (deltaBytes <= 0L) return previous.bytesPerSecond
+        val instant = deltaBytes * 1_000L / deltaTime
+        return if (previous.bytesPerSecond <= 0L) instant else (previous.bytesPerSecond * 3 + instant) / 4
+    }
+
+    /** 接收目录占用（`Downloads/局域网互传/` 的文件数与总大小）。 */
+    fun receivedStats(): DownloadsSink.ReceivedStats = downloads.stats()
+
+    /**
+     * 清理接收目录并清空对应历史：删除 `Downloads/局域网互传/` 下的全部文件记录，
+     * 同时移除「接收 + 已完成」的任务行（失败/取消记录保留，其 `.part` 仍在缓存目录）。
+     *
+     * @return 实际删除的文件条数。
+     */
+    fun clearReceivedHistory(): Int {
+        val removed = downloads.clearAll()
+        publishedFiles.clear()
+        _tasks.update { list ->
+            list.filterNot { it.direction == TransferDirection.RECV && it.status == TransferStatus.COMPLETED }
+        }
+        return removed
+    }
+
+    /**
      * 续传偏移：以 `.part` 实际大小为准（协议 §6 断点续传）。
      *
      * 接收端进程被系统回收后重启，会话内存里的 `received` 是 0，但磁盘 `.part` 已有部分字节；
@@ -837,15 +1068,16 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
 
     private fun scheduleConfirmTimeout(session: IncomingSession) {
         scope.launch {
-            delay(CONFIRM_TIMEOUT_MS)
+            delay(confirmTimeoutMs)
             if (session.state == TransferStatus.AWAITING_CONFIRM &&
                 System.currentTimeMillis() >= session.confirmDeadlineMs
             ) {
                 session.state = TransferStatus.FAILED
                 session.pin = null
                 if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
-                refreshSessionTasks(session)
-                Log.i(TAG, "会话 ${session.sessionId} 确认超时")
+                // 超时只静默收起 PIN 弹层：不播失败音、不震（避免打扰）
+                refreshSessionTasks(session, notifyFailure = false)
+                Log.i(TAG, "会话 ${session.sessionId} 确认超时（${confirmTimeoutMs}ms）")
             }
         }
     }
@@ -858,7 +1090,7 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         expired.forEach { sessions.remove(it.sessionId) }
     }
 
-    private fun refreshSessionTasks(session: IncomingSession) {
+    private fun refreshSessionTasks(session: IncomingSession, notifyFailure: Boolean = true) {
         session.files.values.forEach { incoming ->
             patchTask(session.sessionId, incoming.file.fileId) {
                 it.copy(
@@ -874,7 +1106,9 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
                 )
             }
         }
-        if (session.state == TransferStatus.FAILED || session.state == TransferStatus.DENIED) {
+        if (notifyFailure &&
+            (session.state == TransferStatus.FAILED || session.state == TransferStatus.DENIED)
+        ) {
             playSound(TransferSoundPlayer.Event.FAILURE)
         }
     }
@@ -1111,13 +1345,23 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         val pin: String?,
         val fileName: String,
         val message: String = "",
+        /** 接收端确认截止时刻（会话 `confirmDeadlineMs`）；发送端为 null。 */
+        val expiresAtMs: Long? = null,
     )
 
     private val sessions = ConcurrentHashMap<String, IncomingSession>()
     private val outgoing = ConcurrentHashMap<String, OutgoingSession>()
 
+    /** 已落盘的接收文件：`sessionId#fileId` → MediaStore uri（用户删除记录时一并删）。 */
+    private val publishedFiles = ConcurrentHashMap<String, Uri>()
+
+    /** 撤销窗口内的删除快照：`deletionId` → 快照。 */
+    private val deletedSnapshots = ConcurrentHashMap<String, DeletedTask>()
+
     @Volatile
     private var pendingSend: PendingSend? = null
+
+    private fun taskKey(sessionId: String, fileId: String): String = "$sessionId#$fileId"
 
     companion object {
         private const val TAG = "TransferEngine"
@@ -1127,6 +1371,14 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
         private const val SESSION_KEEP_MS = 5 * 60_000L
         private const val DISK_MARGIN_BYTES = 16L * 1024 * 1024
 
+        /** 删除后的撤销窗口（UI Snackbar 计时，与引擎快照寿命一致）。 */
+        const val UNDO_WINDOW_MS: Long = 5_000L
+
+        /** 通知「暂停 5 分钟」的默认时长。 */
+        const val PAUSE_MINUTES = 5
+
+        private const val DELETED_EVENT_BUFFER = 16
+
         @Volatile
         private var instance: TransferEngine? = null
 
@@ -1135,6 +1387,12 @@ class TransferEngine private constructor(private val appContext: Context) : Tran
             instance ?: synchronized(this) {
                 instance ?: TransferEngine(context.applicationContext).also { instance = it }
             }
+
+        /** 仅供测试：注入更短的确认超时验证 4007（默认走协议 60s）。 */
+        internal fun createForTesting(
+            context: Context,
+            confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS,
+        ): TransferEngine = TransferEngine(context.applicationContext, confirmTimeoutMs)
 
         /**
          * 单例复位（仅供测试）。

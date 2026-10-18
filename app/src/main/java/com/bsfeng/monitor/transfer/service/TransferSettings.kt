@@ -2,6 +2,7 @@ package com.bsfeng.monitor.transfer.service
 
 import android.content.Context
 import androidx.core.content.edit
+import com.bsfeng.monitor.domain.transfer.PairingPolicy
 import org.json.JSONException
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -11,7 +12,9 @@ import java.security.SecureRandom
  *
  * - `deviceId` 首次生成后固定（`and-` + 6 位 hex），与协议示例 `and-7f3a9c` 同形；
  * - 配对密钥按 `deviceId` 持久化，32 字节随机 hex，可在设置里移除；
- * - 提示音三项默认值按协议 §7：完成开、失败关、新设备关。
+ * - 提示音三项默认值按协议 §7：完成开、失败关、新设备关；
+ * - 发现开关 / 免配对窗口 / 体积阈值：新增的「少打断」设置，策略判定在
+ *   [PairingPolicy]（纯函数），本类只负责持久化。
  */
 class TransferSettings(context: Context) {
 
@@ -45,6 +48,110 @@ class TransferSettings(context: Context) {
     var soundOnNewDevice: Boolean
         get() = prefs.getBoolean(KEY_SOUND_NEW_DEVICE, false)
         set(value) = prefs.edit { putBoolean(KEY_SOUND_NEW_DEVICE, value) }
+
+    /**
+     * 「后台接收」：默认关闭。
+     *
+     * 关闭时只在 App 可见期间运行服务（见 [ServiceModePolicy]），开启才常驻前台服务 + 常驻通知。
+     */
+    var backgroundReceive: Boolean
+        get() = prefs.getBoolean(KEY_BACKGROUND_RECEIVE, false)
+        set(value) = prefs.edit { putBoolean(KEY_BACKGROUND_RECEIVE, value) }
+
+    /** 暂停接收的到期时刻（epoch ms；0 = 未暂停）。 */
+    var pauseOffersUntilMs: Long
+        get() = prefs.getLong(KEY_PAUSE_OFFERS_UNTIL, 0L)
+        set(value) = prefs.edit { putLong(KEY_PAUSE_OFFERS_UNTIL, value) }
+
+    /** 暂停接收（默认 5 分钟；期间 offer 直接拒绝、不弹 PIN）。 */
+    fun pauseOffers(
+        minutes: Int = PAUSE_MINUTES,
+        nowMs: Long = System.currentTimeMillis(),
+    ) {
+        pauseOffersUntilMs = nowMs + minutes.coerceAtLeast(0) * WINDOW_MINUTE_MS
+    }
+
+    /** 立即恢复接收。 */
+    fun resumeOffers() {
+        pauseOffersUntilMs = 0L
+    }
+
+    /** 当前是否处于暂停窗口。 */
+    fun isOffersPaused(nowMs: Long = System.currentTimeMillis()): Boolean =
+        pauseOffersUntilMs > nowMs
+
+    /** 暂停剩余毫秒（未暂停返回 0）。 */
+    fun pauseRemainingMs(nowMs: Long = System.currentTimeMillis()): Long =
+        (pauseOffersUntilMs - nowMs).coerceAtLeast(0L)
+
+    /** 是否参与发现（关闭后停止 UDP 公告与应答；HTTP 端口仍常驻）。 */
+    var discoverable: Boolean
+        get() = prefs.getBoolean(KEY_DISCOVERABLE, true)
+        set(value) = prefs.edit { putBoolean(KEY_DISCOVERABLE, value) }
+
+    /** 免配对窗口开关（到期后由 [isOpenPairingActive] 判定失效，不需要改开关）。 */
+    var openPairingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_OPEN_PAIRING_ENABLED, false)
+        set(value) = prefs.edit { putBoolean(KEY_OPEN_PAIRING_ENABLED, value) }
+
+    /** 窗口时长（分钟，5 / 10 / 30）。 */
+    var openPairingMinutes: Int
+        get() = prefs.getInt(KEY_OPEN_PAIRING_MINUTES, DEFAULT_WINDOW_MINUTES)
+        set(value) = prefs.edit {
+            putInt(KEY_OPEN_PAIRING_MINUTES, value.takeIf { it in PairingPolicy.WINDOW_MINUTES } ?: DEFAULT_WINDOW_MINUTES)
+        }
+
+    /** 窗口到期时刻（epoch ms；0 = 未开启）。 */
+    var openPairingExpiresAtMs: Long
+        get() = prefs.getLong(KEY_OPEN_PAIRING_EXPIRES_AT, 0L)
+        set(value) = prefs.edit { putLong(KEY_OPEN_PAIRING_EXPIRES_AT, value) }
+
+    /** 体积阈值（MB；0 = 关闭，一律需要 PIN）。 */
+    var autoApproveThresholdMb: Int
+        get() = prefs.getInt(KEY_AUTO_APPROVE_MB, PairingPolicy.THRESHOLD_OFF_MB)
+        set(value) = prefs.edit { putInt(KEY_AUTO_APPROVE_MB, value.coerceAtLeast(0)) }
+
+    /** 窗口当前是否生效。 */
+    fun isOpenPairingActive(nowMs: Long = System.currentTimeMillis()): Boolean =
+        openPairingEnabled && PairingPolicy.isWindowActive(openPairingExpiresAtMs, nowMs)
+
+    /** 窗口剩余毫秒（未开启 / 已过期返回 0）。 */
+    fun openPairingRemainingMs(nowMs: Long = System.currentTimeMillis()): Long =
+        if (!openPairingEnabled) 0L else PairingPolicy.remainingMs(openPairingExpiresAtMs, nowMs)
+
+    /** 开启窗口：从 [nowMs] 起算 [minutes] 分钟（同时打开开关）。 */
+    fun startOpenPairingWindow(
+        nowMs: Long = System.currentTimeMillis(),
+        minutes: Int = openPairingMinutes,
+    ) {
+        val duration = minutes.takeIf { it in PairingPolicy.WINDOW_MINUTES } ?: DEFAULT_WINDOW_MINUTES
+        prefs.edit {
+            putInt(KEY_OPEN_PAIRING_MINUTES, duration)
+            putBoolean(KEY_OPEN_PAIRING_ENABLED, true)
+            putLong(KEY_OPEN_PAIRING_EXPIRES_AT, nowMs + duration * WINDOW_MINUTE_MS)
+        }
+    }
+
+    /** 关闭窗口（立即回到需配对）。 */
+    fun stopOpenPairingWindow() {
+        prefs.edit {
+            putBoolean(KEY_OPEN_PAIRING_ENABLED, false)
+            putLong(KEY_OPEN_PAIRING_EXPIRES_AT, 0L)
+        }
+    }
+
+    /**
+     * 本次 offer 是否免确认（窗口 或 体积阈值，OR 关系）。
+     *
+     * @param totalBytes 本次 offer 的文件总大小。
+     */
+    fun shouldAutoApprove(totalBytes: Long, nowMs: Long = System.currentTimeMillis()): Boolean =
+        PairingPolicy.isAutoApproved(
+            windowExpiresAtMs = if (openPairingEnabled) openPairingExpiresAtMs else 0L,
+            thresholdMb = autoApproveThresholdMb,
+            totalBytes = totalBytes,
+            nowMs = nowMs,
+        )
 
     /** 取某设备的配对密钥。 */
     fun pairingKey(deviceId: String): String? = pairingKeys()[deviceId]
@@ -83,6 +190,16 @@ class TransferSettings(context: Context) {
 
     companion object {
         const val PREFS_NAME = "lan_transfer"
+        private const val DEFAULT_WINDOW_MINUTES = 10
+        private const val WINDOW_MINUTE_MS = 60_000L
+        private const val KEY_DISCOVERABLE = "discoverable"
+        private const val KEY_BACKGROUND_RECEIVE = "background_receive"
+        private const val KEY_PAUSE_OFFERS_UNTIL = "pause_offers_until"
+        private const val PAUSE_MINUTES = 5
+        private const val KEY_OPEN_PAIRING_ENABLED = "open_pairing_enabled"
+        private const val KEY_OPEN_PAIRING_MINUTES = "open_pairing_minutes"
+        private const val KEY_OPEN_PAIRING_EXPIRES_AT = "open_pairing_expires_at"
+        private const val KEY_AUTO_APPROVE_MB = "auto_approve_threshold_mb"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_ALIAS = "alias"
         private const val KEY_PAIRING = "pairing_keys"

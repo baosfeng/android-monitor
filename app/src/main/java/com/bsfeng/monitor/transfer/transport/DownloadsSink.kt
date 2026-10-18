@@ -52,11 +52,57 @@ class DownloadsSink(private val context: Context) {
     }.onFailure { Log.w(TAG, "发布目标文件失败: ${it.message}") }
         .getOrDefault(false)
 
-    /** 删除（失败 / 取消时清理半成品）。 */
-    fun delete(uri: Uri) {
-        runCatching { context.contentResolver.delete(uri, null, null) }
-            .onFailure { Log.w(TAG, "删除目标文件失败: ${it.message}") }
+    /**
+     * 删除（失败 / 取消 / 用户删除记录时清理）。
+     *
+     * @return 是否真的删掉了目标；文件已不存在 / 无权限时返回 false，调用方按「只移除记录」处理。
+     */
+    fun delete(uri: Uri): Boolean = runCatching {
+        context.contentResolver.delete(uri, null, null) > 0
+    }.onFailure { Log.w(TAG, "删除目标文件失败: ${it.message}") }
+        .getOrDefault(false)
+
+    /** 接收目录占用统计。 */
+    data class ReceivedStats(val count: Int, val totalBytes: Long) {
+        /** 目录是否为空。 */
+        val isEmpty: Boolean get() = count == 0
     }
+
+    /** 统计 `Downloads/局域网互传/` 下的文件条数与总大小；查询失败按 0 处理。 */
+    fun stats(): ReceivedStats {
+        var count = 0
+        var totalBytes = 0L
+        runCatching {
+            context.contentResolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Downloads.SIZE),
+                "${MediaStore.Downloads.RELATIVE_PATH} = ?",
+                arrayOf(relativePath + "/"),
+                null,
+            )?.use { cursor ->
+                val sizeIndex = cursor.getColumnIndex(MediaStore.Downloads.SIZE)
+                while (cursor.moveToNext()) {
+                    count++
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) totalBytes += cursor.getLong(sizeIndex)
+                }
+            }
+        }.onFailure { Log.w(TAG, "统计接收目录失败: ${it.message}") }
+        return ReceivedStats(count, totalBytes)
+    }
+
+    /**
+     * 清空接收目录（删除目录下所有文件记录）。
+     *
+     * @return 实际删除条数；失败返回 0。
+     */
+    fun clearAll(): Int = runCatching {
+        context.contentResolver.delete(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            "${MediaStore.Downloads.RELATIVE_PATH} = ?",
+            arrayOf(relativePath + "/"),
+        )
+    }.onFailure { Log.w(TAG, "清空接收目录失败: ${it.message}") }
+        .getOrDefault(0)
 
     /** 目标目录下已有的文件名集合（用于同名追加 ` (1)`）。 */
     fun existingNames(): Set<String> {

@@ -5,7 +5,6 @@ import android.net.wifi.WifiManager
 import android.util.Log
 import com.bsfeng.monitor.domain.transfer.ANNOUNCE_BURST_COUNT
 import com.bsfeng.monitor.domain.transfer.ANNOUNCE_BURST_INTERVAL_MS
-import com.bsfeng.monitor.domain.transfer.ANNOUNCE_INTERVAL_MS
 import com.bsfeng.monitor.domain.transfer.BROADCAST_ADDRESS
 import com.bsfeng.monitor.domain.transfer.DISCOVERY_PORT
 import com.bsfeng.monitor.domain.transfer.DISCOVERY_UNICAST_CONCURRENCY
@@ -65,6 +64,10 @@ class UdpDiscoveryService(
     private var multicastLock: WifiManager.MulticastLock? = null
     private var jobs: List<Job> = emptyList()
 
+    /** 本轮「开始无在线设备」的时刻（0 = 有设备或尚无基线）。 */
+    @Volatile
+    private var noDeviceSinceMs: Long = 0L
+
     /** 当前是否在发现。 */
     fun isRunning(): Boolean = running.get()
 
@@ -107,7 +110,15 @@ class UdpDiscoveryService(
             delay(ANNOUNCE_BURST_INTERVAL_MS)
         }
         while (running.get()) {
-            delay(ANNOUNCE_INTERVAL_MS)
+            val now = System.currentTimeMillis()
+            val onlineCount = registry.snapshot(now).count { it.online }
+            // 省电：有设备 5s；连续 60s 无设备降到 15s（见 DiscoveryCadence）
+            if (onlineCount > 0) {
+                noDeviceSinceMs = 0L
+            } else if (noDeviceSinceMs <= 0L) {
+                noDeviceSinceMs = now
+            }
+            delay(DiscoveryCadence.intervalMs(onlineCount, noDeviceSinceMs, now))
             if (!running.get()) return
             sendAnnounce()
             // 表里没有在线设备时，兜底扫一遍（组播 → 广播 → /24 单播）

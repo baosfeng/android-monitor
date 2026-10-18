@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.runtime.*
@@ -46,6 +48,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
@@ -69,7 +74,10 @@ import com.bsfeng.monitor.ui.components.BrandSplash
 import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
 import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.springOf
+import com.bsfeng.monitor.transfer.service.TransferService
 import com.bsfeng.monitor.transfer.ui.TransferScreen
+import com.bsfeng.monitor.transfer.ui.TransferViewModel
+import com.bsfeng.monitor.ui.OverviewScreen
 import com.bsfeng.monitor.ui.components.appBackdrop
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentFade
@@ -78,6 +86,15 @@ import com.bsfeng.monitor.ui.theme.ThemeRepository
 import androidx.compose.ui.graphics.vector.ImageVector
 
 class MainActivity : ComponentActivity() {
+
+    /** 从通知点进来的目标 Tab（默认 0 = 概览）。 */
+    private var startTab by mutableIntStateOf(0)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        startTab = intent.getIntExtra(EXTRA_START_TAB, startTab)
+    }
 
     private sealed class FinanceRoute {
         data object Main : FinanceRoute()
@@ -102,6 +119,8 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = true
         }
 
+        startTab = intent?.getIntExtra(EXTRA_START_TAB, 0) ?: 0
+
         // 主题持久化：必须在 setContent 之前读，保证首帧就是用户选定的主题
         ThemeRepository.init(applicationContext)
 
@@ -121,11 +140,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             MonitorTheme {
                 val viewModel: MainViewModel = viewModel()
+                val transferViewModel: TransferViewModel = viewModel()
+                val lifecycleOwner = LocalLifecycleOwner.current
                 val financeViewModel: FinanceViewModel = viewModel()
                 val skipRuleViewModel: SkipRuleViewModel = viewModel()
                 val whitelistViewModel: WhitelistViewModel = viewModel()
                 val tokens = LocalDesignTokens.current
-                // 5 Tab：0 传送(局域网互传) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 设置(s09)
+                // 6 Tab：0 概览(s01) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 传送(局域网互传) / 5 设置(s09)
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var financeRoute by rememberSaveable(stateSaver = FinanceRouteSaver) {
                     mutableStateOf<FinanceRoute>(FinanceRoute.Main)
@@ -143,6 +164,18 @@ class MainActivity : ComponentActivity() {
                 val financeSubPage = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main
                 val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
 
+                // 「后台接收」关闭时：前台启动监听、后台停服务（ServiceModePolicy 的 UI 侧接线）
+                DisposableEffect(lifecycleOwner, transferViewModel) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        when (event) {
+                            Lifecycle.Event.ON_START -> transferViewModel.onAppForeground()
+                            Lifecycle.Event.ON_STOP -> transferViewModel.onAppBackground()
+                            else -> Unit
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
                 // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到记账首页
                 BackHandler(enabled = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main) {
                     financeRoute = FinanceRoute.Main
@@ -151,12 +184,18 @@ class MainActivity : ComponentActivity() {
 
                 val tabs = remember {
                     listOf(
-                        TabItem("传送", Icons.Outlined.SwapHoriz, Icons.Outlined.SwapHoriz),
+                        TabItem("概览", Icons.Outlined.DateRange, Icons.Filled.DateRange),
                         TabItem("实时", Icons.Outlined.Home, Icons.Filled.Home),
                         TabItem("广告", Icons.Outlined.Visibility, Icons.Outlined.Visibility),
                         TabItem("记账", Icons.Outlined.AddCircle, Icons.Filled.AddCircle),
+                        TabItem("传送", Icons.Outlined.SwapHoriz, Icons.Outlined.SwapHoriz),
                         TabItem("设置", Icons.Outlined.Settings, Icons.Filled.Settings),
                     )
+                }
+
+                // 通知点击「直达传送页」
+                LaunchedEffect(startTab) {
+                    if (startTab in tabs.indices) selectedTab = startTab
                 }
 
                 Box(Modifier.fillMaxSize().appBackdrop()) {
@@ -208,12 +247,19 @@ class MainActivity : ComponentActivity() {
                                                 Icon(
                                                     if (isSelected) tab.selectedIcon else tab.icon,
                                                     contentDescription = tab.title,
-                                                    modifier = Modifier.size(24.dp),
+                                                    modifier = Modifier.size(22.dp),
                                                     tint = tabColor,
                                                 )
                                             },
                                             label = {
-                                                Text(tab.title, color = tabColor)
+                                                // 6 个 Tab 时单项宽度约 65dp：labelSmall(12sp) + 单行不折行
+                                                Text(
+                                                    text = tab.title,
+                                                    color = tabColor,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                )
                                             },
                                         )
                                     }
@@ -227,16 +273,21 @@ class MainActivity : ComponentActivity() {
                                 .padding(paddingValues)
                         ) {
                             when (selectedTab) {
-                                0 -> TransferScreen(modifier = Modifier.fillMaxSize())
-                                1 -> MainScreen(
+                                0 -> OverviewScreen(
+                                    onOpenLive = { selectedTab = LIVE_TAB },
+                                    onOpenFinance = { selectedTab = FINANCE_TAB },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                LIVE_TAB -> MainScreen(
                                     viewModel = viewModel,
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                2 -> AdScreen(
+                                AD_TAB -> AdScreen(
                                     onOpenRules = { showSkipRuleScreen = true },
                                     adViewModel = viewModel(),
                                     modifier = Modifier.fillMaxSize()
                                 )
+                                TRANSFER_TAB -> TransferScreen(modifier = Modifier.fillMaxSize())
                                 FINANCE_TAB -> {
                                     when (val route = financeRoute) {
                                         is FinanceRoute.Main -> FinanceMainScreen(
@@ -393,12 +444,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
+    companion object {
+        /** 启动/通知点击时指定目标 Tab 的 Intent extra。 */
+        const val EXTRA_START_TAB = "com.bsfeng.monitor.EXTRA_START_TAB"
+
+        const val LIVE_TAB = 1
+        const val AD_TAB = 2
         const val FINANCE_TAB = 3
-        const val SETTINGS_TAB = 4
+        const val TRANSFER_TAB = 4
+        const val SETTINGS_TAB = 5
 
         /** 旋转 / 进程重建后仍停留在原子页：把路由编码成可保存的原语列表。 */
-        val FinanceRouteSaver: Saver<FinanceRoute, Any> = listSaver(
+        private val FinanceRouteSaver: Saver<FinanceRoute, Any> = listSaver(
             save = { route ->
                 when (route) {
                     is FinanceRoute.Main -> listOf("main")

@@ -95,6 +95,107 @@ class TransferSettingsTest {
     }
 
     @Test
+    fun `可被发现默认开启且可持久化关闭`() {
+        val settings = settings()
+        assertTrue(settings.discoverable)
+        settings.discoverable = false
+        assertTrue(!settings().discoverable)
+        settings().discoverable = true
+        assertTrue(settings.discoverable)
+    }
+
+    @Test
+    fun `后台接收默认关闭且可持久化开启`() {
+        val settings = settings()
+        assertTrue(!settings.backgroundReceive)
+        settings.backgroundReceive = true
+        assertTrue(settings().backgroundReceive)
+        settings().backgroundReceive = false
+        assertTrue(!settings.backgroundReceive)
+    }
+
+    @Test
+    fun `暂停接收持久化并向通知暴露剩余时间`() {
+        val settings = settings()
+        assertTrue(!settings.isOffersPaused())
+        assertEquals(0L, settings.pauseRemainingMs())
+
+        val now = System.currentTimeMillis()
+        settings.pauseOffers(nowMs = now)
+        assertTrue(settings().isOffersPaused(now + 1_000L))
+        assertEquals(5 * 60_000L - 1_000L, settings().pauseRemainingMs(now + 1_000L))
+        // 到期自动恢复
+        assertTrue(!settings().isOffersPaused(now + 6 * 60_000L))
+
+        settings().resumeOffers()
+        assertTrue(!settings.isOffersPaused(now + 1_000L))
+    }
+
+    @Test
+    fun `免配对窗口持久化并可判定生效`() {
+        val settings = settings()
+        assertTrue(!settings.isOpenPairingActive())
+        assertEquals(0L, settings.openPairingRemainingMs())
+
+        val now = System.currentTimeMillis()
+        settings.startOpenPairingWindow(nowMs = now, minutes = 10)
+        // 换实例仍生效（持久化）
+        val reloaded = settings()
+        assertTrue(reloaded.isOpenPairingActive(now + 1_000L))
+        assertEquals(10 * 60_000L - 1_000L, reloaded.openPairingRemainingMs(now + 1_000L))
+        assertEquals(10, reloaded.openPairingMinutes)
+
+        reloaded.stopOpenPairingWindow()
+        assertTrue(!settings().isOpenPairingActive(now + 1_000L))
+    }
+
+    @Test
+    fun `免配对窗口到期自动失效`() {
+        val settings = settings()
+        val now = System.currentTimeMillis()
+        settings.startOpenPairingWindow(nowMs = now, minutes = 5)
+        // 6 分钟后：开关仍开着，但已过期
+        assertTrue(settings.openPairingEnabled)
+        assertTrue(!settings.isOpenPairingActive(now + 6 * 60_000L))
+        assertEquals(0L, settings.openPairingRemainingMs(now + 6 * 60_000L))
+    }
+
+    @Test
+    fun `免配对窗口时长只接受 5 10 30`() {
+        val settings = settings()
+        settings.openPairingMinutes = 7
+        assertEquals(10, settings.openPairingMinutes)
+        settings.openPairingMinutes = 30
+        assertEquals(30, settings.openPairingMinutes)
+    }
+
+    @Test
+    fun `体积阈值默认关闭且可持久化`() {
+        val settings = settings()
+        assertEquals(0, settings.autoApproveThresholdMb)
+        assertTrue(!settings.shouldAutoApprove(1L))
+
+        settings.autoApproveThresholdMb = 10
+        assertEquals(10, settings().autoApproveThresholdMb)
+        assertTrue(settings.shouldAutoApprove(10L * 1024 * 1024))
+        assertTrue(!settings.shouldAutoApprove(10L * 1024 * 1024 + 1))
+        // 负数按关闭处理
+        settings.autoApproveThresholdMb = -5
+        assertEquals(0, settings.autoApproveThresholdMb)
+    }
+
+    @Test
+    fun `窗口与阈值任一命中都免确认`() {
+        val settings = settings()
+        settings.autoApproveThresholdMb = 50
+        assertTrue(settings.shouldAutoApprove(20L * 1024 * 1024))
+        assertTrue(!settings.shouldAutoApprove(80L * 1024 * 1024))
+
+        settings.startOpenPairingWindow(minutes = 5)
+        assertTrue(settings.shouldAutoApprove(80L * 1024 * 1024))
+    }
+
+    @Test
     fun `配对表序列化往返`() {
         val map = mapOf("mac-1" to "aaaa", "mac-2" to "bbbb")
         val encoded = PairingCodec.encode(map)
