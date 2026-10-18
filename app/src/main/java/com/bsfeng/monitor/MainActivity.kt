@@ -29,12 +29,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AddCircle
-import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.runtime.*
@@ -70,7 +69,7 @@ import com.bsfeng.monitor.ui.components.BrandSplash
 import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
 import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.springOf
-import com.bsfeng.monitor.ui.OverviewScreen
+import com.bsfeng.monitor.transfer.ui.TransferScreen
 import com.bsfeng.monitor.ui.components.appBackdrop
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentFade
@@ -126,7 +125,7 @@ class MainActivity : ComponentActivity() {
                 val skipRuleViewModel: SkipRuleViewModel = viewModel()
                 val whitelistViewModel: WhitelistViewModel = viewModel()
                 val tokens = LocalDesignTokens.current
-                // 5 Tab：0 概览(s01 占位) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 设置(s09)
+                // 5 Tab：0 传送(局域网互传) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 设置(s09)
                 var selectedTab by remember { mutableIntStateOf(0) }
                 var financeRoute by rememberSaveable(stateSaver = FinanceRouteSaver) {
                     mutableStateOf<FinanceRoute>(FinanceRoute.Main)
@@ -152,7 +151,7 @@ class MainActivity : ComponentActivity() {
 
                 val tabs = remember {
                     listOf(
-                        TabItem("概览", Icons.Outlined.DateRange, Icons.Filled.DateRange),
+                        TabItem("传送", Icons.Outlined.SwapHoriz, Icons.Outlined.SwapHoriz),
                         TabItem("实时", Icons.Outlined.Home, Icons.Filled.Home),
                         TabItem("广告", Icons.Outlined.Visibility, Icons.Outlined.Visibility),
                         TabItem("记账", Icons.Outlined.AddCircle, Icons.Filled.AddCircle),
@@ -228,11 +227,7 @@ class MainActivity : ComponentActivity() {
                                 .padding(paddingValues)
                         ) {
                             when (selectedTab) {
-                                0 -> OverviewScreen(
-                                    onOpenLive = { selectedTab = 1 },
-                                    onOpenFinance = { selectedTab = FINANCE_TAB },
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                0 -> TransferScreen(modifier = Modifier.fillMaxSize())
                                 1 -> MainScreen(
                                     viewModel = viewModel,
                                     modifier = Modifier.fillMaxSize()
