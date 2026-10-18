@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
                 DisposableEffect(lifecycleOwner, transferViewModel) {
                     val observer = LifecycleEventObserver { _, event ->
                         when (event) {
+                            // 只更新可见性：接收由用户显式开启（磁贴 / 传送页），App 打开不自动启动
                             Lifecycle.Event.ON_START -> transferViewModel.onAppForeground()
                             Lifecycle.Event.ON_STOP -> transferViewModel.onAppBackground()
                             else -> Unit

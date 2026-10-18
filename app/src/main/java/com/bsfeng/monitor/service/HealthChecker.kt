@@ -53,7 +53,8 @@ object HealthChecker {
         createChannel(context)
 
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // SINGLE_TOP 而不是 CLEAR_TASK：点预警通知回到 App 时不重建页面、不清用户当前所在 Tab
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             context, 0, intent,

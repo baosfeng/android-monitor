@@ -210,7 +210,9 @@ fun AppSwitch(
 ) {
     val t = LocalDesignTokens.current
     val trackColor by animateColorAsState(
-        targetValue = if (checked) t.accent else t.borderSoft,
+        // 关闭态轨道用前景 18% 覆盖：border-soft 在浅色主题里只有 6% 透明度，
+        // 白 knob 落在白卡片上几乎看不见（用户会以为这里没有开关）。
+        targetValue = if (checked) t.accent else t.fgFade(18),
         animationSpec = tween(t.durState),
         label = "swTrack",
     )
