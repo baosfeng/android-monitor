@@ -29,8 +29,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.Button
@@ -60,19 +63,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.transfer.DeviceTypes
 import com.bsfeng.monitor.domain.transfer.PeerDevice
 import com.bsfeng.monitor.domain.transfer.TransferDirection
 import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
+import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
 import com.bsfeng.monitor.domain.transfer.TransferFormat
-import com.bsfeng.monitor.transfer.service.ServiceModePolicy
+import com.bsfeng.monitor.transfer.service.ReceivingState
 import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
 import com.bsfeng.monitor.ui.components.AppCard
-import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.ConfirmDialog
@@ -118,11 +121,11 @@ fun TransferScreen(
     val openPairing by viewModel.openPairing.collectAsStateWithLifecycle()
     val thresholdMb by viewModel.autoApproveThresholdMb.collectAsStateWithLifecycle()
     val backgroundReceive by viewModel.backgroundReceive.collectAsStateWithLifecycle()
+    val alias by viewModel.aliasFlow.collectAsStateWithLifecycle()
     val view = LocalView.current
     var pinInput by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { viewModel.ensureStarted() }
     DisposableEffect(view) {
         viewModel.setHapticTarget(view)
         onDispose { viewModel.setHapticTarget(null) }
@@ -169,35 +172,46 @@ fun TransferScreen(
     }
 
     val onlineCount = devices.count { it.online }
+    // 关闭态不出现端口号：端口只在服务真的在跑时才有意义（顶部副标题是状态，不是调试信息）。
     val meta = buildString {
-        append(if (running) "端口 ${viewModel.localPort}" else "服务未就绪")
-        append(" · 在线 $onlineCount 台")
-        append(" · ${viewModel.alias}")
+        if (running) {
+            append("端口 ${viewModel.localPort} · 在线 $onlineCount 台")
+        } else {
+            append("未开启接收")
+        }
+        append(" · ${alias}")
     }
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            ScreenHead(title = "局域网互传", meta = meta)
+            // 固定头部：实色底 + 明确高度，列表用 weight(1f) 占剩余空间，滚动时不会压到头部
+            Box(Modifier.fillMaxWidth().background(t.bg)) {
+                ScreenHead(title = "局域网互传", meta = meta)
+            }
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = t.space4, end = t.space4, bottom = t.space12),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(
+                    start = t.space4,
+                    end = t.space4,
+                    top = t.space2,
+                    bottom = t.space12,
+                ),
                 verticalArrangement = Arrangement.spacedBy(t.space3),
             ) {
+                // 接收状态只留一张卡：服务开关（运行/停止）与「后台常驻」模式合并成一句话，
+                // 避免「后台接收已开启」和「未开启接收」两行并排出现时自相矛盾。
                 item {
-                    HintText(
-                        ServiceModePolicy.modeHint(backgroundReceive) +
-                            " · 通知栏磁贴可一键开关",
+                    ReceivingCard(
+                        running = running,
+                        port = viewModel.localPort,
+                        onlineCount = onlineCount,
+                        backgroundReceive = backgroundReceive,
+                        windowRemainingMs = windowRemainingMs,
+                        thresholdMb = thresholdMb,
+                        onStart = { viewModel.startReceiving() },
+                        onStop = { viewModel.stopReceiving() },
                     )
                 }
-                item { DiscoverableCard(
-                    discoverable = discoverable,
-                    running = running,
-                    port = viewModel.localPort,
-                    onlineCount = onlineCount,
-                    windowRemainingMs = windowRemainingMs,
-                    thresholdMb = thresholdMb,
-                    onToggle = { viewModel.setDiscoverable(it) },
-                ) }
                 item {
                     Text(
                         "附近设备",
@@ -211,6 +225,7 @@ fun TransferScreen(
                         EmptyState(
                             text = "同一 Wi-Fi 下打开 Mac 端「传送」即可互相发现",
                             title = "等待设备出现",
+                            icon = Icons.Outlined.Devices,
                         )
                     }
                 } else {
@@ -243,18 +258,18 @@ fun TransferScreen(
                         )
                     }
                 }
-                val activeTasks = tasks.filter { it.isActive }
-                val finishedTasks = tasks.filter { !it.isActive }.take(MAX_FINISHED_TASKS)
+                val activeTasks = TransferTaskGroups.active(tasks)
+                val finishedTasks = TransferTaskGroups.finished(tasks).take(MAX_FINISHED_TASKS)
                 item {
                     Text(
-                        "进行中" + if (activeTasks.isEmpty()) "" else " · " + activeTasks.size,
+                        TransferTaskGroups.activeTitle(tasks),
                         style = MaterialTheme.typography.titleSmall,
                         color = t.fg2,
                         modifier = Modifier.padding(top = t.space2),
                     )
                 }
                 if (activeTasks.isEmpty()) {
-                    item { HintText("当前没有进行中的传输") }
+                    item { HintText("暂无进行中的传输") }
                 } else {
                     itemsIndexed(
                         activeTasks,
@@ -420,7 +435,8 @@ private fun DeviceRow(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (device.deviceType == DeviceTypes.MAC) {
+                // 协议常量 DeviceTypes.MAC = "macos"；对端若发 "mac" / "macbook" 也按桌面设备显示
+                imageVector = if (device.deviceType.startsWith("mac", ignoreCase = true)) {
                     Icons.Outlined.Computer
                 } else {
                     Icons.Outlined.Smartphone
@@ -504,37 +520,56 @@ private fun SwipeableTaskCard(
     LaunchedEffect(Unit) {
         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) dismissState.reset()
     }
+    // 背景（danger + 垃圾桶）随滑动进度淡入：未滑动时 alpha=0，完全不可见，
+    // 避免「卡片粉色 / 图标从边角透出」（真机截图问题）；
+    // 滑到 35% 即达满不透明，否则拖到一半看到的仍是淡粉色而不是红底。
+    val reveal = (dismissState.progress / REVEAL_FULL_PROGRESS).coerceIn(0f, 1f)
     SwipeToDismissBox(
         state = dismissState,
+        // 进行中任务也允许拖动：松手时 confirmValueChange 返回 false 回弹，
+        // 这样「滑不动」和「滑出去才知道不能删」两种手感都不会出现。
         enableDismissFromStartToEnd = true,
         enableDismissFromEndToStart = true,
         backgroundContent = {
-            val alignment = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                else -> Alignment.CenterEnd
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(shape)
-                    .background(t.danger)
-                    .padding(horizontal = t.space4),
-                contentAlignment = alignment,
-            ) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = "删除",
-                    tint = t.accentOn,
-                    modifier = Modifier.size(t.space5),
-                )
+            if (reveal > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = reveal }
+                        .clip(shape)
+                        .background(t.danger)
+                        .padding(horizontal = t.space4),
+                ) {
+                    // 左右各一个垃圾桶（对应两个滑动方向），垂直居中
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = "删除",
+                        tint = t.accentOn,
+                        modifier = Modifier.align(Alignment.CenterStart).size(t.space5),
+                    )
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = null,
+                        tint = t.accentOn,
+                        modifier = Modifier.align(Alignment.CenterEnd).size(t.space5),
+                    )
+                }
             }
         },
     ) {
-        TaskCard(
-            task = task,
-            index = index,
-            onCancel = onCancel,
-        )
+        // 内容必须不透明且铺满：圆角由卡片自身承载，不留会透出底色的缝
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(t.opaquePanel),
+        ) {
+            TaskCard(
+                task = task,
+                index = index,
+                onCancel = onCancel,
+            )
+        }
     }
 }
 
@@ -570,12 +605,16 @@ private fun TaskCard(
                     task.file.name,
                     style = MaterialTheme.typography.titleSmall,
                     color = t.fg,
+                    // 超长文件名最多两行，其余省略：卡片高度不随文件名爆炸
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(t.space1))
                 Text(
                     taskDetailText(task),
                     style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
+                    // 失败态副文案直接走 danger，和「已完成」的灰色一眼分开
+                    color = if (failed) t.danger else t.muted,
                 )
             }
             if (task.isActive) {
@@ -588,29 +627,54 @@ private fun TaskCard(
                         .clickable(onClick = onCancel)
                         .padding(horizontal = t.space2, vertical = t.space1),
                 )
-            } else if (task.status == TransferStatus.COMPLETED) {
-                CompletionCheck()
+            } else {
+                when (task.status) {
+                    TransferStatus.COMPLETED -> CompletionCheck()
+                    TransferStatus.FAILED, TransferStatus.DENIED -> Icon(
+                        Icons.Outlined.ErrorOutline,
+                        contentDescription = "传输失败",
+                        tint = t.danger,
+                        modifier = Modifier.size(t.space5),
+                    )
+                    TransferStatus.CANCELLED -> Icon(
+                        Icons.Outlined.Cancel,
+                        contentDescription = "已取消",
+                        tint = t.muted,
+                        modifier = Modifier.size(t.space5),
+                    )
+                    else -> Unit
+                }
             }
         }
-        Spacer(Modifier.height(t.space3))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(t.space1)
-                .clip(RoundedCornerShape(t.radiusPill))
-                .background(t.fgFade(10)),
-        ) {
+        // 进度条只属于「进行中」：终态卡片只保留文件名 + 方向/大小 + 状态图标，
+        // 不再挂一条满格绿条（那是过程信息，完成/失败/取消后没有意义）。
+        if (task.isActive) {
+            Spacer(Modifier.height(t.space3))
             Box(
                 Modifier
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .height(t.space1)
                     .clip(RoundedCornerShape(t.radiusPill))
-                    .background(accent),
-            )
+                    .background(t.fgFade(10)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(t.radiusPill))
+                        .background(accent),
+                )
+            }
         }
         if (failed && task.message.isNotBlank()) {
             Spacer(Modifier.height(t.space2))
-            Text(task.message, style = MaterialTheme.typography.bodySmall, color = t.danger)
+            Text(
+                task.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = t.danger,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -707,7 +771,7 @@ private fun secondsUntil(deadlineMs: Long): Int {
     return ((left + 999L) / 1_000L).toInt()
 }
 
-/** 任务行副文案：进行中显示「已传 / 总量 · 速度」，已完成只显示总体积（需求 4a）。 */
+/** 任务行副文案：进行中显示「已传 / 总量 · 速度」，已完成只显示总体积，失败/取消只保留已传/总量。 */
 private fun taskDetailText(task: TransferTask): String = buildString {
     append(if (task.direction == TransferDirection.SEND) "发送" else "接收")
     append(" · ")
@@ -717,54 +781,93 @@ private fun taskDetailText(task: TransferTask): String = buildString {
         append(TransferFormat.fileSize(task.file.size))
     } else {
         append(TransferFormat.progressPair(task.receivedBytes, task.file.size))
-        val speed = TransferFormat.speed(task.bytesPerSecond)
-        if (speed.isNotBlank()) {
-            append(" · ")
-            append(speed)
+        // 速度是过程信息：只有进行中才显示（终态卡片不再挂动态数值）
+        if (task.isActive) {
+            val speed = TransferFormat.speed(task.bytesPerSecond)
+            if (speed.isNotBlank()) {
+                append(" · ")
+                append(speed)
+            }
         }
     }
 }
 
-/** 「可被发现」卡片：发现开关 + 端口 / 在线数 + 免配对窗口剩余时间。 */
+/**
+ * 顶部「接收状态」区（单一真值源 = [TransferEngine.running]）。
+ *
+ * - 关闭：一行「未开启接收 · 仅应用内」+ 说明 + 一键开启；
+ * - 开启：「接收已开启 · 端口 / 在线数 · 后台常驻（或仅应用内）」+ 关闭按钮；
+ * - 「后台常驻」是模式标签，附在状态行末尾，不再单独占一行（否则与「未开启接收」并排自相矛盾）；
+ * - 磁贴、设置页、本卡片都读写同一状态，不再各存一份。
+ */
 @Composable
-private fun DiscoverableCard(
-    discoverable: Boolean,
+private fun ReceivingCard(
     running: Boolean,
     port: Int,
     onlineCount: Int,
+    backgroundReceive: Boolean,
     windowRemainingMs: Long,
     thresholdMb: Int,
-    onToggle: (Boolean) -> Unit,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
+    val modeLabel = if (backgroundReceive) "后台常驻" else "仅应用内"
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("可被发现", style = MaterialTheme.typography.titleSmall, color = t.fg)
-                    Spacer(Modifier.width(t.space2))
-                    Badge(
-                        text = if (discoverable) "发现中" else "已关闭",
-                        tone = if (discoverable) BadgeTone.Success else BadgeTone.Neutral,
-                    )
-                }
+                Text(
+                    if (running) "接收已开启" else "未开启接收",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = t.fg,
+                )
                 Spacer(Modifier.height(t.space1))
                 Text(
-                    when {
-                        !running -> "服务未就绪"
-                        !discoverable -> "停止公告，对端看不到本机"
-                        else -> "端口 $port · 在线 $onlineCount 台"
+                    if (running) {
+                        ReceivingState.of(true, port, onlineCount).statusText + " · " + modeLabel
+                    } else {
+                        // 关闭态只说明「开启后会发生什么」；不把「后台常驻」贴在「未开启接收」旁边
+                        // （那是开启后的模式，不是当前状态，并排会读成自相矛盾）。
+                        "同一 Wi-Fi 下开启后，对端就能发现本机 · " +
+                            if (backgroundReceive) "开启后常驻后台" else "仅应用内"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                 )
             }
-            AppSwitch(checked = discoverable, onCheckedChange = onToggle)
+            if (running) {
+                Text(
+                    "关闭",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = t.accent,
+                    modifier = Modifier
+                        .padding(start = t.space2)
+                        .clip(RoundedCornerShape(t.radiusSm))
+                        .clickable(onClick = onStop)
+                        .padding(horizontal = t.space2, vertical = t.space1),
+                )
+            }
         }
-        if (windowRemainingMs > 0L) {
+        if (!running) {
+            Spacer(Modifier.height(t.space3))
+            Button(
+                onClick = onStart,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = t.accent,
+                    contentColor = t.accentOn,
+                ),
+            ) {
+                Text("开启接收", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        if (running && windowRemainingMs > 0L) {
             Spacer(Modifier.height(t.space2))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Badge(text = "免配对 " + TransferFormat.windowRemaining(windowRemainingMs), tone = BadgeTone.Warn)
+                Badge(
+                    text = "免配对 " + TransferFormat.windowRemaining(windowRemainingMs),
+                    tone = BadgeTone.Warn,
+                )
                 Spacer(Modifier.width(t.space2))
                 Text(
                     "未配对设备在窗口内免 PIN",
@@ -772,7 +875,8 @@ private fun DiscoverableCard(
                     color = t.muted,
                 )
             }
-        } else if (thresholdMb > 0) {
+        }
+        if (running && windowRemainingMs <= 0L && thresholdMb > 0) {
             Spacer(Modifier.height(t.space2))
             Text(
                 "小于 " + TransferFormat.threshold(thresholdMb) + " 的文件免配对",
@@ -808,6 +912,9 @@ private fun statusLabel(task: TransferTask): String = when (task.status) {
 
 /** 抖动幅度（协议 §7：±4px）。 */
 private const val SHAKE_PX = 4f
+
+/** 滑动到什么比例时背景红底达到完全不透明（更早看见「红底 + 垃圾桶」）。 */
+private const val REVEAL_FULL_PROGRESS = 0.35f
 
 /** 「最近完成」最多展示条数（更早的记录由删除整理，不做无限增长）。 */
 private const val MAX_FINISHED_TASKS = 20

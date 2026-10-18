@@ -27,6 +27,13 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
 
     private val engine = TransferEngine.getInstance(application)
 
+    init {
+        // ViewModel 由 UI 创建即代表 App 在前台：显式标记可见。
+        // 只依赖 Activity 的 ON_START 时，观察者注册晚于事件会漏掉首帧，
+        // 表现为「开启接收后端口在跑、组播/广播不发、对端搜不到本机」。
+        engine.setAppVisible(true)
+    }
+
     /** 在线设备。 */
     val devices: StateFlow<List<PeerDevice>> = engine.devices
 
@@ -48,6 +55,16 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     /** 本端设备信息。 */
     val alias: String get() = engine.alias
     val deviceId: String get() = engine.deviceId
+
+    /** 本机名称（可改名；改名后传送页顶部与设置页立即刷新）。 */
+    private val aliasState = MutableStateFlow(engine.alias)
+    val aliasFlow: StateFlow<String> = aliasState.asStateFlow()
+
+    /** 修改本机名称（对端看到的名字）；空串回落到系统设备名。 */
+    fun setAlias(value: String) {
+        engine.setAlias(value)
+        aliasState.value = engine.alias
+    }
 
     /** 实际端口（引擎启动后才有值）。 */
     val localPort: Int get() = engine.localPort
@@ -85,16 +102,43 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     /** 「后台接收」开关（默认关闭：仅 App 可见时运行）。 */
     val backgroundReceive: StateFlow<Boolean> = backgroundReceiveState.asStateFlow()
 
-    /** 确保服务 / 引擎已启动（幂等；仅前台模式下要求 App 可见）。 */
-    fun ensureStarted() {
+    /**
+     * 开启接收（传送页开关 / 按钮）：打开「可被发现」并启动服务。
+     *
+     * App 启动时**不会**自动调用本方法——接收只由用户显式开启（磁贴或传送页），
+     * 保证「磁贴关了、App 里就真的是关的」。
+     */
+    fun startReceiving() {
+        val settings = engine.settings()
+        settings.discoverable = true
+        // 用户此刻就在界面上操作：先标记可见，再启动服务，
+        // 避免「服务已启动但发现线程按不可见判定不启动」的半启动状态。
+        engine.setAppVisible(true)
+        engine.setDiscoverable(true)
         started.value = true
         TransferService.start(getApplication())
+        discoverableState.value = true
     }
 
-    /** App 回到前台：更新可见性并启动（或复用）服务。 */
+    /** 关闭接收：停服务（端口释放、对端列表消失），并同步关闭「可被发现」。 */
+    fun stopReceiving() {
+        val settings = engine.settings()
+        settings.backgroundReceive = false
+        settings.discoverable = false
+        engine.setDiscoverable(false)
+        TransferService.stop(getApplication())
+        discoverableState.value = false
+        backgroundReceiveState.value = false
+    }
+
+    /** 兼容旧调用点：不再自动启动服务，仅记录一次。 */
+    fun ensureStarted() {
+        started.value = true
+    }
+
+    /** App 回到前台：只更新可见性，不自动开启接收。 */
     fun onAppForeground() {
         engine.setAppVisible(true)
-        ensureStarted()
     }
 
     /** App 退到后台：停发现；「后台接收」关闭时连服务一起停（对端列表随之消失）。 */
@@ -107,7 +151,14 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     fun setBackgroundReceive(enabled: Boolean) {
         engine.settings().backgroundReceive = enabled
         backgroundReceiveState.value = enabled
-        if (enabled) TransferService.start(getApplication()) else TransferService.refresh(getApplication())
+        if (enabled) {
+            // 后台接收 = 允许服务常驻；同时把「可被发现」打开，避免服务跑着却搜不到
+            engine.settings().discoverable = true
+            discoverableState.value = true
+            TransferService.start(getApplication())
+        } else {
+            TransferService.refresh(getApplication())
+        }
         TransferTileService.requestRefresh(getApplication())
     }
 
