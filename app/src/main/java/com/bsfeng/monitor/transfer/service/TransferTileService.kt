@@ -53,13 +53,16 @@ class TransferTileService : TileService() {
         val engine = TransferEngine.getInstance(this)
         val settings = TransferSettings(this)
         if (engine.running.value) {
-            // 关：停止前台服务与发现，通知随之移除
+            // 关：停止服务与发现，端口释放、通知移除；「可被发现」同步关闭
             settings.backgroundReceive = false
+            settings.discoverable = false
+            engine.setDiscoverable(false)
             TransferService.stop(this)
             engine.stop()
         } else {
-            // 开：等价于「后台接收」开启 + 前台服务启动
+            // 开：等价于「后台接收」开启 + 「可被发现」开启 + 前台服务启动
             settings.backgroundReceive = true
+            settings.discoverable = true
             TransferService.start(this)
         }
         updateTile()

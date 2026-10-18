@@ -18,7 +18,8 @@ import java.security.SecureRandom
  */
 class TransferSettings(context: Context) {
 
-    private val prefs = context.applicationContext
+    private val appContext: Context = context.applicationContext
+    private val prefs = appContext
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /** 本机设备 id（首次访问时生成并持久化）。 */
@@ -27,11 +28,25 @@ class TransferSettings(context: Context) {
             prefs.edit { putString(KEY_DEVICE_ID, it) }
         }
 
-    /** 本机别名（默认机型名，可改）。 */
+    /**
+     * 本机别名（对外广播的 `alias`）。
+     *
+     * 优先级：用户在设置页显式改过的名字（[KEY_ALIAS_MANUAL]）→ 系统「设备名称」→ 厂商 + 型号 → 兜底。
+     * 未手动改名时**每次读取都重新解析**，因此用户在系统设置里改了设备名、重启 App 后立即跟随；
+     * 解析结果同时写一份缓存，仅用于系统读取失败时保留上次显示，不参与优先级判定。
+     */
     var alias: String
-        get() = prefs.getString(KEY_ALIAS, null)?.takeIf { it.isNotBlank() } ?: defaultAlias
+        get() {
+            prefs.getString(KEY_ALIAS_MANUAL, null)?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+            val resolved = DeviceAliasResolver.resolveDeviceAlias(appContext)
+            prefs.edit { putString(KEY_ALIAS_CACHE, resolved) }
+            return resolved
+        }
         set(value) {
-            prefs.edit { putString(KEY_ALIAS, value.trim().ifBlank { defaultAlias }) }
+            val trimmed = value.trim()
+            prefs.edit {
+                if (trimmed.isBlank()) remove(KEY_ALIAS_MANUAL) else putString(KEY_ALIAS_MANUAL, trimmed)
+            }
         }
 
     /** 传输完成提示音（默认开，协议 §7）。 */
@@ -186,7 +201,7 @@ class TransferSettings(context: Context) {
     }
 
     private val defaultAlias: String
-        get() = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android"
+        get() = DeviceAliasResolver.resolveDeviceAlias(appContext)
 
     companion object {
         const val PREFS_NAME = "lan_transfer"
@@ -201,7 +216,12 @@ class TransferSettings(context: Context) {
         private const val KEY_OPEN_PAIRING_EXPIRES_AT = "open_pairing_expires_at"
         private const val KEY_AUTO_APPROVE_MB = "auto_approve_threshold_mb"
         private const val KEY_DEVICE_ID = "device_id"
-        private const val KEY_ALIAS = "alias"
+
+        /** 用户手动设置的本机名称（最高优先级；清空即回落系统设备名）。 */
+        private const val KEY_ALIAS_MANUAL = "alias_manual"
+
+        /** 上次解析出的本机名称，仅作展示缓存。 */
+        private const val KEY_ALIAS_CACHE = "alias"
         private const val KEY_PAIRING = "pairing_keys"
         private const val KEY_SOUND_COMPLETE = "sound_complete"
         private const val KEY_SOUND_FAILURE = "sound_failure"
