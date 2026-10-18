@@ -61,8 +61,11 @@ const val DISCOVERY_UNICAST_CONCURRENCY: Int = 128
 /** 流式落盘缓冲（64 KiB）。 */
 const val CHUNK_SIZE: Int = 64 * 1024
 
-/** 未配对时 PIN 确认超时。 */
-const val CONFIRM_TIMEOUT_MS: Long = 30_000L
+/** 未配对时 PIN 确认超时（协议 §4.1 错误码 4007）。 */
+const val CONFIRM_TIMEOUT_MS: Long = 60_000L
+
+/** 对方别名为空时的展示回退（offer 缺 `senderAlias` / 发现层未知设备）。 */
+const val UNKNOWN_PEER_ALIAS: String = "未知设备"
 
 /** 60s 无字节进展判超时。 */
 const val NO_PROGRESS_TIMEOUT_MS: Long = 60_000L
@@ -230,6 +233,8 @@ data class TransferTask(
     val file: TransferFile,
     val status: TransferStatus,
     val receivedBytes: Long = 0L,
+    /** 当前速度（字节/秒，指数平滑；终态与未开始为 0）。 */
+    val bytesPerSecond: Long = 0L,
     val errorCode: Int? = null,
     val message: String = "",
     val updatedAtMs: Long = 0L,

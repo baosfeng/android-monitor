@@ -65,6 +65,21 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 局域网互传：下拉通知栏快捷开关（磁贴） -->
+        <service
+            android:name=".transfer.service.TransferTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_transfer_tile"
+            android:label="局域网互传"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
+
         <!-- 定时保活检查 + 周期上报触发(每分钟一次) -->
         <receiver
             android:name=".service.AlarmReceiver"
