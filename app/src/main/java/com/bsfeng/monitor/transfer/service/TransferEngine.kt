@@ -25,6 +25,10 @@ import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.transfer.data.TransferTaskStore
 import com.bsfeng.monitor.transfer.discovery.DeviceRegistry
 import com.bsfeng.monitor.transfer.discovery.UdpDiscoveryService
+import com.bsfeng.monitor.transfer.policy.ProgressSpeed
+import com.bsfeng.monitor.transfer.policy.ProgressThrottle
+import com.bsfeng.monitor.transfer.policy.SendStallReason
+import com.bsfeng.monitor.transfer.policy.SendTaskTimeoutPolicy
 import com.bsfeng.monitor.transfer.transport.ApiResponse
 import com.bsfeng.monitor.transfer.transport.DownloadsSink
 import com.bsfeng.monitor.transfer.transport.MiniHttpClient
@@ -401,6 +405,8 @@ class TransferEngine private constructor(
     /**
      * 超时收敛：确认超时（4007）与「传输中长时间无进展」都统一落为 FAILED，
      * 任务随之从「进行中」移出（模块的单一状态出口，UI 不再自己判断）。
+     *
+     * 接收侧按会话收敛；发送侧按任务行收敛（见 [convergeStalledSendTasks]），口径同一个。
      */
     private fun enforceTimeouts() {
         val now = System.currentTimeMillis()
@@ -415,6 +421,48 @@ class TransferEngine private constructor(
                     failSession(session, TransferErrorCode.CONFIRM_TIMEOUT, "长时间无进展")
             }
         }
+        convergeStalledSendTasks(now)
+    }
+
+    /**
+     * 发送侧超时收敛（与接收侧同口径、同错误码 4007）。
+     *
+     * 真机 Bug：「进行中」卡着一条发送任务两小时以上——发送会话没有超时路径，
+     * 对端失联 / 拒收后不回话时任务永远停在 `OFFERED`（已提交清单）或 `TRANSFERRING`。
+     */
+    private fun convergeStalledSendTasks(now: Long) {
+        _tasks.value
+            .filter { it.direction == TransferDirection.SEND && !it.status.isTerminal }
+            .forEach { task ->
+                val reason = SendTaskTimeoutPolicy.reasonOf(
+                    task = task,
+                    nowMs = now,
+                    confirmTimeoutMs = confirmTimeoutMs,
+                    noProgressTimeoutMs = noProgressTimeoutMs,
+                ) ?: return@forEach
+                failSendSession(task.sessionId, reason)
+            }
+    }
+
+    /**
+     * 一条发送会话整体收敛（幂等）：同会话的活跃任务全部落 FAILED(4007)，
+     * 摘掉 [outgoing] 条目（避免内存泄漏与「已收敛还在上传」）并收起等待输入的 PIN 弹层。
+     */
+    private fun failSendSession(sessionId: String, reason: SendStallReason) {
+        val targets = _tasks.value.filter { it.sessionId == sessionId && !it.status.isTerminal }
+        // 先摘条目：即便任务行已被别处收敛，残留的 outgoing 条目也要清掉
+        val tracked = outgoing.remove(sessionId) != null
+        if (targets.isEmpty()) return
+        targets.forEach { failTask(it.sessionId, it.file.fileId, TransferErrorCode.CONFIRM_TIMEOUT, reason.message) }
+        if (pendingSend?.sessionId == sessionId) {
+            pendingSend = null
+            if (_pinPrompt.value?.sessionId == sessionId) _pinPrompt.value = null
+        }
+        if (tracked) playSound(TransferSoundPlayer.Event.FAILURE)
+        Log.i(
+            TAG,
+            "发送会话 $sessionId 超时收敛：${reason.message}（${TransferErrorCode.CONFIRM_TIMEOUT}）",
+        )
     }
 
     /** 会话失败收敛（幂等）：改状态 + 写任务行 + 清 PIN 弹层。 */
@@ -615,6 +663,9 @@ class TransferEngine private constructor(
         if (!append && part.exists()) part.delete()
 
         var lastPatched = targetOffset
+        // 进度发射节流（150ms）：64KiB 一块就发射一次会把 UI 主线程打满；真实字节与
+        // `lastProgressAtMs` 仍逐块更新，只有 StateFlow 发射被合并
+        var lastEmitMs = ProgressThrottle.NO_EMIT
         val result = try {
             FileOutputStream(part, append).use { output ->
                 StreamCopier.copy(
@@ -624,14 +675,17 @@ class TransferEngine private constructor(
                     onChunk = { copied ->
                         val received = targetOffset + copied
                         incoming.received = received
-                        session.lastProgressAtMs = System.currentTimeMillis()
-                        patchTask(sessionId, fileId) {
-                            val now = System.currentTimeMillis()
-                            it.copy(
-                                receivedBytes = received,
-                                bytesPerSecond = speedFor(it, received, now),
-                                updatedAtMs = now,
-                            )
+                        val now = System.currentTimeMillis()
+                        session.lastProgressAtMs = now
+                        if (ProgressThrottle.shouldEmit(lastEmitMs, now)) {
+                            lastEmitMs = now
+                            patchTask(sessionId, fileId) {
+                                it.copy(
+                                    receivedBytes = received,
+                                    bytesPerSecond = speedFor(it, received, now),
+                                    updatedAtMs = now,
+                                )
+                            }
                         }
                         lastPatched = received
                     },
@@ -790,8 +844,10 @@ class TransferEngine private constructor(
         val token = api.string("token")
         when (TransferStatus.fromWire(api.string("state"))) {
             TransferStatus.TRANSFERRING -> {
-                outgoing[remoteSessionId] = OutgoingSession(peer, token, sources)
-                uploadAll(remoteSessionId, peer, sources, token, readAccepted(api))
+                // 任务行沿用本端会话 id（offered 时就按它落库 / 展示）：对端 sessionId 只用于 HTTP，
+                // 否则进度回写找不到任务行，卡片会永远停在「已提交清单」。
+                outgoing[sessionId] = OutgoingSession(peer, remoteSessionId, token, sources)
+                uploadAll(sessionId, remoteSessionId, peer, sources, token, readAccepted(api))
             }
 
             TransferStatus.AWAITING_CONFIRM -> {
@@ -861,36 +917,41 @@ class TransferEngine private constructor(
             pendingSend = null
             _pinPrompt.value = null
             val token = api.string("token")
-            outgoing[pending.sessionId] = OutgoingSession(pending.peer, token, pending.sources)
-            uploadAll(pending.sessionId, pending.peer, pending.sources, token, readAccepted(api))
+            outgoing[pending.sessionId] =
+                OutgoingSession(pending.peer, pending.sessionId, token, pending.sources)
+            uploadAll(pending.sessionId, pending.sessionId, pending.peer, pending.sources, token, readAccepted(api))
         }
     }
 
     private suspend fun uploadAll(
-        sessionId: String,
+        taskSessionId: String,
+        remoteSessionId: String,
         peer: PeerDevice,
         sources: List<SendSource>,
         token: String,
         offsets: Map<String, Long>,
     ) {
         sources.forEachIndexed { index, source ->
+            // 已被超时收敛（条目被摘）：不再继续上传后面的文件
+            if (outgoing[taskSessionId] == null) return
             val fileId = "f${index + 1}"
             val offset = offsets[fileId] ?: 0L
-            patchTask(sessionId, fileId) {
+            patchTask(taskSessionId, fileId) {
                 it.copy(status = TransferStatus.TRANSFERRING, receivedBytes = offset)
             }
-            val ok = uploadWithRetry(sessionId, peer, source, fileId, offset, token)
+            val ok = uploadWithRetry(taskSessionId, remoteSessionId, peer, source, fileId, offset, token)
             if (!ok) {
-                outgoing.remove(sessionId)
+                outgoing.remove(taskSessionId)
                 return
             }
         }
-        playSound(TransferSoundPlayer.Event.COMPLETE)
-        outgoing.remove(sessionId)
+        // 只有仍在跟踪的会话才播完成音：已被超时收敛的不再「假装成功」
+        if (outgoing.remove(taskSessionId) != null) playSound(TransferSoundPlayer.Event.COMPLETE)
     }
 
     private suspend fun uploadWithRetry(
-        sessionId: String,
+        taskSessionId: String,
+        remoteSessionId: String,
         peer: PeerDevice,
         source: SendSource,
         fileId: String,
@@ -898,12 +959,19 @@ class TransferEngine private constructor(
         token: String,
     ): Boolean {
         var attempt = 0
+        // 进度发射节流（150ms，跨重试保持）：不节流时 100MB / 64KiB = 约 57 次发射每秒，
+        // Compose 每秒全量重组几十次 → 传输中界面白屏。状态跃迁 / 终态不经过这里。
+        var lastEmitMs = ProgressThrottle.NO_EMIT
         while (true) {
             val outcome = runCatching {
                 val url = MiniHttpClient.buildUrl(
                     peer.baseUrl,
                     "upload",
-                    listOf("session" to sessionId, "file" to fileId, "offset" to offset.toString()),
+                    listOf(
+                        "session" to remoteSessionId,
+                        "file" to fileId,
+                        "offset" to offset.toString(),
+                    ),
                 )
                 val input = appContext.contentResolver.openInputStream(source.uri)
                     ?: throw IOException("无法读取源文件")
@@ -915,38 +983,51 @@ class TransferEngine private constructor(
                         contentLength = source.size - offset,
                         headers = mapOf(TokenHeader to token),
                         onProgress = { progress ->
-                            patchTask(sessionId, fileId) {
-                                val now = System.currentTimeMillis()
-                                val received = offset + progress
-                                it.copy(
-                                    receivedBytes = received,
-                                    bytesPerSecond = speedFor(it, received, now),
-                                    status = TransferStatus.TRANSFERRING,
-                                    updatedAtMs = now,
-                                )
+                            val now = System.currentTimeMillis()
+                            if (ProgressThrottle.shouldEmit(lastEmitMs, now)) {
+                                lastEmitMs = now
+                                patchTask(taskSessionId, fileId) {
+                                    // 已收敛为终态的任务不再被进度回写唤醒
+                                    if (it.status.isTerminal) {
+                                        it
+                                    } else {
+                                        val received = offset + progress
+                                        it.copy(
+                                            receivedBytes = received,
+                                            bytesPerSecond = speedFor(it, received, now),
+                                            status = TransferStatus.TRANSFERRING,
+                                            updatedAtMs = now,
+                                        )
+                                    }
+                                }
                             }
                         },
                     )
                 }
-                parseUploadResponse(sessionId, fileId, source, sent)
+                parseUploadResponse(taskSessionId, fileId, source, sent)
             }
             val success = outcome.getOrElse { e ->
                 Log.w(TAG, "上传 $fileId 失败: ${e.message}")
                 false
             }
             if (success) {
-                patchTask(sessionId, fileId) {
-                    it.copy(
-                        status = TransferStatus.COMPLETED,
-                        receivedBytes = source.size,
-                        bytesPerSecond = 0L,
-                        updatedAtMs = System.currentTimeMillis(),
-                    )
+                patchTask(taskSessionId, fileId) {
+                    // 终态不可被回写翻转（已超时收敛的任务保持失败）
+                    if (it.status.isTerminal) {
+                        it
+                    } else {
+                        it.copy(
+                            status = TransferStatus.COMPLETED,
+                            receivedBytes = source.size,
+                            bytesPerSecond = 0L,
+                            updatedAtMs = System.currentTimeMillis(),
+                        )
+                    }
                 }
                 return true
             }
             if (attempt >= RETRY_DELAYS_MS.size) {
-                failTask(sessionId, fileId, TransferErrorCode.SESSION_EXPIRED, "断网重试 3 次仍失败")
+                failTask(taskSessionId, fileId, TransferErrorCode.SESSION_EXPIRED, "断网重试 3 次仍失败")
                 playSound(TransferSoundPlayer.Event.FAILURE)
                 return false
             }
@@ -956,7 +1037,7 @@ class TransferEngine private constructor(
     }
 
     private fun parseUploadResponse(
-        sessionId: String,
+        taskSessionId: String,
         fileId: String,
         source: SendSource,
         response: MiniHttpClient.HttpResponse,
@@ -964,7 +1045,7 @@ class TransferEngine private constructor(
         val api = response.api
         if (api == null || !api.isOk) {
             if (api != null && api.code == TransferErrorCode.SHA256_MISMATCH) {
-                failTask(sessionId, fileId, api.code, api.message)
+                failTask(taskSessionId, fileId, api.code, api.message)
                 return false
             }
             Log.w(TAG, "上传响应异常：HTTP ${response.httpCode} ${response.body.take(120)}")
@@ -972,7 +1053,7 @@ class TransferEngine private constructor(
         }
         val remoteSha = api.string("sha256")
         if (remoteSha.isNotBlank() && !remoteSha.equals(source.sha256, ignoreCase = true)) {
-            failTask(sessionId, fileId, TransferErrorCode.SHA256_MISMATCH, "sha256 不一致")
+            failTask(taskSessionId, fileId, TransferErrorCode.SHA256_MISMATCH, "sha256 不一致")
             playSound(TransferSoundPlayer.Event.FAILURE)
             return false
         }
@@ -1026,7 +1107,7 @@ class TransferEngine private constructor(
                         MiniHttpClient.buildUrl(
                             outbound.peer.baseUrl,
                             "cancel",
-                            listOf("session" to sessionId),
+                            listOf("session" to outbound.remoteSessionId),
                         ),
                         mapOf(TokenHeader to outbound.token),
                     )
@@ -1201,16 +1282,17 @@ class TransferEngine private constructor(
     /**
      * 速度估算：本次增量 / 时间差，再与上次值做 3:1 指数平滑（避免进度条数字乱跳）。
      *
-     * 终态任务不推进度，UI 只显示总体积，因此这里不需要归零逻辑。
+     * 口径落在 [ProgressSpeed]（纯函数，可纯 JVM 单测）：进度被节流后，
+     * 采样时间差随之变大，速度仍然是「真实字节差 / 真实时间差」，不会变 0 或跳变。
      */
-    private fun speedFor(previous: TransferTask, received: Long, nowMs: Long): Long {
-        val deltaTime = nowMs - previous.updatedAtMs
-        if (deltaTime <= 0L) return previous.bytesPerSecond
-        val deltaBytes = received - previous.receivedBytes
-        if (deltaBytes <= 0L) return previous.bytesPerSecond
-        val instant = deltaBytes * 1_000L / deltaTime
-        return if (previous.bytesPerSecond <= 0L) instant else (previous.bytesPerSecond * 3 + instant) / 4
-    }
+    private fun speedFor(previous: TransferTask, received: Long, nowMs: Long): Long =
+        ProgressSpeed.bytesPerSecond(
+            previousReceived = previous.receivedBytes,
+            previousBps = previous.bytesPerSecond,
+            previousAtMs = previous.updatedAtMs,
+            received = received,
+            nowMs = nowMs,
+        )
 
     /** 接收目录占用（`Downloads/局域网互传/` 的文件数与总大小）。 */
     fun receivedStats(): DownloadsSink.ReceivedStats = downloads.stats()
@@ -1479,22 +1561,38 @@ class TransferEngine private constructor(
         }
     }
 
-    /** 启动时加载历史（终态保留；崩溃残留的非终态按失败展示）。 */
+    /**
+     * 启动时加载历史（终态保留；崩溃残留的非终态按失败展示）。
+     *
+     * 非终态里「按同一超时口径已经卡死」的发送任务直接落 FAILED(4007)，
+     * 否则每次重启都会在「进行中」看到同一批陈旧僵尸（真机 Bug：卡了两小时以上）。
+     */
     internal suspend fun loadPersistedHistory() {
         val entries = runCatching { withContext(Dispatchers.IO) { taskStore.loadRecent() } }
             .onFailure { Log.w(TAG, "任务历史读取失败: ${it.message}") }
             .getOrDefault(emptyList())
         if (entries.isEmpty()) return
+        val now = System.currentTimeMillis()
         val restored = entries.map { entry ->
             val task = entry.task
             if (task.status.isTerminal) {
                 task
             } else {
+                val reason = SendTaskTimeoutPolicy.reasonOf(
+                    task = task,
+                    nowMs = now,
+                    confirmTimeoutMs = confirmTimeoutMs,
+                    noProgressTimeoutMs = noProgressTimeoutMs,
+                )
                 task.copy(
                     status = TransferStatus.FAILED,
-                    errorCode = TransferErrorCode.SESSION_EXPIRED,
-                    message = "上次未完成",
-                    updatedAtMs = System.currentTimeMillis(),
+                    errorCode = if (reason != null) {
+                        TransferErrorCode.CONFIRM_TIMEOUT
+                    } else {
+                        TransferErrorCode.SESSION_EXPIRED
+                    },
+                    message = reason?.message ?: "上次未完成",
+                    updatedAtMs = now,
                 )
             }
         }
@@ -1507,6 +1605,32 @@ class TransferEngine private constructor(
             if (uri != null) publishedFiles[taskKey(entry.task.sessionId, entry.task.file.fileId)] = uri
         }
     }
+
+    /**
+     * 仅供测试：立即跑一次超时收敛（生产由 [tickerLoop] 每 tick 调用、`offerStatus` 顺带触发）。
+     */
+    internal fun enforceTimeoutsForTesting() {
+        enforceTimeouts()
+    }
+
+    /**
+     * 仅供测试：注入一条发送任务行，并按需登记对应的 [outgoing] 条目
+     * （用于验证「超时收敛 → 任务落 FAILED 且条目被摘除」）。
+     */
+    internal fun injectSendTaskForTesting(task: TransferTask, trackOutgoing: Boolean = true) {
+        upsertTask(task)
+        if (trackOutgoing) {
+            outgoing[task.sessionId] = OutgoingSession(
+                peer = task.peer,
+                remoteSessionId = "remote-${task.sessionId}",
+                token = "test-token",
+                sources = emptyList(),
+            )
+        }
+    }
+
+    /** 仅供测试：当前登记中的发送会话条目数。 */
+    internal fun outgoingSessionCountForTesting(): Int = outgoing.size
 
     private fun renameTasks(fromSessionId: String, toSessionId: String) {
         _tasks.update { current ->
@@ -1574,8 +1698,15 @@ class TransferEngine private constructor(
         var part: File? = null
     }
 
+    /**
+     * 一次发送会话（登记在 [outgoing]，键为**本端任务行**的 `sessionId`）。
+     *
+     * [remoteSessionId] 是对端 `/offer` 返回的会话 id，只用于 HTTP（upload / cancel）；
+     * 两者分开是为了让进度回写、超时收敛与任务行始终是同一个键。
+     */
     private class OutgoingSession(
         val peer: PeerDevice,
+        val remoteSessionId: String,
         val token: String,
         val sources: List<SendSource>,
     )
@@ -1660,7 +1791,6 @@ class TransferEngine private constructor(
             tickMs: Long = DEVICE_TICK_MS,
         ): TransferEngine =
             TransferEngine(context.applicationContext, confirmTimeoutMs, noProgressTimeoutMs, tickMs)
-
         /**
          * 单例复位（仅供测试）。
          *
