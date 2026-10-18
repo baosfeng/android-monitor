@@ -2,8 +2,10 @@ package com.bsfeng.monitor.transfer.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,6 +75,7 @@ import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
 import com.bsfeng.monitor.domain.transfer.TransferFormat
+import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.ReceivingState
 import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
 import com.bsfeng.monitor.ui.components.AppCard
@@ -121,6 +124,7 @@ fun TransferScreen(
     val openPairing by viewModel.openPairing.collectAsStateWithLifecycle()
     val thresholdMb by viewModel.autoApproveThresholdMb.collectAsStateWithLifecycle()
     val backgroundReceive by viewModel.backgroundReceive.collectAsStateWithLifecycle()
+    val autoCloseDeadline by viewModel.autoCloseDeadline.collectAsStateWithLifecycle()
     val alias by viewModel.aliasFlow.collectAsStateWithLifecycle()
     val view = LocalView.current
     var pinInput by remember { mutableStateOf("") }
@@ -139,6 +143,16 @@ fun TransferScreen(
             if (windowRemainingMs <= 0L) break
             delay(1_000L)
         }
+    }
+    // 「自动关闭接收」剩余时间每秒刷新；未计时 / 未运行时归零（不展示这一行）
+    var autoCloseRemainingMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(autoCloseDeadline, running) {
+        while (running && autoCloseDeadline > 0L) {
+            autoCloseRemainingMs = (autoCloseDeadline - System.currentTimeMillis()).coerceAtLeast(0L)
+            if (autoCloseRemainingMs <= 0L) break
+            delay(1_000L)
+        }
+        if (!running || autoCloseDeadline <= 0L) autoCloseRemainingMs = 0L
     }
     LaunchedEffect(viewModel) {
         viewModel.deletedTasks.collect { deleted ->
@@ -207,6 +221,7 @@ fun TransferScreen(
                         onlineCount = onlineCount,
                         backgroundReceive = backgroundReceive,
                         windowRemainingMs = windowRemainingMs,
+                        autoCloseRemainingMs = autoCloseRemainingMs,
                         thresholdMb = thresholdMb,
                         onStart = { viewModel.startReceiving() },
                         onStop = { viewModel.stopReceiving() },
@@ -797,6 +812,7 @@ private fun taskDetailText(task: TransferTask): String = buildString {
  *
  * - 关闭：一行「未开启接收 · 仅应用内」+ 说明 + 一键开启；
  * - 开启：「接收已开启 · 端口 / 在线数 · 后台常驻（或仅应用内）」+ 关闭按钮；
+ * - 开了「自动关闭接收」时多一行剩余时间（最后 60 秒转警示色），到点由引擎停服务、磁贴回 INACTIVE；
  * - 「后台常驻」是模式标签，附在状态行末尾，不再单独占一行（否则与「未开启接收」并排自相矛盾）；
  * - 磁贴、设置页、本卡片都读写同一状态，不再各存一份。
  */
@@ -807,12 +823,29 @@ private fun ReceivingCard(
     onlineCount: Int,
     backgroundReceive: Boolean,
     windowRemainingMs: Long,
+    autoCloseRemainingMs: Long,
     thresholdMb: Int,
     onStart: () -> Unit,
     onStop: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val modeLabel = if (backgroundReceive) "后台常驻" else "仅应用内"
+    val motionEnabled = rememberMotionEnabled()
+    // 「自动关闭」文案：最后 60 秒切警示色（颜色过渡取 dur-state，reduced-motion 时直接落终态）
+    val autoCloseText = if (running && autoCloseRemainingMs > 0L) {
+        ReceivingAutoClose.remainingText(autoCloseRemainingMs)
+    } else {
+        null
+    }
+    val autoCloseColor by animateColorAsState(
+        targetValue = if (autoCloseText != null && ReceivingAutoClose.isWarning(autoCloseRemainingMs)) {
+            t.warnText
+        } else {
+            t.muted
+        },
+        animationSpec = if (motionEnabled) tween(t.durState) else snap(),
+        label = "autoCloseColor",
+    )
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -860,6 +893,14 @@ private fun ReceivingCard(
             ) {
                 Text("开启接收", style = MaterialTheme.typography.bodyMedium)
             }
+        }
+        if (autoCloseText != null) {
+            Spacer(Modifier.height(t.space2))
+            Text(
+                autoCloseText,
+                style = MaterialTheme.typography.bodySmall,
+                color = autoCloseColor,
+            )
         }
         if (running && windowRemainingMs > 0L) {
             Spacer(Modifier.height(t.space2))
