@@ -66,6 +66,7 @@ import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.Chip
+import com.bsfeng.monitor.ui.components.ChipRow
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.SkeletonBlock
 import com.bsfeng.monitor.ui.components.StateContainer
@@ -87,6 +88,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
@@ -95,6 +97,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
 import com.bsfeng.monitor.domain.transfer.TransferFormat
 import com.bsfeng.monitor.R
+import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.TransferTileService
 import com.bsfeng.monitor.transfer.service.TransferTileState
 import com.bsfeng.monitor.transfer.ui.TransferViewModel
@@ -486,6 +489,7 @@ fun SettingsScreen(
                             }
 
                             val backgroundReceive by transferViewModel.backgroundReceive.collectAsState()
+                            val autoCloseMinutes by transferViewModel.autoCloseMinutes.collectAsState()
                             val myAlias by transferViewModel.aliasFlow.collectAsState()
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
                                 TokenRow(
@@ -516,6 +520,41 @@ fun SettingsScreen(
                                             )
                                         })
                                     },
+                                )
+                                TokenDivider(first = false)
+                                // 「自动关闭接收」：到点自动停服务，避免不用时白白耗电。
+                                // 只持久化时长，不持久化计时起点（进程重启后重新计时）。
+                                TokenRow(
+                                    title = "自动关闭接收",
+                                    subtitle = if (autoCloseMinutes == ReceivingAutoClose.OFF) {
+                                        "关闭：一直保持接收，直到手动关闭（默认）"
+                                    } else {
+                                        "开启接收后 " + ReceivingAutoClose.label(autoCloseMinutes) + "自动停止 · 省电"
+                                    },
+                                    icon = Icons.Outlined.Timer,
+                                )
+                                ChipRow(
+                                    items = ReceivingAutoClose.MINUTES_OPTIONS.map {
+                                        ReceivingAutoClose.label(it)
+                                    },
+                                    selectedIndex = ReceivingAutoClose.MINUTES_OPTIONS
+                                        .indexOf(autoCloseMinutes).coerceAtLeast(0),
+                                    onSelect = { index ->
+                                        val minutes = ReceivingAutoClose.MINUTES_OPTIONS[index]
+                                        transferViewModel.setAutoCloseMinutes(minutes)
+                                        view.performConfirmHaptic()
+                                        toast.show(
+                                            if (minutes == ReceivingAutoClose.OFF) {
+                                                "已关闭「自动关闭接收」"
+                                            } else {
+                                                "接收将在 " + ReceivingAutoClose.label(minutes) + "后自动关闭"
+                                            },
+                                        )
+                                    },
+                                    modifier = Modifier.padding(
+                                        horizontal = t.space4,
+                                        vertical = t.space2,
+                                    ),
                                 )
                                 TokenDivider(first = false)
                                 TokenRow(

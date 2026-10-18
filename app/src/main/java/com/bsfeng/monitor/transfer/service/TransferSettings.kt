@@ -73,6 +73,15 @@ class TransferSettings(context: Context) {
         get() = prefs.getBoolean(KEY_BACKGROUND_RECEIVE, false)
         set(value) = prefs.edit { putBoolean(KEY_BACKGROUND_RECEIVE, value) }
 
+    /**
+     * 「自动关闭接收」：接收服务启动后多久自动停止（分钟；0 = 关闭，默认）。
+     *
+     * 只持久化**时长**，不持久化计时起点：进程重启后倒计时不恢复（见 [ReceivingAutoClose]）。
+     */
+    var autoCloseMinutes: Int
+        get() = prefs.getInt(KEY_AUTO_CLOSE_MINUTES, ReceivingAutoClose.DEFAULT_MINUTES)
+        set(value) = prefs.edit { putInt(KEY_AUTO_CLOSE_MINUTES, ReceivingAutoClose.normalize(value)) }
+
     /** 暂停接收的到期时刻（epoch ms；0 = 未暂停）。 */
     var pauseOffersUntilMs: Long
         get() = prefs.getLong(KEY_PAUSE_OFFERS_UNTIL, 0L)
@@ -209,6 +218,7 @@ class TransferSettings(context: Context) {
         private const val WINDOW_MINUTE_MS = 60_000L
         private const val KEY_DISCOVERABLE = "discoverable"
         private const val KEY_BACKGROUND_RECEIVE = "background_receive"
+        private const val KEY_AUTO_CLOSE_MINUTES = "auto_close_minutes"
         private const val KEY_PAUSE_OFFERS_UNTIL = "pause_offers_until"
         private const val PAUSE_MINUTES = 5
         private const val KEY_OPEN_PAIRING_ENABLED = "open_pairing_enabled"

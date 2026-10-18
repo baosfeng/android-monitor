@@ -33,6 +33,7 @@ import com.bsfeng.monitor.transfer.transport.StreamCopier
 import com.bsfeng.monitor.transfer.transport.TransferRoutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -108,6 +109,15 @@ class TransferEngine private constructor(
     private val _running = MutableStateFlow(false)
     private val _discoverable = MutableStateFlow(false)
     private val _deletedTasks = MutableSharedFlow<DeletedTask>(extraBufferCapacity = DELETED_EVENT_BUFFER)
+    private val _autoCloseEvents = MutableSharedFlow<Unit>(extraBufferCapacity = AUTO_CLOSE_EVENT_BUFFER)
+
+    /** 「自动关闭接收」的倒计时（纯逻辑，起点只在内存，进程重启不恢复）。 */
+    private val autoClose = AutoCloseCountdown()
+
+    @Volatile
+    private var autoCloseJob: Job? = null
+
+    private val _autoCloseDeadline = MutableStateFlow(0L)
 
     /**
      * 删除事件（UI 用它开 5s 撤销窗口）。
@@ -131,6 +141,20 @@ class TransferEngine private constructor(
 
     /** 是否参与发现（「可被发现」开关）。 */
     val discoverable: StateFlow<Boolean> = _discoverable.asStateFlow()
+
+    /**
+     * 「自动关闭接收」的到期时刻（epoch ms；0 = 未计时）。
+     *
+     * 纯内存状态（不持久化）：UI 据此显示「N 分钟后自动关闭」，进程重启后归零。
+     */
+    val autoCloseDeadline: StateFlow<Long> = _autoCloseDeadline.asStateFlow()
+
+    /**
+     * 倒计时到点事件（宿主 [TransferService] 收到后停服务：移除常驻通知、磁贴回 INACTIVE）。
+     *
+     * 引擎负责计时与自身停止，服务负责收尾——两边都听同一个真值源 [running]。
+     */
+    val autoCloseEvents: SharedFlow<Unit> = _autoCloseEvents.asSharedFlow()
 
     /** 本端设置（UI 读写提示音开关）。 */
     fun settings(): TransferSettings = settings
@@ -174,6 +198,8 @@ class TransferEngine private constructor(
                 historyLoaded.set(true)
                 scope.launch { loadPersistedHistory() }
                 _running.value = true
+                // 启动成功后才起算「自动关闭接收」（设置关闭时不做任何事）
+                startAutoCloseCountdown()
                 Log.i(TAG, "传送服务已启动，HTTP 端口 $boundPort")
             } else {
                 started.set(false)
@@ -193,6 +219,8 @@ class TransferEngine private constructor(
 
     /** 停止发现与服务，清理在途会话（保留 `.part` 供下次续传）。 */
     fun stop() {
+        // 手动关闭 / 服务销毁：取消「自动关闭」计时（重新 start 会重新计时）
+        cancelAutoCloseCountdown()
         if (!started.compareAndSet(true, false)) return
         server?.stop()
         server = null
@@ -205,6 +233,65 @@ class TransferEngine private constructor(
         _pinPrompt.value = null
         _running.value = false
         refreshDevices()
+    }
+
+    /**
+     * 「自动关闭接收」设置变化后重放一次计时。
+     *
+     * 运行中改时长 → 按新时长重新计时（与免配对窗口改时长同口径）；
+     * 改成「关闭」→ 取消计时；服务没在跑 → 什么都不做（下次启动按新设置起算）。
+     */
+    fun refreshAutoCloseSchedule() {
+        if (!started.get() || _running.value != true) {
+            cancelAutoCloseCountdown()
+            return
+        }
+        startAutoCloseCountdown()
+    }
+
+    /** 当前自动关闭剩余毫秒（未计时返回 0）。 */
+    fun autoCloseRemainingMs(nowMs: Long = System.currentTimeMillis()): Long =
+        ReceivingAutoClose.remainingMs(_autoCloseDeadline.value, nowMs)
+
+    /**
+     * 按当前设置起算倒计时（服务启动成功后调用）。
+     *
+     * 幂等：每次调用先清掉旧任务，因此「重新开启接收」= 重新计时、改设置 = 用新时长重算。
+     */
+    private fun startAutoCloseCountdown() {
+        cancelAutoCloseCountdown()
+        val minutes = ReceivingAutoClose.normalize(settings.autoCloseMinutes)
+        if (minutes == ReceivingAutoClose.OFF) return
+        autoClose.start(minutes = minutes)
+        _autoCloseDeadline.value = autoClose.deadlineMs()
+        Log.i(TAG, "自动关闭接收已计时：$minutes 分钟后停止")
+        autoCloseJob = scope.launch { autoCloseLoop() }
+    }
+
+    /** 取消计时并清理任务（手动关闭服务、设置改回关闭、服务销毁）。 */
+    private fun cancelAutoCloseCountdown() {
+        autoCloseJob?.cancel()
+        autoCloseJob = null
+        autoClose.cancel()
+        _autoCloseDeadline.value = 0L
+    }
+
+    /**
+     * 倒计时循环：到点先发事件让宿主服务收尾（移除通知 / 磁贴回 INACTIVE），再自停兜底。
+     *
+     * 分段 `delay` 而非一次睡满：设置变更或手动关闭时 `cancel()` 立即生效，不留悬挂任务。
+     */
+    private suspend fun autoCloseLoop() {
+        while (scope.isActive) {
+            if (autoClose.shouldStop()) {
+                Log.i(TAG, "自动关闭接收：到点，停止服务")
+                // 先通知宿主（主线程执行 shutdown），没有监听者时下面的 stop() 也保证服务真的停
+                _autoCloseEvents.tryEmit(Unit)
+                stop()
+                break
+            }
+            delay(autoClose.remainingMs().coerceAtLeast(1L).coerceAtMost(AUTO_CLOSE_TICK_MS))
+        }
     }
 
     /**
@@ -1549,6 +1636,12 @@ class TransferEngine private constructor(
         const val PAUSE_MINUTES = 5
 
         private const val DELETED_EVENT_BUFFER = 16
+
+        /** 「自动关闭接收」倒计时的检查间隔上限（到点判定误差 ≤ 1s）。 */
+        private const val AUTO_CLOSE_TICK_MS = 1_000L
+
+        /** 自动关闭事件的缓冲（宿主服务常驻收集，1 已足够不丢）。 */
+        private const val AUTO_CLOSE_EVENT_BUFFER = 1
 
         @Volatile
         private var instance: TransferEngine? = null

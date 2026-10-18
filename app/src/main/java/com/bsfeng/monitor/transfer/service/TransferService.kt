@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.bsfeng.monitor.MainActivity
@@ -55,6 +56,13 @@ class TransferService : Service() {
         }
         scope.launch {
             TransferEngine.getInstance(applicationContext).tasks.collect { refreshNotification() }
+        }
+        // 「自动关闭接收」到点：引擎发事件，这里在主线程收尾（停服务 → 常驻通知移除、磁贴回 INACTIVE）
+        scope.launch {
+            TransferEngine.getInstance(applicationContext).autoCloseEvents.collect {
+                Log.i(TAG, "自动关闭接收：停止服务与常驻通知")
+                shutdown()
+            }
         }
         // 暂停窗口内每 5s 刷新一次剩余时间（不在暂停时几乎零开销）
         scope.launch {
@@ -201,6 +209,7 @@ class TransferService : Service() {
 
         private const val NOTIFICATION_ID = 5300
         private const val PAUSE_TICK_MS = 5_000L
+        private const val TAG = "TransferService"
 
         /**
          * 启动服务（幂等）：常驻模式走 `startForegroundService`，仅前台模式走普通 `startService`

@@ -8,6 +8,7 @@ import com.bsfeng.monitor.domain.transfer.DeletedTask
 import com.bsfeng.monitor.domain.transfer.PeerDevice
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
+import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.TransferEngine
 import com.bsfeng.monitor.transfer.service.TransferService
 import com.bsfeng.monitor.transfer.service.TransferTileService
@@ -77,6 +78,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     private val thresholdState = MutableStateFlow(engine.settings().autoApproveThresholdMb)
     private val receivedStatsState = MutableStateFlow(DownloadsSink.ReceivedStats(0, 0L))
     private val backgroundReceiveState = MutableStateFlow(engine.settings().backgroundReceive)
+    private val autoCloseMinutesState = MutableStateFlow(engine.settings().autoCloseMinutes)
 
     /** 当前选中的发送目标设备 id。 */
     val selectedDeviceId: StateFlow<String?> = selected.asStateFlow()
@@ -101,6 +103,20 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
 
     /** 「后台接收」开关（默认关闭：仅 App 可见时运行）。 */
     val backgroundReceive: StateFlow<Boolean> = backgroundReceiveState.asStateFlow()
+
+    /** 「自动关闭接收」时长（分钟；0 = 关闭，默认）。 */
+    val autoCloseMinutes: StateFlow<Int> = autoCloseMinutesState.asStateFlow()
+
+    /** 自动关闭的到期时刻（0 = 未计时）；UI 据此显示剩余时间。 */
+    val autoCloseDeadline: StateFlow<Long> = engine.autoCloseDeadline
+
+    /** 切换「自动关闭接收」时长（0 = 关闭）；运行中立即按新时长重新计时。 */
+    fun setAutoCloseMinutes(minutes: Int) {
+        val normalized = ReceivingAutoClose.normalize(minutes)
+        engine.settings().autoCloseMinutes = normalized
+        autoCloseMinutesState.value = normalized
+        engine.refreshAutoCloseSchedule()
+    }
 
     /**
      * 开启接收（传送页开关 / 按钮）：打开「可被发现」并启动服务。
