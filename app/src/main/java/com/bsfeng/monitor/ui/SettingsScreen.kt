@@ -12,6 +12,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -71,15 +75,21 @@ import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.util.DebugConfig
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.ThemeRepository
+import com.bsfeng.monitor.ui.theme.fgFade
 import android.app.StatusBarManager
 import android.content.ComponentName
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.DataUsage
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material.icons.outlined.VolumeOff
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
@@ -433,6 +443,8 @@ fun SettingsScreen(
                             val stats by transferViewModel.receivedStats.collectAsState()
                             var confirmClear by remember { mutableStateOf(false) }
                             var windowLeftMs by remember { mutableStateOf(windowState.remainingMs()) }
+                            var editingName by remember { mutableStateOf(false) }
+                            var nameDraft by remember { mutableStateOf("") }
 
                             LaunchedEffect(windowState) {
                                 while (true) {
@@ -474,7 +486,19 @@ fun SettingsScreen(
                             }
 
                             val backgroundReceive by transferViewModel.backgroundReceive.collectAsState()
+                            val myAlias by transferViewModel.aliasFlow.collectAsState()
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "本机名称",
+                                    subtitle = myAlias + " · 对端设备列表里显示的名字",
+                                    icon = Icons.Outlined.Smartphone,
+                                    onClick = {
+                                        nameDraft = myAlias
+                                        editingName = true
+                                    },
+                                    trailing = { TailChevron() },
+                                )
+                                TokenDivider(first = false)
                                 TokenRow(
                                     title = "后台接收",
                                     subtitle = if (backgroundReceive) {
@@ -482,7 +506,7 @@ fun SettingsScreen(
                                     } else {
                                         "仅 App 可见时运行 · 默认关闭"
                                     },
-                                    icon = Icons.Outlined.Notifications,
+                                    icon = Icons.Outlined.NotificationsActive,
                                     trailing = {
                                         AppSwitch(backgroundReceive, { enabled ->
                                             transferViewModel.setBackgroundReceive(enabled)
@@ -501,7 +525,7 @@ fun SettingsScreen(
                                     } else {
                                         "下拉通知栏 → 编辑 → 添加「局域网互传」"
                                     },
-                                    icon = Icons.Outlined.SwapHoriz,
+                                    icon = Icons.Outlined.Widgets,
                                     trailing = {
                                         AppButton(
                                             text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
@@ -517,7 +541,7 @@ fun SettingsScreen(
                                 TokenRow(
                                     title = "传输完成提示",
                                     subtitle = "系统通知音 + 震动",
-                                    icon = Icons.Outlined.Notifications,
+                                    icon = Icons.Outlined.VolumeUp,
                                     trailing = {
                                         AppSwitch(sound.complete, { enabled ->
                                             transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
@@ -530,7 +554,7 @@ fun SettingsScreen(
                                 TokenRow(
                                     title = "传输失败提示",
                                     subtitle = "提示音 + 震动（默认关）",
-                                    icon = Icons.Outlined.Notifications,
+                                    icon = Icons.Outlined.VolumeOff,
                                     trailing = {
                                         AppSwitch(sound.failure, { enabled ->
                                             transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
@@ -542,7 +566,7 @@ fun SettingsScreen(
                                 TokenRow(
                                     title = "新设备出现提示",
                                     subtitle = "仅震动（默认关）",
-                                    icon = Icons.Outlined.Notifications,
+                                    icon = Icons.Outlined.Vibration,
                                     trailing = {
                                         AppSwitch(sound.newDevice, { enabled ->
                                             transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
@@ -559,7 +583,7 @@ fun SettingsScreen(
                                         "未开启：未配对设备需输入 4 位 PIN"
                                     },
                                     subtitleColor = if (windowLeftMs > 0L) t.successText else t.muted,
-                                    icon = Icons.Outlined.SwapHoriz,
+                                    icon = Icons.Outlined.LockOpen,
                                     trailing = {
                                         AppSwitch(windowState.enabled, { enabled ->
                                             transferViewModel.setOpenPairingWindow(enabled)
@@ -574,9 +598,13 @@ fun SettingsScreen(
                                         })
                                     },
                                 )
-                                // 窗口时长：开启时切换会以新时长重新计时
+                                // 窗口时长：开启时切换会以新时长重新计时；
+                                // 未开启时整行降透明度，避免「未开启」与高亮的「10 分钟」并排读成自相矛盾
                                 Row(
-                                    Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer { alpha = if (windowState.enabled) 1f else 0.55f }
+                                        .padding(horizontal = t.space4, vertical = t.space2),
                                     horizontalArrangement = Arrangement.spacedBy(t.space2),
                                 ) {
                                     PairingPolicy.WINDOW_MINUTES.forEach { minutes ->
@@ -598,7 +626,7 @@ fun SettingsScreen(
                                     } else {
                                         "关闭：一律需要 PIN（默认）"
                                     },
-                                    icon = Icons.Outlined.SwapHoriz,
+                                    icon = Icons.Outlined.DataUsage,
                                 )
                                 Row(
                                     Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
@@ -626,13 +654,18 @@ fun SettingsScreen(
                                     } else {
                                         "占用 " + TransferFormat.fileSize(stats.totalBytes) + " · 共 " + stats.count + " 个"
                                     },
-                                    icon = Icons.Outlined.Delete,
+                                    icon = Icons.Outlined.Folder,
                                     trailing = {
                                         AppButton(
                                             text = "清理",
                                             onClick = {
-                                                confirmClear = true
                                                 view.performConfirmHaptic()
+                                                // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
+                                                if (stats.isEmpty) {
+                                                    toast.show("暂无可清理的接收文件")
+                                                } else {
+                                                    confirmClear = true
+                                                }
                                             },
                                             variant = AppButtonVariant.Ghost,
                                         )
@@ -641,6 +674,35 @@ fun SettingsScreen(
                                 Spacer(Modifier.height(t.space1))
                             }
 
+                            ConfirmDialog(
+                                visible = editingName,
+                                title = "本机名称",
+                                message = "对端设备列表里显示的名字，最多 $ALIAS_MAX_LENGTH 个字符",
+                                confirmLabel = "保存",
+                                dismissLabel = "取消",
+                                onDismiss = { editingName = false },
+                                onConfirm = {
+                                    val name = nameDraft.trim().take(ALIAS_MAX_LENGTH)
+                                    if (name.isNotBlank()) {
+                                        transferViewModel.setAlias(name)
+                                        toast.show("本机名称已改为「" + name + "」")
+                                    }
+                                    editingName = false
+                                },
+                                extraContent = {
+                                    BasicTextField(
+                                        value = nameDraft,
+                                        onValueChange = { if (it.length <= ALIAS_MAX_LENGTH) nameDraft = it },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = t.fg),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(t.radiusMd))
+                                            .background(t.fgFade(6))
+                                            .padding(t.space3),
+                                    )
+                                },
+                            )
                             ConfirmDialog(
                                 visible = confirmClear,
                                 title = "清理接收目录",
@@ -804,3 +866,6 @@ private fun formatUptime(ms: Long): String {
         else -> "不足 1 分钟"
     }
 }
+
+/** 本机名称长度上限（发现报文一行文案，过长会被对端列表截断）。 */
+private const val ALIAS_MAX_LENGTH = 24

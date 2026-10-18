@@ -19,13 +19,11 @@ class AlarmReceiver : BroadcastReceiver() {
 
         HealthChecker.checkAndRestore(context)
 
-        // 检查 AccessibilityService 是否存活，如果不在则尝试唤醒应用进程
+        // 检查 AccessibilityService 是否存活，如果不在且 App 不在前台才尝试唤醒进程。
+        // 注意：不再无条件 startActivity + CLEAR_TOP —— 那会每分钟把正在使用的页面
+        // 重建回「概览」，用户会看到「设置页/传送页自己跳走」。
         if (!isAccessibilityServiceRunning(context)) {
-            // 通过启动 MainActivity 来唤醒进程（会触发 Application.onCreate 重新初始化）
-            val wakeIntent = Intent(context, com.bsfeng.monitor.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            context.startActivity(wakeIntent)
+            bringToFrontIfBackground(context)
         }
 
         // 每 1 分钟也触发一次数据上报
@@ -59,6 +57,27 @@ class AlarmReceiver : BroadcastReceiver() {
         } catch (_: Exception) {
             true  // 无法判断时默认 OK
         }
+    }
+
+    /**
+     * 仅在 App 不在前台时才把界面唤到前台。
+     *
+     * 用 `SINGLE_TOP`（不是 `CLEAR_TOP`）避免重建当前页；前台用户正在操作时直接跳过，
+     * 否则用户会看到页面被每分钟一次的保活闹钟踢回「概览」。
+     */
+    private fun bringToFrontIfBackground(context: Context) {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val inForeground = runCatching {
+            activityManager?.runningAppProcesses?.any {
+                it.processName == context.packageName &&
+                    it.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            } ?: false
+        }.getOrDefault(false)
+        if (inForeground) return
+        val wakeIntent = Intent(context, com.bsfeng.monitor.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        runCatching { context.startActivity(wakeIntent) }
     }
 }
 
