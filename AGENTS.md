@@ -71,6 +71,7 @@
 | 自动记账 | 无障碍识别微信/支付宝**单笔账单页**（账单页门禁 + 视觉行解析）→ 弹确认浮窗（跟随 8 套主题）→ 同一笔短时间去重 → 用户确认后幂等落库 → [文档](docs/记账/自动记账.md)（改识别规则前必读） · [业界调研](docs/记账/自动记账调研.md) · [微信支付页识别调研](docs/记账/微信支付页识别调研.md)（**微信按服务身份封锁节点、改用白名单身份注册后放行的机制与真机证据**） | `com.bsfeng.monitor.autobook` |
 | UI 界面 | Jetpack Compose 四标签界面:实时事件流、广告跳过、记账、设置 | `com.bsfeng.monitor.ui` |
 | 工具与配置 | 应用配置、设备 ID、Token 持久化、调试配置开关、诊断计数器 | `com.bsfeng.monitor.util` |
+| 更新检测 | 多源版本检查（自建源 / jsDelivr / GitHub 镜像）、APK 下载与 sha256 校验、FileProvider 安装 → [文档](docs/更新检测/概述.md) | `com.bsfeng.monitor.update` |
 
 ## 代码快速定位
 
@@ -132,6 +133,12 @@
 | 修改自动记账触发时机 / 窗口选择 / 落库 / 窗口诊断 | `app/src/main/java/com/bsfeng/monitor/autobook/AutoBookEngine.kt` |
 | 修改无障碍服务的**注册身份**（微信白名单伪装壳） | `app/src/main/java/com/google/android/accessibility/selecttospeak/SelectToSpeakService.kt` + `app/src/main/AndroidManifest.xml` + `app/src/main/java/com/bsfeng/monitor/util/AccessibilityStatus.kt` |
 | 修改应用配置 | `app/src/main/java/com/bsfeng/monitor/AppConfig.kt` |
+| 修改更新检测逻辑 | `app/src/main/java/com/bsfeng/monitor/update/UpdateChecker.kt` |
+| 修改版本清单格式 | `updates/version.json` + `app/src/main/java/com/bsfeng/monitor/update/UpdateManifest.kt` |
+| 修改更新下载与校验 | `app/src/main/java/com/bsfeng/monitor/update/ApkDownloader.kt` |
+| 修改更新源与镜像 | `app/src/main/java/com/bsfeng/monitor/update/UpdateConfig.kt` |
+| 修改应用内安装 | `app/src/main/java/com/bsfeng/monitor/update/UpdateInstaller.kt` |
+| 修改发版流程 | `scripts/release.sh` + `.github/workflows/release.yml` + `docs/开发指南/发布指南.md` |
 | 修改工具类 | `app/src/main/java/com/bsfeng/monitor/util/AppUtils.kt` |
 | 修改调试配置 | `app/src/main/java/com/bsfeng/monitor/util/DebugConfig.kt` |
 | 修改无障碍服务状态判定 | `app/src/main/java/com/bsfeng/monitor/util/AccessibilityStatus.kt` |

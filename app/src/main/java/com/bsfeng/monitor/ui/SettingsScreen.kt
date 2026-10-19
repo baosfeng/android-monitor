@@ -43,6 +43,10 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,6 +63,17 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.BuildConfig
+import com.bsfeng.monitor.update.ApkDownloader
+import com.bsfeng.monitor.update.InstallResult
+import com.bsfeng.monitor.update.UpdateCheckResult
+import com.bsfeng.monitor.update.UpdateChecker
+import com.bsfeng.monitor.update.UpdateInstaller
+import com.bsfeng.monitor.update.UpdateManifest
+import com.bsfeng.monitor.update.UpdateUiState
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.io.File
+import java.util.Locale
 import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
@@ -143,6 +158,9 @@ fun SettingsScreen(
     // 保证「外观与主题」「组件与状态演示」两个入口在真机上真的能进（接线后自动走宿主导航）。
     var localAppearance by remember { mutableStateOf(false) }
     var localGallery by remember { mutableStateOf(false) }
+    // 应用内更新：检查 → 下载 → 安装（状态用 StateFlow，下载回调线程安全）
+    val updateState = remember { MutableStateFlow<UpdateUiState>(UpdateUiState.Idle) }
+    val currentUpdate by updateState.collectAsState()
 
     // 规则数 / 订阅源数 / 白名单数：只读其它模块的既有数据源，不新增存储
     var ruleCount by remember { mutableStateOf(0) }
@@ -811,20 +829,38 @@ fun SettingsScreen(
                                         DebugConfig.unlock()
                                         toast.show("调试入口已解锁：设置里出现「调试模式」")
                                     },
-                                    trailing = { TailNum("1.0.0") },
+                                    trailing = { TailNum(BuildConfig.VERSION_NAME) },
                                 )
                                 TokenDivider(first = false)
                                 TokenRow(
                                     title = "检查更新",
                                     icon = Icons.Outlined.Refresh,
-                                    onClick = { toast.show("已是最新版本 1.0.0") },
+                                    onClick = {
+                                        if (updateState.value !is UpdateUiState.Checking) {
+                                            updateState.value = UpdateUiState.Checking
+                                            scope.launch {
+                                                when (val result = withContext(Dispatchers.IO) { UpdateChecker().check() }) {
+                                                    is UpdateCheckResult.Available ->
+                                                        updateState.value = UpdateUiState.Available(result.manifest)
+                                                    is UpdateCheckResult.UpToDate -> {
+                                                        toast.show("已是最新版本 ${result.currentVersionName}")
+                                                        updateState.value = UpdateUiState.Idle
+                                                    }
+                                                    is UpdateCheckResult.Failed -> {
+                                                        toast.show("检查更新失败：${result.message}")
+                                                        updateState.value = UpdateUiState.Idle
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
                                     trailing = { TailChevron() },
                                 )
                                 TokenDivider(first = false)
                                 // 开源许可（原型 s09 缺行）：与原型一致，行本身不带图标、点击出许可文案。
                                 TokenRow(
                                     title = "开源许可",
-                                    onClick = { toast.show("开源许可：Apache-2.0") },
+                                    onClick = { toast.show("开源许可：MIT") },
                                     trailing = { TailChevron() },
                                 )
                                 Spacer(Modifier.height(t.space1))
@@ -835,6 +871,41 @@ fun SettingsScreen(
                 }
             }
         }
+
+        UpdateDialog(
+            state = currentUpdate,
+            onDismiss = { updateState.value = UpdateUiState.Idle },
+            onDownload = { manifest ->
+                updateState.value = UpdateUiState.Downloading(0, 0)
+                scope.launch {
+                    val checker = UpdateChecker()
+                    val dir = File(context.cacheDir, "updates")
+                    val result = withContext(Dispatchers.IO) {
+                        ApkDownloader().download(
+                            sources = checker.downloadSources(manifest),
+                            destDir = dir,
+                            expectedSha256 = manifest.apkSha256,
+                        ) { downloaded, total ->
+                            updateState.value = UpdateUiState.Downloading(downloaded, total)
+                        }
+                    }
+                    result.fold(
+                        onSuccess = { updateState.value = UpdateUiState.Downloaded(it) },
+                        onFailure = {
+                            toast.show("下载失败：${it.message ?: "网络不可用"}")
+                            updateState.value = UpdateUiState.Idle
+                        },
+                    )
+                }
+            },
+            onInstall = { apk ->
+                when (val result = UpdateInstaller.install(context, apk)) {
+                    is InstallResult.Started -> updateState.value = UpdateUiState.Idle
+                    is InstallResult.NeedPermission -> toast.show("请允许安装未知来源应用后重试")
+                    is InstallResult.Failed -> toast.show(result.message)
+                }
+            },
+        )
 
         AppToast(
             message = toast.message,
@@ -908,3 +979,75 @@ private fun formatUptime(ms: Long): String {
 
 /** 本机名称长度上限（发现报文一行文案，过长会被对端列表截断）。 */
 private const val ALIAS_MAX_LENGTH = 24
+
+/** 应用内更新的检查 / 下载 / 安装对话框。 */
+@Composable
+private fun UpdateDialog(
+    state: UpdateUiState,
+    onDismiss: () -> Unit,
+    onDownload: (UpdateManifest) -> Unit,
+    onInstall: (File) -> Unit,
+) {
+    when (state) {
+        is UpdateUiState.Available -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("发现新版本 ${state.manifest.versionName}") },
+            text = {
+                Text(
+                    state.manifest.changelog.ifBlank { "包含功能改进与问题修复。" },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = { TextButton(onClick = { onDownload(state.manifest) }) { Text("下载更新") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("稍后") } },
+        )
+
+        is UpdateUiState.Downloading -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("正在下载更新") },
+            text = {
+                Column {
+                    val fraction = if (state.total > 0) {
+                        (state.downloaded.toFloat() / state.total).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+                    Text(
+                        if (state.total > 0) {
+                            "${(fraction * 100).toInt()}%  ${formatBytes(state.downloaded)} / ${formatBytes(state.total)}"
+                        } else {
+                            formatBytes(state.downloaded)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        )
+
+        is UpdateUiState.Downloaded -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("更新已下载") },
+            text = { Text("点击安装完成更新。", style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = { TextButton(onClick = { onInstall(state.apk) }) { Text("安装") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("稍后") } },
+        )
+
+        else -> Unit
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var value = bytes.toDouble()
+    var index = 0
+    while (value >= 1024 && index < units.lastIndex) {
+        value /= 1024
+        index++
+    }
+    return if (index == 0) "$bytes B" else String.format(Locale.US, "%.1f %s", value, units[index])
+}
