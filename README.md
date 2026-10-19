@@ -11,6 +11,20 @@
 
 项目以 **Kotlin + Jetpack Compose** 编写，遵循「零第三方业务依赖」原则——数据库、网络、序列化均使用 Android 系统内置 API 实现。
 
+<p align="center">
+  <img src="docs/assets/readme/01-今日概览.png" width="300" alt="今日概览">
+</p>
+
+## 界面预览
+
+| 实时事件流 | 广告跳过 | 记账 | 记一笔 |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/assets/readme/02-实时事件流.png" width="200"> | <img src="docs/assets/readme/03-广告跳过.png" width="200"> | <img src="docs/assets/readme/04-记账.png" width="200"> | <img src="docs/assets/readme/05-记一笔.png" width="200"> |
+
+| 统计分析 | 设置 | 开屏跳过规则 | 自动记账浮窗 |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/assets/readme/06-统计分析.png" width="200"> | <img src="docs/assets/readme/07-设置.png" width="200"> | <img src="docs/assets/readme/08-开屏跳过规则.png" width="200"> | <img src="docs/assets/readme/09-自动记账浮窗.png" width="200"> |
+
 ## 功能特性
 
 | 模块 | 能力 |
