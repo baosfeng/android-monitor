@@ -1,0 +1,60 @@
+<!-- ============================================================
+     s14b · 记一笔内联展开-仅样式
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<!-- ============================================================
+     s14b · 记一笔（内联展开版）
+     ------------------------------------------------------------
+     交互模型：点字段行 → **就地展开**选择区（分类展开两排 8 个 + 「更多」开抽屉）。
+     与 s14a 的差别就是这一处：开抽屉 vs 就地展。
+     代价（实测）：分类展开两排会让内容高 738 → 约 890，**需要纵向滚动**；
+     s14a 的抽屉不影响主表单高度。这就是两版要你选的地方。
+     ============================================================ -->
+<style data-for="s14b">
+  .screen.s14b .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
+  .screen.s14b .s14-card{padding:var(--space-3) var(--space-4)}
+  .s14b-kind{margin-bottom:var(--space-2)}
+  .s14b-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
+  .s14b-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
+  .s14b-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .screen.s14b .s14-label{flex:0 0 44px;font-size:var(--text-sm);color:var(--muted)}
+  .screen.s14b .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .screen.s14b .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
+    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
+  .screen.s14b .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
+  .screen.s14b .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .screen.s14b .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14b-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
+    background:linear-gradient(to top,var(--surface) 62%,transparent)}
+  /* 就地展开区：给一层浅底，和「行」拉开层级（这正是 s14 里账户裸露丑的原因） */
+  .s14b-expand{margin:var(--space-2) 0 var(--space-3);padding:var(--space-3);
+    border-radius:var(--radius-md);background:color-mix(in srgb, var(--fg) 4%, transparent)}
+  .s14b-expand[hidden]{display:none}
+  .s14b-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+  .s14b-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+  .s14b-cat .cat-icon{width:44px;height:44px}
+  .s14b-cat[aria-pressed="true"]{color:var(--accent-text)}
+  .s14b-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .s14b-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .s14b-more{grid-column:1 / -1;margin-top:var(--space-1)}
+  .s14b-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
+  .s14b-strip::-webkit-scrollbar{display:none}
+  .s14b-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
+  .s14b-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
+  .s14b-line > .s14b-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
+  .s14b-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
+  .s14b-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
+  .s14b-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
+</style>
+<!--@od:section-->
+<!-- 仅样式方案：无结构段落 -->
+<!--@od:end-->

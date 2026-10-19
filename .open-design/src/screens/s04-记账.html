@@ -1,0 +1,674 @@
+<!-- ============================================================
+     s04 · 记账
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s04">
+/* ═══ s04 · 记账首页 / 交易列表 ═══ */
+.s04-month{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:3px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 4%,transparent)}
+.s04-month .icon-btn{border-color:transparent;background:transparent}
+.s04-month .icon-btn:active{transform:scale(.88)}
+.s04-mlabel{font-size:var(--text-base);font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.s04-mlabel.is-bump{animation:s04-bump 320ms var(--ease-spring) both}
+@keyframes s04-bump{from{transform:scale(.86);opacity:.3}to{transform:scale(1);opacity:1}}
+.s04-kpis{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center}
+.s04-kcol{display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.s04-krow{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+.s04-kv{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-base);font-weight:600;white-space:nowrap}
+.s04-kv.is-exp{color:var(--expense-text)}
+.s04-kv.is-inc{color:var(--income-text)}
+.s04-ring{position:relative;width:104px;height:104px;flex:0 0 auto}
+.s04-ring-chart{position:absolute;inset:0}
+.s04-ring-chart .chart{display:block;width:100%;height:100%}
+.s04-ring-txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center;row-gap:0}
+.s04-ring-txt b{font-family:var(--font-mono);font-size:var(--text-lg);font-weight:700;letter-spacing:-0.02em}
+.s04-ring-txt span{font-size:var(--text-sm);color:var(--muted)}
+.s04-entry{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-2);min-height:104px;text-align:left;font:inherit;cursor:pointer;transition:transform var(--dur-press) var(--ease-out)}
+.s04-entry:active{transform:scale(.965)}
+.s04-entry-ic{width:36px;height:36px;display:grid;place-items:center;border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 6%,transparent);color:var(--fg-2)}
+.s04-entry-ic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s04-entry-t{font-size:var(--text-base);font-weight:600}
+.s04-entry-s{font-size:var(--text-sm);color:var(--muted)}
+.s04-tx{transition:background var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out)}
+.s04-tx:active{background:color-mix(in srgb,var(--fg) 5%,transparent);transform:scale(.985)}
+.s04-amt{font-weight:600}
+.s04-amt.is-exp{color:var(--expense-text)}
+.s04-amt.is-inc{color:var(--income-text)}
+.s04-edge-amt{font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);margin:var(--space-2) 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--expense-text)}
+.s04-in{animation:s04-in 300ms var(--ease-out) both;animation-delay:calc(var(--stagger) * var(--i,0))}
+@keyframes s04-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .s04-in,.s04-mlabel.is-bump{animation:none!important}
+}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s04" data-title="记账" data-od-id="screen-s04">
+  <div class="content" data-od-id="s04-content">
+
+    <div class="screen-head s04-in" style="--i:0" data-state-hide="loading empty error edge" data-od-id="s04-head">
+      <div>
+        <h1 class="h1">记账</h1>
+        <p class="meta" id="s04-sub">2026 年 10 月 · 共 8 笔</p>
+      </div>
+      <button class="icon-btn" type="button" data-goto="s08" aria-label="数据导入" data-od-id="s04-import">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.5v10"/><path d="M7.5 9.5 12 14l4.5-4.5"/><path d="M4.5 16.5v2A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+      </button>
+    </div>
+
+    <div class="pad s04-in" style="--i:1" data-state-hide="loading empty error edge">
+      <div class="s04-month" data-od-id="s04-monthbar">
+        <button class="icon-btn" type="button" data-month="-1" aria-label="上个月" data-od-id="s04-prev">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+        </button>
+        <span class="s04-mlabel" id="s04-mlabel">2026 年 10 月</span>
+        <button class="icon-btn" type="button" data-month="1" aria-label="下个月" data-od-id="s04-next">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s04-in" style="--i:2" data-state-hide="loading empty error edge">
+      <div class="card glass s04-kpis" data-od-id="s04-kpis">
+        <div class="s04-kcol">
+          <div class="s04-krow"><span class="kpi-label">本月支出</span><span class="s04-kv is-exp" data-count-to="2468" data-count-pre="¥">¥2,468</span></div>
+          <div class="s04-krow"><span class="kpi-label">本月收入</span><span class="s04-kv is-inc" data-count-to="5000" data-count-pre="¥">¥5,000</span></div>
+          <div class="s04-krow"><span class="kpi-label">本月结余</span><span class="s04-kv" data-count-to="2532" data-count-pre="¥">¥2,532</span></div>
+        </div>
+        <div class="s04-ring" data-od-id="s04-ring">
+          <div class="s04-ring-chart" data-chart="gauge" data-chart-value="0.62" data-chart-label="本月预算使用率 62 百分比"></div>
+          <div class="s04-ring-txt"><b id="s04-pct">62%</b><span>预算</span></div>
+        </div>
+      </div>
+      <p class="meta mt-3" id="s04-strip">今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932</p>
+    </div>
+
+    <div class="pad mt-3 s04-in" style="--i:3" data-state-hide="loading empty error edge" data-od-id="s04-entries">
+      <div class="grid-2">
+        <button class="card s04-entry" type="button" data-goto="s07" data-od-id="s04-entry-stats">
+          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
+          <span class="s04-entry-t">统计分析</span>
+          <span class="s04-entry-s">分类占比 · 近 7 天</span>
+        </button>
+        <button class="card s04-entry" type="button" data-goto="s06" data-od-id="s04-entry-budget">
+          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+          <span class="s04-entry-t">预算设置</span>
+          <span class="s04-entry-s">已用 ¥2,468 / ¥4,000</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="pad mt-4" data-state-hide="loading empty error edge" data-od-id="s04-list">
+      <div class="sec-head"><h2 class="h2">交易明细</h2><span class="meta" id="s04-listmeta">最近 3 天 · 8 笔</span></div>
+
+      <p class="group-label">10 月 14 日 · 今天</p>
+      <div class="group">
+        <button class="list-row s04-tx s04-in" style="--i:4" type="button" data-tx data-kind="expense" data-cat="餐饮" data-amt="38.00" data-note="午餐 · 公司楼下" data-od-id="s04-tx-1">
+          <span class="legend-dot s1"></span>
+          <span class="row-body"><span class="row-title">餐饮</span><span class="row-sub">午餐 · 公司楼下</span></span>
+          <span class="row-tail num s04-amt is-exp">-¥38.00</span>
+        </button>
+        <button class="list-row s04-tx s04-in" style="--i:5" type="button" data-tx data-kind="expense" data-cat="交通" data-amt="12.00" data-note="地铁 通勤" data-od-id="s04-tx-2">
+          <span class="legend-dot s2"></span>
+          <span class="row-body"><span class="row-title">交通</span><span class="row-sub">地铁 通勤</span></span>
+          <span class="row-tail num s04-amt is-exp">-¥12.00</span>
+        </button>
+        <button class="list-row s04-tx s04-in" style="--i:6" type="button" data-tx data-kind="expense" data-cat="购物" data-amt="96.00" data-note="超市 日用品" data-od-id="s04-tx-3">
+          <span class="legend-dot s3"></span>
+          <span class="row-body"><span class="row-title">购物</span><span class="row-sub">超市 日用品</span></span>
+          <span class="row-tail num s04-amt is-exp">-¥96.00</span>
+        </button>
+        <button class="list-row s04-tx s04-in" style="--i:7" type="button" data-tx data-kind="expense" data-cat="娱乐" data-amt="58.00" data-note="电影票" data-od-id="s04-tx-4">
+          <span class="legend-dot s4"></span>
+          <span class="row-body"><span class="row-title">娱乐</span><span class="row-sub">电影票</span></span>
+          <span class="row-tail num s04-amt is-exp">-¥58.00</span>
+        </button>
+        <button class="list-row s04-tx s04-in" style="--i:8" type="button" data-tx data-kind="expense" data-cat="居住" data-amt="64.00" data-note="水电费" data-od-id="s04-tx-5">
+          <span class="legend-dot s5"></span>
+          <span class="row-body"><span class="row-title">居住</span><span class="row-sub">水电费</span></span>
+          <span class="row-tail num s04-amt is-exp">-¥64.00</span>
+        </button>
+        <button class="list-row s04-tx s04-in" style="--i:9" type="button" data-tx data-kind="income" data-cat="收入" data-amt="1200.00" data-note="工资到账" data-od-id="s04-tx-6">
+          <span class="legend-dot s1"></span>
+          <span class="row-body"><span class="row-title">工资</span><span class="row-sub">工资到账 · 10 月</span></span>
+          <span class="row-tail num s04-amt is-inc">+¥1,200.00</span>
+        </button>
+      </div>
+
+      <p class="group-label mt-3">10 月 13 日 · 昨天</p>
+      <div class="group">
+        <button class="list-row s04-tx s04-in" style="--i:10" type="button" data-tx data-kind="income" data-cat="收入" data-amt="800.00" data-note="项目尾款" data-od-id="s04-tx-7">
+          <span class="legend-dot s1"></span>
+          <span class="row-body"><span class="row-title">收入</span><span class="row-sub">项目尾款</span></span>
+          <span class="row-tail num s04-amt is-inc">+¥800.00</span>
+        </button>
+      </div>
+
+      <p class="group-label mt-3">10 月 12 日 · 周一</p>
+      <div class="group">
+        <button class="list-row s04-tx s04-in" style="--i:11" type="button" data-tx data-kind="income" data-cat="收入" data-amt="1000.00" data-note="周末兼职" data-od-id="s04-tx-8">
+          <span class="legend-dot s1"></span>
+          <span class="row-body"><span class="row-title">收入</span><span class="row-sub">周末兼职</span></span>
+          <span class="row-tail num s04-amt is-inc">+¥1,000.00</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="loading" data-od-id="s04-loading">
+      <div class="sk w-40 tall"></div>
+      <div class="card mt-3"><div class="sk w-60"></div><div class="sk w-80"></div><div class="sk w-100 tall"></div></div>
+      <div class="card mt-3"><div class="sk w-80 tall"></div><div class="sk w-60"></div></div>
+      <div class="group mt-3">
+        <div class="list-row"><div class="sk w-60"></div></div>
+        <div class="list-row"><div class="sk w-80"></div></div>
+        <div class="list-row"><div class="sk w-40"></div></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s04-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><path d="M16.5 15h1.5"/></svg></span>
+      <p class="st-title">本月还没有交易</p>
+      <p class="st-desc">点右下角「+」记下第一笔，或从熊猫记账导入历史账目</p>
+      <button class="btn btn-ghost" type="button" data-newtx data-od-id="s04-empty-add">新增一笔</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s04-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+      <p class="st-title">账目加载失败</p>
+      <p class="st-desc">本地数据库读取超时，没能取到交易记录</p>
+      <button class="btn btn-ghost" type="button" data-retry data-od-id="s04-retry">重新加载</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s04-edge">
+      <div class="card glass">
+        <div class="row-between"><span class="kpi-label">极限数据 · 单月 10,240 笔</span><span class="badge" data-od-min-fs>10240</span></div>
+        <p class="s04-edge-amt num">¥12,345,678.90</p>
+        <p class="meta mt-2">单笔最大 ¥1,234,567.89 · 累计结余 ¥9,876,543.21</p>
+      </div>
+      <p class="group-label mt-3">超长分类名与超长备注（单行截断）</p>
+      <div class="group">
+        <button class="list-row s04-tx" type="button" data-tx data-kind="expense" data-cat="购物" data-amt="1234567.89" data-note="超长备注" data-od-id="s04-edge-tx">
+          <span class="legend-dot s3"></span>
+          <span class="row-body">
+            <span class="row-title">购物 · 双十一预售定金与尾款合并自动分期</span>
+            <span class="row-sub">备注相当长：用于验证单行截断与省略号在超长文本下不撑破布局</span>
+          </span>
+          <span class="row-tail num s04-amt is-exp">-¥1,234,567.89</span>
+        </button>
+        <button class="list-row s04-tx" type="button" data-tx data-kind="income" data-cat="购物退款" data-amt="58.00" data-note="订单 202610140938 原路退回" data-od-id="s04-edge-refund">
+          <span class="legend-dot s3"></span>
+          <span class="row-body">
+            <span class="row-title">购物退款</span>
+            <span class="row-sub">订单 202610140938 原路退回</span>
+          </span>
+          <span class="row-tail num s04-amt is-inc">+¥58.00</span>
+        </button>
+      </div>
+      <p class="meta mt-3">退款按收入色显示；缺失分类时回退为中性灰。</p>
+    </div>
+
+  </div>
+
+  <button class="fab" type="button" data-newtx aria-label="新增交易" data-od-id="s04-fab">
+    <svg viewBox="0 0 24 24" aria-hidden><path d="M12 5.2v13.6"/><path d="M5.2 12h13.6"/></svg>
+  </button>
+
+  <script>
+  (function () {
+    'use strict';
+    if (window.__odFin) return;
+    window.__odFin = true;
+    var MINE = { s04: 1, s05: 1, s06: 1, s07: 1, s08: 1 };
+    function $(s, r) { return (r || document).querySelector(s); }
+    function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+    function A() { return window.App || null; }
+    function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+    function scr(id) {
+      var els = $$('#screenHost > .screen');
+      for (var i = 0; i < els.length; i++) { if (els[i].getAttribute('data-screen') === id) return els[i]; }
+      return null;
+    }
+    function toast(t) { var a = A(); if (a) a.toast(t); }
+    function haptic(k) { var a = A(); if (a) a.haptic(k || 'light'); }
+    function fmt(n, dec) {
+      var s = Number(n).toFixed(dec || 0).split('.');
+      s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return s.join('.');
+    }
+    function pay(el, dir) {
+      var s = String(el.textContent || '').replace(/[^\d.-]/g, '');
+      var v = parseFloat(s) || 0;
+      el.setAttribute('data-count-to', String(v));
+    }
+
+    /* ── 数字滚动（进入屏 / 切月 / 保存后触发） ── */
+    function counts(root, base) {
+      var a = A(); if (!a || !root) return;
+      $$('[data-count-to]', root).forEach(function (el, i) {
+        var to = parseFloat(el.getAttribute('data-count-to'));
+        if (isNaN(to)) return;
+        var dec = Number(el.getAttribute('data-count-dec') || 0);
+        var pre = el.getAttribute('data-count-pre') || '';
+        var suf = el.getAttribute('data-count-suf') || '';
+        if (reduced()) { el.textContent = pre + fmt(to, dec) + suf; return; }
+        el.textContent = pre + fmt(0, dec) + suf;
+        window.setTimeout(function () {
+          a.count(el, to, { decimals: dec, prefix: pre, suffix: suf, dur: 620 });
+          window.setTimeout(function () { el.textContent = pre + fmt(to, dec) + suf; }, 700);
+        }, 70 + i * 40);
+      });
+    }
+
+    /* ── 月份数据 ── */
+    var MONTHS = ['2026 年 7 月', '2026 年 8 月', '2026 年 9 月', '2026 年 10 月'];
+    var MD = {
+      s04: [
+        { n: 18, exp: 1620, inc: 2400, bal: 780, p: 0.41 },
+        { n: 96, exp: 2360, inc: 3000, bal: 640, p: 0.59 },
+        { n: 74, exp: 1842, inc: 2600, bal: 758, p: 0.46 },
+        { n: 8, exp: 2468, inc: 5000, bal: 2532, p: 0.62 }
+      ],
+      s06: [
+        { total: 4000, spent: 1620, rows: [620, 300, 420, 180, 480, 120] },
+        { total: 4000, spent: 2360, rows: [900, 400, 760, 300, 620, 180] },
+        { total: 4000, spent: 1842, rows: [760, 360, 520, 240, 640, 160] },
+        { total: 4000, spent: 2468, rows: [1200, 400, 1000, 500, 700, 200] }
+      ],
+      s07: [
+        { exp: 1620, inc: 2400, cats: [420, 180, 520, 260, 180, 60] },
+        { exp: 2360, inc: 3000, cats: [720, 240, 680, 380, 240, 100] },
+        { exp: 1842, inc: 2600, cats: [560, 210, 520, 300, 180, 72] },
+        { exp: 2468, inc: 5000, cats: [686, 214, 862, 328, 268, 110] }
+      ]
+    };
+    var mIdx = { s04: 3, s06: 3, s07: 3 };
+
+    function bump(el) {
+      if (!el || reduced()) return;
+      el.classList.remove('is-bump');
+      void el.offsetWidth;
+      el.classList.add('is-bump');
+      window.setTimeout(function () { el.classList.remove('is-bump'); }, 360);
+    }
+
+    function kpiTo(root, i, val, pre) {
+      var els = $$('[data-count-to]', root);
+      var el = els[i];
+      if (!el) return;
+      el.setAttribute('data-count-to', String(val));
+      el.setAttribute('data-count-pre', pre || '');
+      return el;
+    }
+
+    function gauge(el, v, label) {
+      var a = A();
+      if (!a || !el || !a.chart) return;
+      a.chart.mount(el, 'gauge', { value: v, size: 132, thickness: 11, label: label || '' });
+    }
+    function ring(el, items, label) {
+      var a = A();
+      if (!a || !el || !a.chart) return;
+      a.chart.mount(el, 'ring', { items: items, size: 132, thickness: 16, label: label || '' });
+    }
+
+    function setMonth(sid, dir) {
+      var arr = MD[sid]; if (!arr) return;
+      var i = Math.max(0, Math.min(arr.length - 1, mIdx[sid] + dir));
+      if (i === mIdx[sid]) { toast(dir > 0 ? '已经是最新的月份' : '已经是最早的月份'); return; }
+      mIdx[sid] = i;
+      haptic('light');
+      var s = scr(sid); if (!s) return;
+      if (sid === 's04') {
+        var d = arr[i];
+        bump($('#s04-mlabel', s));
+        $('#s04-mlabel', s).textContent = MONTHS[i];
+        $('#s04-sub', s).textContent = MONTHS[i] + ' · 共 ' + d.n + ' 笔';
+        $('#s04-listmeta', s).textContent = i === 3 ? '最近 3 天 · 8 笔' : '共 ' + d.n + ' 笔';
+        var card = $('#s04-kpis', s);
+        kpiTo(card, 0, d.exp, '¥'); kpiTo(card, 1, d.inc, '¥'); kpiTo(card, 2, d.bal, '¥');
+        counts(card);
+        gauge($('.s04-ring-chart', s), d.p, '预算使用率 ' + Math.round(d.p * 100) + ' 百分比');
+        $('#s04-pct', s).textContent = Math.round(d.p * 100) + '%';
+        $('#s04-strip', s).textContent = i === 3
+          ? '今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932'
+          : MONTHS[i] + ' 共 ' + d.n + ' 笔 · 预算使用 ' + Math.round(d.p * 100) + '%';
+      } else if (sid === 's06') {
+        var g = arr[i];
+        bump($('#s06-mlabel', s));
+        $('#s06-mlabel', s).textContent = MONTHS[i];
+        $('#s06-total', s).setAttribute('data-count-to', String(g.total));
+        $('#s06-spent', s).setAttribute('data-count-to', String(g.spent));
+        $('#s06-left', s).setAttribute('data-count-to', String(g.total - g.spent));
+        counts($('#s06-card', s));
+        gauge($('.s06-ring-chart', s), Math.min(1, g.spent / g.total), '总预算使用率 ' + Math.round(g.spent / g.total * 100) + ' 百分比');
+        $('#s06-pct', s).textContent = Math.round(g.spent / g.total * 100) + '%';
+      } else if (sid === 's07') {
+        var h = arr[i];
+        bump($('#s07-mlabel', s));
+        $('#s07-mlabel', s).textContent = MONTHS[i];
+        $('#s07-sub', s).textContent = MONTHS[i] + ' · 共 ' + h.cats.length + ' 个分类';
+        var kc = $('#s07-kpis', s);
+        kpiTo(kc, 0, h.exp, '¥'); kpiTo(kc, 1, h.inc, '¥'); kpiTo(kc, 2, h.inc - h.exp, '¥');
+        counts(kc);
+        var cls = ['s1', 's2', 's3', 's4', 's5', 's6'];
+        var names = ['餐饮', '交通', '购物', '娱乐', '居住', '医疗'];
+        ring($('#s07-ring', s), h.cats.map(function (v, k) { return { label: names[k], value: v, cls: cls[k] }; }), '分类支出占比');
+        $$('#s07-legend li', s).forEach(function (li, k) {
+          var num = $('.legend-num', li);
+          if (num) num.textContent = '¥' + fmt(h.cats[k]);
+        });
+        $('#s07-ring-total', s).setAttribute('data-count-to', String(h.exp));
+        counts($('#s07-ringhead', s));
+      }
+    }
+
+    /* ── s05 表单 ── */
+    function setS05(o) {
+      var s = scr('s05'); if (!s) return;
+      if (o.amount != null) { var ai = $('#s05-amount', s); if (ai) ai.value = o.amount; }
+      if (o.note != null) { var ni = $('#s05-note', s); if (ni) ni.value = o.note; }
+      if (o.kind) {
+        $$('.s05-kind', s).forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-kind') === o.kind ? 'true' : 'false'); });
+        var kl = $('#s05-kind-label', s); if (kl) kl.textContent = o.kind === 'income' ? '收入' : '支出';
+        var aw = $('#s05-amount-wrap', s); if (aw) aw.classList.toggle('is-inc', o.kind === 'income');
+      }
+      if (o.cat) {
+        $$('.s05-cat', s).forEach(function (b) {
+          var on = b.getAttribute('data-cat') === o.cat || (o.cat === '收入' && b.getAttribute('data-cat') === '其他');
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+    }
+    /* 定版：记一笔 = s14a（全抽屉版，2026-10-16 用户选定 A）。
+       新增 / 编辑共用这份回填；分类与账户的值都写在行的 data-value-for 上。 */
+    function setS14a(o) {
+      var s = scr('s14a'); if (!s) return;
+      if (o.amount != null) { var ai = $('#s14a-amount', s); if (ai) ai.value = o.amount; }
+      if (o.note != null) { var ni = $('#s14a-note', s); if (ni) ni.value = o.note; }
+      if (o.kind) {
+        $$('[data-kind]', s).forEach(function (b) {
+          b.setAttribute('aria-pressed', b.getAttribute('data-kind') === o.kind ? 'true' : 'false');
+        });
+      }
+      if (o.cat) {
+        var cur = $('[data-value-for="cat"]', s);
+        $$('.s14-cat', s).forEach(function (b) {
+          var on = b.getAttribute('data-cat') === o.cat;
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          if (on && cur) cur.textContent = o.cat;
+        });
+      }
+    }
+
+    function newTx() {
+      var a = A(); if (!a) return;
+      var s = scr('s14a'); if (!s) return;
+      s.classList.remove('is-edit');
+      s.setAttribute('data-title', '记一笔');
+      setS14a({ amount: '0.00', note: '', kind: 'expense', cat: '餐饮' });
+      a.go('s14a');
+    }
+    function editTx(btn) {
+      var a = A(); if (!a) return;
+      var s = scr('s14a'); if (!s) return;
+      s.classList.add('is-edit');
+      s.setAttribute('data-title', '编辑交易');
+      setS14a({
+        amount: btn.getAttribute('data-amt') || '0.00',
+        note: btn.getAttribute('data-note') || '',
+        kind: btn.getAttribute('data-kind') || 'expense',
+        cat: btn.getAttribute('data-cat') || '餐饮'
+      });
+      a.go('s14a');
+    }
+
+    /* ── s06 预算编辑 ── */
+    var s06Rows = ['餐饮', '交通', '购物', '娱乐', '居住', '医疗'];
+    function openBudget(btn) {
+      var a = A(); if (!a) return;
+      var s = scr('s06'); if (!s) return;
+      var row = btn.closest('[data-brow]') || btn;
+      var idx = Number(row.getAttribute('data-brow') || 0);
+      $('#s06-dlg-name', s).textContent = s06Rows[idx] || '分类';
+      var inp = $('#s06-dlg-input', s);
+      inp.value = String(Number(row.getAttribute('data-amount') || 0));
+      inp.setAttribute('data-idx', String(idx));
+      a.open('#s06-dlg');
+      window.setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 60);
+    }
+    function saveBudget() {
+      var a = A(); if (!a) return;
+      var s = scr('s06'); if (!s) return;
+      var inp = $('#s06-dlg-input', s);
+      var idx = Number(inp.getAttribute('data-idx') || 0);
+      var v = parseFloat(String(inp.value).replace(/[^\d.]/g, ''));
+      if (isNaN(v) || v < 0) { toast('请输入有效的预算金额'); return; }
+      var row = $('[data-brow="' + idx + '"]', s);
+      if (!row) return;
+      var spent = Number(row.getAttribute('data-spent') || 0);
+      row.setAttribute('data-amount', String(v));
+      $('.s06-amt', row).textContent = '¥' + fmt(v);
+      var bar = $('.s06-bar i', row);
+      var p = v > 0 ? spent / v : 0;
+      if (bar) { bar.style.setProperty('--p', String(Math.max(0, Math.min(1, p)))); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+      $('.row-sub', row).textContent = '已支出 ¥' + fmt(spent) + ' · 剩余 ¥' + fmt(Math.max(0, v - spent));
+      row.classList.toggle('is-over', p > 1);
+      var total = 0, sp = 0;
+      $$('[data-brow]', s).forEach(function (r) { total += Number(r.getAttribute('data-amount') || 0); sp += Number(r.getAttribute('data-spent') || 0); });
+      var mm = MD.s06[mIdx.s06];
+      mm.total = total;
+      mm.rows = $$('[data-brow]', s).map(function (r) { return Number(r.getAttribute('data-amount') || 0); });
+      $('#s06-total', s).setAttribute('data-count-to', String(total));
+      $('#s06-spent', s).setAttribute('data-count-to', String(sp));
+      $('#s06-left', s).setAttribute('data-count-to', String(total - sp));
+      counts($('#s06-card', s));
+      var pp = total > 0 ? Math.min(1, sp / total) : 0;
+      gauge($('.s06-ring-chart', s), pp, '总预算使用率 ' + Math.round(pp * 100) + ' 百分比');
+      $('#s06-pct', s).textContent = Math.round(pp * 100) + '%';
+      a.close('#s06-dlg');
+      haptic('medium');
+      toast('已更新 ' + (s06Rows[idx] || '分类') + ' 预算为 ¥' + fmt(v));
+    }
+
+    /* ── s08 导入 ── */
+    var s08Timer = null;
+    function importPick() {
+      var s = scr('s08'); if (!s) return;
+      var f = $('#s08-file', s), go = $('#s08-go', s);
+      if (f) f.hidden = false;
+      if (go) go.disabled = false;
+      haptic('light');
+      toast('已选择 熊猫记账_导出_2026-10-14.csv');
+    }
+    function importClear() {
+      var s = scr('s08'); if (!s) return;
+      var f = $('#s08-file', s), go = $('#s08-go', s);
+      if (f) f.hidden = true;
+      if (go) go.disabled = true;
+    }
+    function importReset() {
+      var s = scr('s08'); if (!s) return;
+      ['#s08-result', '#s08-fail', '#s08-progress'].forEach(function (sel) { var el = $(sel, s); if (el) el.hidden = true; });
+      var w = $('#s08-pickwrap', s); if (w) w.hidden = false;
+      var fill = $('#s08-fill', s); if (fill) fill.style.setProperty('--p', '0');
+      var pct = $('#s08-pct', s); if (pct) pct.textContent = '正在解析文件… 0%';
+    }
+    function importRun(failMode) {
+      var s = scr('s08'); if (!s) return;
+      var go = $('#s08-go', s);
+      if (go && go.disabled) { toast('请先选择要导入的 CSV 文件'); return; }
+      var w = $('#s08-pickwrap', s), pr = $('#s08-progress', s), res = $('#s08-result', s), fl = $('#s08-fail', s);
+      if (w) w.hidden = true;
+      if (res) res.hidden = true;
+      if (fl) fl.hidden = true;
+      if (pr) pr.hidden = false;
+      haptic('medium');
+      var fill = $('#s08-fill', s), pct = $('#s08-pct', s);
+      var p = 0;
+      if (s08Timer) window.clearInterval(s08Timer);
+      s08Timer = window.setInterval(function () {
+        p = Math.min(1, p + 0.045);
+        if (fill) fill.style.setProperty('--p', p.toFixed(3));
+        if (pct) pct.textContent = p < 0.45 ? ('正在解析 CSV… ' + Math.round(p * 100) + '%')
+          : (p < 0.9 ? ('正在写入本地数据库… ' + Math.round(p * 100) + '%') : ('正在重建预算与统计… ' + Math.round(p * 100) + '%'));
+        if (p >= 1) {
+          window.clearInterval(s08Timer);
+          s08Timer = null;
+          if (pr) pr.hidden = true;
+          if (failMode) { if (fl) fl.hidden = false; toast('导入中断：文件第 812 行格式异常'); }
+          else { if (res) res.hidden = false; counts(res); toast('导入完成 · 成功 1,024 笔'); }
+        }
+      }, 60);
+    }
+
+    /* ── 图表 hover 提示 ── */
+    function tipEl() {
+      var t = document.getElementById('odFinTip');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'odFinTip';
+        t.className = 'fin-tip';
+        t.hidden = true;
+        document.body.appendChild(t);
+      }
+      return t;
+    }
+    function showTip(e) {
+      var host = e.target && e.target.closest ? e.target.closest('[data-chart="heat"],[data-tip-zone]') : null;
+      var t = tipEl();
+      if (!host) { t.hidden = true; return; }
+      var raw = (host.getAttribute('data-tip-values') || host.getAttribute('data-chart-values') || '');
+      var vals = raw.split(',').filter(function (x) { return x !== ''; });
+      if (!vals.length) { t.hidden = true; return; }
+      var labs = (host.getAttribute('data-tip-labels') || host.getAttribute('data-chart-labels') || '').split(',');
+      var r = host.getBoundingClientRect();
+      var grp = parseFloat(host.getAttribute('data-tip-group') || '0');
+      var pad = parseFloat(host.getAttribute('data-tip-pad') || '0');
+      var vb = parseFloat(host.getAttribute('data-tip-vb') || '0') || r.width;
+      var unit = host.getAttribute('data-tip-unit') || '笔';
+      var i;
+      if (grp > 0) i = Math.floor(((e.clientX - r.left) * (vb / r.width) - pad) / grp);
+      else i = Math.floor((e.clientX - r.left) / (r.width / vals.length));
+      i = Math.max(0, Math.min(vals.length - 1, i));
+      var v = vals[i];
+      var txt = labs[i] ? labs[i] + ' · ' : '';
+      if (v.indexOf('/') > -1) {
+        var pair = v.split('/');
+        txt += '支出 ¥' + fmt(pair[0]) + ' · 收入 ¥' + fmt(pair[1]);
+      } else {
+        txt += fmt(v) + ' ' + unit;
+      }
+      t.textContent = txt;
+      t.hidden = false;
+      var w = t.offsetWidth || 120;
+      t.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, e.clientX - w / 2)) + 'px';
+      t.style.top = Math.max(8, e.clientY - 42) + 'px';
+    }
+
+    /* ── 委托交互 ── */
+    function onClick(e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var s = t.closest('#screenHost > .screen');
+      if (!s) return;
+      var sid = s.getAttribute('data-screen');
+      if (!MINE[sid]) return;
+      var n;
+      if ((n = t.closest('[data-month]'))) { setMonth(sid, Number(n.getAttribute('data-month')) || 1); return; }
+      if (t.closest('[data-newtx]')) { newTx(); return; }
+      if ((n = t.closest('[data-tx]')) && n.getAttribute('data-tx') !== null) { editTx(n); return; }
+      if ((n = t.closest('[data-kind]'))) {
+        $$('.s05-kind', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
+        var kl = $('#s05-kind-label', s); if (kl) kl.textContent = n.getAttribute('data-kind') === 'income' ? '收入' : '支出';
+        var aw = $('#s05-amount-wrap', s); if (aw) aw.classList.toggle('is-inc', n.getAttribute('data-kind') === 'income');
+        haptic('light');
+        return;
+      }
+      if ((n = t.closest('.s05-cat'))) {
+        $$('.s05-cat', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
+        return;
+      }
+      if ((n = t.closest('[data-acct]'))) {
+        $$('[data-acct]', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
+        return;
+      }
+      if (t.closest('[data-date-open]')) { var a0 = A(); if (a0) a0.open('#s05-date-sheet'); return; }
+      if ((n = t.closest('[data-date-pick]'))) {
+        var dd = $('#s05-date', s); if (dd) dd.textContent = n.getAttribute('data-date-pick');
+        var a1 = A(); if (a1) { a1.close('#s05-date-sheet'); a1.toast('日期已改为 ' + n.getAttribute('data-date-pick')); }
+        return;
+      }
+      if (t.closest('[data-save]')) {
+        var ai = $('#s05-amount', s);
+        var v = parseFloat(String(ai && ai.value || '').replace(/[^\d.]/g, ''));
+        if (isNaN(v) || v <= 0) {
+          if (ai) { ai.classList.remove('is-bad'); void ai.offsetWidth; ai.classList.add('is-bad'); }
+          toast('请输入大于 0 的金额');
+          return;
+        }
+        var on = $('.s05-cat[aria-pressed="true"]', s);
+        var kindEl = $('.s05-kind[aria-pressed="true"]', s);
+        var kind = kindEl && kindEl.getAttribute('data-kind') === 'income' ? '收入' : '支出';
+        haptic('medium');
+        toast('已保存 · ' + kind + ' ' + ((on && on.getAttribute('data-cat')) || '未分类') + ' ¥' + fmt(v, 2));
+        var a2 = A(); if (a2) window.setTimeout(function () { a2.back(); }, 260);
+        return;
+      }
+      if (t.closest('[data-del]')) { var a3 = A(); if (a3) a3.open('#s05-del-dialog'); return; }
+      if (t.closest('[data-confirm-del]')) {
+        var a4 = A();
+        if (a4) { a4.close('#s05-del-dialog'); a4.toast('已删除这笔交易'); a4.haptic('medium'); window.setTimeout(function () { a4.back(); }, 260); }
+        return;
+      }
+      if ((n = t.closest('[data-brow]')) && sid === 's06') { openBudget(n); return; }
+      if (t.closest('[data-budget-save]')) { saveBudget(); return; }
+      if (t.closest('[data-file-pick]')) { importPick(); return; }
+      if (t.closest('[data-file-clear]')) { importClear(); return; }
+      if (t.closest('[data-import]')) { importRun(false); return; }
+      if (t.closest('[data-import-fail]')) { importRun(true); return; }
+      if (t.closest('[data-import-reset]')) { importReset(); return; }
+      if (t.closest('[data-retry]')) {
+        var a5 = A();
+        if (a5) { a5.state(sid, 'populated'); a5.toast('已重新加载'); a5.haptic('light'); }
+        var fr = $('[data-count-to]', s); if (fr) counts(s);
+        return;
+      }
+    }
+
+    /* ── 进入屏：数字滚动 + 提示复位 ── */
+    function enter(el) {
+      if (!el || !el.classList) return;
+      var sid = el.getAttribute('data-screen');
+      if (!MINE[sid]) return;
+      counts(el);
+      var t = document.getElementById('odFinTip');
+      if (t) t.hidden = true;
+    }
+    function watch() {
+      var host = document.getElementById('screenHost');
+      if (!host) return;
+      var cur = host.querySelector(':scope > .screen.is-active');
+      if (cur && MINE[cur.getAttribute('data-screen')]) enter(cur);
+      if (!window.MutationObserver) return;
+      new MutationObserver(function (muts) {
+        muts.forEach(function (m) {
+          var t = m.target;
+          if (t && t.classList && t.classList.contains('screen') && t.classList.contains('is-active')) enter(t);
+        });
+      }).observe(host, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    try {
+      document.addEventListener('click', onClick, false);
+      document.addEventListener('mousemove', function (e) { try { showTip(e); } catch (err) {} }, false);
+      window.addEventListener('scroll', function () { var t = document.getElementById('odFinTip'); if (t) t.hidden = true; }, true);
+      watch();
+    } catch (err) {
+      if (window.console && console.warn) console.warn('[finance] init', err);
+    }
+  })();
+  </script>
+</section>
+<!--@od:end-->

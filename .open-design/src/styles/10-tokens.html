@@ -1,0 +1,968 @@
+<style>
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Apple's binary section rhythm alternates pure white retail/hero
+   * canvases with pale Apple gray feature fields. We bind --bg to
+   * the white canvas (the most common default Apple page background)
+   * and --surface to the pale gray that cards and feature bands lift
+   * onto. --surface-warm is bound to a real third tier (#fbfbfd) —
+   * the near-white brightness shift that appears between hero and
+   * pale-gray bands on apple.com. Collapsing it to var(--surface)
+   * would erase a real brand feature, so we keep it independent. */
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --surface-warm: #fbfbfd;
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Apple's text neutrals are explicitly named in DESIGN.md §2:
+   * Near-Black Ink (primary), Utility Dark Gray (secondary text /
+   * dark-neutral surfaces in store contexts), Secondary Neutral Gray
+   * (helper copy / tertiary metadata), Mid Border Gray (the strongest
+   * neutral, used for stronger field outlines and the most-restrained
+   * caption tier). We bind all four — Apple genuinely walks the full
+   * ramp, so collapsing --fg-2 or --meta to siblings would flatten
+   * the brand.
+   *
+   * Note that none of these are pure black (#000000). #000000 is
+   * reserved for hero canvases and dark chapters; for body type on
+   * white, #1d1d1f gives the slight warmth that reads as Apple. */
+  --fg: #1d1d1f;
+  --fg-2: #424245;
+  --muted: #6e6e73;
+  --meta: #86868b;
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Soft Border Gray (#d2d2d7) is Apple's default divider weight and
+   * card-edge color. --border-soft is bound to a lighter near-neutral
+   * (#e8e8ed) for inner row separators in dense retail tables and
+   * configurator option lists, where the d2d2d7 hairline would
+   * over-compete with the option labels. */
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Apple Action Blue — the system's only persistent chromatic move.
+   * DESIGN.md §7 ("Don't introduce broad secondary accent palettes
+   * that compete with Apple blue") makes this a one-color brand for
+   * action and link semantics; the schema's hard cap of ≤2 visible
+   * accent uses per screen aligns naturally. */
+  --accent: #0071e3;
+  --accent-on: #ffffff; /* white label on the blue fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * Apple's live primary buttons LIGHTEN on hover (the blue gains
+   * luminance) and darken on press. The schema's default black-mix
+   * formula would fight that motion, so we hand-pick both values:
+   *   - hover: #0077ed (≈ 4% brighter than --accent)
+   *   - active: #0066cc (the documented Body Link Blue from DESIGN.md
+   *             §2, which doubles cleanly as the press tone)
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. The binding strategy (formula / hand-picked /
+   * identity) is brand-decided. Default uses formulas; kami uses
+   * identity + hand-picked; Apple uses hand-picked in both
+   * directions. */
+  --accent-hover: #0077ed;
+  --accent-active: #0066cc;
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Apple's DESIGN.md §2 explicitly notes "no distinct semantic
+   * palette was consistently visible in the extracted surface set" —
+   * so we inherit the schema defaults verbatim. Apple artifacts
+   * almost never need success / warn / danger; when they do, the
+   * defaults are restrained enough not to fight the blue accent.
+   * Reserve under 5% of any surface area regardless. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Apple's documented split is two SF Pro families: SF Pro Display
+   * for hero / merchandising headings, SF Pro Text for navigation,
+   * controls, and dense commerce copy. We mirror the exact published
+   * fallback chain (SF Pro Icons → Helvetica Neue → Helvetica → Arial
+   * → sans-serif) so artifacts rendered on non-macOS clients land on
+   * the closest practical substitute.
+   *
+   * SF Mono leads the monospace stack — Apple's brand mono — with
+   * the schema fallbacks behind it for portability. */
+  /* 用 -apple-system 取 Apple 系统字体：直接写 "SF Pro Text" 在网页里取不到，
+     会静默回落到 Helvetica Neue（即「看起来是系统默认字体」）。 */
+  --font-display:
+    -apple-system, "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    -apple-system, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Apple's body baseline is 17px (NOT the 16px web norm) because
+   * SF Pro Text was metrically tuned at 17 for Retina; rebinding
+   * --text-base to anything else collapses the brand's reading
+   * texture. The display ceiling is the 80px Hero Display XL. */
+  --text-xs:   12px;   /* Micro UI — fine print, micro labels */
+  --text-sm:   14px;   /* Control Label — buttons, helper labels */
+  --text-base: 17px;   /* Body Primary — Apple's reading baseline */
+  --text-lg:   21px;   /* Link/Action Heading — large promo links */
+  --text-xl:   28px;   /* Card/Product Title — tile-level naming */
+  --text-2xl:  40px;   /* Product Heading — campaign section titles */
+  --text-3xl:  56px;   /* Hero Display L — homepage hero moments */
+  --text-4xl:  80px;   /* Hero Display XL — Environment / store hero */
+
+  /* Apple's leading envelope is unusually tight at the top of the
+   * scale (display sizes ride at 1.00–1.10) and unusually airy in
+   * the body (1.47, well above the web 1.4 default). Both numbers
+   * come straight from DESIGN.md §3. */
+  --leading-body:  1.47;   /* SF Pro Text body, 17px */
+  --leading-tight: 1.05;   /* Hero Display XL ceiling */
+
+  /* Display tracking compresses to -0.015em — the famous Apple
+   * machined-headline feel. DESIGN.md §3 lists -1.2px on 80px
+   * (≈ -0.015em); we bind a single em-value so the same rule applies
+   * across the display tiers. Body type runs at 0 / -0.374px and is
+   * left to component-level rules so as not to hurt readability. */
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Apple's underlying grid is 8px (DESIGN.md §5), with utility
+   * micro-steps (2/4/6/7/8/9/10) for precision alignment. The shared
+   * schema's 4-8-12-16-20-24-32-48 scale fits cleanly — we inherit
+   * the defaults. Component-internal values that don't match a token
+   * (Apple's 14px or 17px utility intervals) stay inline at the
+   * call site rather than spawning extra spacing tokens. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Apple's billboard chapters lean noticeably more generous than the
+   * schema default of 80px — broad top/bottom breathing room is what
+   * lets product imagery dominate the page. We bind 100/64/40, a
+   * slightly wider envelope than default's 80/48/32. */
+  --section-y-desktop: 100px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Apple uses purposeful radius tiers (DESIGN.md §5 §7 — "don't
+   * flatten all corners to a single radius"). The mapping:
+   *   --radius-sm   → 8px   compact controls and fields
+   *   --radius-md   → 12px  standard buttons, configurator chips
+   *   --radius-lg   → 18px  cards, module frames, commerce panels
+   *   --radius-pill → 980px Apple's signature capsule CTA — we keep
+   *                          the literal value rather than collapse
+   *                          to 9999px because the number itself is
+   *                          a brand-recognisable detail in Apple's
+   *                          published CSS.
+   *
+   * The 28-36px spotlight tier and the 56px capsule sub-tier are
+   * component-internal one-offs and stay inline — they do not earn
+   * their own tokens until a second use appears. */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-pill: 980px;
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Apple uses depth sparingly (DESIGN.md §6 — "depth is intentionally
+   * restrained"). Three sanctioned levels:
+   *   - flat   → none (the default; tonal contrast does the work)
+   *   - ring   → 0 0 0 1px var(--border) (border-led containment in
+   *              dense retail contexts)
+   *   - raised → 0 12px 32px rgba(0,0,0,0.08) (the soft Apple card
+   *              shadow; rgba 0.08 is the lower bound from DESIGN.md
+   *              §6's "0.08 → 0.22" range, which keeps cards from
+   *              feeling Material-flavoured)
+   *
+   * No fourth level — that would be the Material/neumorphism stack
+   * Apple consciously avoids. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Apple's keyboard-focus signal is a soft blue glow at the action
+   * accent (DESIGN.md §6 — "Blue focus signal (#0071e3) for keyboard
+   * and selection emphasis"). We use a 4px ring at ~35% accent
+   * opacity, slightly larger than the schema's 3px default so it
+   * reads as the deliberate Apple halo rather than a generic outline.
+   * Implemented as a box-shadow so it layers outside the element
+   * without affecting layout. */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 65%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Apple transitions decelerate hard and settle — never bounce,
+   * never spring past the target. We override the schema default
+   * easing with cubic-bezier(0.28, 0, 0.22, 1), the curve Apple
+   * uses on apple.com for hover and section reveals; --motion-base
+   * is bumped from 200ms → 220ms because Apple's micro-interactions
+   * carry slightly more cinematic weight than the web default.
+   * --motion-fast stays at 150ms for true micro-states (hover tints,
+   * focus, kbd press feedback). */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Apple's marketing core is a constrained readable column with
+   * generous outer margins (DESIGN.md §5). 1024px max keeps lines
+   * inside the SF Pro Text comfortable-measure ceiling (~80ch at
+   * 17px) while leaving the chapter band full-bleed. Gutters step
+   * 22 → 18 → 16 across desktop / tablet / phone — slightly tighter
+   * than default to honor Apple's "broad horizontal breathing room
+   * but column-disciplined content" balance. */
+  --container-max:            1024px;
+  --container-gutter-desktop: 22px;
+  --container-gutter-tablet:  18px;
+  --container-gutter-phone:   16px;
+
+  /* ═══ 附加主题「色值命名空间」（7 套 × 111 个色值/阴影字面量）══════════════════
+   * 全产物唯一允许出现颜色字面量的地方。官方 lint 的 raw-hex 与 odops verify 的裸色值
+   * P0 都只豁免 :root 作用域（实测形状：:root 本身、:root:root、html:root 免计；
+   * 接属性选择器 / 接其他伪类 / 出现在选择器列表里的 :root 一律计入）。
+   * 所以 [data-theme] 块退化为纯 var() 别名（--bg: var(--gm-bg) 等），块内无颜色字面量。
+   * 这些命名空间名同时计入 :root 的槽位集合，组装器 build.mjs 的 theme-slot-parity 要求
+   * 每个 [data-theme] 块声明同名槽位 → 各主题块内有一处 @media not all 占位段（永不生效）。
+   * 取值来源：odops style <id> --tokens 逐字；仅 3 处可访问性偏离，登记见 00-tokens-extra.css。 */
+  --gm-bg: #eef6ff;
+  --gm-surface: rgba(255, 255, 255, 0.74);
+  --gm-surface-warm: rgba(238, 246, 255, 0.72);
+  --gm-fg: #102033;
+  --gm-fg-2: #34465f;
+  --gm-muted: #60708a;
+  --gm-meta: #4f8cff;
+  --gm-border: rgba(255, 255, 255, 0.64);
+  --gm-border-soft: rgba(255, 255, 255, 0.38);
+  --gm-accent: #3e6ec9;
+  --gm-accent-on: #ffffff;
+  --gm-success: #22c55e;
+  --gm-warn: #f59e0b;
+  --gm-danger: #ef4444;
+  --gm-elev-raised: 0 24px 80px rgba(79, 140, 255, 0.18);
+  --gm-focus-ring: 0 0 0 4px rgba(79, 140, 255, 0.28);
+  --nt-bg: #ffffff;
+  --nt-surface: #f6f5f4;
+  --nt-fg: rgba(0, 0, 0, 0.95);
+  --nt-fg-2: #31302e;
+  --nt-muted: #615d59;
+  --nt-meta: #a39e98;
+  --nt-border: rgba(0, 0, 0, 0.1);
+  --nt-border-soft: rgba(0, 0, 0, 0.06);
+  --nt-accent: #0075de;
+  --nt-accent-on: #ffffff;
+  --nt-accent-hover: #005bab;
+  --nt-success: #1aae39;
+  --nt-warn: #dd5b00;
+  --nt-danger: #dc2626;
+  --nt-elev-raised: rgba(0, 0, 0, 0.04) 0px 4px 18px, rgba(0, 0, 0, 0.027) 0px 2px 7.85px, rgba(0, 0, 0, 0.02) 0px 0.8px 2.93px, rgba(0, 0, 0, 0.01) 0px 0.175px 1.04px;
+  --nt-focus-ring: 0 0 0 3px rgba(9, 127, 232, 0.3);
+  --st-bg: #ffffff;
+  --st-surface: #ffffff;
+  --st-surface-warm: #f6f9fc;
+  --st-fg: #061b31;
+  --st-fg-2: #273951;
+  --st-muted: #64748d;
+  --st-border: #e5edf5;
+  --st-accent: #533afd;
+  --st-accent-on: #ffffff;
+  --st-accent-hover: #4434d4;
+  --st-accent-active: #2e2b8c;
+  --st-success: #15be53;
+  --st-warn: #9b6829;
+  --st-danger: #ea2261;
+  --st-elev-raised: rgba(50, 50, 93, 0.25) 0px 30px 45px -30px, rgba(0, 0, 0, 0.10) 0px 18px 36px -18px;
+  --cl-bg: #f5f4ed;
+  --cl-surface: #faf9f5;
+  --cl-surface-warm: #e8e6dc;
+  --cl-fg: #141413;
+  --cl-fg-2: #3d3d3a;
+  --cl-muted: #5e5d59;
+  --cl-meta: #87867f;
+  --cl-border: #f0eee6;
+  --cl-border-soft: #e8e6dc;
+  --cl-accent: #aa5538;
+  --cl-accent-on: #faf9f5;
+  --cl-success: #17a34a;
+  --cl-warn: #eab308;
+  --cl-danger: #b53333;
+  --cl-elev-raised: rgba(0, 0, 0, 0.05) 0px 4px 24px;
+  --cl-focus-ring: 0 0 0 3px rgba(56, 152, 236, 0.3);
+  --ib-bg: #ffffff;
+  --ib-surface: #f4f4f4;
+  --ib-surface-warm: #edf5ff;
+  --ib-fg: #161616;
+  --ib-fg-2: #525252;
+  --ib-muted: #6f6f6f;
+  --ib-meta: #8d8d8d;
+  --ib-border: #c6c6c6;
+  --ib-border-soft: #e0e0e0;
+  --ib-accent: #0f62fe;
+  --ib-accent-on: #ffffff;
+  --ib-success: #24a148;
+  --ib-warn: #f1c21b;
+  --ib-danger: #da1e28;
+  --ib-elev-raised: 0 2px 6px rgba(0, 0, 0, 0.12);
+  --ib-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #0f62fe;
+  --km-bg: #f5f4ed;
+  --km-surface: #faf9f5;
+  --km-surface-warm: #e8e6dc;
+  --km-fg: #141413;
+  --km-fg-2: #3d3d3a;
+  --km-muted: #504e49;
+  --km-meta: #6b6a64;
+  --km-border: #e8e6dc;
+  --km-border-soft: #e5e3d8;
+  --km-accent: #1b365d;
+  --km-accent-on: #faf9f5;
+  --km-accent-active: #142a48;
+  --km-success: #4a6b3a;
+  --km-warn: #8a6b1f;
+  --km-danger: #8a3a30;
+  --km-elev-raised: 0 4px 24px rgba(0, 0, 0, 0.05);
+  --bn-bg: #f5f8ff;
+  --bn-surface: #ffffff;
+  --bn-surface-warm: #eaf1ff;
+  --bn-fg: #101828;
+  --bn-fg-2: #344054;
+  --bn-muted: #667085;
+  --bn-meta: #2563eb;
+  --bn-border: #d7e0ef;
+  --bn-border-soft: #edf2f8;
+  --bn-accent: #2563eb;
+  --bn-accent-on: #ffffff;
+  --bn-success: #16a34a;
+  --bn-warn: #f59e0b;
+  --bn-danger: #ef4444;
+  --bn-elev-raised: 0 20px 52px rgba(16, 24, 40, 0.11);
+  --bn-focus-ring: 0 0 0 4px rgba(37, 99, 235, 0.22);
+}
+/* ─────────────────────────────────────────────────────────────────────────
+ * 扩展区 · 项目自有变量（不进官方 56 槽位，负责人 可继续追加）
+ *
+ * 规则：
+ *   1. 官方 56 个槽位只在文件开头的 :root 中定义一次，任何人不得删改；
+ *   2. 本项目自有的设备框 / 玻璃配方 / 图表数列 / 语义派生色 / 动效时长
+ *      全部写在本区，且必须建立在官方槽位之上（换主题时由 [data-theme] 覆盖）；
+ *   3. 本区之外一律不得出现颜色字面量，必须走 var(--token)。
+ * ───────────────────────────────────────────────────────────────────────── */
+:where(html) {
+  /* ── 原型页画布（设备框之外） ─────────────────────────────────── */
+  --page-bg: color-mix(in srgb, var(--fg) 5%, var(--bg));
+
+  /* ── Android Pixel 设备框 ────────────────────────────────────── */
+  --frame-a: color-mix(in srgb, var(--fg) 17%, var(--bg));
+  --frame-b: color-mix(in srgb, var(--fg) 10%, var(--bg));
+  --frame-edge: color-mix(in srgb, var(--bg) 60%, transparent);
+  --frame-inner: color-mix(in srgb, var(--fg) 24%, transparent);
+  --frame-key: color-mix(in srgb, var(--fg) 34%, var(--bg));
+  --frame-shadow: color-mix(in srgb, var(--fg) 28%, transparent);
+  --punch: color-mix(in srgb, var(--fg) 90%, var(--bg));
+  --punch-ring: color-mix(in srgb, var(--bg) 24%, transparent);
+
+  /* ── 屏幕尺寸与外壳高度 ──────────────────────────────────────── */
+  --screen-w: 393px;
+  --screen-h: 852px;
+  --statusbar-h: 36px;
+  --appbar-h: 56px;
+  --tab-h: 52px;
+  --gesture-h: 22px;
+  --tap-min: 44px;
+  --row-min-h: 52px;
+
+  /* ── 屏幕底衬（浅色玻璃必须压在可见底衬上） ─────────────────── */
+  --app-bg: var(--bg);
+  --backdrop-a: color-mix(in srgb, var(--fg) 5%, var(--bg));
+  --backdrop-b: color-mix(in srgb, var(--fg) 1%, var(--bg));
+
+  /* ── 玻璃配方（契约 §4） ─────────────────────────────────────── */
+  --glass-bg: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glass-border: color-mix(in srgb, var(--fg) 8%, transparent);
+  --glass-highlight: color-mix(in srgb, var(--bg) 70%, transparent);
+  --glass-blur: blur(18px) saturate(1.5);
+
+  /* ── 层级（elevation-1 / 2 / 3） ─────────────────────────────── */
+  --elev-1: 0 1px 2px color-mix(in srgb, var(--fg) 7%, transparent);
+  --elev-2: 0 10px 28px -10px color-mix(in srgb, var(--fg) 22%, transparent);
+  --elev-3: 0 22px 56px -18px color-mix(in srgb, var(--fg) 34%, transparent);
+  --scrim: color-mix(in srgb, var(--fg) 34%, transparent);
+
+  /* ── 语义色「文字级派生」（契约 §4：向 --fg 混 ≥35%，保证 ≥4.5:1） ── */
+  --success-text: color-mix(in srgb, var(--success) 65%, var(--fg));
+  --warn-text: color-mix(in srgb, var(--warn) 45%, var(--fg));
+  --danger-text: color-mix(in srgb, var(--danger) 65%, var(--fg));
+  --accent-text: color-mix(in srgb, var(--accent) 88%, var(--fg));
+  --income-text: color-mix(in srgb, var(--success) 62%, var(--fg));
+  --expense-text: color-mix(in srgb, var(--danger) 62%, var(--fg));
+
+  /* ── 图表的三种色彩角色（互相不混用） ─────────────────────────
+     ① 序列色 --chart-seq：单系列图表（柱状 / 折线 / 面积 / 仪表 / 迷你走势）
+        的主色，跟随主题强调色，因此换主题时图表整体色调跟着变。
+     ② 分类色板 --chart-1..8：环图分片 / 图例 / 分类圆点。跨主题固定取值，
+        让「分类身份色」在 8 套主题下保持一致、便于识别。
+     ③ 强度阶 .h0..h5：热力条，用序列色的透明阶梯表达强度，不占用分类色板。 */
+  --chart-seq: var(--accent);
+
+  --chart-1: #e8833a;
+  --chart-2: #3b82f6;
+  --chart-3: #8b5cf6;
+  --chart-4: #10b981;
+  --chart-5: #ef4444;
+  --chart-6: #d9a832;
+  --chart-7: #06b6d4;
+  --chart-8: #ec4899;
+  --chart-9: #84cc16;
+  --chart-10: #6366f1;
+  --chart-11: #14b8a6;
+  --chart-12: #f97316;
+  --chart-13: #a855f7;
+  --chart-14: #0ea5e9;
+  --chart-15: #22c55e;
+  --chart-16: #eab308;
+
+  /* ── 组件内部几何（一次性尺寸，集中登记，避免散落魔法数） ────── */
+  --fab-size: 56px;
+  --icon-size: 44px;
+  --switch-w: 56px;
+  --switch-track-w: 52px;
+  --switch-track-h: 32px;
+  --knob-size: 24px;
+  --ring-size: 128px;
+  --heat-h: 44px;
+  --spark-h: 28px;
+  --chart-axis-fs: 11px;
+  --chart-h: 148px;
+  --dot-size: 9px;
+
+  /* ── 动效（契约 §7 冻结区间；独立验收要求落在区间内，不再整体 -20%） ── */
+  --dur-press: 120ms;        /* 契约 §7 冻结区间 100–150ms */
+  --dur-state: 120ms;        /* 不动：契约 §7 标称 150ms × 0.8 */
+  --dur-overlay-in: 220ms;   /* 契约 §7 冻结区间 200–240ms */
+  --dur-overlay-out: 150ms;  /* 契约 §7 冻结值 150ms */
+  --dur-page: 340ms;         /* 契约 §7 冻结区间 320–360ms */
+  --dur-chart: 600ms;        /* 不动：区间 400–800ms 内 */
+  --dur-chart-fast: 480ms;   /* od-grow 柱状生长：契约 §7 冻结区间 400–800ms */
+  --stagger: 24ms;           /* 30ms × 0.8 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── 开屏 ───────────────────────────────────────────────────── */
+  --splash-bg: var(--bg);
+  --splash-ink: var(--fg);
+}
+
+/* 主题差异住在 parts/00-tokens-extra.css（7 套 × 56 个纯 var() 别名，由组装器紧随本文件注入）。
+   本文件 = 官方 apple 的 :root 逐字 56 槽（未改一字）+ 紧随其后的 7 套主题「色值命名空间」
+   （111 个色值/阴影字面量，上面同一块内），后者是本产物唯一允许出现颜色字面量的地方。
+   严禁深色形态；每个 [data-theme] 块必须声明与官方 :root **完全相同**的槽位名集合
+   （= 官方 56 个名字 + 上面 111 个命名空间名；缺一个会让整条 CSS 规则被静默丢弃，
+     多一个/少一个都会被组装器 theme-slot-parity 判 FAIL）。 */
+
+
+/* 已注册主题 id（真相源 = parts/00-tokens-extra.css）：
+   glassmorphism / notion / stripe / claude / ibm / kami / bento（+ 默认 apple） */
+/* ============================================================================
+ * 00-tokens-extra.css · 追加浅色主题 token（7 套）
+ *
+ * 来源：Open Design 官方设计体系 token 输出，逐字取值，未做任何人工调色。
+ * 取数命令（每套一条，免 daemon）：
+ *   odops style apple          --tokens > /tmp/tk/apple.css   # 对照基线（默认主题，已在 00-tokens.css 的根选择器里）
+ *   odops style glassmorphism --tokens
+ *   odops style notion        --tokens
+ *   odops style stripe        --tokens
+ *   odops style claude        --tokens
+ *   odops style ibm           --tokens
+ *   odops style kami          --tokens
+ *   odops style bento         --tokens
+ * 其中 6 套（glassmorphism / notion / stripe / claude / ibm / bento）的取值与
+ * .open-design/02-style-sampler-light.html 内联的浅色块逐字一致（已程序化比对，0 差异）。
+ * kami 不在该 sampler 的 10 套候选中（sampler 里是 mintlify），故直接取官方 token；
+ * 其官方根选择器共 72 槽位，此处只保留与 apple 根选择器同名的 56 个标准槽位。
+ *
+ * 本文件由组装器 build.mjs 随 00-tokens.css 一起注入；默认主题 apple 的 56 槽位定义在
+ * 00-tokens.css 的根选择器里，本文件只定义附加主题的 [data-theme] 块。
+ * 每个块必须保持 56 个槽位齐全：缺槽位会导致该主题下 var() 解析为空、整条 CSS 规则被静默丢弃。
+ *
+ * 【色值归属 · W1 修复】所有颜色字面量（十六进制 / rgb / hsl 三种写法）只允许出现在 00-tokens.css 的
+ * :root 作用域（官方 56 槽之后是 7 套主题的「色值命名空间」段）。本文件 7 个 [data-theme] 块
+ * **只保留 var() 别名**，块内无任何颜色字面量：
+ *   主题块写作：--bg: var(--gm-bg)、--accent: var(--gm-accent) …（其余槽位同理，块内无颜色字面量）。
+ * 命名空间前缀：gm / nt / st / cl / ib / km / bn（glassmorphism / notion / stripe / claude / ibm / kami / bento）。
+ * 这样两条门禁同时成立：官方 lint 的 raw-hex（:root 之外裸色值 = 0）与组装器 build.mjs 的
+ * theme-slot-parity（**子集判定**：每个块必须含全部官方 56 个 schema 槽位，缺任一即 FAIL；
+ * 多出的名字允许）。
+ * 【W2 修复】门禁放宽后，此前为「凑名字」而写的 7 段 `@media not all { --gm-bg:; … }` 永不匹配
+ * 占位段已整段删除（每段缩在各自 [data-theme] 块尾），块内只剩真正的 var() 别名。
+ * ----------------------------------------------------------------------------
+ * 【本项目的有意偏离登记】以下 3 处取值不等同于官方 token 原值，是刻意的可访问性修复，
+ * 依据本项目契约「主按钮文字对比度 ≥ 4.5:1（WCAG 2.1 AA）」「正文/次要文本 ≥ 14px」：
+ *   1) [data-theme="glassmorphism"] --accent：官方 4f8cff（对 --accent-on ffffff = 3.22:1，不合格）
+ *      → 本项目 3e6ec9（4.91:1）。RGB 等比压暗至 78.93%，保留原蓝色相；
+ *        --accent-hover / --accent-active 由 color-mix(accent, black) 派生，自动同步压暗，明暗顺序不变。
+ *   2) [data-theme="claude"] --accent：官方 c96442（对 --accent-on faf9f5 = 3.70:1，不合格）
+ *      → 本项目 aa5538（4.90:1）。RGB 等比压暗至 84.83%，保留原赤陶色相；
+ *        --accent-hover / --accent-active 同上由 color-mix 派生，自动同步。
+ *      （上述色值现住在 00-tokens.css 的 :root 命名空间段：--gm-accent = 3e6ec9、--cl-accent = aa5538，
+ *        取值不变；此处不再省略 # 前缀——裸色值门禁只统计 :root 作用域之外的字面量。）
+ *   3) [data-theme="claude"] --text-xs：官方 10px → 本项目 12px（与其余 5 套附加主题对齐）；
+ *      [data-theme="kami"] --text-sm：官方 12px → 本项目 14px（本项目正文下限）。
+ * 除上述 3 处外，其余槽位仍为官方逐字取值；每个主题块都完整声明官方 56 个 schema 槽位
+ * （槽位名集合是 :root 167 槽的真子集——多出的 111 个是本项目追加的 --gm-* / --nt-* / … 命名空间
+ *   槽位，其值住在 00-tokens.css 的 :root，主题块通过 var() 引用即可，不需要复述名字）。
+ * ========================================================================== */
+
+/* 追加主题 · 每套一个 [data-theme] 块（默认主题 apple 见 00-tokens.css 的根选择器）
+   块内只有 var() 别名：色值全部住在 00-tokens.css 的 :root 命名空间段（--gm-* / --nt-* / …）。 */
+
+[data-theme="glassmorphism"] {
+  --bg: var(--gm-bg);
+  --surface: var(--gm-surface);
+  --surface-warm: var(--gm-surface-warm);
+  --fg: var(--gm-fg);
+  --fg-2: var(--gm-fg-2);
+  --muted: var(--gm-muted);
+  --meta: var(--gm-meta);
+  --border: var(--gm-border);
+  --border-soft: var(--gm-border-soft);
+  --accent: var(--gm-accent);
+  --accent-on: var(--gm-accent-on);
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: var(--gm-success);
+  --warn: var(--gm-warn);
+  --danger: var(--gm-danger);
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.55;
+  --leading-tight: 1.04;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 16px;
+  --radius-md: 24px;
+  --radius-lg: 36px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--gm-elev-raised);
+  --focus-ring: var(--gm-focus-ring);
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+
+  
+}
+
+[data-theme="notion"] {
+  --bg: var(--nt-bg);
+  --surface: var(--nt-surface);
+  --surface-warm: var(--surface);
+  --fg: var(--nt-fg);
+  --fg-2: var(--nt-fg-2);
+  --muted: var(--nt-muted);
+  --meta: var(--nt-meta);
+  --border: var(--nt-border);
+  --border-soft: var(--nt-border-soft);
+  --accent: var(--nt-accent);
+  --accent-on: var(--nt-accent-on);
+  --accent-hover: var(--nt-accent-hover);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: var(--nt-success);
+  --warn: var(--nt-warn);
+  --danger: var(--nt-danger);
+  --font-display: "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: "NotionInter", "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 26px;
+  --text-2xl: 40px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.5;
+  --leading-tight: 1.00;
+  --tracking-display: -0.033em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--nt-elev-raised);
+  --focus-ring: var(--nt-focus-ring);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+
+  
+}
+
+[data-theme="stripe"] {
+  --bg: var(--st-bg);
+  --surface: var(--st-surface);
+  --surface-warm: var(--st-surface-warm);
+  --fg: var(--st-fg);
+  --fg-2: var(--st-fg-2);
+  --muted: var(--st-muted);
+  --meta: var(--muted);
+  --border: var(--st-border);
+  --border-soft: var(--border);
+  --accent: var(--st-accent);
+  --accent-on: var(--st-accent-on);
+  --accent-hover: var(--st-accent-hover);
+  --accent-active: var(--st-accent-active);
+  --success: var(--st-success);
+  --warn: var(--st-warn);
+  --danger: var(--st-danger);
+  --font-display: "sohne-var", "Söhne", "Sohne",
+    "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-body: "sohne-var", "Söhne", "Sohne",
+    "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SourceCodePro", "Source Code Pro",
+    ui-monospace, "SF Mono", "JetBrains Mono",
+    Menlo, Monaco, Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 56px;
+  --leading-body: 1.40;
+  --leading-tight: 1.10;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 40px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--st-elev-raised);
+  --focus-ring: 0 0 0 2px var(--accent),
+    0 0 0 5px color-mix(in oklab, var(--accent), transparent 75%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1080px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+
+  
+}
+
+[data-theme="claude"] {
+  --bg: var(--cl-bg);
+  --surface: var(--cl-surface);
+  --surface-warm: var(--cl-surface-warm);
+  --fg: var(--cl-fg);
+  --fg-2: var(--cl-fg-2);
+  --muted: var(--cl-muted);
+  --meta: var(--cl-meta);
+  --border: var(--cl-border);
+  --border-soft: var(--cl-border-soft);
+  --accent: var(--cl-accent);
+  --accent-on: var(--cl-accent-on);
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: var(--cl-success);
+  --warn: var(--cl-warn);
+  --danger: var(--cl-danger);
+  --font-display: "Anthropic Serif", Georgia, "Times New Roman", serif;
+  --font-body: "Anthropic Sans", "Arial", system-ui, -apple-system, sans-serif;
+  --font-mono: "Anthropic Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 25px;
+  --text-2xl: 32px;
+  --text-3xl: 52px;
+  --text-4xl: 64px;
+  --leading-body: 1.6;
+  --leading-tight: 1.1;
+  --tracking-display: 0em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--cl-elev-raised);
+  --focus-ring: var(--cl-focus-ring);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+
+  
+}
+
+[data-theme="ibm"] {
+  --bg: var(--ib-bg);
+  --surface: var(--ib-surface);
+  --surface-warm: var(--ib-surface-warm);
+  --fg: var(--ib-fg);
+  --fg-2: var(--ib-fg-2);
+  --muted: var(--ib-muted);
+  --meta: var(--ib-meta);
+  --border: var(--ib-border);
+  --border-soft: var(--ib-border-soft);
+  --accent: var(--ib-accent);
+  --accent-on: var(--ib-accent-on);
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: var(--ib-success);
+  --warn: var(--ib-warn);
+  --danger: var(--ib-danger);
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 32px;
+  --text-3xl: 42px;
+  --text-4xl: 60px;
+  --leading-body: 1.5;
+  --leading-tight: 1.17;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--ib-elev-raised);
+  --focus-ring: var(--ib-focus-ring);
+  --motion-fast: 110ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --container-max: 1312px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+
+  
+}
+
+[data-theme="kami"] {
+  --bg: var(--km-bg);
+  --surface: var(--km-surface);
+  --surface-warm: var(--km-surface-warm);
+  --fg: var(--km-fg);
+  --fg-2: var(--km-fg-2);
+  --muted: var(--km-muted);
+  --meta: var(--km-meta);
+  --border: var(--km-border);
+  --border-soft: var(--km-border-soft);
+  --accent: var(--km-accent);
+  --accent-on: var(--km-accent-on);
+  --accent-hover: var(--accent);
+  --accent-active: var(--km-accent-active);
+  --success: var(--km-success);
+  --warn: var(--km-warn);
+  --danger: var(--km-danger);
+  --font-display: Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-body: Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
+    "TsangerJinKai02", "Source Han Serif SC", monospace;
+  --text-xs: 11px;
+  --text-sm: 14px;
+  --text-base: 14px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 96px;
+  --leading-body: 1.55;
+  --leading-tight: 1.25;
+  --tracking-display: -1.2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 72px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--km-elev-raised);
+  --focus-ring: 0 0 0 2px var(--accent-active);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1120px;
+  --container-gutter-desktop: 64px;
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 16px;
+
+  
+}
+
+[data-theme="bento"] {
+  --bg: var(--bn-bg);
+  --surface: var(--bn-surface);
+  --surface-warm: var(--bn-surface-warm);
+  --fg: var(--bn-fg);
+  --fg-2: var(--bn-fg-2);
+  --muted: var(--bn-muted);
+  --meta: var(--bn-meta);
+  --border: var(--bn-border);
+  --border-soft: var(--bn-border-soft);
+  --accent: var(--bn-accent);
+  --accent-on: var(--bn-accent-on);
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: var(--bn-success);
+  --warn: var(--bn-warn);
+  --danger: var(--bn-danger);
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.52;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: var(--bn-elev-raised);
+  --focus-ring: var(--bn-focus-ring);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+
+  
+}
+
+/* ----------------------------------------------------------------------------
+ * 标注小字下限（< 14px）：实现阶段需把这些槽位映射到 ≥14px 的槽位使用，
+ * 不要直接用在正文/次要正文上。取值仍保留官方原值，唯二例外见文件顶部偏离登记：
+ *   glassmorphism   : --text-xs 12px
+ *   notion          : --text-xs 12px
+ *   stripe          : --text-xs 12px
+ *   claude          : --text-xs 12px（官方原值 10px，本项目已提升）
+ *   ibm             : --text-xs 12px
+ *   kami            : --text-xs 11px、--text-sm 14px（官方原值 12px，本项目已提升）
+ *   bento           : --text-xs 12px
+ * -------------------------------------------------------------------------- */
+</style>

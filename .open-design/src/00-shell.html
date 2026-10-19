@@ -1,0 +1,131 @@
+<!doctype html>
+<!--
+  00-shell.html · 「行为记录」UI 重设计原型外壳（shell owner 独占，writer 只读）
+
+  · 四个注入占位注释各出现一次：token 块 / 逐屏样式 / 逐屏结构 / 开屏。
+  · 设备框 = Android Pixel 风格 393×852（打孔摄像头 + Android 状态栏 + 底部手势条），
+    外框不滚动，只有每屏内部的 .content 滚动。
+
+  ── 给 writer 的冻结接口（只调用，不要自己实现） ──────────────────────────
+  App.go('s07')            进入某屏（push，带返回栈）
+  App.back()               返回上一屏
+  App.tab('finance')       切底部 Tab（接受 tab key 或屏 id，清空返回栈）
+  App.toast('已保存')       轻提示，1.6s 自动消失
+  App.haptic('light'|'medium')  视觉震动反馈示意
+  App.state('s04','empty') 切某屏状态演示：loading / empty / error / populated / edge
+  App.theme('glass')       切主题（只改 <html data-theme>，默认 apple）
+  App.open('#id') / App.close('#id')     显隐浮层（弹窗 / 抽屉）
+  App.count(elOrSelector, 128, {decimals:0, prefix:'', suffix:' 条'})   数字滚动
+  App.chart.hydrate(scope) 渲染 scope 内所有 [data-chart] 元素
+
+  ---- 屏结构（push 屏请在 section 上写 data-title） ----
+  （下表示例的属性值故意不写引号：带引号的写法会被组装器当成真实屏 id 注册；
+    示例标签也带上 data-od-id —— 官方 verify 是全文文本级扫描，示例缺锚点会被算成"顶层区块缺 data-od-id"）
+  <style data-for=sXX> … 只写本屏样式，颜色/圆角/间距/时长一律 var(--token) … </style>
+  <section class=screen data-screen=sXX data-title=页面标题 data-od-id=sXX>
+    <header class="screen-head" data-od-id=sXX-head>…</header>
+    <div class="content"> … 唯一滚动区 … </div>
+  </section>
+
+  ---- 可用类（契约 §5，全部由外壳提供） ----
+  卡：.glass .card .card.glass   分组：.group .group-row .group-label
+  行：.row(.row-icon .row-body .row-title .row-sub .row-tail) .list-row
+  控件：.chip(.is-on) .segmented(子元素 [aria-pressed="true"] 或 .is-on) .switch([aria-checked])
+       .btn .btn-ghost .btn-block .fab .icon-btn
+  数据：.kpi(.kpi-label .kpi-value .kpi-unit .kpi-delta .kpi-spark) .tl .tl-item(.tl-time .tl-body)
+  浮层：.scrim .dialog .sheet（+ .scrim.is-bottom 用于抽屉） .toast（App.toast 自动生成）
+  状态：.st-loading .st-empty .st-error .st-edge；元素加 data-state-when="empty" 即「仅 empty 态显示」，
+       data-state-hide="empty" 即「empty 态隐藏」；五态由 App.state() 切换。
+  图表：.chart + App.chart.*（area / ring / bars / gauge / spark / heat），
+       或写 <div data-chart="heat" data-chart-values="1,3,9,…"></div> 自动渲染。
+       .s1… .s7 = 7 级中性色阶；.legend .legend-dot【图表轴标签 11px，已由外壳加 data-od-min-fs 豁免】
+  排版：.h1 .h2 .h3 .meta .fine .pad .stack .grid-2/3/4 .row-between .sec-head .mt-2/3/4 .num
+  注意：强调色（--accent）每屏 ≤2 次（主 CTA + 当前选中态）；图表与语义色一律不走 accent；
+       <14px 的角标文本请给最近的父元素加 data-od-min-fs 豁免（--meta 只用于图标/描边，不用于文字）。
+-->
+<html lang="zh-CN" data-theme="apple">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>行为记录 · 交互原型</title>
+
+<!--@od:base-styles-->
+
+<!-- 逐屏样式注入位：必须放在 style 元素之外，注入的是各 partial 独立的 style[data-for] 元素 -->
+<!--@od:styles-->
+
+</head>
+<body>
+<div class="od-stage" data-od-id="stage">
+
+  <div class="device-frame" data-od-id="device-frame">
+    <span class="dev-key k-assist" aria-hidden></span>
+    <span class="dev-key k-volup" aria-hidden></span>
+    <span class="dev-key k-voldn" aria-hidden></span>
+    <span class="dev-key k-power" aria-hidden></span>
+
+    <div class="device" id="odDevice" data-od-id="device">
+      <div class="device-screen" id="odScreen">
+        <span class="app-backdrop" aria-hidden></span>
+
+        <div class="statusbar" data-od-min-fs data-od-id="statusbar">
+          <span class="sb-time">9:41</span>
+          <span class="sb-icons" aria-hidden>
+            <svg viewBox="0 0 18 12" width="16" height="11"><rect x="0" y="8" width="3" height="4" rx="0.8"/><rect x="5" y="6" width="3" height="6" rx="0.8"/><rect x="10" y="3" width="3" height="9" rx="0.8"/><rect x="15" y="0" width="3" height="12" rx="0.8"/></svg>
+            <svg viewBox="0 0 16 12" width="15" height="11"><path d="M8 10.6 6.3 8.9a2.4 2.4 0 0 1 3.4 0zM8 6.4c-1.2 0-2.3.45-3.1 1.25L3.6 6.3A6.4 6.4 0 0 1 8 4.6c1.7 0 3.2.65 4.4 1.7l-1.3 1.35A4.5 4.5 0 0 0 8 6.4zM8 2.3c-2.3 0-4.4.9-6 2.35L.7 3.35A10.6 10.6 0 0 1 8 .3c2.9 0 5.5 1.15 7.3 3.05L14 4.65A8.7 8.7 0 0 0 8 2.3z"/></svg>
+            <svg viewBox="0 0 24 12" width="23" height="11"><rect class="sb-outline" x="0.5" y="0.5" width="19" height="11" rx="3"/><rect class="sb-dim" x="21" y="4" width="1.6" height="4" rx="0.8"/><rect x="2" y="2" width="13" height="8" rx="2"/></svg>
+          </span>
+        </div>
+
+        <div class="appbar" id="odAppbar" hidden data-od-id="appbar">
+          <button class="icon-btn" type="button" data-back aria-label="返回" data-od-id="appbar-back">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M15 4.5 7.5 12 15 19.5"/></svg>
+          </button>
+          <span class="appbar-title" id="odAppbarTitle"></span>
+        </div>
+
+        <div class="screen-host" id="screenHost" data-od-id="screen-host">
+<!--@od:screens-->
+
+
+
+        </div>
+
+        <nav class="tabbar" id="odTabbar" role="tablist" aria-label="主导航" data-od-min-fs data-od-id="tabbar">
+          <button class="tab" type="button" role="tab" data-tab="overview" aria-selected="true" data-od-id="tab-overview">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2"/></svg></span>
+            <span>概览</span>
+          </button>
+          <button class="tab" type="button" role="tab" data-tab="live" aria-selected="false" data-od-id="tab-live">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg></span>
+            <span>实时</span>
+          </button>
+          <button class="tab" type="button" role="tab" data-tab="ad" aria-selected="false" data-od-id="tab-ad">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg></span>
+            <span>广告</span>
+          </button>
+          <button class="tab" type="button" role="tab" data-tab="finance" aria-selected="false" data-od-id="tab-finance">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><path d="M16.5 15h1.5"/></svg></span>
+            <span>记账</span>
+          </button>
+          <button class="tab" type="button" role="tab" data-tab="settings" aria-selected="false" data-od-id="tab-settings">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <div class="gesture-bar" aria-hidden data-od-id="gesture-bar"></div>
+<!--@od:splash-->
+        <div class="toast-host" id="odToastHost" aria-live="polite" data-od-id="toast-host"></div>
+        <span class="haptic-ping" id="odHaptic" aria-hidden></span>
+      </div>
+      <span class="punch" aria-hidden data-od-id="punch"></span>
+    </div>
+  </div>
+</div>
+
+<!--@od:devbar-->
+
+<!--@od:scripts-->
+</body>
+</html>

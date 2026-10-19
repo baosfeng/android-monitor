@@ -1,0 +1,68 @@
+<!-- ============================================================
+     s14 · 记一笔一屏版-仅样式
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<!-- ============================================================
+     s14 · 记一笔（一屏版）—— 用户要求「一屏就能操作，不要来回滑动」
+     ------------------------------------------------------------
+     与 s05「新增交易」的差异（只为省纵向高度，信息一个没少）：
+       1. 分类：21 个分类的 6 行网格  →  单行横滑（一屏可见约 5 个）
+       2. 账户：3 个带余额的大卡片行  →  一行 pill
+       3. 日期/备注：两段分组        →  与账户合并成一张紧凑卡（每行 44px）
+       4. 自动记账带过来的单据信息    →  折叠成一行摘要（点击展开）
+       5. 保存按钮吸底（sticky），不随内容滚走
+     首屏高度估算 ≈ 560px（视口可用 ≈ 756px），不需要纵向滚动。
+     ============================================================ -->
+<style data-for="s14">
+  .screen.s14 .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
+  .screen.s14 .s14-card{padding:var(--space-3) var(--space-4)}
+  .s14-kind{margin-bottom:var(--space-2)}
+  .s14-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
+  .s14-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
+  .s14-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .s14-scroll{display:flex;gap:var(--space-2);overflow-x:auto;padding:0 var(--space-4) var(--space-1);
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .s14-scroll::-webkit-scrollbar{display:none}
+  .s14-cat{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+  .s14-cat .cat-icon{width:46px;height:46px}
+  .s14-cat.is-on,.s14-cat[aria-pressed="true"]{color:var(--accent-text)}
+  .s14-cat.is-on .cat-icon,.s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .s14-cat-name{font-size:var(--text-xs);white-space:nowrap}
+  /* 分类默认收起成一行；点开才出 chips，选完自动收起（省掉首屏约 76px） */
+  .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
+    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
+  .s14-cats-current{flex:1;min-width:0;color:var(--fg);font-size:var(--text-base);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 四行同构：分类 / 账户 / 时间 都是「标签 + 值 + ▸」，点开就地出 chips；
+     备注行同形态但没有箭头（直接输入）。同一个值样式 + 同分隔线，避免控件形态混用。 */
+  /* 值：与标签**同字号**，层级靠字重（500）与颜色（fg vs muted）拉开 —— 17px 对 14px 的反差过强 */
+  .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14-panel[hidden]{display:none}
+  .s14-panel{padding:var(--space-2) 0 var(--space-1);margin-top:var(--space-2);border-top:1px solid var(--border-soft)}
+  .s14-card .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
+  .s14-row{display:flex;align-items:center;gap:var(--space-3);min-height:44px}
+  .s14-row + .s14-row{border-top:1px solid var(--border-soft)}
+  .s14-label{flex:0 0 40px;font-size:var(--text-sm);color:var(--muted)}
+  .s14-row .s14-scroll{padding:0;flex:1;min-width:0}
+  /* ⚠️ input 必须显式继承字体族：默认字体族不是页面字体，真机/浏览器上都会显得又大又生硬 */
+  .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .s14-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
+  .s14-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
+  .s14-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
+  .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14-actions{position:sticky;bottom:0;margin-top:auto;
+    padding:var(--space-3) var(--space-4) var(--space-5);
+    background:linear-gradient(to top,var(--surface) 62%,transparent)}
+</style>
+<!--@od:section-->
+<!-- 仅样式方案：无结构段落 -->
+<!--@od:end-->

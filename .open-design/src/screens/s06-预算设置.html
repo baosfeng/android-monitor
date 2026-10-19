@@ -1,0 +1,171 @@
+<!-- ============================================================
+     s06 · 预算设置
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s06">
+/* ═══ s06 · 预算设置 ═══ */
+.s06-month{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:3px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 4%,transparent)}
+.s06-month .icon-btn{border-color:transparent;background:transparent}
+.s06-month .icon-btn:active{transform:scale(.88)}
+.s06-mlabel{font-size:var(--text-base);font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.s06-mlabel.is-bump{animation:s06-bump 320ms var(--ease-spring) both}
+@keyframes s06-bump{from{transform:scale(.86);opacity:.3}to{transform:scale(1);opacity:1}}
+.s06-kpis{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center}
+.s06-kcol{display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.s06-krow{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+.s06-kv{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-base);font-weight:600;white-space:nowrap}
+.s06-kv.is-exp{color:var(--expense-text)}
+.s06-ring{position:relative;width:104px;height:104px;flex:0 0 auto}
+.s06-ring-chart{position:absolute;inset:0}
+.s06-ring-chart .chart{display:block;width:100%;height:100%}
+.s06-ring-txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.s06-ring-txt b{font-family:var(--font-mono);font-size:var(--text-lg);font-weight:700;letter-spacing:-0.02em}
+.s06-ring-txt span{font-size:var(--text-sm);color:var(--muted)}
+.s06-brow{display:flex;flex-direction:column;gap:6px;width:100%;min-height:72px;padding:var(--space-3) 0;border:0;border-top:1px solid var(--border-soft);background:transparent;font:inherit;text-align:left;cursor:pointer;transition:background var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out)}
+.s06-brow:first-child{border-top:0}
+.s06-brow:active{background:color-mix(in srgb,var(--fg) 5%,transparent);transform:scale(.985)}
+.s06-brow-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2);min-width:0}
+.s06-brow-top .row-title{font-size:var(--text-base)}
+.s06-amt{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-base);font-weight:600}
+.s06-bar{display:block;height:7px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 9%,transparent);overflow:hidden}
+.s06-bar i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--chart-3);transform-origin:left;animation:s06-grow 620ms var(--ease-out) both;animation-delay:calc(var(--stagger) * var(--i,0))}
+.s06-brow.is-over .s06-bar i{background:var(--chart-1)}
+.s06-brow.is-over .row-sub{color:var(--danger-text)}
+@keyframes s06-grow{from{transform:scaleX(0)}to{transform:scaleX(var(--p,.5))}}
+.s06-in{animation:s06-in 300ms var(--ease-out) both;animation-delay:calc(var(--stagger) * var(--i,0))}
+@keyframes s06-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+.s06-dlg-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.s06-input{flex:1 1 auto;min-width:0;border:0;background:transparent;padding:8px 0;outline:none;font-family:var(--font-mono);font-size:var(--text-xl);font-weight:700;color:var(--fg)}
+@media (prefers-reduced-motion: reduce){
+  .s06-in,.s06-mlabel.is-bump,.s06-bar i{animation:none!important}
+  .s06-bar i{transform:scaleX(var(--p,.5))}
+}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s06" data-title="预算设置" data-od-id="screen-s06">
+  <div class="content" data-od-id="s06-content">
+
+    <div class="pad s06-in" style="--i:0" data-state-hide="loading empty error edge">
+      <div class="s06-month" data-od-id="s06-monthbar">
+        <button class="icon-btn" type="button" data-month="-1" aria-label="上个月" data-od-id="s06-prev">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+        </button>
+        <span class="s06-mlabel" id="s06-mlabel">2026 年 10 月</span>
+        <button class="icon-btn" type="button" data-month="1" aria-label="下个月" data-od-id="s06-next">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s06-in" style="--i:1" data-state-hide="loading empty error edge">
+      <div class="card glass s06-kpis" id="s06-card" data-od-id="s06-card">
+        <div class="s06-kcol">
+          <div class="s06-krow"><span class="kpi-label">总预算</span><span class="s06-kv" id="s06-total" data-count-to="4000" data-count-pre="¥">¥4,000</span></div>
+          <div class="s06-krow"><span class="kpi-label">已支出</span><span class="s06-kv is-exp" id="s06-spent" data-count-to="2468" data-count-pre="¥">¥2,468</span></div>
+          <div class="s06-krow"><span class="kpi-label">剩余</span><span class="s06-kv" id="s06-left" data-count-to="1532" data-count-pre="¥">¥1,532</span></div>
+        </div>
+        <div class="s06-ring" data-od-id="s06-ring">
+          <div class="s06-ring-chart" data-chart="gauge" data-chart-value="0.62" data-chart-label="总预算使用率 62 百分比"></div>
+          <div class="s06-ring-txt"><b id="s06-pct">62%</b><span>已用</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pad mt-4" data-state-hide="loading empty error edge" data-od-id="s06-list">
+      <div class="sec-head"><h2 class="h2">分类预算</h2><span class="meta">点任意一行可修改</span></div>
+      <div class="group">
+        <button class="s06-brow" type="button" data-brow="0" data-amount="1200" data-spent="686" style="--i:0" data-od-id="s06-brow-0">
+          <span class="s06-brow-top"><span class="row-title">餐饮</span><span class="s06-amt num">¥1,200</span></span>
+          <span class="s06-bar"><i style="--p:0.572"></i></span>
+          <span class="row-sub">已支出 ¥686 · 剩余 ¥514</span>
+        </button>
+        <button class="s06-brow" type="button" data-brow="1" data-amount="400" data-spent="214" style="--i:1" data-od-id="s06-brow-1">
+          <span class="s06-brow-top"><span class="row-title">交通</span><span class="s06-amt num">¥400</span></span>
+          <span class="s06-bar"><i style="--p:0.535"></i></span>
+          <span class="row-sub">已支出 ¥214 · 剩余 ¥186</span>
+        </button>
+        <button class="s06-brow" type="button" data-brow="2" data-amount="1000" data-spent="862" style="--i:2" data-od-id="s06-brow-2">
+          <span class="s06-brow-top"><span class="row-title">购物</span><span class="s06-amt num">¥1,000</span></span>
+          <span class="s06-bar"><i style="--p:0.862"></i></span>
+          <span class="row-sub">已支出 ¥862 · 剩余 ¥138</span>
+        </button>
+        <button class="s06-brow" type="button" data-brow="3" data-amount="500" data-spent="328" style="--i:3" data-od-id="s06-brow-3">
+          <span class="s06-brow-top"><span class="row-title">娱乐</span><span class="s06-amt num">¥500</span></span>
+          <span class="s06-bar"><i style="--p:0.656"></i></span>
+          <span class="row-sub">已支出 ¥328 · 剩余 ¥172</span>
+        </button>
+        <button class="s06-brow" type="button" data-brow="4" data-amount="700" data-spent="268" style="--i:4" data-od-id="s06-brow-4">
+          <span class="s06-brow-top"><span class="row-title">居住</span><span class="s06-amt num">¥700</span></span>
+          <span class="s06-bar"><i style="--p:0.383"></i></span>
+          <span class="row-sub">已支出 ¥268 · 剩余 ¥432</span>
+        </button>
+        <button class="s06-brow" type="button" data-brow="5" data-amount="200" data-spent="110" style="--i:5" data-od-id="s06-brow-5">
+          <span class="s06-brow-top"><span class="row-title">医疗</span><span class="s06-amt num">¥200</span></span>
+          <span class="s06-bar"><i style="--p:0.55"></i></span>
+          <span class="row-sub">已支出 ¥110 · 剩余 ¥90</span>
+        </button>
+      </div>
+      <p class="meta mt-3">分类预算合计等于总预算；超出后进度条转为深色并提示超支。</p>
+    </div>
+
+    <div class="pad" data-state-when="loading" data-od-id="s06-loading">
+      <div class="card"><div class="sk w-40"></div><div class="sk w-60 tall"></div><div class="sk w-80"></div></div>
+      <div class="group mt-3">
+        <div class="list-row" style="display:block"><div class="sk w-100"></div><div class="sk w-80"></div></div>
+        <div class="list-row" style="display:block"><div class="sk w-100"></div><div class="sk w-60"></div></div>
+        <div class="list-row" style="display:block"><div class="sk w-100"></div><div class="sk w-80"></div></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s06-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+      <p class="st-title">本月还没有设置预算</p>
+      <p class="st-desc">先设置总预算，再为常用分类分配额度，超支时会收到提醒</p>
+      <button class="btn btn-ghost" type="button" data-retry data-od-id="s06-empty-set">设置总预算</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s06-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+      <p class="st-title">预算数据读取失败</p>
+      <p class="st-desc">本地预算表损坏或读取超时，当前显示为上次缓存值</p>
+      <button class="btn btn-ghost" type="button" data-retry data-od-id="s06-retry">重新加载</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s06-edge">
+      <div class="card glass">
+        <div class="s06-krow"><span class="kpi-label">总预算（超支 128%）</span><span class="s06-kv is-exp">¥999,999</span></div>
+        <span class="s06-bar mt-2" style="display:block"><i style="--p:1;background:var(--chart-1)"></i></span>
+        <p class="meta mt-2">已支出 ¥1,280,000 · 超支 ¥280,001</p>
+      </div>
+      <p class="group-label mt-3">超长分类名</p>
+      <div class="group">
+        <button class="s06-brow is-over" type="button" data-brow="0" data-amount="200" data-spent="256" data-od-id="s06-edge-brow">
+          <span class="s06-brow-top"><span class="row-title">人情往来 · 红白喜事与节日红包</span><span class="s06-amt num">¥200</span></span>
+          <span class="s06-bar"><i style="--p:1"></i></span>
+          <span class="row-sub">已支出 ¥256 · 超支 ¥56</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="scrim" id="s06-dlg" hidden data-od-id="s06-dialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="s06-dlg-title">
+      <p class="h3" id="s06-dlg-title">修改预算</p>
+      <p class="meta mt-2" id="s06-dlg-name">餐饮</p>
+      <div class="card mt-3" style="display:flex;align-items:center;gap:var(--space-2)">
+        <span class="s05-cur">¥</span>
+        <input class="s06-input" id="s06-dlg-input" type="text" inputmode="decimal" autocomplete="off" value="1200" aria-label="预算金额">
+      </div>
+      <div class="s06-dlg-actions mt-4">
+        <button class="btn btn-ghost" type="button" data-close="#s06-dlg" data-od-id="s06-dlg-cancel">取消</button>
+        <button class="btn" type="button" data-budget-save data-od-id="s06-dlg-save">保存</button>
+      </div>
+    </div>
+  </div>
+</section>
+<!--@od:end-->

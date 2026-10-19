@@ -1,0 +1,359 @@
+<!-- ============================================================
+     s12 · 组件与状态
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s12">
+/* s12 · 组件与状态展厅 */
+.screen.s12{font-size:max(var(--text-sm),14px)}
+/* 状态块放进 grid 时轨道按容器宽度收敛，避免 nowrap 长文案把轨道撑到 max-content */
+.screen.s12 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s12 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.list-row,.tl-time,.tl-sub,.st-desc,.kpi-label,.kpi-unit,.kpi-delta,.legend li,.field,.theme-cn,.app-pkg){font-size:max(var(--text-sm),14px)}
+.screen.s12 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+/* 展厅默认（populated）同时陈列五种状态；切到某一状态时只留对应那块 */
+#screenHost > .screen.s12:not([data-od-state]) [data-state-when],
+#screenHost > .screen.s12[data-od-state="populated"] [data-state-when]{display:grid;grid-template-columns:minmax(0,1fr);place-items:stretch;gap:var(--space-2)}
+.screen.s12 .demo{margin-bottom:var(--space-4)}
+.screen.s12 .demo:last-child{margin-bottom:0}
+.screen.s12 .act-row{display:flex;gap:var(--space-2)}
+.screen.s12 .act-row .btn{flex:1 1 0;min-width:0;padding:0 var(--space-3)}
+.screen.s12 button.group-row{background:transparent;border-left:0;border-right:0;border-bottom:0;width:100%;font:inherit;color:inherit;cursor:pointer}
+.screen.s12 button.group-row:first-child{border-top:0}
+.screen.s12 .row-wrap{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}
+.screen.s12 .ch-sm{width:118px}
+.screen.s12 .ch-xs{width:96px}
+.screen.s12 .bar{height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.screen.s12 .bar > i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--fg-2);transform:scaleX(0);transform-origin:left;animation:od-bar 700ms var(--ease-out) 120ms forwards}
+.screen.s12 .bar-68 > i{width:68%}
+.screen.s12 .bar-34 > i{width:34%}
+@keyframes od-bar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.screen.s12 .sw-row{display:block;width:100%;height:auto}
+.screen.s12 .scale-row{display:flex;align-items:center;gap:var(--space-2)}
+.screen.s12 .scale-num{font-family:var(--font-mono);color:var(--muted);min-width:42px}
+.screen.s12 .demo-list{padding:0 var(--space-4)}
+.screen.s12 .edge-name{flex:1 1 auto;min-width:0;font-size:var(--text-base);line-height:1.25}
+.screen.s12 [data-od-tap-demo]:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+</style>
+<!--@od:section-->
+<section class="screen s12" data-screen="s12" data-title="组件与状态" data-od-id="screen-s12">
+  <div class="screen-head" data-od-id="s12-head">
+    <div>
+      <h2 class="h2">组件与状态</h2>
+      <p class="meta mt-2">全量组件陈列 · 五种状态 · 弹窗 / 抽屉 / Toast</p>
+    </div>
+  </div>
+
+  <div class="content pad">
+    <div class="stack">
+
+      <div class="demo" data-od-id="s12-buttons">
+        <p class="group-label">按钮 Button</p>
+        <div class="card">
+          <div class="act-row">
+            <button class="btn" type="button" data-od-tap-demo onclick="App.haptic('light');App.toast('主按钮：已保存')">保存</button>
+            <button class="btn btn-ghost" type="button" data-od-tap-demo onclick="App.toast('次按钮：已取消')">取消</button>
+          </div>
+          <div class="act-row mt-3">
+            <button class="btn btn-ghost" type="button" data-od-tap-demo disabled>禁用态</button>
+            <button class="icon-btn" type="button" aria-label="更多操作" data-od-tap-demo onclick="App.toast('图标按钮')">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M12 4.6v14.8M4.6 12h14.8"/></svg>
+            </button>
+          </div>
+          <button class="btn btn-ghost btn-block mt-3" type="button" data-od-tap-demo onclick="App.toast('通栏次按钮')">通栏次按钮 btn-block</button>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-chip-seg">
+        <p class="group-label">胶囊 Chip 与分段控件 Segmented</p>
+        <div class="card">
+          <div class="row-wrap">
+            <button class="chip is-on" type="button" aria-pressed="true" data-chip-demo>全部</button>
+            <button class="chip" type="button" aria-pressed="false" data-chip-demo>前台切换</button>
+            <button class="chip" type="button" aria-pressed="false" data-chip-demo>广告跳过</button>
+            <button class="chip" type="button" aria-pressed="false" data-chip-demo>充电</button>
+          </div>
+          <div class="segmented mt-3" role="group" aria-label="区间切换">
+            <button type="button" aria-pressed="true" data-seg-demo>今日</button>
+            <button type="button" aria-pressed="false" data-seg-demo>本周</button>
+            <button type="button" aria-pressed="false" data-seg-demo>本月</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-switch-badge">
+        <p class="group-label">开关 Switch 与徽标 Badge</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-body"><span class="row-title">已开启</span><span class="row-sub">aria-checked="true"</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="示例开关一" data-toggle data-on-msg="开关已开启" data-off-msg="开关已关闭"></button>
+          </div>
+          <div class="row">
+            <span class="row-body"><span class="row-title">已关闭</span><span class="row-sub">aria-checked="false"</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="示例开关二" data-toggle data-on-msg="开关已开启" data-off-msg="开关已关闭"></button>
+          </div>
+          <div class="row">
+            <span class="row-body"><span class="row-title">徽标形态</span><span class="row-sub">数字 / 千分位 / 文本</span></span>
+            <span class="row-tail">
+              <span class="badge" data-od-min-fs>12</span>
+              <span class="badge" data-od-min-fs>1,286</span>
+              <span class="badge" data-od-min-fs>新</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-rows">
+        <p class="group-label">列表行 Row / ListRow</p>
+        <div class="group">
+          <button class="group-row" type="button" onclick="App.toast('分组行：入口可点')">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/></svg></span>
+            <span class="row-body"><span class="row-title">分组行 group-row</span><span class="row-sub">左图标 + 标题 + 副标题 + 右侧箭头</span></span>
+            <span class="row-tail"><span class="num">42 条</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <button class="group-row" type="button" onclick="App.toast('分组行：带开关')">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 17V9.5M9.3 17V5.5M14.7 17v-5M20 17V7.5"/></svg></span>
+            <span class="row-body"><span class="row-title">紧凑行 list-row</span><span class="row-sub">高度 48px，用于密集列表</span></span>
+            <span class="row-tail"><span class="num">1,286 次</span></span>
+          </button>
+        </div>
+        <div class="card mt-3 demo-list" style="padding:0 var(--space-4)">
+          <div class="list-row"><span class="row-body"><span class="row-title">微信</span></span><span class="row-tail"><span class="num">42 分钟</span></span></div>
+          <div class="list-row"><span class="row-body"><span class="row-title">哔哩哔哩</span></span><span class="row-tail"><span class="num">31 分钟</span></span></div>
+          <div class="list-row"><span class="row-body"><span class="row-title">淘宝</span></span><span class="row-tail"><span class="num">18 分钟</span></span></div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-progress">
+        <p class="group-label">进度 Progress</p>
+        <div class="card">
+          <div class="row-between">
+            <span class="meta">本月预算已用</span>
+            <span class="num">¥2,040 / ¥3,000</span>
+          </div>
+          <div class="bar bar-68 mt-3"><i></i></div>
+          <div class="row-between mt-4">
+            <span class="meta">今日支出占日均</span>
+            <span class="num">34%</span>
+          </div>
+          <div class="bar bar-34 mt-3"><i></i></div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-scale">
+        <p class="group-label">图表灰阶色板 s1 – s7</p>
+        <div class="card">
+          <svg class="sw-row" viewBox="0 0 340 24" data-od-min-fs aria-label="灰阶色板">
+            <rect class="s1" x="0" y="0" width="44" height="24" rx="5"/>
+            <rect class="s2" x="49" y="0" width="44" height="24" rx="5"/>
+            <rect class="s3" x="98" y="0" width="44" height="24" rx="5"/>
+            <rect class="s4" x="147" y="0" width="44" height="24" rx="5"/>
+            <rect class="s5" x="196" y="0" width="44" height="24" rx="5"/>
+            <rect class="s6" x="245" y="0" width="44" height="24" rx="5"/>
+            <rect class="s7" x="294" y="0" width="44" height="24" rx="5"/>
+          </svg>
+          <ul class="legend mt-3">
+            <li><span class="legend-dot s1"></span>主序列<span class="legend-num">s1</span></li>
+            <li><span class="legend-dot s2"></span>次序列<span class="legend-num">s2</span></li>
+            <li><span class="legend-dot s3"></span>第三序列<span class="legend-num">s3</span></li>
+            <li><span class="legend-dot s4"></span>第四序列<span class="legend-num">s4</span></li>
+            <li><span class="legend-dot s5"></span>第五序列<span class="legend-num">s5</span></li>
+            <li><span class="legend-dot s6"></span>第六序列<span class="legend-num">s6</span></li>
+            <li><span class="legend-dot s7"></span>第七序列<span class="legend-num">s7</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-charts">
+        <p class="group-label">图表基元 Chart primitives</p>
+        <div class="stack">
+          <div class="card">
+            <span class="meta">面积曲线 area · 24h 事件量</span>
+            <div class="mt-3" data-chart="area" data-chart-values="2,1,0,0,1,3,8,14,11,9,14,17,12,15,19,16,21,18,13,10,7,5,3,2" data-chart-labels="00,04,08,12,16,20" data-chart-label="24 小时事件量"></div>
+          </div>
+          <div class="card">
+            <span class="meta">柱状图 bars · 近 7 日事件量</span>
+            <div class="mt-3" data-chart="bars" data-chart-values="62,88,74,96,120,110,128" data-chart-labels="一,二,三,四,五,六,日" data-chart-label="近 7 日事件量"></div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <span class="meta">环形图 ring</span>
+              <div class="ch-sm mt-3" data-chart="pie" data-chart-values="42,31,24,18,13" data-chart-label="事件类型占比"></div>
+            </div>
+            <div class="card">
+              <span class="meta">圆环进度 gauge</span>
+              <div class="ch-sm mt-3" data-chart="gauge" data-chart-value="0.68" data-chart-label="预算使用率 68%"></div>
+            </div>
+          </div>
+          <div class="card">
+            <span class="meta">迷你走势 spark</span>
+            <div class="ch-xs mt-3" data-chart="spark" data-chart-values="62,88,74,96,120,110,128" data-chart-label="七日走势"></div>
+          </div>
+          <div class="card">
+            <span class="meta">热力条 heat · 24 小时活跃强度</span>
+            <div class="mt-3" data-chart="heat" data-chart-values="0,0,1,0,0,1,3,9,14,11,9,14,17,12,15,19,16,21,18,13,10,7,4,2" data-chart-label="24 小时活跃热力"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-states">
+        <p class="group-label">五种状态 State coverage</p>
+        <div class="stack">
+          <div class="card" data-state-when="loading" data-od-id="s12-st-loading">
+            <span class="meta">loading · 骨架屏</span>
+            <div class="mt-3">
+              <div class="sk w-40 tall"></div>
+              <div class="sk w-100"></div>
+              <div class="sk w-80"></div>
+              <div class="sk w-100"></div>
+              <div class="sk w-60"></div>
+            </div>
+          </div>
+
+          <div class="card" data-state-when="empty" data-od-id="s12-st-empty">
+            <span class="meta">empty · 空态</span>
+            <div class="st-empty">
+              <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.5 7.5h15M4.5 12h15M4.5 16.5h9"/></svg></span>
+              <p class="st-title">今天还没有记录</p>
+              <p class="st-desc">开启监控后，事件会按小时汇总到这里。</p>
+              <button class="btn btn-ghost" type="button" onclick="App.toast('已开启监控')">开启监控</button>
+            </div>
+          </div>
+
+          <div class="card" data-state-when="error" data-od-id="s12-st-error">
+            <span class="meta">error · 错误态</span>
+            <div class="st-error">
+              <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.6M12 17v.2"/></svg></span>
+              <p class="st-title">数据加载失败</p>
+              <p class="st-desc">数据库连接已断开（SQLITE_BUSY），未返回任何记录。</p>
+              <button class="btn btn-ghost" type="button" onclick="App.toast('正在重试…')">重试</button>
+            </div>
+          </div>
+
+          <div class="card" data-od-id="s12-st-populated">
+            <span class="meta">populated · 有数据</span>
+            <div class="mt-3">
+              <div class="list-row"><span class="row-body"><span class="row-title">微信</span><span class="row-sub">前台切换 · 9:12</span></span><span class="row-tail"><span class="num">42 分钟</span></span></div>
+              <div class="list-row"><span class="row-body"><span class="row-title">哔哩哔哩</span><span class="row-sub">广告跳过 · 9:05</span></span><span class="row-tail"><span class="num">3 次</span></span></div>
+              <div class="list-row"><span class="row-body"><span class="row-title">高德地图</span><span class="row-sub">前台切换 · 8:41</span></span><span class="row-tail"><span class="num">16 分钟</span></span></div>
+            </div>
+          </div>
+
+          <div class="card" data-state-when="edge" data-od-id="s12-st-edge">
+            <span class="meta">edge · 超长文案与计数</span>
+            <div class="mt-3">
+              <div class="row">
+                <span class="row-body">
+                  <span class="row-title">超长标题：国家电网掌上电力营业厅客户端（企业内网版）前台切换记录</span>
+                  <span class="row-sub">com.example.very.long.package.name.edge.case</span>
+                </span>
+                <span class="row-tail"><span class="num">10,286</span></span>
+              </div>
+              <div class="row">
+                <span class="row-body">
+                  <span class="row-title">边界态：字段缺失</span>
+                  <span class="row-sub">该记录没有结束时间，时长按 0 计算</span>
+                </span>
+                <span class="row-tail"><span class="num">10,000</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo" data-od-id="s12-overlays">
+        <p class="group-label">浮层 Overlays</p>
+        <div class="card">
+          <div class="act-row">
+            <button class="btn btn-ghost" type="button" data-od-tap-demo onclick="App.open('#s12-dialog')">弹窗</button>
+            <button class="btn btn-ghost" type="button" data-od-tap-demo onclick="App.open('#s12-sheet')">底部抽屉</button>
+          </div>
+          <button class="btn btn-ghost btn-block mt-3" type="button" data-od-tap-demo onclick="App.toast('已保存 · 1.6s 后自动消失')">Toast 轻提示</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="s12-dialog" hidden data-od-id="s12-dialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="删除这条记录">
+      <p class="h3">删除这条记录？</p>
+      <p class="meta mt-2">删除后无法恢复，本地统计会在下次汇总时更新。</p>
+      <div class="act-row mt-4">
+        <button class="btn btn-ghost" type="button" data-close="#s12-dialog">取消</button>
+        <button class="btn" type="button" data-close="#s12-dialog" onclick="App.toast('记录已删除')">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim is-bottom" id="s12-sheet" hidden data-od-id="s12-sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="选择记录类型">
+      <span class="sheet-grip" aria-hidden></span>
+      <p class="h3">选择记录类型</p>
+      <p class="meta mt-2">底部抽屉从下方推入，240ms 进入 / 150ms 退出。</p>
+      <div class="row-wrap mt-3">
+        <button class="chip is-on" type="button" aria-pressed="true" data-chip-demo>前台切换</button>
+        <button class="chip" type="button" aria-pressed="false" data-chip-demo>广告跳过</button>
+        <button class="chip" type="button" aria-pressed="false" data-chip-demo>亮屏解锁</button>
+        <button class="chip" type="button" aria-pressed="false" data-chip-demo>充电</button>
+      </div>
+      <button class="btn btn-block mt-4" type="button" data-close="#s12-sheet" onclick="App.toast('已选择：前台切换')">确定</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var tries = 0;
+    function ready(fn) {
+      if (window.App) { fn(); return; }
+      tries++;
+      if (tries > 200) return;
+      window.setTimeout(function () { ready(fn); }, 40);
+    }
+    ready(function () {
+      sec.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var sw = t.closest('[data-toggle]');
+        if (sw) {
+          var on = sw.getAttribute('aria-checked') === 'true';
+          sw.setAttribute('aria-checked', on ? 'false' : 'true');
+          window.App.haptic('light');
+          var msg = on ? sw.getAttribute('data-off-msg') : sw.getAttribute('data-on-msg');
+          if (msg) window.App.toast(msg);
+          return;
+        }
+        var chip = t.closest('[data-chip-demo]');
+        if (chip) {
+          var multi = chip.closest('.sheet');
+          if (!multi) {
+            var sibs = sec.querySelectorAll('[data-chip-demo]');
+            for (var i = 0; i < sibs.length; i++) {
+              if (sibs[i].closest('.sheet')) continue;
+              sibs[i].classList.remove('is-on');
+              sibs[i].setAttribute('aria-pressed', 'false');
+            }
+          }
+          var nowOn = chip.getAttribute('aria-pressed') === 'true';
+          chip.setAttribute('aria-pressed', nowOn ? 'false' : 'true');
+          chip.classList.toggle('is-on', !nowOn);
+          window.App.haptic('light');
+          return;
+        }
+        var seg = t.closest('[data-seg-demo]');
+        if (seg) {
+          var group = seg.parentNode;
+          var items = group ? group.querySelectorAll('[data-seg-demo]') : [];
+          for (var j = 0; j < items.length; j++) items[j].setAttribute('aria-pressed', items[j] === seg ? 'true' : 'false');
+          window.App.haptic('light');
+          window.App.toast('区间：' + (seg.textContent || '').trim());
+        }
+      });
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

@@ -1,0 +1,306 @@
+<!-- ============================================================
+     s09 · 设置
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s09">
+/* s09 · 设置 —— 字号下限护栏：token 收缩主题（如 kami --text-sm=12px）兜底 14px */
+.screen.s09{font-size:max(var(--text-sm),14px)}
+/* 状态块放进 grid 时轨道按容器宽度收敛，避免 nowrap 长文案把轨道撑到 max-content */
+.screen.s09 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+/* 骨架占位尺寸：.st-loading 被外壳状态规则改为 display:grid + place-items:center，
+   不撑满就会塌成 max-content（实测仅 34px）→ 强制拉伸轨道，与 s01–s03 同款修正。 */
+.screen.s09 .st-loading{justify-items:stretch;align-items:start}
+.screen.s09 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.list-row,.tl-time,.tl-sub,.st-desc,.kpi-label,.kpi-unit,.kpi-delta,.legend li,.field,.theme-cn,.app-pkg){font-size:max(var(--text-sm),14px)}
+.screen.s09 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s09 .set-chips{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.screen.s09 .set-group{margin-bottom:var(--space-4)}
+.screen.s09 .set-count{color:var(--fg-2)}
+.screen.s09 .st-loading .card{padding:var(--space-4)}
+.screen.s09 [role="switch"]:focus-visible,.screen.s09 .chip:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+.screen.s09 .edge-row{display:flex;align-items:center;gap:var(--space-3);min-height:var(--row-min-h);border-top:1px solid var(--border-soft)}
+.screen.s09 .edge-row:first-child{border-top:0}
+.screen.s09 .edge-name{flex:1 1 auto;min-width:0;font-size:var(--text-base);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen.s09 .edge-count{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--fg-2);flex:0 0 auto}
+</style>
+<!--@od:section-->
+<section class="screen s09" data-screen="s09" data-title="设置" data-od-id="screen-s09">
+  <div class="screen-head" data-od-id="s09-head">
+    <div>
+      <h1 class="h1">设置</h1>
+      <p class="meta mt-2">行为记录 1.0.0 · 设备 示例设备</p>
+    </div>
+    <span class="badge" data-od-min-fs data-od-id="s09-run-badge">运行中</span>
+  </div>
+
+  <div class="content pad">
+    <div class="stack" data-state-hide="loading empty error edge" data-od-id="s09-body">
+
+      <div class="set-group" data-od-id="s09-window">
+        <p class="group-label">监控时长窗口</p>
+        <div class="set-chips" role="group" aria-label="监控时长窗口">
+          <button class="chip" type="button" data-window aria-pressed="false">15 分钟</button>
+          <button class="chip" type="button" data-window aria-pressed="false">30 分钟</button>
+          <button class="chip" type="button" data-window aria-pressed="false">1 小时</button>
+          <button class="chip is-on" type="button" data-window aria-pressed="true">永久</button>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-a11y">
+        <p class="group-label">无障碍服务</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="5.4" r="1.9"/><path d="M4.8 8.6h14.4M12 10.2v4.6M12 14.8 9 19.4M12 14.8l3 4.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">无障碍服务</span>
+              <span class="row-sub">已授权 · 已运行 6 小时 12 分</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="无障碍服务" data-toggle data-on-msg="无障碍服务已开启" data-off-msg="关闭后监控将暂停，需到系统设置重新授权"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-monitor">
+        <p class="group-label">监控开关</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">前台应用监控</span>
+              <span class="row-sub">今日已记录 128 条事件</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="前台应用监控" data-toggle data-on-msg="已恢复前台应用监控" data-off-msg="已暂停前台应用监控"></button>
+          </div>
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M4 17V9.5M9.3 17V5.5M14.7 17v-5M20 17V7.5"/><path d="M2.5 20.5h19"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">使用时长统计</span>
+              <span class="row-sub">按应用累计前台时长，用于概览曲线</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="使用时长统计" data-toggle data-on-msg="已开启使用时长统计" data-off-msg="已关闭使用时长统计"></button>
+          </div>
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M12 4.5c4.2 0 7.2 2.6 8.5 6-1.3 3.4-4.3 6-8.5 6s-7.2-2.6-8.5-6c1.3-3.4 4.3-6 8.5-6z"/><circle cx="12" cy="10.5" r="2.4"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">事件上报</span>
+              <span class="row-sub">每分钟心跳 · 上次上报 9:40</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="事件上报" data-toggle data-on-msg="已开启事件上报" data-off-msg="已关闭事件上报，仅本地留存"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-battery">
+        <p class="group-label">电池优化</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="7" width="15.4" height="10" rx="3"/><path d="M21 10.6v2.8"/><path d="M10.6 9.2 8.2 12.4h3l-1.4 2.6 3.6-4h-3z"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">忽略电池优化</span>
+              <span class="row-sub">已在系统白名单，后台不会被冻结</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="忽略电池优化" data-toggle data-on-msg="已加入电池优化白名单" data-off-msg="已移出白名单，息屏后可能被冻结"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-skip">
+        <p class="group-label">开屏广告跳过</p>
+        <div class="group">
+          <button class="row" type="button" data-goto="s10" data-od-id="s09-goto-rules">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">开屏跳过规则</span>
+              <span class="row-sub">订阅源 2 个 · 累计命中 1,286 次</span>
+            </span>
+            <span class="row-tail"><span class="num">42 条</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <button class="row" type="button" data-goto="s11" data-od-id="s09-goto-white">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M8.8 12.2l2.2 2.2 4.2-4.4"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">应用白名单</span>
+              <span class="row-sub">白名单内应用不参与跳过</span>
+            </span>
+            <span class="row-tail"><span class="num">9 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-appearance">
+        <p class="group-label">外观</p>
+        <div class="group">
+          <button class="row" type="button" data-goto="s13" data-od-id="s09-goto-theme">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8" fill="currentColor" stroke="none" opacity="0.28"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">外观与主题</span>
+              <span class="row-sub">8 套浅色主题 · 切换即时生效</span>
+            </span>
+            <span class="row-tail"><span class="num" id="s09-theme-name">Apple</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-debug">
+        <p class="group-label">调试模式</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M9 4.8h6M10.4 4.8v2.4M12 7.4c-3.1 0-5.2 2.3-5.2 5.4 0 3.4 2.2 5.6 5.2 5.6s5.2-2.2 5.2-5.6c0-3.1-2.1-5.4-5.2-5.4z"/><path d="M6.8 11.4H3.6M6.8 15.6l-2.6 1.8M17.2 11.4h3.2M17.2 15.6l2.6 1.8"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">调试模式</span>
+              <span class="row-sub">记录详细日志与诊断计数</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="调试模式" data-toggle data-on-msg="调试模式已开启，日志级别 DEBUG" data-off-msg="调试模式已关闭"></button>
+          </div>
+          <button class="row" type="button" data-goto="s12" data-od-id="s09-goto-demo">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="4.2" width="17.2" height="15.6" rx="3"/><path d="M3.4 9.2h17.2M9 9.2v10.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">组件与状态演示</span>
+              <span class="row-sub">按钮 / 图表 / 骨架屏 / 空态 / 边界态</span>
+            </span>
+            <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-about" style="margin-bottom:0">
+        <p class="group-label">关于</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-body">
+              <span class="row-title">版本</span>
+              <span class="row-sub">行为记录 · 本地优先，数据不出设备</span>
+            </span>
+            <span class="row-tail"><span class="num set-count">1.0.0</span></span>
+          </div>
+          <button class="row" type="button" onclick="App.toast('已是最新版本 1.0.0')">
+            <span class="row-body"><span class="row-title">检查更新</span></span>
+            <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <button class="row" type="button" onclick="App.toast('开源许可：Apache-2.0')">
+            <span class="row-body"><span class="row-title">开源许可</span></span>
+            <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s09-st-loading">
+      <div class="card">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-60 tall"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-40"></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s09-st-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 7.8v5.4M12 16.2v.2"/></svg></span>
+      <p class="st-title">暂无可用设置项</p>
+      <p class="st-desc">无障碍服务尚未授权，开启后才能调整监控与开屏跳过选项。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('已跳转系统无障碍设置')">前往系统设置</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s09-st-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.6M12 17v.2"/></svg></span>
+      <p class="st-title">读取配置失败</p>
+      <p class="st-desc">本地配置存储被拒绝（EACCES），上次读取 9:40 失败。</p>
+      <button class="btn" type="button" onclick="App.toast('正在重试读取配置…')">重试</button>
+    </div>
+
+    <div class="st-edge" data-state-when="edge" data-od-id="s09-st-edge">
+      <div class="group" style="width:100%">
+        <div class="edge-row">
+          <span class="edge-name">国家电网掌上电力营业厅客户端（企业内网版）</span>
+          <span class="edge-count">10,286 条</span>
+        </div>
+        <div class="edge-row">
+          <span class="edge-name">中国建设银行个人网上银行移动客户端</span>
+          <span class="edge-count">10,000 条</span>
+        </div>
+        <div class="edge-row">
+          <span class="edge-name">超长副标题：该应用在后台持续拉起前台服务并申请了忽略电池优化的白名单权限</span>
+          <span class="edge-count">9,999 条</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var tries = 0;
+    function ready(fn) {
+      if (window.App) { fn(); return; }
+      tries++;
+      if (tries > 200) return;
+      window.setTimeout(function () { ready(fn); }, 40);
+    }
+    ready(function () {
+      var NAME = { apple: 'Apple', glassmorphism: '玻璃', notion: '纸面', stripe: '条纹', claude: '陶土', ibm: '工业', kami: '墨青', bento: '便当' };
+      function syncThemeName() {
+        var el = document.getElementById('s09-theme-name');
+        if (!el) return;
+        var id = document.documentElement.getAttribute('data-theme') || 'apple';
+        el.textContent = NAME[id] || id;
+      }
+      sec.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var sw = t.closest('[data-toggle]');
+        if (sw) {
+          var on = sw.getAttribute('aria-checked') === 'true';
+          sw.setAttribute('aria-checked', on ? 'false' : 'true');
+          window.App.haptic('light');
+          var msg = on ? sw.getAttribute('data-off-msg') : sw.getAttribute('data-on-msg');
+          if (msg) window.App.toast(msg);
+          return;
+        }
+        var chip = t.closest('[data-window]');
+        if (chip) {
+          var all = sec.querySelectorAll('[data-window]');
+          for (var i = 0; i < all.length; i++) {
+            all[i].classList.remove('is-on');
+            all[i].setAttribute('aria-pressed', 'false');
+          }
+          chip.classList.add('is-on');
+          chip.setAttribute('aria-pressed', 'true');
+          window.App.haptic('light');
+          window.App.toast('监控时长窗口：' + (chip.textContent || '').replace(/\s+/g, ''));
+        }
+      });
+      if (window.MutationObserver) {
+        new MutationObserver(syncThemeName).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+      }
+      syncThemeName();
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

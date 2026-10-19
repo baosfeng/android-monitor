@@ -1,0 +1,369 @@
+<!-- ============================================================
+     s03 · 广告跳过记录
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s03">
+/* ── s03 广告跳过记录 ───────────────────────────────────────────── */
+#s03 .od-ctl{display:none}
+
+/* 统计卡 */
+#s03 .card.stg{position:relative}
+#s03 .s03-total{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-1);min-height:var(--tap-min)}
+#s03 .s03-total .num{font-family:var(--font-mono);font-size:var(--text-2xl);font-weight:700;letter-spacing:var(--tracking-display);line-height:1.05;font-variant-numeric:tabular-nums}
+#s03 .s03-mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-3)}
+#s03 .s03-mini > div{
+  display:flex;flex-direction:column;gap:2px;padding:var(--space-2);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface-warm);
+}
+#s03 .s03-mini .num{font-family:var(--font-mono);font-size:var(--text-base);font-weight:600;font-variant-numeric:tabular-nums}
+/* 次要标签（「平均耗时」「规则命中」「累计节省」）落在 --surface-warm 上：
+   外壳 .meta 的 --muted 在 stripe(4.49:1) / bento(4.39:1) 跌破 4.5:1（14px/400）。
+   改走更深的语义 token --fg-2（8 主题实测最低 7.11:1），仍明显浅于主文字 --fg（15.65~16.46:1），层级保留。 */
+#s03 .s03-mini > div .meta{color:var(--fg-2)}
+/* 记录行改为真实 button（键盘可达）：复位 UA 默认样式，保留原 grid 布局与视觉 */
+#s03 button.tl-item{appearance:none;width:100%;border:0;background:transparent;font:inherit;color:var(--fg);text-align:left;cursor:pointer}
+#s03 button.btn{cursor:pointer;user-select:none}
+/* 键盘焦点可见：走外壳 --focus-ring */
+#s03 .tl-item:focus-visible{outline:0;box-shadow:var(--focus-ring)}
+
+/* 跳过方式筛选 chips */
+#s03 .s03-chips{display:flex;gap:var(--space-2);flex-wrap:wrap}
+#s03 .s03-chips > button{cursor:pointer;user-select:none}
+#s03-m-all:checked ~ .content .s03-chips > :nth-child(1),
+#s03-m-rule:checked ~ .content .s03-chips > :nth-child(2),
+#s03-m-coord:checked ~ .content .s03-chips > :nth-child(3),
+#s03-m-a11y:checked ~ .content .s03-chips > :nth-child(4){
+  background:color-mix(in srgb,var(--fg) 7%,transparent);
+  border-color:color-mix(in srgb,var(--fg) 24%,transparent);
+  color:var(--fg);font-weight:600;
+}
+#s03-m-rule:checked ~ .content .tl-item:not([data-method="rule"]),
+#s03-m-coord:checked ~ .content .tl-item:not([data-method="coord"]),
+#s03-m-a11y:checked ~ .content .tl-item:not([data-method="a11y"]){display:none}
+
+/* 时间线（可点，点开底部抽屉） */
+#s03 .tl-item{cursor:pointer;border-radius:var(--radius-sm);transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+#s03 .tl-item:active{transform:scale(.99);opacity:.9}
+#s03 .tl-item::after{box-shadow:0 0 0 3px var(--surface)}
+#s03 .tl-item::before{background:var(--border)}
+
+/* 记录详情抽屉 */
+#s03 .s03-drawer{display:none}
+#s03 .od-ctl:checked + .s03-drawer{display:grid}
+#s03 .s03-veil{position:absolute;inset:0}
+#s03 .s03-drawer .sheet{position:relative;z-index:1}
+#s03 .s03-fields{margin-top:var(--space-2)}
+#s03 .s03-fields .row:first-child{border-top:0}
+#s03 .row-tail{max-width:58%;justify-content:flex-end;text-align:right}
+#s03 .row-tail > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 状态块被外壳置为 display:grid：网格项需可收缩，否则 nowrap 长标题会把卡片撑出屏外 */
+#s03 [data-state-when="edge"]{width:100%;align-self:start}
+#s03 [data-state-when="edge"] > .card{width:100%;min-width:0}
+/* 骨架 */
+#s03 .st-loading{justify-items:stretch;align-items:start}
+#s03 .s03-skrow{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
+#s03 .s03-skdot{flex:0 0 auto;width:10px;height:10px;border-radius:50%}
+#s03 .s03-skgrow{flex:1 1 auto}
+#s03 .s03-sksq{height:150px}
+
+/* 入场错落 + 柱状图与热力条重播 */
+#s03 .stg{opacity:0}
+#s03 .tl-item{opacity:0}
+#s03.is-active .stg{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s03.is-active .tl-item{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s03.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+#s03.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+#s03.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+#s03.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+#s03.is-active .od-d5{animation-delay:calc(var(--stagger) * 5)}
+#s03.is-active .od-d6{animation-delay:calc(var(--stagger) * 6)}
+#s03.is-active .od-d7{animation-delay:calc(var(--stagger) * 7)}
+#s03.is-active .od-d8{animation-delay:calc(var(--stagger) * 8)}
+#s03.is-active .od-d9{animation-delay:calc(var(--stagger) * 9)}
+#s03.is-active .od-d10{animation-delay:calc(var(--stagger) * 10)}
+#s03:not(.is-active) .chart-bar{animation:none;transform:scaleY(0)}
+#s03.is-active .chart-bar{animation:od-grow var(--dur-chart-fast) var(--ease-out) var(--bar-d,0ms) both}
+
+/* 开屏期间不播入场 */
+.device-screen:has(#odSplash:not([hidden])) #s03 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s03" data-title="广告跳过记录" id="s03" data-od-id="screen-s03">
+  <input class="od-ctl" type="radio" name="s03-method" id="s03-m-all" checked />
+  <input class="od-ctl" type="radio" name="s03-method" id="s03-m-rule" />
+  <input class="od-ctl" type="radio" name="s03-method" id="s03-m-coord" />
+  <input class="od-ctl" type="radio" name="s03-method" id="s03-m-a11y" />
+
+  <div class="content" data-od-id="s03-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s03-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 s03-sksq mt-3"></div>
+        <div class="s03-skrow"><span class="sk s03-skdot"></span><span class="sk s03-skgrow"></span></div>
+        <div class="s03-skrow"><span class="sk s03-skdot"></span><span class="sk s03-skgrow w-80"></span></div>
+        <div class="s03-skrow"><span class="sk s03-skdot"></span><span class="sk s03-skgrow w-60"></span></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s03-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/><path d="M4 4l16 16"/></svg></span>
+      <p class="st-title">还没有跳过记录</p>
+      <p class="st-desc">在「跳过规则」里为常用应用开启规则后，命中记录会按时间倒序出现在这里。</p>
+      <button class="btn btn-ghost" type="button" data-goto="s10" data-od-id="s03-empty-cta">去配置跳过规则</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s03-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg></span>
+      <p class="st-title">跳过记录读取失败</p>
+      <p class="st-desc">跳过事件表暂时被占用（SQLITE_BUSY）。已跳过的广告不会重复出现。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('正在重新读取跳过记录…')" data-od-id="s03-error-retry">重试</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s03-edge">
+      <div class="card">
+        <div class="row-between">
+          <span class="badge" data-od-min-fs>10,204 次</span>
+          <span class="meta">累计上限</span>
+        </div>
+        <p class="row-title mt-2">哔哩哔哩（tv.danmaku.bili）· 开屏与贴片广告 · 累计跳过 3,128 次</p>
+        <p class="meta mt-2">超长应用名与万级计数用于验证截断；缺失字段以「—」占位。</p>
+        <div class="row mt-2">
+          <span class="row-body"><span class="row-title">命中规则</span><span class="row-sub">字段缺失</span></span>
+          <span class="row-tail">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="s03-main" data-state-hide="loading empty error">
+      <header class="screen-head" data-od-id="s03-head">
+        <div>
+          <p class="meta">今日 34 次 · 最近 09:38</p>
+          <h1 class="h1 mt-2">广告跳过记录</h1>
+        </div>
+        <button class="icon-btn" type="button" aria-label="刷新记录" onclick="App.toast('已刷新跳过记录')" data-od-id="s03-refresh">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V10h-5.4"/></svg>
+        </button>
+      </header>
+
+      <div class="pad" data-od-id="s03-stat">
+        <div class="card stg od-d1"
+             onanimationstart="if(event.target===this&&event.animationName==='od-rise'){document.getElementById('s03-total').textContent='0'}"
+             onanimationend="if(event.target===this&&event.animationName==='od-rise'){App.count('#s03-total',34,{dur:700})}">
+          <div class="row-between">
+            <span class="meta">近 7 天累计跳过</span>
+            <span class="meta">日均 4.9 次</span>
+          </div>
+          <button class="s03-total" type="button" onclick="document.getElementById('s03-total').textContent='0';App.count('#s03-total',34,{dur:700})"
+                  style="border:0;background:transparent;padding:0;cursor:pointer;color:var(--fg);text-align:left">
+            <span class="num" id="s03-total">34</span><span class="kpi-unit">次</span>
+          </button>
+          <div class="s03-mini">
+            <div><span class="meta">平均耗时</span><span class="num">128 ms</span></div>
+            <div><span class="meta">规则命中</span><span class="num">29 / 34</span></div>
+            <div><span class="meta">累计节省</span><span class="num">6m48s</span></div>
+          </div>
+          <button class="btn btn-block mt-3" type="button" data-goto="s10" data-od-id="s03-rules">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 9.5 17 19 7.5"/></svg>
+            <span>查看跳过规则</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pad mt-3" data-od-id="s03-bars">
+        <div class="card stg od-d2">
+          <div class="sec-head">
+            <h2 class="h3">近 7 天跳过趋势</h2>
+            <span class="meta">10 月 8 日 – 10 月 14 日</span>
+          </div>
+          <div data-chart="bars"
+               data-chart-values="3,5,2,6,4,8,6"
+               data-chart-labels="08,09,10,11,12,13,14"
+               data-chart-label="近 7 天每日跳过广告次数柱状图"></div>
+          <p class="meta mt-2">周末跳过次数更高：周六 8 次为本周峰值。</p>
+        </div>
+      </div>
+
+      <div class="pad stack mt-3" data-od-id="s03-records">
+        <div class="sec-head" style="margin-bottom:0">
+          <h2 class="h3">跳过记录</h2>
+          <span class="meta">最近 10 次 · 倒序</span>
+        </div>
+
+        <div class="s03-chips" role="radiogroup" aria-label="按跳过方式筛选" data-od-id="s03-chips">
+          <button class="chip" type="button" role="radio" aria-checked="true" data-ctl="s03-m-all">全部 <span class="num">10</span></button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s03-m-rule">规则 <span class="num">7</span></button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s03-m-coord">坐标兜底 <span class="num">2</span></button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s03-m-a11y">无障碍 <span class="num">1</span></button>
+        </div>
+
+        <div class="card stg od-d3">
+          <div class="tl" role="list">
+        <button class="tl-item has-icon od-d1" type="button" data-ctl-open="s03-x1" data-method="rule">
+          <span class="tl-time num">09:38</span>
+          <span class="app-icon" style="--app:#07c160">微</span>
+          <span class="tl-body">
+            <span class="tl-title">微信</span>
+            <span class="tl-sub">规则匹配 · 128 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d2" type="button" data-ctl-open="s03-x2" data-method="rule">
+          <span class="tl-time num">09:21</span>
+          <span class="app-icon" style="--app:#fb7299">哔</span>
+          <span class="tl-body">
+            <span class="tl-title">哔哩哔哩</span>
+            <span class="tl-sub">规则匹配 · 96 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d3" type="button" data-ctl-open="s03-x3" data-method="coord">
+          <span class="tl-time num">08:57</span>
+          <span class="app-icon" style="--app:#e6162d">微</span>
+          <span class="tl-body">
+            <span class="tl-title">微博</span>
+            <span class="tl-sub">坐标点击兜底 · 342 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d4" type="button" data-ctl-open="s03-x4" data-method="rule">
+          <span class="tl-time num">08:40</span>
+          <span class="app-icon" style="--app:#00a6fb">高</span>
+          <span class="tl-body">
+            <span class="tl-title">高德地图</span>
+            <span class="tl-sub">规则匹配 · 87 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d5" type="button" data-ctl-open="s03-x5" data-method="rule">
+          <span class="tl-time num">08:12</span>
+          <span class="app-icon" style="--app:#ff2442">小</span>
+          <span class="tl-body">
+            <span class="tl-title">小红书</span>
+            <span class="tl-sub">规则匹配 · 104 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d6" type="button" data-ctl-open="s03-x6" data-method="a11y">
+          <span class="tl-time num">07:58</span>
+          <span class="app-icon" style="--app:#0084ff">知</span>
+          <span class="tl-body">
+            <span class="tl-title">知乎</span>
+            <span class="tl-sub">无障碍事件兜底 · 512 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d7" type="button" data-ctl-open="s03-x7" data-method="rule">
+          <span class="tl-time num">07:34</span>
+          <span class="app-icon" style="--app:#c20c0c">网</span>
+          <span class="tl-body">
+            <span class="tl-title">网易云音乐</span>
+            <span class="tl-sub">规则匹配 · 76 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d8" type="button" data-ctl-open="s03-x8" data-method="coord">
+          <span class="tl-time num">07:19</span>
+          <span class="app-icon" style="--app:#ff5000">淘</span>
+          <span class="tl-body">
+            <span class="tl-title">淘宝</span>
+            <span class="tl-sub">坐标点击兜底 · 388 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d9" type="button" data-ctl-open="s03-x9" data-method="rule">
+          <span class="tl-time num">06:52</span>
+          <span class="app-icon" style="--app:#07c160">微</span>
+          <span class="tl-body">
+            <span class="tl-title">微信</span>
+            <span class="tl-sub">规则匹配 · 92 ms</span>
+          </span>
+        </button>
+        <button class="tl-item has-icon od-d10" type="button" data-ctl-open="s03-x10" data-method="rule">
+          <span class="tl-time num">06:30</span>
+          <span class="app-icon" style="--app:#161823">抖</span>
+          <span class="tl-body">
+            <span class="tl-title">抖音</span>
+            <span class="tl-sub">规则匹配 · 118 ms</span>
+          </span>
+        </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s03-x1" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x1" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:38</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [text="跳过"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">128 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x1">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x2" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x2" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">哔哩哔哩 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:21</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [id="skip_btn"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">96 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x2">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x3" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x3" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微博 · 跳过成功</h3><span class="badge">坐标点击兜底</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:57</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">兜底坐标 · 右上角 (1050, 180)</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">342 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x3">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x4" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x4" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">高德地图 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:40</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [text="跳过 3s"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">87 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x4">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x5" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x5" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">小红书 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:12</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [desc="跳过"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">104 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x5">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x6" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x6" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">知乎 · 跳过成功</h3><span class="badge">无障碍事件兜底</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">07:58</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">点击事件流捕获 · 无稳定选择器</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">512 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x6">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x7" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x7" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">网易云音乐 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">07:34</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [id$=":id/skip"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">76 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x7">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x8" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x8" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">淘宝 · 跳过成功</h3><span class="badge">坐标点击兜底</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">07:19</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">兜底坐标 · 底部中央 (540, 1980)</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">388 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x8">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x9" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x9" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">06:52</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [text="跳过"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">92 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x9">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s03-x10" />
+  <div class="scrim is-bottom s03-drawer"><label class="s03-veil" for="s03-x10" aria-label="关闭跳过详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">抖音 · 跳过成功</h3><span class="badge">规则匹配</span></div><div class="s03-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">06:30</span></span></div><div class="row"><span class="row-body"><span class="row-title">命中规则</span></span><span class="row-tail"><span class="num">内置规则 · [id="skip"]</span></span></div><div class="row"><span class="row-body"><span class="row-title">响应耗时</span></span><span class="row-tail"><span class="num">118 ms</span></span></div><div class="row"><span class="row-body"><span class="row-title">结果</span></span><span class="row-tail"><span>已进入正片 · 未误触</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s03-x10">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制选择器')">复制选择器</button></div></div></div>
+  <script>
+  /* 键盘可达：筛选 chip / 列表行 / 加载更多 / 抽屉关闭 全部为真实 button；
+     隐藏 input 仅作纯 CSS 状态钩子（:checked ~ 选择器与筛选/抽屉逻辑完全不变）。
+     data-ctl=单选置真 · data-ctl-open=置真 · data-ctl-toggle=切换 · data-ctl-off=置假 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var MODES = [['data-ctl', 'on'], ['data-ctl-open', 'on'], ['data-ctl-toggle', 'toggle'], ['data-ctl-off', 'off']];
+    var SEL = '[data-ctl],[data-ctl-open],[data-ctl-toggle],[data-ctl-off]';
+    function modeOf(b) {
+      for (var k = 0; k < MODES.length; k++) if (b.hasAttribute(MODES[k][0])) return MODES[k];
+      return null;
+    }
+    function sync() {
+      var bs = sec.querySelectorAll(SEL);
+      for (var i = 0; i < bs.length; i++) {
+        var m = modeOf(bs[i]);
+        if (!m) continue;
+        var t = document.getElementById(bs[i].getAttribute(m[0]));
+        var on = !!(t && t.checked);
+        if (bs[i].getAttribute('role') === 'radio') bs[i].setAttribute('aria-checked', on ? 'true' : 'false');
+        if (bs[i].hasAttribute('aria-expanded')) bs[i].setAttribute('aria-expanded', on ? 'true' : 'false');
+      }
+    }
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+      for (var k = 0; k < MODES.length; k++) {
+        var b = n.closest('[' + MODES[k][0] + ']');
+        if (!b) continue;
+        var el = document.getElementById(b.getAttribute(MODES[k][0]));
+        if (!el) return;
+        var m = MODES[k][1];
+        el.checked = (m === 'toggle') ? !el.checked : (m === 'on');
+        sync();
+        if (m === 'toggle' && el.checked) {
+          var first = sec.querySelector('.s02-older .s02-ev');
+          if (first) first.focus();
+        } else if (m === 'on' && b.hasAttribute('data-ctl-open')) {
+          /* 打开抽屉：焦点进入抽屉的「关闭」按钮，键盘可继续操作与退出 */
+          var sheet = el.nextElementSibling;
+          var into = sheet && sheet.querySelector('button');
+          if (into) into.focus();
+        } else if (m === 'off') {
+          /* 关闭抽屉：焦点回到打开它的那一行 */
+          var opener = sec.querySelector('[data-ctl-open="' + el.id + '"]');
+          if (opener) opener.focus();
+        }
+        return;
+      }
+    });
+    sync();
+  })();
+  </script>
+
+</section>
+<!--@od:end-->

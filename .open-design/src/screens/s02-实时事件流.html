@@ -1,0 +1,387 @@
+<!-- ============================================================
+     s02 · 实时事件流
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s02">
+/* ── s02 实时事件流 ─────────────────────────────────────────────── */
+#s02 .od-ctl{display:none}
+
+/* 类型筛选 chips（横滑，选中态走中性色） */
+#s02 .s02-chips{
+  display:flex;gap:var(--space-2);align-items:center;
+  padding:0 var(--space-4) var(--space-2);
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+}
+#s02 .s02-chips::-webkit-scrollbar{display:none}
+#s02 .s02-chips > button{cursor:pointer;user-select:none;flex:0 0 auto}
+#s02-f-all:checked ~ .content .s02-chips > :nth-child(1),
+#s02-f-screen:checked ~ .content .s02-chips > :nth-child(2),
+#s02-f-app:checked ~ .content .s02-chips > :nth-child(3),
+#s02-f-charging:checked ~ .content .s02-chips > :nth-child(4),
+#s02-f-wifi:checked ~ .content .s02-chips > :nth-child(5),
+#s02-f-audio:checked ~ .content .s02-chips > :nth-child(6){
+  background:color-mix(in srgb,var(--fg) 7%,transparent);
+  border-color:color-mix(in srgb,var(--fg) 24%,transparent);
+  color:var(--fg);font-weight:600;
+}
+
+/* 按类型筛选：整组剔除 + 组内异类行剔除 */
+#s02-f-screen:checked ~ .content .od-grp:not([data-has~="SCREEN"]),
+#s02-f-app:checked ~ .content .od-grp:not([data-has~="APP_USAGE"]),
+#s02-f-charging:checked ~ .content .od-grp:not([data-has~="CHARGING"]),
+#s02-f-wifi:checked ~ .content .od-grp:not([data-has~="WIFI"]),
+#s02-f-audio:checked ~ .content .od-grp:not([data-has~="AUDIO"]),
+#s02-f-screen:checked ~ .content .od-grp .s02-ev:not([data-type="SCREEN"]),
+#s02-f-app:checked ~ .content .od-grp .s02-ev:not([data-type="APP_USAGE"]),
+#s02-f-charging:checked ~ .content .od-grp .s02-ev:not([data-type="CHARGING"]),
+#s02-f-wifi:checked ~ .content .od-grp .s02-ev:not([data-type="WIFI"]),
+#s02-f-audio:checked ~ .content .od-grp .s02-ev:not([data-type="AUDIO"]),
+#s02-f-screen:checked ~ .content .grp-cnt,
+#s02-f-app:checked ~ .content .grp-cnt,
+#s02-f-charging:checked ~ .content .grp-cnt,
+#s02-f-wifi:checked ~ .content .grp-cnt,
+#s02-f-audio:checked ~ .content .grp-cnt{display:none}
+#s02 .s02-tip{display:none}
+#s02-f-screen:checked ~ .content .s02-tip,
+#s02-f-app:checked ~ .content .s02-tip,
+#s02-f-charging:checked ~ .content .s02-tip,
+#s02-f-wifi:checked ~ .content .s02-tip,
+#s02-f-audio:checked ~ .content .s02-tip{display:block}
+
+/* 小时分组卡 + 吸顶组头 */
+#s02 .od-grp{
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);
+  padding:0 var(--space-4) var(--space-2);
+}
+#s02 .grp-head{
+  position:sticky;top:0;z-index:3;
+  display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);
+  padding:var(--space-2) 0;
+  background:color-mix(in srgb,var(--surface) 92%,transparent);
+  -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+}
+#s02 .grp-time{font-size:var(--text-sm);font-weight:600;letter-spacing:.01em}
+#s02 .s02-ev{cursor:pointer;transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+#s02 .s02-ev:active{transform:scale(.99);opacity:.9}
+/* 键盘焦点可见：事件行按钮走外壳 --focus-ring（不用 accent 描边，省强调色预算） */
+#s02 .list-row:focus-visible{outline:0;box-shadow:var(--focus-ring)}
+#s02 .s02-t{flex:0 0 auto;width:42px;font-size:var(--text-sm);color:var(--muted)}
+#s02 .row-tail{max-width:62%;justify-content:flex-end}
+#s02 .row-tail > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 加载更多 */
+#s02 .s02-older{display:none}
+#s02-more:checked ~ .content .s02-older{display:block}
+#s02-more:checked ~ .content .s02-loadmore{display:none}
+#s02 .s02-loadmore{cursor:pointer;user-select:none}
+
+/* 事件详情抽屉（input + scrim 相邻配对，只依赖 CSS） */
+#s02 .s02-drawer{display:none}
+#s02 .od-ctl:checked + .s02-drawer{display:grid}
+#s02 .s02-veil{position:absolute;inset:0}
+#s02 .s02-drawer .sheet{position:relative;z-index:1}
+#s02 .s02-fields{margin-top:var(--space-2)}
+#s02 .s02-fields .row:first-child{border-top:0}
+
+/* 状态块被外壳置为 display:grid：网格项需可收缩，否则 nowrap 长标题会把卡片撑出屏外 */
+#s02 [data-state-when="edge"]{width:100%;align-self:start}
+#s02 [data-state-when="edge"] > .card{width:100%;min-width:0}
+/* 骨架 */
+#s02 .st-loading{justify-items:stretch;align-items:start}
+#s02 .s02-skrow{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
+#s02 .s02-skdot{flex:0 0 auto;width:30px;height:30px;border-radius:var(--radius-md)}
+#s02 .s02-skgrow{flex:1 1 auto}
+
+/* 入场：分组错落 + 组内行错落 */
+#s02 .stg{opacity:0}
+#s02.is-active .stg{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s02.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+#s02.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+#s02.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+#s02.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+#s02.is-active .od-d5{animation-delay:calc(var(--stagger) * 5)}
+#s02.is-active .od-grp .s02-ev{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s02.is-active .od-grp .s02-ev:nth-of-type(2){animation-delay:calc(var(--stagger) * 2)}
+#s02.is-active .od-grp .s02-ev:nth-of-type(3){animation-delay:calc(var(--stagger) * 3)}
+#s02.is-active .od-grp .s02-ev:nth-of-type(4){animation-delay:calc(var(--stagger) * 4)}
+#s02 .od-grp .s02-ev{opacity:0}
+
+/* 热力条逐格重播 */
+#s02:not(.is-active) .heat-cell{animation:none;opacity:0}
+#s02.is-active .heat-cell{animation:od-fade 260ms var(--ease-out) var(--heat-d,0ms) forwards}
+
+/* 开屏期间不播入场 */
+.device-screen:has(#odSplash:not([hidden])) #s02 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s02" data-title="实时事件流" id="s02" data-od-id="screen-s02">
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-all" checked />
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-screen" />
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-app" />
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-charging" />
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-wifi" />
+  <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-audio" />
+  <input class="od-ctl" type="checkbox" id="s02-more" />
+
+  <div class="content" data-od-id="s02-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s02-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="s02-skrow"><span class="sk s02-skdot"></span><span class="sk s02-skgrow"></span></div>
+        <div class="s02-skrow"><span class="sk s02-skdot"></span><span class="sk s02-skgrow w-80"></span></div>
+        <div class="s02-skrow"><span class="sk s02-skdot"></span><span class="sk s02-skgrow"></span></div>
+        <div class="s02-skrow"><span class="sk s02-skdot"></span><span class="sk s02-skgrow w-60"></span></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s02-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg></span>
+      <p class="st-title">还没有事件</p>
+      <p class="st-desc">无障碍服务已就绪。屏幕、应用、网络与充电一旦变化，就会按小时汇总到这里。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('监控中 · 等待事件')" data-od-id="s02-empty-cta">刷新试试</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s02-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg></span>
+      <p class="st-title">事件流读取失败</p>
+      <p class="st-desc">采集服务无响应（AccessibilityService 未连接）。已落库的事件仍可查看。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('正在重新连接采集服务…')" data-od-id="s02-error-retry">重新连接</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s02-edge">
+      <div class="card">
+        <div class="row-between">
+          <span class="badge" data-od-min-fs>11,342 条</span>
+          <span class="meta">今日窗口已满</span>
+        </div>
+        <p class="row-title mt-2">微信（com.tencent.mm）· 前台使用 128 分钟 32 秒 · 累计 1,024 次前台切换</p>
+        <p class="meta mt-2">超长应用名与万级计数用于验证单行截断；缺失字段以「—」占位。</p>
+        <div class="row mt-2">
+          <span class="row-body"><span class="row-title">持续时长</span><span class="row-sub">字段缺失</span></span>
+          <span class="row-tail">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="s02-main" data-state-hide="loading empty error">
+      <header class="screen-head" data-od-id="s02-head">
+        <div>
+          <p class="meta">今日已记录 128 条 · 最近更新 09:41</p>
+          <h1 class="h1 mt-2">实时事件流</h1>
+        </div>
+        <button class="icon-btn" type="button" aria-label="按时间倒序排列" onclick="App.toast('已按时间倒序排列')" data-od-id="s02-sort">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h6"/></svg>
+        </button>
+      </header>
+
+      <div class="s02-chips" role="radiogroup" aria-label="事件类型筛选" data-od-id="s02-chips">
+        <button class="chip" type="button" role="radio" aria-checked="true" data-ctl="s02-f-all">全部 <span class="num">128</span></button>
+        <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s02-f-screen">屏幕 <span class="num">31</span></button>
+        <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s02-f-app">应用 <span class="num">52</span></button>
+        <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s02-f-charging">充电 <span class="num">11</span></button>
+        <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s02-f-wifi">网络 <span class="num">18</span></button>
+        <button class="chip" type="button" role="radio" aria-checked="false" data-ctl="s02-f-audio">音频 <span class="num">8</span></button>
+      </div>
+
+      <div class="pad" data-od-id="s02-heatwrap">
+        <div class="row-between"><span class="meta">今日活跃强度</span><span class="meta">峰值 09:00 · 54 分钟</span></div>
+        <div class="mt-2" data-chart="heat"
+             data-chart-values="0,0,0,0,0,0,6,18,34,54,33,22,38,27,15,20,31,25,14,10,7,11,5,2"
+             data-chart-label="今日逐时活跃强度热力条"></div>
+        <p class="meta s02-tip mt-2" data-od-id="s02-filter-tip">已按类型筛选 · 组头的「条数」仅在全部视图下显示</p>
+      </div>
+
+      <div class="pad stack mt-3" data-od-id="s02-timeline">
+      <div class="od-grp stg od-d1" data-has="APP_USAGE SCREEN WIFI AUDIO" data-od-id="s02-g09">
+        <div class="grp-head"><span class="grp-time num">09:00</span><span class="badge grp-cnt" data-od-min-fs>4 条事件</span></div>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x1" data-type="APP_USAGE">
+            <span class="s02-t num">09:41</span>
+            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+        <span class="row-body"><span class="row-title">微信 · 前台 12 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x2" data-type="SCREEN">
+            <span class="s02-t num">09:26</span>
+            <span class="row-icon s2" aria-hidden><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 5.5h4"/></svg></span>
+            <span class="row-body"><span class="row-title">屏幕点亮 · 解锁进入桌面</span><span class="row-sub">屏幕事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x3" data-type="WIFI">
+            <span class="s02-t num">09:12</span>
+            <span class="row-icon s3" aria-hidden><svg viewBox="0 0 24 24"><path d="M2.5 9.5a15 15 0 0 1 19 0"/><path d="M6 13a10 10 0 0 1 12 0"/><path d="M9.5 16.5a5 5 0 0 1 5 0"/><circle cx="12" cy="19.8" r="1"/></svg></span>
+            <span class="row-body"><span class="row-title">Wi-Fi 连接 · Home-5G</span><span class="row-sub">网络事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x4" data-type="AUDIO">
+            <span class="s02-t num">09:03</span>
+            <span class="app-icon" style="--app:#c20c0c" aria-hidden>乐</span>
+        <span class="row-body"><span class="row-title">网易云音乐 · 开始播放「岛屿」</span><span class="row-sub">音频事件 · 音频焦点</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+      </div>
+      <div class="od-grp stg od-d2" data-has="CHARGING PACKAGE APP_USAGE LOCATION" data-od-id="s02-g08">
+        <div class="grp-head"><span class="grp-time num">08:00</span><span class="badge grp-cnt" data-od-min-fs>4 条事件</span></div>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x5" data-type="CHARGING">
+            <span class="s02-t num">08:52</span>
+            <span class="row-icon s4" aria-hidden><svg viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/></svg></span>
+            <span class="row-body"><span class="row-title">充电中 · 电量 87%</span><span class="row-sub">充电事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x6" data-type="PACKAGE">
+            <span class="s02-t num">08:34</span>
+            <span class="row-icon s6" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 2.8 20.5 7v10L12 21.2 3.5 17V7z"/><path d="M3.5 7 12 11.2 20.5 7"/><path d="M12 11.2v10"/></svg></span>
+            <span class="row-body"><span class="row-title">安装完成 · 高德地图 13.2.1</span><span class="row-sub">应用事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x7" data-type="APP_USAGE">
+            <span class="s02-t num">08:11</span>
+            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+        <span class="row-body"><span class="row-title">微信 · 前台 23 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x8" data-type="LOCATION">
+            <span class="s02-t num">08:02</span>
+            <span class="row-icon s7" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+            <span class="row-body"><span class="row-title">定位请求 · 高德地图 后台</span><span class="row-sub">定位事件 · 位置服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+      </div>
+      <div class="od-grp stg od-d3" data-has="SCREEN LOCATION" data-od-id="s02-g07">
+        <div class="grp-head"><span class="grp-time num">07:00</span><span class="badge grp-cnt" data-od-min-fs>2 条事件</span></div>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x9" data-type="SCREEN">
+            <span class="s02-t num">07:46</span>
+            <span class="row-icon s2" aria-hidden><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 5.5h4"/></svg></span>
+            <span class="row-body"><span class="row-title">屏幕点亮 · 闹钟关闭</span><span class="row-sub">屏幕事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x10" data-type="LOCATION">
+            <span class="s02-t num">07:31</span>
+            <span class="row-icon s7" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+            <span class="row-body"><span class="row-title">定位请求 · 墨迹天气 前台</span><span class="row-sub">定位事件 · 位置服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+      </div>
+        <div class="s02-loadwrap" data-od-id="s02-loadwrap">
+          <button class="btn btn-ghost btn-block s02-loadmore" type="button" data-ctl-toggle="s02-more" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M12 5v14"/><path d="M5.5 12.5 12 19l6.5-6.5"/></svg>
+            <span>加载更早的事件（还有 118 条）</span>
+          </button>
+        </div>
+        <div class="s02-older">
+      <div class="od-grp stg od-d4" data-has="APP_USAGE WIFI" data-od-id="s02-g06">
+        <div class="grp-head"><span class="grp-time num">06:00</span><span class="badge grp-cnt" data-od-min-fs>2 条事件</span></div>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x11" data-type="APP_USAGE">
+            <span class="s02-t num">06:58</span>
+            <span class="app-icon" style="--app:#ff2442" aria-hidden>小</span>
+        <span class="row-body"><span class="row-title">小红书 · 前台 6 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x12" data-type="WIFI">
+            <span class="s02-t num">06:20</span>
+            <span class="row-icon s3" aria-hidden><svg viewBox="0 0 24 24"><path d="M2.5 9.5a15 15 0 0 1 19 0"/><path d="M6 13a10 10 0 0 1 12 0"/><path d="M9.5 16.5a5 5 0 0 1 5 0"/><circle cx="12" cy="19.8" r="1"/></svg></span>
+            <span class="row-body"><span class="row-title">Wi-Fi 断开 · 切换到 5G</span><span class="row-sub">网络事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+      </div>
+      <div class="od-grp stg od-d5" data-has="CHARGING" data-od-id="s02-g05">
+        <div class="grp-head"><span class="grp-time num">05:00</span><span class="badge grp-cnt" data-od-min-fs>1 条事件</span></div>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x13" data-type="CHARGING">
+            <span class="s02-t num">05:12</span>
+            <span class="row-icon s4" aria-hidden><svg viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/></svg></span>
+            <span class="row-body"><span class="row-title">充电完成 · 电量 100%</span><span class="row-sub">充电事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+      </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s02-x1" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x1" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 · 前台使用</h3><span class="badge">APP_USAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:41</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">12 分 04 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.tencent.mm</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">无障碍服务 · 前台</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x1">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x2" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x2" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">屏幕点亮 · 解锁</h3><span class="badge">SCREEN</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:26</span></span></div><div class="row"><span class="row-body"><span class="row-title">事件</span></span><span class="row-tail"><span class="num">SCREEN_ON</span></span></div><div class="row"><span class="row-body"><span class="row-title">电量</span></span><span class="row-tail"><span class="num">87%</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收 · 已解锁</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x2">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x3" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x3" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">Wi-Fi 连接</h3><span class="badge">WIFI</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:12</span></span></div><div class="row"><span class="row-body"><span class="row-title">SSID</span></span><span class="row-tail"><span class="num">Home-5G</span></span></div><div class="row"><span class="row-body"><span class="row-title">频段 / 信号</span></span><span class="row-tail"><span class="num">5 GHz · -52 dBm</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x3">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x4" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x4" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">网易云音乐 · 开始播放</h3><span class="badge">AUDIO</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:03</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.netease.cloudmusic</span></span></div><div class="row"><span class="row-body"><span class="row-title">输出设备</span></span><span class="row-tail"><span class="num">蓝牙耳机</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">音频焦点变化</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x4">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x5" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x5" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">充电中</h3><span class="badge">CHARGING</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:52</span></span></div><div class="row"><span class="row-body"><span class="row-title">充电方式</span></span><span class="row-tail"><span class="num">有线快充</span></span></div><div class="row"><span class="row-body"><span class="row-title">功率 / 温度</span></span><span class="row-tail"><span class="num">33 W · 34.2 ℃</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x5">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x6" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x6" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">应用安装完成</h3><span class="badge">PACKAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:34</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.autonavi.minimap</span></span></div><div class="row"><span class="row-body"><span class="row-title">版本</span></span><span class="row-tail"><span class="num">13.2.1</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收 · 更新</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x6">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x7" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x7" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 · 前台使用</h3><span class="badge">APP_USAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:11</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">23 分 18 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.tencent.mm</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">无障碍服务 · 前台</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x7">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x8" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x8" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">定位请求</h3><span class="badge">LOCATION</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:02</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.autonavi.minimap</span></span></div><div class="row"><span class="row-body"><span class="row-title">前后台</span></span><span class="row-tail"><span class="num">后台</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">位置服务 · 高精度</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x8">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x9" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x9" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">屏幕点亮 · 闹钟关闭</h3><span class="badge">SCREEN</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">07:46</span></span></div><div class="row"><span class="row-body"><span class="row-title">事件</span></span><span class="row-tail"><span class="num">SCREEN_ON</span></span></div><div class="row"><span class="row-body"><span class="row-title">电量</span></span><span class="row-tail"><span class="num">100%</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收 · 闹钟</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x9">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x10" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x10" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">定位请求</h3><span class="badge">LOCATION</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">07:31</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.moji.mjweather</span></span></div><div class="row"><span class="row-body"><span class="row-title">前后台</span></span><span class="row-tail"><span class="num">前台</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">位置服务 · 网络定位</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x10">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x11" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x11" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">小红书 · 前台使用</h3><span class="badge">APP_USAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">06:58</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">6 分 12 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.xingin.xhs</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">无障碍服务 · 前台</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x11">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x12" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x12" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">Wi-Fi 断开</h3><span class="badge">WIFI</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">06:20</span></span></div><div class="row"><span class="row-body"><span class="row-title">SSID</span></span><span class="row-tail"><span class="num">Home-5G</span></span></div><div class="row"><span class="row-body"><span class="row-title">切换至</span></span><span class="row-tail"><span class="num">中国移动 5G</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x12">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x13" />
+  <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x13" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">充电完成</h3><span class="badge">CHARGING</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">05:12</span></span></div><div class="row"><span class="row-body"><span class="row-title">充电方式</span></span><span class="row-tail"><span class="num">有线快充</span></span></div><div class="row"><span class="row-body"><span class="row-title">时长</span></span><span class="row-tail"><span class="num">1 小时 42 分</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">广播接收</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x13">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <script>
+  /* 键盘可达：筛选 chip / 列表行 / 加载更多 / 抽屉关闭 全部为真实 button；
+     隐藏 input 仅作纯 CSS 状态钩子（:checked ~ 选择器与筛选/抽屉逻辑完全不变）。
+     data-ctl=单选置真 · data-ctl-open=置真 · data-ctl-toggle=切换 · data-ctl-off=置假 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var MODES = [['data-ctl', 'on'], ['data-ctl-open', 'on'], ['data-ctl-toggle', 'toggle'], ['data-ctl-off', 'off']];
+    var SEL = '[data-ctl],[data-ctl-open],[data-ctl-toggle],[data-ctl-off]';
+    function modeOf(b) {
+      for (var k = 0; k < MODES.length; k++) if (b.hasAttribute(MODES[k][0])) return MODES[k];
+      return null;
+    }
+    function sync() {
+      var bs = sec.querySelectorAll(SEL);
+      for (var i = 0; i < bs.length; i++) {
+        var m = modeOf(bs[i]);
+        if (!m) continue;
+        var t = document.getElementById(bs[i].getAttribute(m[0]));
+        var on = !!(t && t.checked);
+        if (bs[i].getAttribute('role') === 'radio') bs[i].setAttribute('aria-checked', on ? 'true' : 'false');
+        if (bs[i].hasAttribute('aria-expanded')) bs[i].setAttribute('aria-expanded', on ? 'true' : 'false');
+      }
+    }
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+      for (var k = 0; k < MODES.length; k++) {
+        var b = n.closest('[' + MODES[k][0] + ']');
+        if (!b) continue;
+        var el = document.getElementById(b.getAttribute(MODES[k][0]));
+        if (!el) return;
+        var m = MODES[k][1];
+        el.checked = (m === 'toggle') ? !el.checked : (m === 'on');
+        sync();
+        if (m === 'toggle' && el.checked) {
+          var first = sec.querySelector('.s02-older .s02-ev');
+          if (first) first.focus();
+        } else if (m === 'on' && b.hasAttribute('data-ctl-open')) {
+          /* 打开抽屉：焦点进入抽屉的「关闭」按钮，键盘可继续操作与退出 */
+          var sheet = el.nextElementSibling;
+          var into = sheet && sheet.querySelector('button');
+          if (into) into.focus();
+        } else if (m === 'off') {
+          /* 关闭抽屉：焦点回到打开它的那一行 */
+          var opener = sec.querySelector('[data-ctl-open="' + el.id + '"]');
+          if (opener) opener.focus();
+        }
+        return;
+      }
+    });
+    sync();
+  })();
+  </script>
+
+</section>
+<!--@od:end-->
