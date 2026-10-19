@@ -1,0 +1,48 @@
+name: Bug 报告
+description: 提交一个可复现的问题
+labels: [ bug ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！提交前请先搜索是否已有相同 Issue。
+        请勿在 Issue 中粘贴真实手机号、卡号、订单号或包含个人信息的截图。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么，预期是什么
+      placeholder: 打开记账页时……
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 观察到……
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      placeholder: 1.0.0
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      placeholder: 小米 14 / Android 15
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 可粘贴 logcat 片段或附加脱敏后的截图
+      render: shell
