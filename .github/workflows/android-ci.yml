@@ -14,10 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build & Test
+  test:
+    name: Unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -34,6 +34,24 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew test --stacktrace
+
+  assemble:
+    name: Assemble APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
