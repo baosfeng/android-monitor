@@ -1,5 +1,10 @@
 <!doctype html>
 <!--
+  本文件由 scripts/assemble-prototype.mjs 从 .open-design/src/ 自动生成，请勿直接编辑。
+  改哪一屏就改 src/screens/ 下对应分片，改完全局骨架改 src/00-shell.html，
+  然后执行 node scripts/assemble-prototype.mjs 重新生成。
+-->
+<!--
   00-shell.html · 「行为记录」UI 重设计原型外壳（shell owner 独占，writer 只读）
 
   · 四个注入占位注释各出现一次：token 块 / 逐屏样式 / 逐屏结构 / 开屏。
@@ -48,6 +53,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>行为记录 · 交互原型</title>
+
 <style>
 :root {
   /* ─── Surface (3 levels) ──────────────────────────────────────────
@@ -1016,6 +1022,7 @@
  *   bento           : --text-xs 12px
  * -------------------------------------------------------------------------- */
 </style>
+
 <style>
 /* ═══ 0 · 基线 ═══════════════════════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box}
@@ -1643,6 +1650,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .brand-mark .bm-ring{stroke-dashoffset:0}
 }
 </style>
+
 <!-- 逐屏样式注入位：必须放在 style 元素之外，注入的是各 partial 独立的 style[data-for] 元素 -->
 <style data-for="s01">
 /* ── s01 今日概览 ───────────────────────────────────────────────── */
@@ -1726,6 +1734,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 /* 开屏未结束时先不播入场，等开屏收起再播（:has 不支持时自动退回「立即播」） */
 .device-screen:has(#odSplash:not([hidden])) #s01 *{animation:none}
 </style>
+
 <style data-for="s02">
 /* ── s02 实时事件流 ─────────────────────────────────────────────── */
 #s02 .od-ctl{display:none}
@@ -1837,6 +1846,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 /* 开屏期间不播入场 */
 .device-screen:has(#odSplash:not([hidden])) #s02 *{animation:none}
 </style>
+
 <style data-for="s03">
 /* ── s03 广告跳过记录 ───────────────────────────────────────────── */
 #s03 .od-ctl{display:none}
@@ -1923,6 +1933,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 /* 开屏期间不播入场 */
 .device-screen:has(#odSplash:not([hidden])) #s03 *{animation:none}
 </style>
+
 <style data-for="s04">
 /* ═══ s04 · 记账首页 / 交易列表 ═══ */
 .s04-month{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:3px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 4%,transparent)}
@@ -1961,6 +1972,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s04-in,.s04-mlabel.is-bump{animation:none!important}
 }
 </style>
+
 <style data-for="s05">
 /* ═══ s05 · 新增 / 编辑交易 ═══ */
 .fin-tip{position:fixed;z-index:60;pointer-events:none;padding:6px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 92%,transparent);color:var(--bg);font-size:var(--text-sm);font-family:var(--font-mono);box-shadow:var(--elev-2);white-space:nowrap}
@@ -1992,6 +2004,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s05-in,.s05-input.is-bad{animation:none!important}
 }
 </style>
+
 <style data-for="s06">
 /* ═══ s06 · 预算设置 ═══ */
 .s06-month{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:3px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 4%,transparent)}
@@ -2031,6 +2044,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s06-bar i{transform:scaleX(var(--p,.5))}
 }
 </style>
+
 <style data-for="s07">
 /* ═══ s07 · 统计分析 ═══ */
 .s07-month{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:3px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 4%,transparent)}
@@ -2059,6 +2073,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s07-in,.s07-mlabel.is-bump{animation:none!important}
 }
 </style>
+
 <style data-for="s08">
 /* ═══ s08 · 数据导入（熊猫记账） ═══ */
 .s08-steps{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)}
@@ -2082,6 +2097,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s08-track i{transition:none}
 }
 </style>
+
 <style data-for="s09">
 /* s09 · 设置 —— 字号下限护栏：token 收缩主题（如 kami --text-sm=12px）兜底 14px */
 .screen.s09{font-size:max(var(--text-sm),14px)}
@@ -2102,6 +2118,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s09 .edge-name{flex:1 1 auto;min-width:0;font-size:var(--text-base);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .screen.s09 .edge-count{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--fg-2);flex:0 0 auto}
 </style>
+
 <style data-for="s10">
 /* s10 · 开屏跳过规则管理 */
 .screen.s10{font-size:max(var(--text-sm),14px)}
@@ -2149,6 +2166,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s10 .rule-detail .tl-body{padding-left:var(--space-2)}
 .screen.s10 .rule-hint{border-top:1px solid var(--border-soft)}
 </style>
+
 <style data-for="s11">
 /* s11 · 应用白名单 */
 .screen.s11{font-size:max(var(--text-sm),14px)}
@@ -2174,6 +2192,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s11 .app-count{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .screen.s11 .app-row{min-height:var(--row-min-h)}
 </style>
+
 <style data-for="s12">
 /* s12 · 组件与状态展厅 */
 .screen.s12{font-size:max(var(--text-sm),14px)}
@@ -2205,6 +2224,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s12 .edge-name{flex:1 1 auto;min-width:0;font-size:var(--text-base);line-height:1.25}
 .screen.s12 [data-od-tap-demo]:focus-visible{outline:var(--focus-ring);outline-offset:2px}
 </style>
+
 <style data-for="s13">
 /* s13 · 外观（主题切换）—— .theme-picker / .theme-opt / .theme-swatch 组件名与 shell 一致，
    仅在本屏把 8 个选项排成 2 列并补中英文标签；默认 grid 4 列放不下双行标签。 */
@@ -2246,6 +2266,193 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   background:color-mix(in srgb,var(--fg) 4%,transparent);
 }
 </style>
+
+<!-- ============================================================
+     s14 · 记一笔（一屏版）—— 用户要求「一屏就能操作，不要来回滑动」
+     ------------------------------------------------------------
+     与 s05「新增交易」的差异（只为省纵向高度，信息一个没少）：
+       1. 分类：21 个分类的 6 行网格  →  单行横滑（一屏可见约 5 个）
+       2. 账户：3 个带余额的大卡片行  →  一行 pill
+       3. 日期/备注：两段分组        →  与账户合并成一张紧凑卡（每行 44px）
+       4. 自动记账带过来的单据信息    →  折叠成一行摘要（点击展开）
+       5. 保存按钮吸底（sticky），不随内容滚走
+     首屏高度估算 ≈ 560px（视口可用 ≈ 756px），不需要纵向滚动。
+     ============================================================ -->
+<style data-for="s14">
+  .screen.s14 .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
+  .screen.s14 .s14-card{padding:var(--space-3) var(--space-4)}
+  .s14-kind{margin-bottom:var(--space-2)}
+  .s14-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
+  .s14-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
+  .s14-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .s14-scroll{display:flex;gap:var(--space-2);overflow-x:auto;padding:0 var(--space-4) var(--space-1);
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .s14-scroll::-webkit-scrollbar{display:none}
+  .s14-cat{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+  .s14-cat .cat-icon{width:46px;height:46px}
+  .s14-cat.is-on,.s14-cat[aria-pressed="true"]{color:var(--accent-text)}
+  .s14-cat.is-on .cat-icon,.s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .s14-cat-name{font-size:var(--text-xs);white-space:nowrap}
+  /* 分类默认收起成一行；点开才出 chips，选完自动收起（省掉首屏约 76px） */
+  .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
+    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
+  .s14-cats-current{flex:1;min-width:0;color:var(--fg);font-size:var(--text-base);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 四行同构：分类 / 账户 / 时间 都是「标签 + 值 + ▸」，点开就地出 chips；
+     备注行同形态但没有箭头（直接输入）。同一个值样式 + 同分隔线，避免控件形态混用。 */
+  /* 值：与标签**同字号**，层级靠字重（500）与颜色（fg vs muted）拉开 —— 17px 对 14px 的反差过强 */
+  .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14-panel[hidden]{display:none}
+  .s14-panel{padding:var(--space-2) 0 var(--space-1);margin-top:var(--space-2);border-top:1px solid var(--border-soft)}
+  .s14-card .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
+  .s14-row{display:flex;align-items:center;gap:var(--space-3);min-height:44px}
+  .s14-row + .s14-row{border-top:1px solid var(--border-soft)}
+  .s14-label{flex:0 0 40px;font-size:var(--text-sm);color:var(--muted)}
+  .s14-row .s14-scroll{padding:0;flex:1;min-width:0}
+  /* ⚠️ input 必须显式继承字体族：默认字体族不是页面字体，真机/浏览器上都会显得又大又生硬 */
+  .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .s14-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
+  .s14-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
+  .s14-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
+  .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14-actions{position:sticky;bottom:0;margin-top:auto;
+    padding:var(--space-3) var(--space-4) var(--space-5);
+    background:linear-gradient(to top,var(--surface) 62%,transparent)}
+</style>
+
+<!-- ============================================================
+     s14a · 记一笔（一屏 · 全抽屉版）
+     ------------------------------------------------------------
+     交互模型：四个字段行（分类 / 账户 / 时间 / 单据）**同一个模型** —— 点行弹底部抽屉。
+     取这份的理由：
+       · 主表单高度**恒定**，抽屉开合不影响「一屏不放滚」；
+       · 分类抽屉是 4 列网格，一屏可见 12+ 个，冷门分类最多滑一下（对比 s14 的横滑一行 6 个）；
+       · 账户/时间不再有「pill 组 / 单 pill / 裸文本」三种形态混用。
+     ============================================================ -->
+<style data-for="s14a">
+  /* ── s14a：字段选择全部走底部抽屉（与分类/单据同一个模型） ── */
+  .screen.s14a .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
+  .screen.s14a .s14-card{padding:var(--space-3) var(--space-4)}
+  .s14a-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
+  .s14a-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
+  .s14a-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .s14a-kind{margin-bottom:var(--space-2)}
+  .screen.s14a .s14-label{flex:0 0 44px;font-size:var(--text-sm);color:var(--muted)}
+  .screen.s14a .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .screen.s14a .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
+    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
+  .screen.s14a .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
+  .screen.s14a .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .screen.s14a .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14a-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
+  .s14a-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
+  .s14a-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
+  .s14a-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
+    background:linear-gradient(to top,var(--surface) 62%,transparent)}
+  /* 抽屉内：分类网格 4 列（一屏可见 12+，冷门不用长滑） */
+  .s14a-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3);max-height:46vh;overflow-y:auto}
+  .s14a-grid .s14-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+  .s14a-grid .s14-cat .cat-icon{width:44px;height:44px}
+  .s14a-grid .s14-cat[aria-pressed="true"]{color:var(--accent-text)}
+  .s14a-grid .s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .s14a-grid .s14-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  /* 抽屉内：横向条（只用于日期快捷） */
+  .s14a-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
+  .s14a-strip::-webkit-scrollbar{display:none}
+  .s14a-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
+  /* 时刻：滚轮（比一排圆 chip 紧凑得多，也不用横着划去找数字） */
+  /* ⚠️ flex 容器必须显式 width:100% —— 默认按内容宽度收缩，justify-content:center 就没有可居中的余地，
+     表现出来就是「滚轮组没居中」。 */
+  .s14a-timepick{display:flex;align-items:center;justify-content:center;gap:var(--space-3);
+    margin:var(--space-4) 0 0}
+  .s14a-wheel-wrap{position:relative;flex:0 0 auto;width:104px;height:132px;border-radius:var(--radius-md);overflow:hidden;
+    background:color-mix(in srgb, var(--fg) 4%, transparent)}
+  .s14a-wheel-band{position:absolute;left:6px;right:6px;top:44px;height:44px;border-radius:var(--radius-sm);
+    background:color-mix(in srgb, var(--fg) 8%, transparent);pointer-events:none}
+  .s14a-wheel{position:relative;height:100%;padding:44px 0;overflow-y:auto;scroll-snap-type:y mandatory;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .s14a-wheel::-webkit-scrollbar{display:none}
+  .s14a-wheel button{display:block;width:100%;height:44px;scroll-snap-align:center;border:0;background:transparent;
+    font:inherit;font-size:var(--text-lg);color:var(--muted);cursor:pointer;font-variant-numeric:tabular-nums;
+    transition:color var(--dur-fast, .15s) ease}
+  .s14a-wheel button.is-on{color:var(--fg);font-weight:600}
+  .s14a-colon{font-size:var(--text-xl);color:var(--muted);font-weight:600;padding-bottom:2px}
+  .s14a-picked{margin:var(--space-3) 0 0;text-align:center;color:var(--muted);font-size:var(--text-sm)}
+  /* ⚠️ min-width:0 是横向滚动的前提：flex 子项默认按内容宽度扩张，
+     会把抽屉整个撑宽、溢出手机框（真机表现就是「超出屏幕」）。
+     strip 必须能收缩，横向滚动才成立。 */
+  .s14a-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;min-width:0}
+  .s14a-line > .s14a-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
+  .s14a-line > .s14a-strip{flex:1 1 auto;min-width:0}
+  /* 抽屉宽度锁死在手机框内。
+     外壳的 .scrim.is-bottom 是 grid + place-items:end center，隐式列的 auto 最小尺寸 = item 的
+     min-content，于是抽屉被内容撑到 476px（手机框只有 393px），右侧整块溢出屏幕 ——
+     max-width 也压不住 min-content。这里在 s14a 内改成 flex：stretch 语义明确，不再按内容 sizing。 */
+  .screen.s14a .scrim.is-bottom{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch}
+  .screen.s14a .scrim{overflow:hidden}
+  .screen.s14a .sheet{width:100%;max-width:100%}
+</style>
+
+<!-- ============================================================
+     s14b · 记一笔（内联展开版）
+     ------------------------------------------------------------
+     交互模型：点字段行 → **就地展开**选择区（分类展开两排 8 个 + 「更多」开抽屉）。
+     与 s14a 的差别就是这一处：开抽屉 vs 就地展。
+     代价（实测）：分类展开两排会让内容高 738 → 约 890，**需要纵向滚动**；
+     s14a 的抽屉不影响主表单高度。这就是两版要你选的地方。
+     ============================================================ -->
+<style data-for="s14b">
+  .screen.s14b .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
+  .screen.s14b .s14-card{padding:var(--space-3) var(--space-4)}
+  .s14b-kind{margin-bottom:var(--space-2)}
+  .s14b-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
+  .s14b-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
+  .s14b-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .screen.s14b .s14-label{flex:0 0 44px;font-size:var(--text-sm);color:var(--muted)}
+  .screen.s14b .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .screen.s14b .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
+    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
+  .screen.s14b .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
+  .screen.s14b .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+    font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .screen.s14b .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s14b-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
+    background:linear-gradient(to top,var(--surface) 62%,transparent)}
+  /* 就地展开区：给一层浅底，和「行」拉开层级（这正是 s14 里账户裸露丑的原因） */
+  .s14b-expand{margin:var(--space-2) 0 var(--space-3);padding:var(--space-3);
+    border-radius:var(--radius-md);background:color-mix(in srgb, var(--fg) 4%, transparent)}
+  .s14b-expand[hidden]{display:none}
+  .s14b-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+  .s14b-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+  .s14b-cat .cat-icon{width:44px;height:44px}
+  .s14b-cat[aria-pressed="true"]{color:var(--accent-text)}
+  .s14b-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .s14b-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .s14b-more{grid-column:1 / -1;margin-top:var(--space-1)}
+  .s14b-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
+  .s14b-strip::-webkit-scrollbar{display:none}
+  .s14b-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
+  .s14b-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
+  .s14b-line > .s14b-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
+  .s14b-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
+  .s14b-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
+  .s14b-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
+</style>
+
 </head>
 <body>
 <div class="od-stage" data-od-id="stage">
@@ -2604,6 +2811,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 
 </section>
+
 <section class="screen" data-screen="s02" data-title="实时事件流" id="s02" data-od-id="screen-s02">
   <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-all" checked />
   <input class="od-ctl" type="radio" name="s02-filter" id="s02-f-screen" />
@@ -2870,6 +3078,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 
 </section>
+
 <section class="screen" data-screen="s03" data-title="广告跳过记录" id="s03" data-od-id="screen-s03">
   <input class="od-ctl" type="radio" name="s03-method" id="s03-m-all" checked />
   <input class="od-ctl" type="radio" name="s03-method" id="s03-m-rule" />
@@ -3143,6 +3352,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 
 </section>
+
 <section class="screen" data-screen="s04" data-title="记账" data-od-id="screen-s04">
   <div class="content" data-od-id="s04-content">
 
@@ -3769,6 +3979,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen" data-screen="s05" data-title="新增交易" data-od-id="screen-s05">
   <div class="content" data-od-id="s05-content">
 
@@ -3919,6 +4130,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     </div>
   </div>
 </section>
+
 <section class="screen" data-screen="s06" data-title="预算设置" data-od-id="screen-s06">
   <div class="content" data-od-id="s06-content">
 
@@ -4041,6 +4253,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     </div>
   </div>
 </section>
+
 <section class="screen" data-screen="s07" data-title="统计分析" data-od-id="screen-s07">
   <div class="content" data-od-id="s07-content">
 
@@ -4173,6 +4386,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
   </div>
 </section>
+
 <section class="screen" data-screen="s08" data-title="数据导入" data-od-id="screen-s08">
   <div class="content" data-od-id="s08-content">
 
@@ -4305,6 +4519,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen s09" data-screen="s09" data-title="设置" data-od-id="screen-s09">
   <div class="screen-head" data-od-id="s09-head">
     <div>
@@ -4581,6 +4796,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen s10" data-screen="s10" data-title="开屏跳过规则" data-od-id="screen-s10">
   <div class="screen-head" data-od-id="s10-head">
     <div>
@@ -4840,6 +5056,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen s11" data-screen="s11" data-title="应用白名单" data-od-id="screen-s11">
   <div class="screen-head" data-od-id="s11-head">
     <div>
@@ -5029,6 +5246,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen s12" data-screen="s12" data-title="组件与状态" data-od-id="screen-s12">
   <div class="screen-head" data-od-id="s12-head">
     <div>
@@ -5347,6 +5565,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   })();
   </script>
 </section>
+
 <section class="screen s13" data-screen="s13" data-title="外观" data-od-id="screen-s13">
   <div class="screen-head" data-od-id="s13-head">
     <div>
@@ -5530,142 +5749,8 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 </section>
 
-<!-- ============================================================
-     s14 · 记一笔（一屏版）—— 用户要求「一屏就能操作，不要来回滑动」
-     ------------------------------------------------------------
-     与 s05「新增交易」的差异（只为省纵向高度，信息一个没少）：
-       1. 分类：21 个分类的 6 行网格  →  单行横滑（一屏可见约 5 个）
-       2. 账户：3 个带余额的大卡片行  →  一行 pill
-       3. 日期/备注：两段分组        →  与账户合并成一张紧凑卡（每行 44px）
-       4. 自动记账带过来的单据信息    →  折叠成一行摘要（点击展开）
-       5. 保存按钮吸底（sticky），不随内容滚走
-     首屏高度估算 ≈ 560px（视口可用 ≈ 756px），不需要纵向滚动。
-     ============================================================ -->
-<style data-for="s14">
-  .screen.s14 .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
-  .screen.s14 .s14-card{padding:var(--space-3) var(--space-4)}
-  .s14-kind{margin-bottom:var(--space-2)}
-  .s14-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
-  .s14-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
-  .s14-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-  .s14-scroll{display:flex;gap:var(--space-2);overflow-x:auto;padding:0 var(--space-4) var(--space-1);
-    scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  .s14-scroll::-webkit-scrollbar{display:none}
-  .s14-cat{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
-    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
-  .s14-cat .cat-icon{width:46px;height:46px}
-  .s14-cat.is-on,.s14-cat[aria-pressed="true"]{color:var(--accent-text)}
-  .s14-cat.is-on .cat-icon,.s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
-  .s14-cat-name{font-size:var(--text-xs);white-space:nowrap}
-  /* 分类默认收起成一行；点开才出 chips，选完自动收起（省掉首屏约 76px） */
-  .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
-    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
-  .s14-cats-current{flex:1;min-width:0;color:var(--fg);font-size:var(--text-base);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* 四行同构：分类 / 账户 / 时间 都是「标签 + 值 + ▸」，点开就地出 chips；
-     备注行同形态但没有箭头（直接输入）。同一个值样式 + 同分隔线，避免控件形态混用。 */
-  /* 值：与标签**同字号**，层级靠字重（500）与颜色（fg vs muted）拉开 —— 17px 对 14px 的反差过强 */
-  .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .s14-panel[hidden]{display:none}
-  .s14-panel{padding:var(--space-2) 0 var(--space-1);margin-top:var(--space-2);border-top:1px solid var(--border-soft)}
-  .s14-card .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
-  .s14-row{display:flex;align-items:center;gap:var(--space-3);min-height:44px}
-  .s14-row + .s14-row{border-top:1px solid var(--border-soft)}
-  .s14-label{flex:0 0 40px;font-size:var(--text-sm);color:var(--muted)}
-  .s14-row .s14-scroll{padding:0;flex:1;min-width:0}
-  /* ⚠️ input 必须显式继承字体族：默认字体族不是页面字体，真机/浏览器上都会显得又大又生硬 */
-  .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-family:inherit;font-size:var(--text-sm);font-weight:500}
-  .s14-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
-  .s14-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
-  .s14-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
-  .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .s14-actions{position:sticky;bottom:0;margin-top:auto;
-    padding:var(--space-3) var(--space-4) var(--space-5);
-    background:linear-gradient(to top,var(--surface) 62%,transparent)}
-</style>
+<!-- 仅样式方案：无结构段落 -->
 
-
-<!-- ============================================================
-     s14a · 记一笔（一屏 · 全抽屉版）
-     ------------------------------------------------------------
-     交互模型：四个字段行（分类 / 账户 / 时间 / 单据）**同一个模型** —— 点行弹底部抽屉。
-     取这份的理由：
-       · 主表单高度**恒定**，抽屉开合不影响「一屏不放滚」；
-       · 分类抽屉是 4 列网格，一屏可见 12+ 个，冷门分类最多滑一下（对比 s14 的横滑一行 6 个）；
-       · 账户/时间不再有「pill 组 / 单 pill / 裸文本」三种形态混用。
-     ============================================================ -->
-<style data-for="s14a">
-  /* ── s14a：字段选择全部走底部抽屉（与分类/单据同一个模型） ── */
-  .screen.s14a .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
-  .screen.s14a .s14-card{padding:var(--space-3) var(--space-4)}
-  .s14a-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
-  .s14a-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
-  .s14a-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-family:inherit;font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-  .s14a-kind{margin-bottom:var(--space-2)}
-  .screen.s14a .s14-label{flex:0 0 44px;font-size:var(--text-sm);color:var(--muted)}
-  .screen.s14a .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .screen.s14a .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
-    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
-  .screen.s14a .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
-  .screen.s14a .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-family:inherit;font-size:var(--text-sm);font-weight:500}
-  .screen.s14a .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .s14a-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
-  .s14a-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
-  .s14a-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
-  .s14a-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
-    background:linear-gradient(to top,var(--surface) 62%,transparent)}
-  /* 抽屉内：分类网格 4 列（一屏可见 12+，冷门不用长滑） */
-  .s14a-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3);max-height:46vh;overflow-y:auto}
-  .s14a-grid .s14-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
-    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
-  .s14a-grid .s14-cat .cat-icon{width:44px;height:44px}
-  .s14a-grid .s14-cat[aria-pressed="true"]{color:var(--accent-text)}
-  .s14a-grid .s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
-  .s14a-grid .s14-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  /* 抽屉内：横向条（只用于日期快捷） */
-  .s14a-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
-  .s14a-strip::-webkit-scrollbar{display:none}
-  .s14a-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
-  /* 时刻：滚轮（比一排圆 chip 紧凑得多，也不用横着划去找数字） */
-  /* ⚠️ flex 容器必须显式 width:100% —— 默认按内容宽度收缩，justify-content:center 就没有可居中的余地，
-     表现出来就是「滚轮组没居中」。 */
-  .s14a-timepick{display:flex;align-items:center;justify-content:center;gap:var(--space-3);
-    margin:var(--space-4) 0 0}
-  .s14a-wheel-wrap{position:relative;flex:0 0 auto;width:104px;height:132px;border-radius:var(--radius-md);overflow:hidden;
-    background:color-mix(in srgb, var(--fg) 4%, transparent)}
-  .s14a-wheel-band{position:absolute;left:6px;right:6px;top:44px;height:44px;border-radius:var(--radius-sm);
-    background:color-mix(in srgb, var(--fg) 8%, transparent);pointer-events:none}
-  .s14a-wheel{position:relative;height:100%;padding:44px 0;overflow-y:auto;scroll-snap-type:y mandatory;
-    scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  .s14a-wheel::-webkit-scrollbar{display:none}
-  .s14a-wheel button{display:block;width:100%;height:44px;scroll-snap-align:center;border:0;background:transparent;
-    font:inherit;font-size:var(--text-lg);color:var(--muted);cursor:pointer;font-variant-numeric:tabular-nums;
-    transition:color var(--dur-fast, .15s) ease}
-  .s14a-wheel button.is-on{color:var(--fg);font-weight:600}
-  .s14a-colon{font-size:var(--text-xl);color:var(--muted);font-weight:600;padding-bottom:2px}
-  .s14a-picked{margin:var(--space-3) 0 0;text-align:center;color:var(--muted);font-size:var(--text-sm)}
-  /* ⚠️ min-width:0 是横向滚动的前提：flex 子项默认按内容宽度扩张，
-     会把抽屉整个撑宽、溢出手机框（真机表现就是「超出屏幕」）。
-     strip 必须能收缩，横向滚动才成立。 */
-  .s14a-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;min-width:0}
-  .s14a-line > .s14a-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
-  .s14a-line > .s14a-strip{flex:1 1 auto;min-width:0}
-  /* 抽屉宽度锁死在手机框内。
-     外壳的 .scrim.is-bottom 是 grid + place-items:end center，隐式列的 auto 最小尺寸 = item 的
-     min-content，于是抽屉被内容撑到 476px（手机框只有 393px），右侧整块溢出屏幕 ——
-     max-width 也压不住 min-content。这里在 s14a 内改成 flex：stretch 语义明确，不再按内容 sizing。 */
-  .screen.s14a .scrim.is-bottom{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch}
-  .screen.s14a .scrim{overflow:hidden}
-  .screen.s14a .sheet{width:100%;max-width:100%}
-</style>
 <section class="screen s14a" data-screen="s14a" data-title="记一笔 · 全抽屉" data-od-id="screen-s14a">
   <div class="content" data-od-id="s14a-content">
 
@@ -6011,55 +6096,8 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 </section>
 
-<!-- ============================================================
-     s14b · 记一笔（内联展开版）
-     ------------------------------------------------------------
-     交互模型：点字段行 → **就地展开**选择区（分类展开两排 8 个 + 「更多」开抽屉）。
-     与 s14a 的差别就是这一处：开抽屉 vs 就地展。
-     代价（实测）：分类展开两排会让内容高 738 → 约 890，**需要纵向滚动**；
-     s14a 的抽屉不影响主表单高度。这就是两版要你选的地方。
-     ============================================================ -->
-<style data-for="s14b">
-  .screen.s14b .content{display:flex;flex-direction:column;gap:var(--space-3);padding-bottom:0}
-  .screen.s14b .s14-card{padding:var(--space-3) var(--space-4)}
-  .s14b-kind{margin-bottom:var(--space-2)}
-  .s14b-amt{display:flex;align-items:baseline;gap:var(--space-2);padding-block:var(--space-1)}
-  .s14b-cur{font-size:var(--text-xl);color:var(--muted);font-weight:600}
-  .s14b-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-family:inherit;font-size:var(--text-3xl);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-  .screen.s14b .s14-label{flex:0 0 44px;font-size:var(--text-sm);color:var(--muted)}
-  .screen.s14b .s14-value{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);font-weight:500;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .screen.s14b .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
-    border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
-  .screen.s14b .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
-  .screen.s14b .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
-    font-family:inherit;font-size:var(--text-sm);font-weight:500}
-  .screen.s14b .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .s14b-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
-    background:linear-gradient(to top,var(--surface) 62%,transparent)}
-  /* 就地展开区：给一层浅底，和「行」拉开层级（这正是 s14 里账户裸露丑的原因） */
-  .s14b-expand{margin:var(--space-2) 0 var(--space-3);padding:var(--space-3);
-    border-radius:var(--radius-md);background:color-mix(in srgb, var(--fg) 4%, transparent)}
-  .s14b-expand[hidden]{display:none}
-  .s14b-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
-  .s14b-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
-    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
-  .s14b-cat .cat-icon{width:44px;height:44px}
-  .s14b-cat[aria-pressed="true"]{color:var(--accent-text)}
-  .s14b-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
-  .s14b-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .s14b-more{grid-column:1 / -1;margin-top:var(--space-1)}
-  .s14b-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
-  .s14b-strip::-webkit-scrollbar{display:none}
-  .s14b-strip .chip{flex:0 0 auto;min-width:48px;justify-content:center}
-  .s14b-line{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0}
-  .s14b-line > .s14b-key{flex:0 0 44px;color:var(--muted);font-size:var(--text-sm)}
-  .s14b-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
-  .s14b-kv > span:first-child{flex:0 0 64px;color:var(--muted)}
-  .s14b-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
-</style>
+<!-- 仅样式方案：无结构段落 -->
+
 
 
         </div>

@@ -1,0 +1,224 @@
+<!-- ============================================================
+     s11 · 应用白名单
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s11">
+/* s11 · 应用白名单 */
+.screen.s11{font-size:max(var(--text-sm),14px)}
+/* 状态块放进 grid 时轨道按容器宽度收敛，避免 nowrap 长文案把轨道撑到 max-content */
+.screen.s11 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+/* 骨架占位尺寸：.st-loading 被外壳状态规则改为 display:grid + place-items:center，
+   不撑满就会塌成 max-content（实测仅 34px）→ 强制拉伸轨道，与 s01–s03 同款修正。 */
+.screen.s11 .st-loading{justify-items:stretch;align-items:start}
+.screen.s11 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.list-row,.tl-time,.tl-sub,.st-desc,.kpi-label,.kpi-unit,.kpi-delta,.legend li,.field,.theme-cn,.app-pkg){font-size:max(var(--text-sm),14px)}
+.screen.s11 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s11 .search-wrap{position:relative;display:flex;flex-direction:column;gap:var(--space-2)}
+.screen.s11 .field{
+  width:100%;min-height:var(--tap-min);padding:0 var(--space-3);
+  border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface);color:var(--fg);font:inherit;
+  font-size:max(var(--text-sm),14px);
+}
+.screen.s11 .field:focus-visible{outline:var(--focus-ring);outline-offset:1px}
+.screen.s11 .quick{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.screen.s11 .app-row[hidden]{display:none}
+.screen.s11 .st-empty[hidden]{display:none}
+.screen.s11 .app-pkg{font-family:var(--font-mono);letter-spacing:-0.01em}
+.screen.s11 .app-count{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.screen.s11 .app-row{min-height:var(--row-min-h)}
+</style>
+<!--@od:section-->
+<section class="screen s11" data-screen="s11" data-title="应用白名单" data-od-id="screen-s11">
+  <div class="screen-head" data-od-id="s11-head">
+    <div>
+      <h2 class="h2">应用白名单</h2>
+      <p class="meta mt-2">白名单内的应用不会被跳过开屏广告</p>
+    </div>
+  </div>
+
+  <div class="content pad">
+    <div class="stack" data-state-hide="loading empty error edge" data-od-id="s11-body">
+      <div class="search-wrap" data-od-id="s11-search">
+        <input class="field" id="s11-q" type="search" placeholder="搜索应用名或包名" aria-label="搜索应用" autocomplete="off">
+        <div class="quick" role="group" aria-label="快捷筛选">
+          <button class="chip" type="button" data-quick="微信">微信</button>
+          <button class="chip" type="button" data-quick="哔哩哔哩">哔哩哔哩</button>
+          <button class="chip" type="button" data-quick="淘宝">淘宝</button>
+          <button class="chip" type="button" data-quick="">重置</button>
+        </div>
+        <p class="meta">已扫描 9 个已授权应用 · 搜索「抖音」可查看无结果空态</p>
+      </div>
+
+      <div class="app-count" style="padding:0 var(--space-4)">
+        <p class="group-label" style="padding:0;margin:0">应用列表</p>
+        <span class="row-sub" id="s11-match">匹配 9 个</span>
+      </div>
+
+      <div class="group" data-od-id="s11-list">
+        <div class="row app-row" data-app data-name="微信" data-pkg="com.tencent.mm">
+          <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+          <span class="row-body"><span class="row-title">微信</span><span class="row-sub app-pkg">com.tencent.mm</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="微信 白名单" data-toggle data-on-msg="微信 已加入白名单" data-off-msg="微信 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="哔哩哔哩" data-pkg="tv.danmaku.bili">
+          <span class="app-icon" style="--app:#fb7299" aria-hidden>哔</span>
+          <span class="row-body"><span class="row-title">哔哩哔哩</span><span class="row-sub app-pkg">tv.danmaku.bili</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="哔哩哔哩 白名单" data-toggle data-on-msg="哔哩哔哩 已加入白名单" data-off-msg="哔哩哔哩 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="淘宝" data-pkg="com.taobao.taobao">
+          <span class="app-icon" style="--app:#ff5000" aria-hidden>淘</span>
+          <span class="row-body"><span class="row-title">淘宝</span><span class="row-sub app-pkg">com.taobao.taobao</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="淘宝 白名单" data-toggle data-on-msg="淘宝 已加入白名单" data-off-msg="淘宝 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="高德地图" data-pkg="com.autonavi.minimap">
+          <span class="app-icon" style="--app:#00a6fb" aria-hidden>高</span>
+          <span class="row-body"><span class="row-title">高德地图</span><span class="row-sub app-pkg">com.autonavi.minimap</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="高德地图 白名单" data-toggle data-on-msg="高德地图 已加入白名单" data-off-msg="高德地图 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="知乎" data-pkg="com.zhihu.android">
+          <span class="app-icon" style="--app:#0084ff" aria-hidden>知</span>
+          <span class="row-body"><span class="row-title">知乎</span><span class="row-sub app-pkg">com.zhihu.android</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="知乎 白名单" data-toggle data-on-msg="知乎 已加入白名单" data-off-msg="知乎 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="网易云音乐" data-pkg="com.netease.cloudmusic">
+          <span class="app-icon" style="--app:#c20c0c" aria-hidden>乐</span>
+          <span class="row-body"><span class="row-title">网易云音乐</span><span class="row-sub app-pkg">com.netease.cloudmusic</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="网易云音乐 白名单" data-toggle data-on-msg="网易云音乐 已加入白名单" data-off-msg="网易云音乐 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="支付宝" data-pkg="com.eg.android.AlipayGphone">
+          <span class="app-icon" style="--app:#1677ff" aria-hidden>支</span>
+          <span class="row-body"><span class="row-title">支付宝</span><span class="row-sub app-pkg">com.eg.android.AlipayGphone</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="支付宝 白名单" data-toggle data-on-msg="支付宝 已加入白名单" data-off-msg="支付宝 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="京东" data-pkg="com.jingdong.app.mall">
+          <span class="app-icon" style="--app:#e1251b" aria-hidden>京</span>
+          <span class="row-body"><span class="row-title">京东</span><span class="row-sub app-pkg">com.jingdong.app.mall</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="京东 白名单" data-toggle data-on-msg="京东 已加入白名单" data-off-msg="京东 已移出白名单"></button>
+        </div>
+        <div class="row app-row" data-app data-name="微博" data-pkg="com.sina.weibo">
+          <span class="app-icon" style="--app:#e6162d" aria-hidden>博</span>
+          <span class="row-body"><span class="row-title">微博</span><span class="row-sub app-pkg">com.sina.weibo</span></span>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="微博 白名单" data-toggle data-on-msg="微博 已加入白名单" data-off-msg="微博 已移出白名单"></button>
+        </div>
+      </div>
+
+      <div class="st-empty" id="s11-none" hidden data-od-id="s11-none">
+        <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4 20 20"/></svg></span>
+        <p class="st-title">没有匹配的应用</p>
+        <p class="st-desc">换个关键词试试，或清空搜索看全部 9 个已授权应用。</p>
+        <button class="btn btn-ghost" type="button" data-clear>清空搜索</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s11-st-loading">
+      <div class="card">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-40"></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s11-st-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="3.4" width="7.2" height="7.2" rx="2"/><rect x="13.4" y="3.4" width="7.2" height="7.2" rx="2"/><rect x="3.4" y="13.4" width="7.2" height="7.2" rx="2"/><path d="M17 13.6v6.8M13.6 17h6.8"/></svg></span>
+      <p class="st-title">还没有扫描到应用</p>
+      <p class="st-desc">授予使用情况访问权限后，这里会列出可加入白名单的应用。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('已跳转系统「使用情况访问」设置')">去授权</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s11-st-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.6M12 17v.2"/></svg></span>
+      <p class="st-title">读取应用列表失败</p>
+      <p class="st-desc">PackageManager 拒绝查询（QUERY_ALL_PACKAGES 未声明）。</p>
+      <button class="btn" type="button" onclick="App.toast('正在重新扫描已安装应用…')">重新扫描</button>
+    </div>
+
+    <div class="st-edge" data-state-when="edge" data-od-id="s11-st-edge">
+      <div class="group" style="width:100%">
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">超长应用名：中国建设银行个人网上银行移动客户端（鸿蒙兼容版）</span>
+            <span class="row-sub app-pkg">com.example.very.long.package.name.for.edge.case.testing</span>
+          </span>
+          <span class="row-tail"><span class="num">9,999</span></span>
+        </div>
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">边界态：缺失字段</span>
+            <span class="row-sub">该应用未提供图标与包名，开关状态未知</span>
+          </span>
+          <span class="row-tail"><span class="num">—</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var tries = 0;
+    function ready(fn) {
+      if (window.App) { fn(); return; }
+      tries++;
+      if (tries > 200) return;
+      window.setTimeout(function () { ready(fn); }, 40);
+    }
+    ready(function () {
+      var q = document.getElementById('s11-q');
+      var none = document.getElementById('s11-none');
+      var match = document.getElementById('s11-match');
+      function apply() {
+        var kw = (q && q.value ? q.value : '').trim().toLowerCase();
+        var rows = sec.querySelectorAll('[data-app]');
+        var hit = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var name = (rows[i].getAttribute('data-name') || '').toLowerCase();
+          var pkg = (rows[i].getAttribute('data-pkg') || '').toLowerCase();
+          var ok = !kw || name.indexOf(kw) >= 0 || pkg.indexOf(kw) >= 0;
+          rows[i].hidden = !ok;
+          if (ok) hit++;
+        }
+        if (none) none.hidden = hit !== 0;
+        if (match) match.textContent = kw ? ('匹配 ' + hit + ' 个') : ('匹配 ' + hit + ' 个');
+      }
+      if (q) q.addEventListener('input', apply);
+      sec.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var quick = t.closest('[data-quick]');
+        if (quick) {
+          var v = quick.getAttribute('data-quick');
+          if (q) q.value = v;
+          apply();
+          window.App.haptic('light');
+          window.App.toast(v ? ('已筛选：' + v) : '已重置筛选');
+          return;
+        }
+        if (t.closest('[data-clear]')) {
+          if (q) q.value = '';
+          apply();
+          window.App.haptic('light');
+          return;
+        }
+        var sw = t.closest('[data-toggle]');
+        if (sw) {
+          var on = sw.getAttribute('aria-checked') === 'true';
+          sw.setAttribute('aria-checked', on ? 'false' : 'true');
+          window.App.haptic('light');
+          var msg = on ? sw.getAttribute('data-off-msg') : sw.getAttribute('data-on-msg');
+          if (msg) window.App.toast(msg);
+        }
+      });
+      apply();
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

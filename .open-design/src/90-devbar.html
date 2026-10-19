@@ -1,0 +1,36 @@
+<div class="devbar" data-od-min-fs data-od-id="devbar">
+  <div class="devbar-panel" id="devPanel" hidden data-od-id="dev-panel">
+    <div class="dev-group">
+      <span class="dev-lab">主题 theme <code id="devTheme">apple</code></span>
+      <div class="theme-picker" id="devThemePicker" role="group" aria-label="主题切换" data-od-id="theme-picker">
+        <button class="theme-opt" type="button" data-theme-id="apple" aria-pressed="true" data-od-id="theme-apple"><span class="theme-swatch"></span>Apple</button>
+        <button class="theme-opt" type="button" data-theme-id="glassmorphism" aria-pressed="false" data-od-id="theme-glassmorphism"><span class="theme-swatch"></span>玻璃</button>
+        <button class="theme-opt" type="button" data-theme-id="notion" aria-pressed="false" data-od-id="theme-notion"><span class="theme-swatch"></span>Notion</button>
+        <button class="theme-opt" type="button" data-theme-id="stripe" aria-pressed="false" data-od-id="theme-stripe"><span class="theme-swatch"></span>Stripe</button>
+        <button class="theme-opt" type="button" data-theme-id="claude" aria-pressed="false" data-od-id="theme-claude"><span class="theme-swatch"></span>Claude</button>
+        <button class="theme-opt" type="button" data-theme-id="ibm" aria-pressed="false" data-od-id="theme-ibm"><span class="theme-swatch"></span>IBM</button>
+        <button class="theme-opt" type="button" data-theme-id="kami" aria-pressed="false" data-od-id="theme-kami"><span class="theme-swatch"></span>墨青</button>
+        <button class="theme-opt" type="button" data-theme-id="bento" aria-pressed="false" data-od-id="theme-bento"><span class="theme-swatch"></span>Bento</button>
+      </div>
+    </div>
+    <div class="dev-group">
+      <span class="dev-lab">当前屏 <code id="devScreen">s01</code> · 状态演示</span>
+      <div class="segmented dev-seg" id="devStates" role="group" aria-label="状态演示" data-od-id="state-demo">
+        <button type="button" data-state-id="loading" aria-pressed="false" data-od-id="state-loading">加载</button>
+        <button type="button" data-state-id="empty" aria-pressed="false" data-od-id="state-empty">空</button>
+        <button type="button" data-state-id="error" aria-pressed="false" data-od-id="state-error">错误</button>
+        <button type="button" data-state-id="populated" aria-pressed="true" data-od-id="state-populated">有数据</button>
+        <button type="button" data-state-id="edge" aria-pressed="false" data-od-id="state-edge">边界</button>
+      </div>
+    </div>
+    <div class="dev-group dev-actions">
+      <button class="btn btn-ghost" type="button" id="devReplay" data-od-id="dev-replay">重播开屏</button>
+      <button class="btn btn-ghost" type="button" id="devToast" data-od-id="dev-toast">Toast</button>
+    </div>
+    <p class="dev-hint">接口：App.go / App.back / App.tab / App.toast / App.haptic / App.state / App.theme / App.chart</p>
+  </div>
+  <button class="devbar-toggle" type="button" id="devToggle" aria-expanded="false" aria-controls="devPanel" data-od-id="dev-toggle">
+    <svg viewBox="0 0 24 24" aria-hidden><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <span>原型控制</span>
+  </button>
+</div>

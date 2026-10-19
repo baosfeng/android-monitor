@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     paths:
       - '.open-design/08-prototype.html'
+      - '.open-design/src/**'
+      - 'scripts/assemble-prototype.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -28,6 +30,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Verify prototype is in sync with src
+        run: node scripts/assemble-prototype.mjs --check
 
       - name: Prepare site
         run: |

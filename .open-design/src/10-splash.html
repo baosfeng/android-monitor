@@ -1,0 +1,19 @@
+<!-- ─────────────────────────────────────────────────────────────────────────
+     90-splash.html · 开屏 + logo 入场（brand-mark 为占位 mark：环 + 中心点）
+     · 结构由本文件提供，样式在 00-shell.html（避免开屏样式闪烁）
+     · 正式 logo 确定后：只替换 <svg class="brand-mark"> 内部的路径即可，
+       外层 .splash / .splash-name / .splash-tag 与入场时序不变。
+     ───────────────────────────────────────────────────────────────────────── -->
+<div class="splash" id="odSplash" data-od-id="splash">
+  <div class="splash-inner">
+    <svg class="brand-mark" viewBox="0 0 96 96" role="img" aria-label="行为记录">
+      <circle class="bm-ring-soft" cx="48" cy="48" r="38"/>
+      <circle class="bm-ring" cx="48" cy="48" r="30" pathLength="1"/>
+      <path class="bm-tick" d="M48 10v8M48 78v8M10 48h8M78 48h8"/>
+      <circle class="bm-dot" cx="48" cy="48" r="7"/>
+    </svg>
+    <p class="splash-name">行为记录</p>
+    <p class="splash-tag">记录自己的行为 · 去掉干扰</p>
+    <div class="splash-bar" aria-hidden><span></span></div>
+  </div>
+</div>

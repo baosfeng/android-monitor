@@ -1,0 +1,419 @@
+<!-- ============================================================
+     s01 · 今日概览
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s01">
+/* ── s01 今日概览 ───────────────────────────────────────────────── */
+#s01 .od-ctl{display:none}
+
+/* 时间范围分段：选中态走中性色（不花强调色预算） */
+#s01 .s01-range > button{cursor:pointer;user-select:none}
+#s01-r1:checked ~ .content .s01-range > :nth-child(1),
+#s01-r7:checked ~ .content .s01-range > :nth-child(2),
+#s01-r30:checked ~ .content .s01-range > :nth-child(3){
+  background:var(--surface);color:var(--fg);font-weight:600;box-shadow:var(--elev-1);
+}
+#s01 .s01-panel{display:none}
+#s01-r1:checked ~ .content .s01-panel[data-panel="1"],
+#s01-r7:checked ~ .content .s01-panel[data-panel="7"],
+#s01-r30:checked ~ .content .s01-panel[data-panel="30"]{display:block}
+
+/* KPI 卡（可点：重播数字滚动） */
+#s01 button.kpi{
+  appearance:none;font:inherit;text-align:left;color:var(--fg);cursor:pointer;
+  transition:transform var(--dur-press) var(--ease-out),border-color var(--dur-state) var(--ease-standard);
+}
+#s01 button.kpi:active{transform:scale(.97)}
+#s01 .kpi-value{display:flex;align-items:baseline;flex-wrap:nowrap}
+#s01 .s01-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-2);margin-top:var(--space-1)}
+#s01 .kpi-spark{width:72px;height:24px;margin:0;flex:0 0 auto}
+#s01 .kpi-spark svg{width:72px;height:24px}
+
+/* 环图 + 图例 */
+#s01 .s01-ringrow{display:grid;grid-template-columns:118px minmax(0,1fr);gap:var(--space-4);align-items:center}
+#s01 .s01-ringbox{width:118px}
+#s01 .s01-ringbox svg{width:118px;height:118px}
+#s01 .legend li{padding:1px 0}
+
+/* 最近事件（紧凑行） */
+#s01 .s01-ev{
+  display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:52px;
+  padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;font:inherit;color:var(--fg);text-align:left;cursor:pointer;
+  transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out);
+}
+#s01 .s01-ev:first-of-type{border-top:0}
+#s01 .s01-ev:active{transform:scale(.99);opacity:.9}
+#s01 .s01-ev-t{flex:0 0 auto;width:42px;font-family:var(--font-mono);font-size:var(--text-sm);color:var(--muted);font-variant-numeric:tabular-nums}
+#s01 .s01-ev-x{flex:1 1 auto;min-width:0;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#s01 .s01-ev .row-icon{width:30px;height:30px}
+#s01 .s01-ev .row-icon svg{width:17px;height:17px}
+
+/* 状态块被外壳置为 display:grid：网格项需可收缩，否则 nowrap 长标题会把卡片撑出屏外 */
+#s01 [data-state-when="edge"]{width:100%;align-self:start}
+#s01 [data-state-when="edge"] > .card{width:100%;min-width:0}
+/* 骨架占位尺寸（.st-loading 被外壳改为 display:grid + place-items:center，需撑满宽度） */
+#s01 .st-loading{justify-items:stretch;align-items:start}
+#s01 .s01-sksq{height:118px}
+
+/* 入场错落（本屏再次激活时重播） */
+#s01 .stg{opacity:0}
+#s01.is-active .stg{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s01.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+#s01.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+#s01.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+#s01.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+#s01.is-active .od-d5{animation-delay:calc(var(--stagger) * 5)}
+#s01.is-active .od-d6{animation-delay:calc(var(--stagger) * 6)}
+
+/* 图表绘制入场（离开本屏后重置，回来重播） */
+#s01:not(.is-active) .chart-line[pathLength],
+#s01:not(.is-active) .chart-area,
+#s01:not(.is-active) .chart-dot,
+#s01:not(.is-active) .chart-arc,
+#s01:not(.is-active) .heat-cell{animation:none}
+#s01:not(.is-active) .chart-area,
+#s01:not(.is-active) .chart-dot,
+#s01:not(.is-active) .heat-cell{opacity:0}
+#s01.is-active .chart-arc{animation:od-arc var(--dur-chart) var(--ease-out) var(--arc-d,0ms) both}
+#s01.is-active .chart-line[pathLength]{animation:od-draw var(--dur-chart) var(--ease-out) forwards}
+#s01.is-active .chart-area{animation:od-fade var(--dur-chart) var(--ease-out) 100ms forwards}
+#s01.is-active .chart-dot{animation:od-fade var(--dur-chart-fast) var(--ease-out) 320ms forwards}
+#s01.is-active .heat-cell{animation:od-fade 260ms var(--ease-out) var(--heat-d,0ms) forwards}
+
+/* 开屏未结束时先不播入场，等开屏收起再播（:has 不支持时自动退回「立即播」） */
+.device-screen:has(#odSplash:not([hidden])) #s01 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s01" data-title="今日概览" id="s01" data-od-id="screen-s01">
+  <input class="od-ctl" type="radio" name="s01-range" id="s01-r1" checked />
+  <input class="od-ctl" type="radio" name="s01-range" id="s01-r7" />
+  <input class="od-ctl" type="radio" name="s01-range" id="s01-r30" />
+
+  <div class="content" data-od-id="s01-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s01-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="grid-2 mt-3">
+          <div class="sk tall"></div><div class="sk tall"></div>
+          <div class="sk tall"></div><div class="sk tall"></div>
+        </div>
+        <div class="sk w-100 s01-sksq mt-3"></div>
+        <div class="sk w-80 mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s01-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><path d="M14 17h6"/><path d="M17 14v6"/></svg></span>
+      <p class="st-title">今天还没有记录</p>
+      <p class="st-desc">开启无障碍服务后，屏幕、应用、网络与充电事件会自动汇总到这里。</p>
+      <button class="btn btn-ghost" type="button" data-goto="s09" data-od-id="s01-empty-cta">去设置开启监控</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s01-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg></span>
+      <p class="st-title">统计加载失败</p>
+      <p class="st-desc">本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('正在重新统计…')" data-od-id="s01-error-retry">重试</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s01-edge">
+      <div class="card">
+        <div class="row-between">
+          <span class="badge" data-od-min-fs>10,842 条</span>
+          <span class="meta">已达单日展示上限</span>
+        </div>
+        <p class="row-title mt-2">微信（com.tencent.mm）· 前台使用 128 分钟 32 秒 · 累计 1,024 次前台切换</p>
+        <p class="meta mt-2">超长标题与万级计数用于验证单行截断与折行表现；缺失字段以「—」占位。</p>
+        <div class="row mt-2">
+          <span class="row-body"><span class="row-title">开始时间</span><span class="row-sub">字段缺失</span></span>
+          <span class="row-tail">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="s01-main" data-state-hide="loading empty error">
+
+      <header class="screen-head" data-od-id="s01-head">
+        <div>
+          <p class="meta">2025 年 10 月 14 日 · 星期二</p>
+          <h1 class="h1 mt-2">今日概览</h1>
+        </div>
+        <button class="icon-btn" type="button" aria-label="今日提醒" onclick="App.toast('今日已记录 128 条事件')" data-od-id="s01-bell">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+        </button>
+      </header>
+
+      <div class="pad" data-od-id="s01-range">
+        <div class="segmented s01-range" role="radiogroup" aria-label="时间范围">
+          <button type="button" role="radio" aria-checked="true" data-ctl="s01-r1">今日</button>
+          <button type="button" role="radio" aria-checked="false" data-ctl="s01-r7">近 7 天</button>
+          <button type="button" role="radio" aria-checked="false" data-ctl="s01-r30">近 30 天</button>
+        </div>
+      </div>
+
+      <!-- ── 今日 ─────────────────────────────────────────────── -->
+      <div class="pad mt-3 s01-panel" data-panel="1">
+        <div class="grid-2 stg od-d1" data-od-id="s01-kpi"
+             onanimationstart="if(event.target===this&&event.animationName==='od-rise'){['s01-k1v','s01-k2h','s01-k2m','s01-k3v','s01-k4v'].forEach(function(i){document.getElementById(i).textContent='0'})}"
+             onanimationend="if(event.target===this&&event.animationName==='od-rise'){App.count('#s01-k1v',128);App.count('#s01-k2h',6,{suffix:'h'});App.count('#s01-k2m',12,{suffix:'m'});App.count('#s01-k3v',34);App.count('#s01-k4v',268,{prefix:'¥'})}">
+          <button class="kpi" type="button" data-od-id="s01-kpi-events" onclick="document.getElementById('s01-k1v').textContent='0';App.count('#s01-k1v',128)">
+            <span class="kpi-label">事件</span>
+            <span class="kpi-value"><span class="num" id="s01-k1v">128</span><span class="kpi-unit">条</span></span>
+            <span class="s01-foot">
+              <span class="kpi-delta is-up">较昨日 +18</span>
+              <span class="kpi-spark" data-chart="spark" data-chart-values="118,132,96,141,128,105,172" data-chart-label="近 7 天事件量走势"></span>
+            </span>
+          </button>
+
+          <button class="kpi" type="button" data-od-id="s01-kpi-active"
+                  onclick="['s01-k2h','s01-k2m'].forEach(function(i){document.getElementById(i).textContent='0'});App.count('#s01-k2h',6,{suffix:'h'});App.count('#s01-k2m',12,{suffix:'m'})">
+            <span class="kpi-label">活跃</span>
+            <span class="kpi-value"><span class="num" id="s01-k2h">6h</span><span class="num" id="s01-k2m">12m</span></span>
+            <span class="s01-foot">
+              <span class="kpi-delta is-up">较昨日 +42m</span>
+              <span class="kpi-spark" data-chart="spark" data-chart-values="7,11,9,14,12,10,16" data-chart-label="近 7 天活跃时长走势"></span>
+            </span>
+          </button>
+
+          <button class="kpi" type="button" data-od-id="s01-kpi-skip" onclick="document.getElementById('s01-k3v').textContent='0';App.count('#s01-k3v',34)">
+            <span class="kpi-label">跳过广告</span>
+            <span class="kpi-value"><span class="num" id="s01-k3v">34</span><span class="kpi-unit">次</span></span>
+            <span class="s01-foot">
+              <span class="kpi-delta is-down">较昨日 -4</span>
+              <span class="kpi-spark" data-chart="spark" data-chart-values="3,5,2,6,4,8,6" data-chart-label="近 7 天跳过次数走势"></span>
+            </span>
+          </button>
+
+          <button class="kpi" type="button" data-od-id="s01-kpi-spend" onclick="document.getElementById('s01-k4v').textContent='0';App.count('#s01-k4v',268,{prefix:'¥'})">
+            <span class="kpi-label">今日支出</span>
+            <span class="kpi-value"><span class="num" id="s01-k4v">¥268</span></span>
+            <span class="s01-foot">
+              <span class="kpi-delta">收入 ¥1,200 · 结余 ¥932</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="card stg od-d2 mt-3" data-od-id="s01-chart24h">
+          <div class="sec-head">
+            <h2 class="h3">最近 24 小时活跃</h2>
+            <span class="meta">合计 372 分钟</span>
+          </div>
+          <div data-chart="area"
+               data-chart-values="0,0,0,0,0,0,6,18,34,54,33,22,38,27,15,20,31,25,14,10,7,11,5,2"
+               data-chart-labels="00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+               data-chart-label="最近 24 小时逐时活跃时长曲线"></div>
+          <div class="row-between mt-3">
+            <span class="meta">逐时活跃强度</span>
+            <span class="meta">峰值 09:00 · 54 分钟</span>
+          </div>
+          <div class="mt-2" data-chart="heat"
+               data-chart-values="0,0,0,0,0,0,6,18,34,54,33,22,38,27,15,20,31,25,14,10,7,11,5,2"
+               data-chart-label="最近 24 小时活跃热力"></div>
+        </div>
+
+        <div class="card stg od-d3 mt-3" data-od-id="s01-ring">
+          <div class="sec-head">
+            <h2 class="h3">事件类型分布</h2>
+            <span class="meta">共 128 条</span>
+          </div>
+          <div class="s01-ringrow">
+            <div class="s01-ringbox" data-chart="pie" data-chart-values="52,31,18,11,8,5,3" data-chart-label="事件类型分布扇形图"></div>
+            <ul class="legend">
+              <li><span class="legend-dot s1"></span>应用使用<span class="legend-num">52</span></li>
+              <li><span class="legend-dot s2"></span>屏幕<span class="legend-num">31</span></li>
+              <li><span class="legend-dot s3"></span>网络<span class="legend-num">18</span></li>
+              <li><span class="legend-dot s4"></span>充电<span class="legend-num">11</span></li>
+              <li><span class="legend-dot s5"></span>音频<span class="legend-num">8</span></li>
+              <li><span class="legend-dot s6"></span>安装<span class="legend-num">5</span></li>
+              <li><span class="legend-dot s7"></span>定位<span class="legend-num">3</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card stg od-d4 mt-3" data-od-id="s01-recent">
+          <div class="sec-head">
+            <h2 class="h3">最近事件</h2>
+            <button class="icon-btn" type="button" aria-label="查看全部事件" data-goto="s02" data-od-id="s01-recent-all">
+              <svg viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+            </button>
+          </div>
+          <button class="s01-ev" type="button" data-goto="s02" data-od-id="s01-recent-1">
+            <span class="s01-ev-t">09:41</span>
+            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="s01-ev-x">微信 · 前台 12 分钟</span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="s01-ev" type="button" data-goto="s02" data-od-id="s01-recent-2">
+            <span class="s01-ev-t">09:26</span>
+            <span class="row-icon s2" aria-hidden><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 5.5h4"/></svg></span>
+            <span class="s01-ev-x">屏幕点亮 · 解锁进入桌面</span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="s01-ev" type="button" data-goto="s02" data-od-id="s01-recent-3">
+            <span class="s01-ev-t">09:12</span>
+            <span class="row-icon s3" aria-hidden><svg viewBox="0 0 24 24"><path d="M2.5 9.5a15 15 0 0 1 19 0"/><path d="M6 13a10 10 0 0 1 12 0"/><path d="M9.5 16.5a5 5 0 0 1 5 0"/><circle cx="12" cy="19.8" r="1"/></svg></span>
+            <span class="s01-ev-x">Wi-Fi 连接 · Home-5G</span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </div>
+
+        <div class="stack stg od-d5 mt-3" data-od-id="s01-quick">
+          <button class="btn btn-block" type="button" data-goto="s02" data-od-id="s01-quick-live">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg>
+            <span>去实时事件流</span>
+          </button>
+          <button class="btn btn-ghost btn-block" type="button" data-goto="s04" data-od-id="s01-quick-finance">
+            <svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><circle cx="12" cy="14.6" r="1.6"/></svg>
+            <span>去记账 · 今日支出 ¥268</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── 近 7 天 ──────────────────────────────────────────── -->
+      <div class="pad mt-3 s01-panel" data-panel="7">
+        <div class="grid-2 stg od-d1">
+          <div class="kpi" data-od-id="s01-k7-events">
+            <span class="kpi-label">事件</span>
+            <span class="kpi-value"><span class="num">892</span><span class="kpi-unit">条</span></span>
+            <span class="kpi-delta is-up">较上周 +6.2%</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k7-active">
+            <span class="kpi-label">活跃</span>
+            <span class="kpi-value"><span class="num">42h</span><span class="num">05m</span></span>
+            <span class="kpi-delta">日均 6h01m</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k7-skip">
+            <span class="kpi-label">跳过广告</span>
+            <span class="kpi-value"><span class="num">218</span><span class="kpi-unit">次</span></span>
+            <span class="kpi-delta is-up">较上周 +31</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k7-spend">
+            <span class="kpi-label">支出</span>
+            <span class="kpi-value"><span class="num">¥1,846</span></span>
+            <span class="kpi-delta">收入 ¥6,420 · 结余 ¥4,574</span>
+          </div>
+        </div>
+
+        <div class="card stg od-d2 mt-3" data-od-id="s01-chart7d">
+          <div class="sec-head">
+            <h2 class="h3">近 7 天每日事件量</h2>
+            <span class="meta">10 月 8 日 – 10 月 14 日</span>
+          </div>
+          <div data-chart="bars"
+               data-chart-values="118,132,96,141,128,105,172"
+               data-chart-labels="08,09,10,11,12,13,14"
+               data-chart-label="近 7 天每日事件量柱状图"></div>
+        </div>
+
+        <div class="card stg od-d3 mt-3" data-od-id="s01-top7d">
+          <div class="sec-head"><h2 class="h3">本周跳过最多</h2><span class="meta">共 218 次</span></div>
+          <div class="row">
+            <span class="row-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg></span>
+            <span class="row-body"><span class="row-title">哔哩哔哩</span><span class="row-sub">规则匹配 · 平均 96 ms</span></span>
+            <span class="row-tail num">86 次</span>
+          </div>
+          <div class="row">
+            <span class="row-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg></span>
+            <span class="row-body"><span class="row-title">微博</span><span class="row-sub">坐标点击兜底 · 平均 342 ms</span></span>
+            <span class="row-tail num">64 次</span>
+          </div>
+          <div class="row">
+            <span class="row-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg></span>
+            <span class="row-body"><span class="row-title">知乎</span><span class="row-sub">无障碍事件兜底 · 平均 512 ms</span></span>
+            <span class="row-tail num">41 次</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 近 30 天 ─────────────────────────────────────────── -->
+      <div class="pad mt-3 s01-panel" data-panel="30">
+        <div class="grid-2 stg od-d1">
+          <div class="kpi" data-od-id="s01-k30-events">
+            <span class="kpi-label">事件</span>
+            <span class="kpi-value"><span class="num">3,914</span><span class="kpi-unit">条</span></span>
+            <span class="kpi-delta is-up">较上月 +9.8%</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k30-active">
+            <span class="kpi-label">活跃</span>
+            <span class="kpi-value"><span class="num">186h</span></span>
+            <span class="kpi-delta">日均 6h12m</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k30-skip">
+            <span class="kpi-label">跳过广告</span>
+            <span class="kpi-value"><span class="num">964</span><span class="kpi-unit">次</span></span>
+            <span class="kpi-delta is-up">较上月 +122</span>
+          </div>
+          <div class="kpi" data-od-id="s01-k30-spend">
+            <span class="kpi-label">支出</span>
+            <span class="kpi-value"><span class="num">¥7,340</span></span>
+            <span class="kpi-delta">收入 ¥28,600 · 结余 ¥21,260</span>
+          </div>
+        </div>
+
+        <div class="card stg od-d2 mt-3" data-od-id="s01-chart30d">
+          <div class="sec-head">
+            <h2 class="h3">近 30 天活跃趋势</h2>
+            <span class="meta">单位 分钟</span>
+          </div>
+          <div data-chart="area"
+               data-chart-values="292,318,344,301,372,286,341,362,298,330,355,312,286,301,334,368,322,296,348,372,315,290,336,358,304,328,346,299,352,372"
+               data-chart-labels="09-15,09-20,09-25,09-30,10-05,10-10,10-14"
+               data-chart-label="近 30 天每日活跃时长曲线"></div>
+        </div>
+
+        <div class="card stg od-d3 mt-3" data-od-id="s01-ring30d">
+          <div class="sec-head"><h2 class="h3">近 30 天类型分布</h2><span class="meta">共 3,914 条</span></div>
+          <div class="s01-ringrow">
+            <div class="s01-ringbox" data-chart="pie" data-chart-values="1523,968,561,347,241,171,103" data-chart-label="近 30 天事件类型分布扇形图"></div>
+            <ul class="legend">
+              <li><span class="legend-dot s1"></span>应用使用<span class="legend-num">1523</span></li>
+              <li><span class="legend-dot s2"></span>屏幕<span class="legend-num">968</span></li>
+              <li><span class="legend-dot s3"></span>网络<span class="legend-num">561</span></li>
+              <li><span class="legend-dot s4"></span>充电<span class="legend-num">347</span></li>
+              <li><span class="legend-dot s5"></span>音频<span class="legend-num">241</span></li>
+              <li><span class="legend-dot s6"></span>安装<span class="legend-num">171</span></li>
+              <li><span class="legend-dot s7"></span>定位<span class="legend-num">103</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <script>
+  /* s01 键盘可达：时间范围分段为真实 button（role=radio + aria-checked）；
+     隐藏 radio 仅作纯 CSS 状态钩子（:checked ~ 面板切换逻辑完全不变）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    function sync() {
+      var bs = sec.querySelectorAll('[data-ctl]');
+      for (var i = 0; i < bs.length; i++) {
+        var t = document.getElementById(bs[i].getAttribute('data-ctl'));
+        var on = !!(t && t.checked);
+        if (bs[i].getAttribute('role') === 'radio') bs[i].setAttribute('aria-checked', on ? 'true' : 'false');
+      }
+    }
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+      var b = n.closest('[data-ctl]');
+      if (!b) return;
+      var t = document.getElementById(b.getAttribute('data-ctl'));
+      if (!t) return;
+      t.checked = true;
+      sync();
+    });
+    sync();
+  })();
+  </script>
+
+</section>
+<!--@od:end-->

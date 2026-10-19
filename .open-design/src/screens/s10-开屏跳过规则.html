@@ -1,0 +1,316 @@
+<!-- ============================================================
+     s10 · 开屏跳过规则
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s10">
+/* s10 · 开屏跳过规则管理 */
+.screen.s10{font-size:max(var(--text-sm),14px)}
+/* 状态块放进 grid 时轨道按容器宽度收敛，避免 nowrap 长文案把轨道撑到 max-content */
+.screen.s10 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+/* 骨架占位尺寸：.st-loading 被外壳状态规则改为 display:grid + place-items:center，
+   不撑满就会塌成 max-content（实测仅 34px）→ 强制拉伸轨道，与 s01–s03 同款修正。 */
+.screen.s10 .st-loading{justify-items:stretch;align-items:start}
+.screen.s10 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.list-row,.tl-time,.tl-sub,.st-desc,.kpi-label,.kpi-unit,.kpi-delta,.legend li,.field,.theme-cn,.app-pkg){font-size:max(var(--text-sm),14px)}
+.screen.s10 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s10 .src-card{display:flex;flex-direction:column;gap:var(--space-3)}
+.screen.s10 .field{
+  width:100%;min-height:var(--tap-min);padding:0 var(--space-3);
+  border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);color:var(--fg);font:inherit;
+  font-size:max(var(--text-sm),14px);
+}
+.screen.s10 .field:focus-visible{outline:var(--focus-ring);outline-offset:1px}
+.screen.s10 .act-row{display:flex;gap:var(--space-2)}
+.screen.s10 .act-row .btn{flex:1 1 0;min-width:0;padding:0 var(--space-3);font-size:max(var(--text-sm),14px)}
+.screen.s10 .kpi-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.screen.s10 .kpi-spark .chart{height:var(--spark-h)}
+.screen.s10 .src-meta{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.screen.s10 .src-meta .row-sub{flex:1 1 auto;min-width:0}
+.screen.s10 .src-meta .badge{flex:0 0 auto}
+.screen.s10 [role="switch"]:focus-visible,.screen.s10 .rule-main:focus-visible,.screen.s10 .field:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+.screen.s10 .rule-list{padding:0 var(--space-4)}
+.screen.s10 .rule-main{
+  flex:1 1 auto;min-width:0;min-height:var(--tap-min);
+  display:flex;flex-direction:column;justify-content:center;gap:2px;
+  padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+}
+.screen.s10 .rule-main:active{opacity:.62}
+.screen.s10 .rule-main.has-icon{display:grid;grid-template-columns:25px minmax(0,1fr);gap:5px;align-items:center;flex-direction:row}
+.screen.s10 .rule-main.has-icon .app-icon{width:25px;height:25px;border-radius:7px;font-size:12px}
+.screen.s10 .rule-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.screen.s10 .rule-main:focus-visible{outline:var(--focus-ring);outline-offset:2px;border-radius:var(--radius-sm)}
+.screen.s10 .rule-chev{transition:transform var(--dur-state) var(--ease-standard)}
+.screen.s10 .rule.is-open .rule-chev{transform:rotate(90deg)}
+.screen.s10 .rule-detail{padding:0 0 var(--space-3)}
+.screen.s10 .rule-detail.is-in{animation:od-rise 220ms var(--ease-out) both}
+.screen.s10 .rule-detail .tl-item{grid-template-columns:34px minmax(0,1fr)}
+.screen.s10 .rule-detail .tl-item::before{left:40px}
+.screen.s10 .rule-detail .tl-item::after{left:calc(40px - (var(--dot-size) - 1px) / 2)}
+.screen.s10 .rule-detail .tl-body{padding-left:var(--space-2)}
+.screen.s10 .rule-hint{border-top:1px solid var(--border-soft)}
+</style>
+<!--@od:section-->
+<section class="screen s10" data-screen="s10" data-title="开屏跳过规则" data-od-id="screen-s10">
+  <div class="screen-head" data-od-id="s10-head">
+    <div>
+      <h2 class="h2">订阅源与规则</h2>
+      <p class="meta mt-2">从镜像源拉取规则包，本地合并后按顺序匹配</p>
+    </div>
+  </div>
+
+  <div class="content pad">
+    <div class="stack" data-state-hide="loading empty error edge" data-od-id="s10-body">
+
+      <div class="card glass src-card" data-od-id="s10-source">
+        <p class="group-label" style="padding:0;margin:0">订阅源 URL</p>
+        <input class="field" type="url" value="registry.npmmirror.com/@gkd-kit/subscription/latest/files/dist/gkd.json5" aria-label="订阅源 URL" data-od-id="s10-url">
+        <div class="act-row">
+          <button class="btn" type="button" onclick="App.open('#s10-confirm')">更新订阅</button>
+          <button class="btn btn-ghost" type="button" onclick="App.toast('已新增订阅源：本地自定义')">新增订阅</button>
+          <button class="btn btn-ghost" type="button" onclick="App.toast('页面快照已导出到 /Download/snapshot-9-41.zip')">页面快照</button>
+        </div>
+        <div class="src-meta">
+          <span class="row-sub">上次同步 9:40 · 镜像 registry.npmmirror.com</span>
+          <span class="badge" data-od-min-fs>2 个源</span>
+        </div>
+      </div>
+
+      <div class="kpi-row" data-od-id="s10-summary">
+        <div class="kpi">
+          <span class="kpi-label">规则总数</span>
+          <span class="kpi-value"><span id="s10-rule-count">0</span><span class="kpi-unit">条</span></span>
+          <span class="kpi-delta is-up">较上周 +2</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">累计命中</span>
+          <span class="kpi-value"><span id="s10-hit-count">0</span><span class="kpi-unit">次</span></span>
+          <span class="kpi-delta">今日 34 次</span>
+          <span class="kpi-spark" data-chart="spark" data-chart-values="96,142,88,210,176,240,334"></span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-head" style="padding:0 var(--space-4);margin-bottom:var(--space-2)">
+          <p class="group-label" style="padding:0;margin:0">规则列表</p>
+          <span class="row-sub">点击行展开选择器明细</span>
+        </div>
+        <div class="group rule-list" data-od-id="s10-rules">
+          <div class="rule" data-rule>
+            <div class="row">
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#07c160" aria-hidden>微</span><span class="rule-text"><span class="row-title">微信</span><span class="row-sub">3 个选择器 · 命中 412 次</span></span></button>
+              <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="微信 跳过规则" data-toggle data-on-msg="已启用 微信 跳过规则" data-off-msg="已停用 微信 跳过规则"></button>
+            </div>
+            <div class="rule-detail" hidden>
+              <ul class="tl">
+                <li class="tl-item"><span class="tl-time">01</span><span class="tl-body"><span class="tl-title">[text="跳过"]</span><span class="tl-sub">文本精确匹配 · 优先级 1</span></span></li>
+                <li class="tl-item"><span class="tl-time">02</span><span class="tl-body"><span class="tl-title">[id="com.tencent.mm:id/jump_ad"]</span><span class="tl-sub">资源 id 匹配 · 优先级 2</span></span></li>
+                <li class="tl-item"><span class="tl-time">03</span><span class="tl-body"><span class="tl-title">[text^="跳过"][visibleToUser=true]</span><span class="tl-sub">文本前缀 + 可见性 · 兜底降级为坐标点击</span></span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="rule" data-rule>
+            <div class="row">
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#fb7299" aria-hidden>哔</span><span class="rule-text"><span class="row-title">哔哩哔哩</span><span class="row-sub">4 个选择器 · 命中 386 次</span></span></button>
+              <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="哔哩哔哩 跳过规则" data-toggle data-on-msg="已启用 哔哩哔哩 跳过规则" data-off-msg="已停用 哔哩哔哩 跳过规则"></button>
+            </div>
+            <div class="rule-detail" hidden>
+              <ul class="tl">
+                <li class="tl-item"><span class="tl-time">01</span><span class="tl-body"><span class="tl-title">[text="跳过广告"]</span><span class="tl-sub">文本精确匹配 · 优先级 1</span></span></li>
+                <li class="tl-item"><span class="tl-time">02</span><span class="tl-body"><span class="tl-title">[id="tv.danmaku.bili:id/skip"]</span><span class="tl-sub">资源 id 匹配 · 优先级 2</span></span></li>
+                <li class="tl-item"><span class="tl-time">03</span><span class="tl-body"><span class="tl-title">[desc="跳过"][clickable=true]</span><span class="tl-sub">无障碍描述匹配 · 优先级 3</span></span></li>
+                <li class="tl-item"><span class="tl-time">04</span><span class="tl-body"><span class="tl-title">[text="关闭"][bounds.width&lt;200]</span><span class="tl-sub">文本 + 边界约束 · 优先级 4</span></span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="rule" data-rule>
+            <div class="row">
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#ff5000" aria-hidden>淘</span><span class="rule-text"><span class="row-title">淘宝</span><span class="row-sub">2 个选择器 · 命中 268 次</span></span></button>
+              <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="淘宝 跳过规则" data-toggle data-on-msg="已启用 淘宝 跳过规则" data-off-msg="已停用 淘宝 跳过规则"></button>
+            </div>
+            <div class="rule-detail" hidden>
+              <ul class="tl">
+                <li class="tl-item"><span class="tl-time">01</span><span class="tl-body"><span class="tl-title">[text="跳过"][index=3]</span><span class="tl-sub">文本 + 兄弟序号 · 优先级 1</span></span></li>
+                <li class="tl-item"><span class="tl-time">02</span><span class="tl-body"><span class="tl-title">[id="com.taobao.taobao:id/skip_view"]</span><span class="tl-sub">资源 id 匹配 · 优先级 2</span></span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="rule" data-rule>
+            <div class="row">
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#00a6fb" aria-hidden>高</span><span class="rule-text"><span class="row-title">高德地图</span><span class="row-sub">2 个选择器 · 命中 154 次</span></span></button>
+              <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="高德地图 跳过规则" data-toggle data-on-msg="已启用 高德地图 跳过规则" data-off-msg="已停用 高德地图 跳过规则"></button>
+            </div>
+            <div class="rule-detail" hidden>
+              <ul class="tl">
+                <li class="tl-item"><span class="tl-time">01</span><span class="tl-body"><span class="tl-title">[text="跳过"][clickable=true]</span><span class="tl-sub">文本精确匹配 · 优先级 1</span></span></li>
+                <li class="tl-item"><span class="tl-time">02</span><span class="tl-body"><span class="tl-title">[text="3"][bounds.top&gt;600]</span><span class="tl-sub">倒计时按钮 · 优先级 2</span></span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="rule" data-rule>
+            <div class="row">
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#0084ff" aria-hidden>知</span><span class="rule-text"><span class="row-title">知乎</span><span class="row-sub">1 个选择器 · 命中 66 次</span></span></button>
+              <span class="row-tail"><span class="badge" data-od-min-fs>停用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              <button class="switch" type="button" role="switch" aria-checked="false" aria-label="知乎 跳过规则" data-toggle data-on-msg="已启用 知乎 跳过规则" data-off-msg="已停用 知乎 跳过规则"></button>
+            </div>
+            <div class="rule-detail" hidden>
+              <ul class="tl">
+                <li class="tl-item"><span class="tl-time">01</span><span class="tl-body"><span class="tl-title">[text="跳过"]</span><span class="tl-sub">文本精确匹配 · 优先级 1</span></span></li>
+              </ul>
+            </div>
+          </div>
+
+          <button class="row rule-hint" type="button" onclick="App.toast('已展开全部 42 条规则')" data-od-id="s10-all">
+            <span class="row-body"><span class="row-title">查看全部规则</span><span class="row-sub">内置规则库 40 条 · 订阅新增 2 条</span></span>
+            <span class="row-tail"><span class="num">42 条</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <ul class="legend" data-od-id="s10-legend">
+        <li><span class="legend-dot s1"></span>文本精确匹配<span class="legend-num">21</span></li>
+        <li><span class="legend-dot s2"></span>资源 id 匹配<span class="legend-num">13</span></li>
+        <li><span class="legend-dot s3"></span>描述 / 前缀匹配<span class="legend-num">6</span></li>
+        <li><span class="legend-dot s4"></span>边界与序号约束<span class="legend-num">2</span></li>
+      </ul>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s10-st-loading">
+      <div class="card">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+        <div class="sk w-80 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-40"></div>
+      </div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s10-st-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.5 6.5h15M4.5 12h15M4.5 17.5h9"/></svg></span>
+      <p class="st-title">还没有任何规则</p>
+      <p class="st-desc">添加订阅源后点击「更新订阅」，规则会自动合并到本地规则库。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('请在订阅源卡片填写 URL')">去添加订阅源</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s10-st-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.6M12 17v.2"/></svg></span>
+      <p class="st-title">订阅源更新失败</p>
+      <p class="st-desc">镜像源返回 502，已保留本地 42 条规则，未做覆盖。</p>
+      <button class="btn" type="button" onclick="App.toast('正在重新拉取订阅源…')">重试</button>
+    </div>
+
+    <div class="st-edge" data-state-when="edge" data-od-id="s10-st-edge">
+      <div class="group" style="width:100%">
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">某应用名称长到超出一行仍然需要完整展示的极端情况</span>
+            <span class="row-sub">[text="跳过广告并关闭"][id="com.example.app.long.package.name:id/skip_button_container"]</span>
+          </span>
+          <span class="row-tail"><span class="num">10,286 条</span></span>
+        </div>
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">边界态：规则缺字段</span>
+            <span class="row-sub">该规则未提供选择器与优先级，命中次数缺失</span>
+          </span>
+          <span class="row-tail"><span class="num">—</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="s10-confirm" hidden data-od-id="s10-confirm">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="确认更新订阅源">
+      <p class="h3">更新订阅源？</p>
+      <p class="meta mt-2">将从镜像源拉取最新规则包，与本地 42 条规则合并；同 id 规则以订阅源为准。</p>
+      <div class="act-row mt-4">
+        <button class="btn btn-ghost" type="button" data-close="#s10-confirm">取消</button>
+        <button class="btn" type="button" data-close="#s10-confirm" onclick="App.toast('订阅已更新：42 条规则')">确认更新</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var tries = 0;
+    function ready(fn) {
+      if (window.App) { fn(); return; }
+      tries++;
+      if (tries > 200) return;
+      window.setTimeout(function () { ready(fn); }, 40);
+    }
+    ready(function () {
+      var ruleEl = document.getElementById('s10-rule-count');
+      var hitEl = document.getElementById('s10-hit-count');
+      var done = false;
+      function countUp() {
+        if (done) return;
+        done = true;
+        if (ruleEl) window.App.count(ruleEl, 42, { dur: 700 });
+        if (hitEl) {
+          window.App.count(hitEl, 1286, { dur: 900 });
+          window.setTimeout(function () { hitEl.textContent = '1,286'; }, 960);
+        }
+      }
+      sec.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var sw = t.closest('[data-toggle]');
+        if (sw) {
+          var on = sw.getAttribute('aria-checked') === 'true';
+          sw.setAttribute('aria-checked', on ? 'false' : 'true');
+          var rule = sw.closest('[data-rule]');
+          var badge = rule ? rule.querySelector('.badge') : null;
+          if (badge) badge.textContent = on ? '停用' : '启用';
+          window.App.haptic('light');
+          var msg = on ? sw.getAttribute('data-off-msg') : sw.getAttribute('data-on-msg');
+          if (msg) window.App.toast(msg);
+          return;
+        }
+        var main = t.closest('[data-expand]');
+        if (main) {
+          var box = main.closest('[data-rule]');
+          var detail = box ? box.querySelector('.rule-detail') : null;
+          if (!detail) return;
+          var open = main.getAttribute('aria-expanded') === 'true';
+          main.setAttribute('aria-expanded', open ? 'false' : 'true');
+          box.classList.toggle('is-open', !open);
+          if (open) {
+            detail.hidden = true;
+            detail.classList.remove('is-in');
+          } else {
+            detail.hidden = false;
+            detail.classList.remove('is-in');
+            void detail.offsetWidth;
+            detail.classList.add('is-in');
+          }
+          window.App.haptic('light');
+          return;
+        }
+      });
+      if (window.MutationObserver) {
+        var obs = new MutationObserver(function () {
+          if (sec.classList.contains('is-active')) { countUp(); obs.disconnect(); }
+        });
+        obs.observe(sec, { attributes: true, attributeFilter: ['class'] });
+      }
+      if (sec.classList.contains('is-active')) countUp();
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

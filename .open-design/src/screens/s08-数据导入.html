@@ -1,0 +1,165 @@
+<!-- ============================================================
+     s08 · 数据导入
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s08">
+/* ═══ s08 · 数据导入（熊猫记账） ═══ */
+.s08-steps{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)}
+.s08-step{display:flex;align-items:center;gap:var(--space-3);min-height:var(--tap-min)}
+.s08-step-n{flex:0 0 auto;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600}
+.s08-step-t{font-size:var(--text-sm);color:var(--fg-2)}
+.s08-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);width:100%;min-height:152px;padding:var(--space-5);border:1px dashed var(--border);border-radius:var(--radius-lg);background:color-mix(in srgb,var(--fg) 3%,transparent);color:var(--fg-2);font:inherit;cursor:pointer;transition:transform var(--dur-press) var(--ease-out),background var(--dur-state) var(--ease-standard)}
+.s08-drop:active{transform:scale(.98);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.s08-drop-ic{width:44px;height:44px;display:grid;place-items:center;border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s08-drop-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s08-drop-t{font-size:var(--text-base);font-weight:600;color:var(--fg)}
+.s08-drop-s{font-size:var(--text-sm);color:var(--muted)}
+.s08-track{height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 9%,transparent);overflow:hidden}
+.s08-track i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--chart-2);transform-origin:left;transform:scaleX(var(--p,0));transition:transform 120ms linear}
+.s08-kv{font-size:var(--text-lg);font-weight:700;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:var(--tracking-display)}
+.s08-kv.is-exp{color:var(--expense-text)}
+.s08-in{animation:s08-in 300ms var(--ease-out) both;animation-delay:calc(var(--stagger) * var(--i,0))}
+@keyframes s08-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .s08-in{animation:none!important}
+  .s08-track i{transition:none}
+}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s08" data-title="数据导入" data-od-id="screen-s08">
+  <div class="content" data-od-id="s08-content">
+
+    <div class="pad s08-in" style="--i:0" id="s08-pickwrap" data-state-hide="loading empty error edge">
+      <p class="meta">从「熊猫记账」导出的 CSV 文件导入历史账目。导入前会先预检：重复记录自动跳过，无法识别的分类落到「未分类」。</p>
+      <div class="s08-steps">
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>1</span><span class="s08-step-t">选择熊猫记账导出的 CSV 文件</span></div>
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>2</span><span class="s08-step-t">预检并预览：导入 / 跳过 / 失败 三类记录</span></div>
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>3</span><span class="s08-step-t">写入本地数据库并重建预算与统计</span></div>
+      </div>
+      <button class="s08-drop mt-4" type="button" data-file-pick data-od-id="s08-drop">
+        <span class="s08-drop-ic"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 16.5V5"/><path d="M7.5 9.5 12 5l4.5 4.5"/><path d="M4.5 15v3A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-3"/></svg></span>
+        <span class="s08-drop-t">选择 CSV 文件</span>
+        <span class="s08-drop-s">支持 .csv，单文件 ≤ 20 MB</span>
+      </button>
+      <div class="group mt-3" id="s08-file" hidden data-od-id="s08-file">
+        <div class="row">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
+          <span class="row-body"><span class="row-title" id="s08-fname">熊猫记账_导出_2026-10-14.csv</span><span class="row-sub" id="s08-fmeta">1.2 MB · 1,039 条记录</span></span>
+          <button class="icon-btn" type="button" data-file-clear aria-label="移除文件" data-od-id="s08-file-clear"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 6.5 17.5 17.5"/><path d="M17.5 6.5 6.5 17.5"/></svg></button>
+        </div>
+      </div>
+      <div class="mt-3" id="s08-progress" hidden data-od-id="s08-progress">
+        <div class="s08-track"><i id="s08-fill" style="--p:0"></i></div>
+        <p class="meta mt-3" id="s08-pct">正在解析 CSV… 0%</p>
+      </div>
+      <button class="btn btn-block mt-4" type="button" data-import disabled id="s08-go" data-od-id="s08-go">开始导入</button>
+      <p class="meta mt-3">导入不会删除已有账目；如需重来，先移除文件再重新选择。</p>
+    </div>
+
+    <div class="pad" id="s08-result" hidden data-od-id="s08-result">
+      <div class="card glass">
+        <div class="row-between"><h2 class="h2">导入完成</h2><span class="badge" data-od-min-fs>1039</span></div>
+        <div class="grid-3 mt-3">
+          <div class="kpi"><span class="kpi-label">成功</span><span class="s08-kv" data-count-to="1024">1,024</span></div>
+          <div class="kpi"><span class="kpi-label">跳过</span><span class="s08-kv" data-count-to="12">12</span></div>
+          <div class="kpi"><span class="kpi-label">失败</span><span class="s08-kv is-exp" id="s08-failnum" data-count-to="3">3</span></div>
+        </div>
+        <p class="meta mt-3">耗时 1.8 秒 · 覆盖 2024-01-01 ~ 2026-10-14 · 新增 6 个分类</p>
+      </div>
+      <div class="group mt-3" id="s08-failrows" data-od-id="s08-failrows">
+        <div class="row">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+          <span class="row-body"><span class="row-title">第 812 行 金额格式异常</span><span class="row-sub">「-1,2OO.00」无法解析为数字，已跳过该条</span></span>
+        </div>
+        <div class="row">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+          <span class="row-body"><span class="row-title">第 918 行 日期缺失</span><span class="row-sub">该行没有日期字段，无法归档到月份</span></span>
+        </div>
+        <div class="row">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+          <span class="row-body"><span class="row-title">第 1031 行 账户未知</span><span class="row-sub">账户「招行储蓄卡」在本地不存在，已落入默认账户</span></span>
+        </div>
+      </div>
+      <div class="grid-2 mt-3">
+        <button class="btn btn-ghost" type="button" data-import-retry data-od-id="s08-retry-failed">重试失败项</button>
+        <button class="btn btn-ghost" type="button" data-import-reset data-od-id="s08-again">再导一个文件</button>
+      </div>
+    </div>
+
+    <div class="st-error" id="s08-fail" hidden data-od-id="s08-fail">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+      <p class="st-title">导入中断</p>
+      <p class="st-desc">文件第 812 行格式异常，已回滚本次写入，本地账目未被修改</p>
+      <button class="btn btn-ghost" type="button" data-import-reset data-od-id="s08-fail-retry">重新选择文件</button>
+    </div>
+
+    <div class="pad" data-state-when="loading" data-od-id="s08-loading">
+      <div class="sk w-100"></div><div class="sk w-80"></div>
+      <div class="card mt-3"><div class="sk w-40"></div><div class="sk w-60 tall"></div><div class="sk w-100"></div></div>
+      <div class="s08-steps mt-3">
+        <div class="list-row"><div class="sk w-60"></div></div>
+        <div class="list-row"><div class="sk w-80"></div></div>
+      </div>
+      <div class="sk w-100 tall mt-3"></div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s08-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
+      <p class="st-title">还没有选择文件</p>
+      <p class="st-desc">先在熊猫记账里「我的 → 导出账单 → CSV」，再回到这里选择该文件</p>
+      <button class="btn btn-ghost" type="button" data-file-pick data-od-id="s08-empty-pick">选择 CSV 文件</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s08-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
+      <p class="st-title">文件解析失败</p>
+      <p class="st-desc">不是有效的熊猫记账导出文件，或文件已损坏（第 1 行缺少表头）</p>
+      <button class="btn btn-ghost" type="button" data-import-reset data-od-id="s08-error-retry">重试</button>
+    </div>
+
+    <div class="pad" data-state-when="edge" data-od-id="s08-edge">
+      <div class="group">
+        <div class="row">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
+          <span class="row-body">
+            <span class="row-title">熊猫记账-全部账本导出-2026年10月14日-含转账与退款-完整版-final-final.csv</span>
+            <span class="row-sub">19.8 MB · 128,430 条记录 · 已超过 20 MB 建议上限</span>
+          </span>
+          <span class="badge" data-od-min-fs>128430</span>
+        </div>
+      </div>
+      <p class="meta mt-3">超长文件名与 10,000+ 条记录：文件名单行截断，记录数用等宽字体展示。</p>
+    </div>
+
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+    if (window.__odFin08) return;
+    window.__odFin08 = true;
+    try {
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var s = t.closest('#screenHost > .screen');
+        if (!s || s.getAttribute('data-screen') !== 's08') return;
+        if (t.closest('[data-import-retry]')) {
+          var fr = document.getElementById('s08-failrows');
+          if (fr) fr.hidden = true;
+          var fn = document.getElementById('s08-failnum');
+          if (fn) { fn.setAttribute('data-count-to', '0'); fn.textContent = '0'; }
+          if (window.App) { window.App.toast('3 条失败记录已重试，全部导入成功'); window.App.haptic('medium'); }
+        }
+      }, false);
+    } catch (err) {
+      if (window.console && console.warn) console.warn('[finance] s08', err);
+    }
+  })();
+  </script>
+</section>
+<!--@od:end-->

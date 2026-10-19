@@ -1,0 +1,233 @@
+<!-- ============================================================
+     s13 · 外观
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s13">
+/* s13 · 外观（主题切换）—— .theme-picker / .theme-opt / .theme-swatch 组件名与 shell 一致，
+   仅在本屏把 8 个选项排成 2 列并补中英文标签；默认 grid 4 列放不下双行标签。 */
+.screen.s13{font-size:max(var(--text-sm),14px)}
+/* 状态块放进 grid 时轨道按容器宽度收敛，避免 nowrap 长文案把轨道撑到 max-content */
+.screen.s13 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+/* 骨架占位尺寸：.st-loading 被外壳状态规则改为 display:grid + place-items:center，
+   不撑满就会塌成 max-content（实测仅 34px）→ 强制拉伸轨道，与 s01–s03 同款修正。 */
+.screen.s13 .st-loading{justify-items:stretch;align-items:start}
+.screen.s13 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.list-row,.tl-time,.tl-sub,.st-desc,.kpi-label,.kpi-unit,.kpi-delta,.legend li,.field,.theme-cn,.app-pkg){font-size:max(var(--text-sm),14px)}
+.screen.s13 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s13 .theme-picker{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.screen.s13 .theme-opt{
+  flex-direction:row;justify-content:flex-start;gap:var(--space-3);
+  padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);text-align:left;
+}
+/* 缩略图渲染「该主题自己的配色」：元素带 data-theme 后即取到对应主题的变量 */
+.screen.s13 .theme-swatch{
+  width:46px;height:36px;flex:0 0 auto;border-radius:var(--radius-sm);overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--fg) 12%,transparent);
+  background:var(--bg);display:flex;flex-direction:column;
+}
+.screen.s13 .theme-swatch .ts-accent{height:48%;background:var(--accent)}
+.screen.s13 .theme-swatch .ts-body{
+  flex:1;display:flex;flex-direction:column;justify-content:center;gap:3px;
+  padding:0 6px;background:var(--surface);
+}
+.screen.s13 .theme-swatch .ts-body i{display:block;height:3px;border-radius:2px;width:100%;background:color-mix(in srgb,var(--fg) 22%,transparent)}
+.screen.s13 .theme-swatch .ts-body i:first-child{width:64%;background:color-mix(in srgb,var(--fg) 46%,transparent)}
+.screen.s13 .theme-names{display:flex;flex-direction:column;gap:2px;min-width:0}
+.screen.s13 .theme-cn{color:inherit;line-height:1.2}
+.screen.s13 .theme-en{font-size:max(var(--text-xs),12px);color:var(--muted);line-height:1.2}
+.screen.s13 .pv-row{display:flex;align-items:center;gap:var(--space-4)}
+.screen.s13 .pv-ring{width:104px;flex:0 0 auto}
+.screen.s13 .pv-row .legend{flex:1 1 auto}
+.screen.s13 .kpi-spark .chart{height:var(--spark-h)}
+.screen.s13 .note{
+  padding:var(--space-3);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--fg) 4%,transparent);
+}
+</style>
+<!--@od:section-->
+<section class="screen s13" data-screen="s13" data-title="外观" data-od-id="screen-s13">
+  <div class="screen-head" data-od-id="s13-head">
+    <div>
+      <h2 class="h2">外观</h2>
+      <p class="meta mt-2">切换即时生效，原型与 App 行为一致</p>
+    </div>
+  </div>
+
+  <div class="content pad">
+    <div class="stack" data-state-hide="loading empty error edge" data-od-id="s13-body">
+
+      <div data-od-id="s13-picker">
+        <div class="sec-head">
+          <p class="group-label" style="padding:0;margin:0">主题</p>
+          <span class="row-sub" id="s13-current">当前 Apple</span>
+        </div>
+        <div class="theme-picker" role="group" aria-label="主题切换" data-od-id="s13-picker-grid">
+          <button class="theme-opt" type="button" data-theme-id="apple" aria-pressed="true" data-od-min-fs data-od-id="s13-theme-apple">
+            <span class="theme-swatch" data-theme="apple"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">苹果</span><span class="theme-en">Apple</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="glassmorphism" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-glass">
+            <span class="theme-swatch" data-theme="glassmorphism"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">玻璃</span><span class="theme-en">Glassmorphism</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="notion" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-notion">
+            <span class="theme-swatch" data-theme="notion"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">纸面</span><span class="theme-en">Notion</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="stripe" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-stripe">
+            <span class="theme-swatch" data-theme="stripe"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">条纹</span><span class="theme-en">Stripe</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="claude" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-claude">
+            <span class="theme-swatch" data-theme="claude"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">陶土</span><span class="theme-en">Claude</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="ibm" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-ibm">
+            <span class="theme-swatch" data-theme="ibm"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">工业</span><span class="theme-en">IBM</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="kami" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-kami">
+            <span class="theme-swatch" data-theme="kami"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">墨青</span><span class="theme-en">Kami</span></span>
+          </button>
+          <button class="theme-opt" type="button" data-theme-id="bento" aria-pressed="false" data-od-min-fs data-od-id="s13-theme-bento">
+            <span class="theme-swatch" data-theme="bento"><span class="ts-accent"></span><span class="ts-body"><i></i><i></i></span></span>
+            <span class="theme-names"><span class="theme-cn">便当</span><span class="theme-en">Bento</span></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card glass" data-od-id="s13-preview">
+        <div class="sec-head" style="margin-bottom:0">
+          <p class="group-label" style="padding:0;margin:0">实时预览</p>
+          <span class="row-sub">底色 / 文字 / 描边 / 灰阶同步变化</span>
+        </div>
+        <div class="kpi mt-3">
+          <span class="kpi-label">今日事件</span>
+          <span class="kpi-value"><span id="s13-kpi">0</span><span class="kpi-unit">条</span></span>
+          <span class="kpi-delta is-up">较昨日 +12%</span>
+          <span class="kpi-spark" data-chart="spark" data-chart-values="62,88,74,96,120,110,128"></span>
+        </div>
+        <div class="pv-row mt-3">
+          <div class="pv-ring" data-chart="pie" data-chart-values="42,31,24,18,13"></div>
+          <ul class="legend">
+            <li><span class="legend-dot s1"></span>前台切换<span class="legend-num">42</span></li>
+            <li><span class="legend-dot s2"></span>广告跳过<span class="legend-num">34</span></li>
+            <li><span class="legend-dot s3"></span>亮屏解锁<span class="legend-num">28</span></li>
+            <li><span class="legend-dot s4"></span>充电<span class="legend-num">24</span></li>
+          </ul>
+        </div>
+        <div class="row mt-3">
+          <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 4.4c-3.3 0-6 2.1-6 4.7 0 1.5.9 2.8 2.3 3.7l-.6 1.9 2.2-1.1c.7.2 1.4.3 2.1.3"/><path d="M14.6 8.6c3.1 0 5.6 1.9 5.6 4.3 0 1.4-.8 2.6-2.1 3.4l.5 1.8-2-1c-.6.2-1.3.3-2 .3-3.1 0-5.6-1.9-5.6-4.4s2.5-4.4 5.6-4.4z"/></svg></span>
+          <span class="row-body"><span class="row-title">微信</span><span class="row-sub">今日前台 42 分钟 · 跳过 3 次</span></span>
+          <span class="row-tail"><span class="num">12 次</span></span>
+        </div>
+      </div>
+
+      <div class="note" data-od-id="s13-note">
+        <p class="meta">8 套主题的差异全部由 token 承载（底色、文字、描边、圆角、字号、图表灰阶），没有一屏写死颜色，也没有按主题分支的样式。</p>
+        <p class="fine mt-2" data-od-min-fs>选择态只用描边加粗 + 字重提升表示，不占用强调色预算。</p>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s13-st-loading">
+      <div class="grid-4">
+        <div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div>
+        <div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div><div class="sk tall"></div>
+      </div>
+      <div class="card mt-3"><div class="sk w-100 tall"></div><div class="sk w-60"></div><div class="sk w-80"></div></div>
+    </div>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s13-st-empty">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8M12 3.6a8.4 8.4 0 0 1 0 16.8"/></svg></span>
+      <p class="st-title">主题列表为空</p>
+      <p class="st-desc">未在本地找到任何主题 token，将回退到默认 Apple。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.theme('apple');App.toast('已回退到默认 Apple')">载入默认主题</button>
+    </div>
+
+    <div class="st-error" data-state-when="error" data-od-id="s13-st-error">
+      <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.6M12 17v.2"/></svg></span>
+      <p class="st-title">主题应用失败</p>
+      <p class="st-desc">token 解析异常：--accent 缺失，已保留上一个生效主题。</p>
+      <button class="btn" type="button" onclick="App.theme('apple');App.toast('已重试应用 Apple')">重新应用</button>
+    </div>
+
+    <div class="st-edge" data-state-when="edge" data-od-id="s13-st-edge">
+      <div class="group" style="width:100%">
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">超长主题名：墨青 · Kami（含中日韩字形回退与等宽数字变体）</span>
+            <span class="row-sub">含 10,286 个 token 覆盖测试</span>
+          </span>
+          <span class="row-tail"><span class="num">10,286</span></span>
+        </div>
+        <div class="row">
+          <span class="row-body">
+            <span class="row-title">边界态：主题缺少 --text-xl 槽位</span>
+            <span class="row-sub">标题回退到 --text-lg，数值 10,000 条</span>
+          </span>
+          <span class="row-tail"><span class="num">10,000</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var tries = 0;
+    function ready(fn) {
+      if (window.App) { fn(); return; }
+      tries++;
+      if (tries > 200) return;
+      window.setTimeout(function () { ready(fn); }, 40);
+    }
+    ready(function () {
+      var NAME = { apple: 'Apple', glassmorphism: '玻璃 Glassmorphism', notion: '纸面 Notion', stripe: '条纹 Stripe', claude: '陶土 Claude', ibm: '工业 IBM', kami: '墨青 Kami', bento: '便当 Bento' };
+      var kpi = document.getElementById('s13-kpi');
+      var done = false;
+      function sync() {
+        var id = document.documentElement.getAttribute('data-theme') || 'apple';
+        var all = sec.querySelectorAll('[data-theme-id]');
+        for (var i = 0; i < all.length; i++) {
+          all[i].setAttribute('aria-pressed', all[i].getAttribute('data-theme-id') === id ? 'true' : 'false');
+        }
+        var cur = document.getElementById('s13-current');
+        if (cur) cur.textContent = '当前 ' + (NAME[id] || id);
+      }
+      function countUp() {
+        if (done || !kpi) return;
+        done = true;
+        window.App.count(kpi, 128, { dur: 700 });
+      }
+      sec.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var b = t.closest('[data-theme-id]');
+        if (!b) return;
+        var id = b.getAttribute('data-theme-id');
+        window.App.theme(id);
+        sync();
+        window.App.toast('已切换到 ' + (NAME[id] || id));
+      });
+      if (window.MutationObserver) {
+        new MutationObserver(function () {
+          sync();
+          if (sec.classList.contains('is-active')) countUp();
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        var obs = new MutationObserver(function () {
+          if (sec.classList.contains('is-active')) { countUp(); obs.disconnect(); }
+        });
+        obs.observe(sec, { attributes: true, attributeFilter: ['class'] });
+      }
+      sync();
+      if (sec.classList.contains('is-active')) countUp();
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

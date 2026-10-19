@@ -22,6 +22,7 @@
 | **修改任何 UI 代码（颜色/字号/间距/组件）** | → **[UI 设计规范](docs/UI设计/设计规范.md)** — 主题 Token、组件、动效、震动规范 |
 | **审查 UI 代码变更** | → **[UI 审查清单](docs/UI设计/审查清单.md)** — 逐条核对硬编码颜色/字号/间距/震动 |
 | **修改/新增局域网文件互传代码** | → **[局域网互传协议](docs/网络通信/局域网互传协议.md)** — 端口/组播/四路由/错误码、落盘续传、动效音效、落点与验收 |
+| **修改交互原型（`.open-design/`）** | → **[原型维护](docs/UI设计/原型维护.md)** — 改 `src/screens/` 分片，跑 `node scripts/assemble-prototype.mjs` 重新组装；`08-prototype.html` 是产物不要手改 |
 
 ## 项目简介
 - **版本:** 1.0.0
@@ -147,6 +148,11 @@
 | 修改诊断计数器 | `app/src/main/java/com/bsfeng/monitor/util/DiagnosticCounters.kt` |
 | 修改 Application 入口 | `app/src/main/java/com/bsfeng/monitor/MonitorApp.kt` |
 | 修改 MainActivity | `app/src/main/java/com/bsfeng/monitor/MainActivity.kt` |
+| 修改交互原型某一屏的界面/文案 | `.open-design/src/screens/<屏>-<标题>.html` |
+| 修改原型全局样式 / 公共组件 | `.open-design/src/styles/10-tokens.html` + `20-base.html` |
+| 修改原型骨架 / 设备框 / 底部导航 | `.open-design/src/00-shell.html` |
+| 修改原型交互逻辑（切屏 / 返回栈 / toast / 图表） | `.open-design/src/99-app.js` |
+| 重新生成原型产物（改完分片必跑） | `node scripts/assemble-prototype.mjs` |
 
 ## 开发指南
 → [代码规范](docs/开发指南/代码规范.md)
