@@ -1,8 +1,8 @@
 {
   "versionCode": 1,
   "versionName": "1.0.0",
-  "apkUrl": "",
-  "apkSha256": "",
-  "changelog": "首个公开版本",
-  "publishedAt": "2026-10-19T00:00:00Z"
+  "apkUrl": "https://github.com/baosfeng/android-monitor/releases/download/v1.0.0/app-release.apk",
+  "apkSha256": "0787c920226c3a1131b616458a1620ab100259d986850717b85734e36ae76cde",
+  "changelog": "- chore: 完善发版流程（版本号、签名注入、发布脚本与 Release workflow）",
+  "publishedAt": "2026-10-19T14:38:00Z"
 }
