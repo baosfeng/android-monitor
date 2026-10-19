@@ -1,8 +1,8 @@
 package com.bsfeng.monitor
 
 object AppConfig {
-    /** 服务器地址写死为固定 IP */
-    val serverBaseUrl: String get() = "http://127.0.0.1"
+    /** 服务器地址：由 local.properties 的 serverBaseUrl 注入，仓库内只保留占位 */
+    val serverBaseUrl: String get() = BuildConfig.SERVER_BASE_URL
     val uploadIntervalMs: Int get() = BuildConfig.UPLOAD_INTERVAL_MS
     val batchMaxSize: Int get() = BuildConfig.BATCH_MAX_SIZE
     val cacheMaxDays: Int get() = BuildConfig.CACHE_MAX_DAYS

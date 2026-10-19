@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// 后端地址从 local.properties 注入（该文件不入库），仓库内只保留占位。
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val serverBaseUrl = localProps.getProperty("serverBaseUrl") ?: "https://your-server.example.com"
 
 android {
     namespace = "com.bsfeng.monitor"
@@ -13,7 +22,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "SERVER_BASE_URL", "\"https://your-server.com/api/v1\"")
+        buildConfigField("String", "SERVER_BASE_URL", "\"$serverBaseUrl\"")
         buildConfigField("int", "UPLOAD_INTERVAL_MS", "5000")
         buildConfigField("int", "BATCH_MAX_SIZE", "50")
         buildConfigField("int", "CACHE_MAX_DAYS", "3")
