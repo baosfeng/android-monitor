@@ -65,6 +65,15 @@ build
 .netrc
 .env
 .env.local
+.env.*
+node_modules/
+.kotlin/
+*.db
+*.sqlite
+*.sqlite3
+*.jks
+*.p12
+*.pem
 
 ## ==============================
 ## Project specific
