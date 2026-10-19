@@ -231,7 +231,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // Core
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.19.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")
