@@ -12,10 +12,10 @@ object UpdateConfig {
     val serverBaseUrl: String = BuildConfig.UPDATE_BASE_URL.trim()
     val repo: String = BuildConfig.UPDATE_REPO
 
-    /** GitHub 无法直连时按顺序尝试的镜像前缀。 */
+    /** GitHub 无法直连时按顺序尝试的镜像前缀（可用性会变化，按实测顺序排列）。 */
     val mirrorPrefixes: List<String> = listOf(
-        "https://ghfast.top/",
         "https://gh-proxy.com/",
+        "https://ghfast.top/",
         "https://ghproxy.net/",
     )
 }

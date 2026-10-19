@@ -59,11 +59,11 @@ jobs:
           SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
           if [ -n "$PREV_TAG" ]; then
-            RANGE="$PREV_TAG..HEAD"
+            CHANGELOG=$(git log --pretty=format:'- %s' "$PREV_TAG..HEAD" | head -40)
           else
-            RANGE="HEAD^..HEAD"
+            # 首个版本没有上一个 tag：取最近 20 个提交作为发布说明
+            CHANGELOG=$(git log --pretty=format:'- %s' -20 | head -40)
           fi
-          CHANGELOG=$(git log --pretty=format:'- %s' "$RANGE" | head -40)
           export APK_SHA256="$SHA256" CHANGELOG
           python3 - <<'PY'
           import datetime
