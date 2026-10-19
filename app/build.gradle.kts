@@ -42,11 +42,16 @@ android {
     }
 
     signingConfigs {
-        named("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        // 本地存在 debug.keystore 时沿用（保证覆盖安装签名一致）；
+        // 公开仓库不含该文件时回退到 AGP 默认 debug keystore，保证 clone 后可构建。
+        val localDebugKeystore = file("debug.keystore")
+        if (localDebugKeystore.exists()) {
+            named("debug") {
+                storeFile = localDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 
