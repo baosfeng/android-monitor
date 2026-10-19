@@ -12,6 +12,22 @@ val localProps = Properties().apply {
 }
 val serverBaseUrl = localProps.getProperty("serverBaseUrl") ?: "https://your-server.example.com"
 
+// 版本号由仓库根目录 version.properties 维护，发布脚本负责递增。
+val versionProps = Properties().apply {
+    val file = rootProject.file("version.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val appVersionCode = versionProps.getProperty("versionCode")?.toIntOrNull() ?: 1
+val appVersionName = versionProps.getProperty("versionName") ?: "1.0.0"
+
+// Release 签名：本地从 local.properties 读取，CI 从环境变量读取，密钥不入库。
+val releaseStoreFile = localProps.getProperty("releaseStoreFile") ?: System.getenv("RELEASE_STORE_FILE")
+val releaseStorePassword = localProps.getProperty("releaseStorePassword") ?: System.getenv("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = localProps.getProperty("releaseKeyAlias") ?: System.getenv("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = localProps.getProperty("releaseKeyPassword") ?: System.getenv("RELEASE_KEY_PASSWORD")
+val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+    .all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.bsfeng.monitor"
     compileSdk = 36
@@ -19,10 +35,13 @@ android {
         applicationId = "com.bsfeng.monitor"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         buildConfigField("String", "SERVER_BASE_URL", "\"$serverBaseUrl\"")
+        // 更新检测：自建更新源优先，仓库信息用于 jsDelivr / GitHub 镜像兜底
+        buildConfigField("String", "UPDATE_BASE_URL", "\"${localProps.getProperty("updateBaseUrl") ?: ""}\"")
+        buildConfigField("String", "UPDATE_REPO", "\"baosfeng/android-monitor\"")
         buildConfigField("int", "UPLOAD_INTERVAL_MS", "5000")
         buildConfigField("int", "BATCH_MAX_SIZE", "50")
         buildConfigField("int", "CACHE_MAX_DAYS", "3")
@@ -53,6 +72,15 @@ android {
                 keyPassword = "android"
             }
         }
+        // Release 签名：仅在配置齐全时创建（本地 local.properties / CI Secrets）
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -70,6 +98,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
