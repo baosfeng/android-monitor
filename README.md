@@ -17,6 +17,8 @@
 
 ## 界面预览
 
+> 🎨 [在线预览可交互原型](https://baosfeng.github.io/android-monitor/)（GitHub Pages）
+
 | 实时事件流 | 广告跳过 | 记账 | 记一笔 |
 |:---:|:---:|:---:|:---:|
 | <img src="docs/assets/readme/02-实时事件流.png" width="200"> | <img src="docs/assets/readme/03-广告跳过.png" width="200"> | <img src="docs/assets/readme/04-记账.png" width="200"> | <img src="docs/assets/readme/05-记一笔.png" width="200"> |
