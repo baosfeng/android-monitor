@@ -52,6 +52,22 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 
 > 仓库不包含签名文件。本地存在 `app/debug.keystore` 时沿用自定义签名，否则回退到 AGP 默认 debug keystore。
 
+Release 构建需要签名配置（`local.properties` 或环境变量注入，详见 [发布指南](docs/开发指南/发布指南.md)）：
+
+```bash
+./gradlew assembleRelease
+# app/build/outputs/apk/release/app-release.apk
+```
+
+## 更新与发版
+
+- 应用内支持「检查更新 → 下载 → 安装」，版本清单为 `updates/version.json`；
+- 更新源按顺序回退：私有构建的自建源 → jsDelivr → GitHub 镜像（ghfast.top / gh-proxy.com / ghproxy.net）→ GitHub 直连，适配国内网络；
+- 发版：`scripts/release.sh <x.y.z>` 递增版本号并打 tag，GitHub Actions 自动构建签名 APK、创建 Release 并回写版本清单；
+- 公开 Release 的 APK **不包含任何自建服务器地址**，避免泄露源站 IP；需要服务器加速时只在自己本地构建私有版本并注入地址。
+
+细节见 [更新检测](docs/更新检测/概述.md) 与 [发布指南](docs/开发指南/发布指南.md)。
+
 ## 项目结构
 
 ```
@@ -77,6 +93,7 @@ docs/     中文文档：架构、协议、设计规范、踩坑记录
 
 - 数据默认存储在本地 SQLite，卸载即删除；
 - 事件上报需要自行在 `local.properties` 配置 `serverBaseUrl`，仓库默认占位地址不会向任何服务器发送数据；
+- 检查更新只读取公开的版本清单并下载 APK，不采集任何设备信息；
 - 不采集通讯录、短信正文、相册、位置与剪贴板内容。
 
 ## 贡献

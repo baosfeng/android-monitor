@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Decode release keystore
+        run: |
+          if [ -z "${RELEASE_KEYSTORE_BASE64:-}" ]; then
+            echo "缺少 RELEASE_KEYSTORE_BASE64 secret" >&2
+            exit 1
+          fi
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+
+      - name: Build signed release APK
+        env:
+          RELEASE_STORE_FILE: ${{ runner.temp }}/release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --stacktrace
+          test -f app/build/outputs/apk/release/app-release.apk
+
+      - name: Build version manifest
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..HEAD"
+          else
+            RANGE="HEAD^..HEAD"
+          fi
+          CHANGELOG=$(git log --pretty=format:'- %s' "$RANGE" | head -40)
+          export APK_SHA256="$SHA256" CHANGELOG
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import re
+
+          version_file = "version.properties"
+          props = dict(
+              line.split("=", 1)
+              for line in open(version_file, encoding="utf-8").read().splitlines()
+              if "=" in line
+          )
+          tag = os.environ["GITHUB_REF_NAME"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          manifest = {
+              "versionCode": int(props["versionCode"]),
+              "versionName": props["versionName"],
+              "apkUrl": f"https://github.com/{repo}/releases/download/{tag}/app-release.apk",
+              "apkSha256": os.environ["APK_SHA256"],
+              "changelog": os.environ.get("CHANGELOG", "").strip(),
+              "publishedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          with open("updates/version.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          cp updates/version.json "$RUNNER_TEMP/version.json"
+          echo "版本清单已生成："
+          cat updates/version.json
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            app/build/outputs/apk/release/app-release.apk \
+            "$RUNNER_TEMP/version.json" \
+            --title "v${GITHUB_REF_NAME#v}" \
+            --generate-notes
+
+      - name: Update version manifest on main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/version.json" updates/version.json
+          git add updates/version.json
+          git commit -m "chore: 更新版本清单 ${GITHUB_REF_NAME}" || echo "版本清单无变化"
+          git push origin main
