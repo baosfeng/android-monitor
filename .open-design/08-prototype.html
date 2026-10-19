@@ -1137,10 +1137,10 @@ body{
 }
 
 .tabbar{
-  position:relative;z-index:2;flex:0 0 auto;
+  position:absolute;left:0;right:0;bottom:var(--gesture-h);z-index:20;
   display:grid;grid-template-columns:repeat(5,1fr);gap:2px;
   padding:var(--space-1) var(--space-1) 0;
-  background:color-mix(in srgb,var(--surface) 84%,transparent);
+  background:var(--surface);
   -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
   border-top:1px solid var(--border-soft);
 }
@@ -1160,7 +1160,7 @@ body{
 .tab[aria-selected="true"]{color:var(--accent);font-weight:600}
 .tab[aria-selected="true"] .tab-icon{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .tab:active .tab-icon{transform:scale(.92)}
-.gesture-bar{position:relative;z-index:2;flex:0 0 auto;height:var(--gesture-h);display:grid;place-items:center}
+.gesture-bar{position:absolute;left:0;right:0;bottom:0;z-index:20;height:var(--gesture-h);display:grid;place-items:center}
 .gesture-bar::after{
   content:"";width:108px;height:4px;border-radius:var(--radius-pill);
   background:var(--fg);opacity:.32;
@@ -6722,6 +6722,24 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   if (document.readyState === 'complete') setTimeout(jump, 80);
   else window.addEventListener('load', function () { setTimeout(jump, 80); });
   window.addEventListener('hashchange', jump);
+})();
+</script>
+<script>
+/* 布局修正：tabbar / gesture-bar 必须位于 device-screen 的 flex 流底部，
+   否则会被绝对定位的 device-screen 覆盖，渲染到屏幕顶部。 */
+(function () {
+  var nav = document.querySelector('.tabbar');
+  var gesture = document.querySelector('.gesture-bar');
+  var host = document.querySelector('#screenHost');
+  if (!nav || !gesture || !host) return;
+  var parent = host.parentElement;
+  [nav, gesture].forEach(function (el) {
+    el.style.position = 'relative';
+    el.style.left = 'auto';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+    parent.appendChild(el);
+  });
 })();
 </script>
 </body>
