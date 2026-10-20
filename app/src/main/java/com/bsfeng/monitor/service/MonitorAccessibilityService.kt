@@ -493,6 +493,8 @@ open class MonitorAccessibilityService : AccessibilityService() {
             pollerActive = true
             foregroundHandler.postDelayed(foregroundPoller, 10_000L)
         }
+        // 预热自动记账：提前加载分类，第一笔账单弹窗时不再现查库（浮窗更快）
+        runCatching { autoBookEngine.warmUp() }
     }
 
     override fun onDestroy() {

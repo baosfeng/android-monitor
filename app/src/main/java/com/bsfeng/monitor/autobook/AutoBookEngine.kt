@@ -11,7 +11,9 @@ import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.util.concurrent.atomic.AtomicBoolean
@@ -29,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 设计约束：
  * - **只弹窗、不自动记账**：识别结果一律要用户确认，避免把识别错误直接写进账本；
  * - 只在 [AutoBookRules] 覆盖的包名（微信 / 支付宝）上运行；
- * - 同一包名事件 800ms 节流（支付结果页会连续抛多个 CONTENT_CHANGED）；
+ * - 同一包名事件 300ms 节流（支付结果页会连续抛多个 CONTENT_CHANGED）；
  * - **只在账单 / 交易页识别**（[AutoBookParser.isBillPage] 门禁，挡掉首页消息摘要）；
  * - 同一笔账单短时间只弹一次：内存去重表（[AutoBookDedup]）+ 落库查库双重兜底；
  * - 解析在无障碍主线程（节点不能跨线程），查库/落库切到 IO。
@@ -43,12 +45,21 @@ class AutoBookEngine(private val service: AccessibilityService) {
     private val overlay = AutoBookOverlay(service)
 
     /**
-     * 事件节流：只有 CONTENT_CHANGED 走 800ms 窗口；WINDOW_STATE_CHANGED 永远放行。
+     * 页面变化检测：**页面文本一变就处理**，不再按固定时间窗等待。
      *
-     * 真机事故（2026-10-17）：支付成功页的 WINDOW_STATE_CHANGED 在指纹页之后 402ms 到达，
-     * 被旧实现的 800ms 节流丢掉；结果页是静态的、之后不再有事件 —— 那一笔永远不弹窗。
+     * 旧实现用 800ms/300ms/150ms 时间窗：页面渲染完成的那次事件总要等窗口到期，
+     * 用户看到浮窗慢半拍。缩短窗口只是减小等待，没有治本（2026-10-20 用户明确要求）。
+     * 现在判断依据是「页面内容有没有变」，渲染完成即解析。
      */
-    private val eventThrottle = AutoBookEventThrottle()
+    private val pageChangeDetector = AutoBookPageChangeDetector()
+
+    /** 正在弹窗/已弹窗的这笔：防同一笔的连续事件重复建浮窗（detail 分支也要挡） */
+    @Volatile private var pendingOverlaySourceId: String? = null
+
+    /** 弹窗链路诊断时间戳（事件→读文本→解析），仅用于日志定位延迟 */
+    @Volatile private var traceEventAtMs = 0L
+    @Volatile private var traceLinesAtMs = 0L
+    @Volatile private var traceParsedAtMs = 0L
 
     /**
      * 短期去重表：**同一笔账单短时间只弹一次浮窗**。
@@ -59,6 +70,17 @@ class AutoBookEngine(private val service: AccessibilityService) {
      * 现在改成按指纹记录三种结局（已记账 / 已忽略 / 刚弹过），各有安静期。
      */
     private val dedup = AutoBookDedup()
+
+    /**
+     * 用户点过「忽略」的这笔：**落盘记住、之后不再弹**（见 [AutoBookIgnoreStore]）。
+     *
+     * 真机反馈（2026-10-17）：点了忽略之后页面继续抛事件，浮窗又弹一次。内存去重只有 10 分钟，
+     * 这里按落库键持久化，退出微信 / 服务重启后同一笔也不会再弹。
+     */
+    private val ignoreStore: AutoBookIgnoreStore by lazy {
+        // 旧版把遮罩点击也写成忽略：升级后首次初始化时清空一次，之后只认「忽略」按钮的记录
+        AutoBookIgnoreStore.getInstance(service).also { it.migrateLegacyOnce() }
+    }
 
     /**
      * 付款前页面预采集：收款方 / 付款方式 / 用户备注等结果页拿不到的信息。
@@ -90,6 +112,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
     /** 交易详情页补全同一时间只跑一个（详情页会连续抛多个事件） */
     private val detailEnriching = AtomicBoolean(false)
 
+    /** 本次浮窗是否已经提示过「点遮罩不会关闭」（每笔只一次，避免连点刷屏） */
+    private var scrimHintShown = false
+
     /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
     @Volatile
     private var categoriesByType: Map<Int, List<Category>> = emptyMap()
@@ -103,6 +128,18 @@ class AutoBookEngine(private val service: AccessibilityService) {
     @Volatile
     var shownCount: Int = 0
         private set
+
+    /**
+     * 服务连接后预热：提前加载分类，避免第一笔账单弹窗时才发现分类缓存是空的。
+     *
+     * 真机反馈「识别到后浮窗还要等一会儿」：分类查询是弹窗链路里唯一可能首次建库/慢查询的一步，
+     * 放在服务连接时做，用户在支付页停留的几秒足够完成。
+     */
+    fun warmUp() {
+        scope.launch {
+            if (categoriesByType.isEmpty()) categoriesByType = loadCategories()
+        }
+    }
 
     /**
      * 无障碍事件入口，由 [com.bsfeng.monitor.service.MonitorAccessibilityService] 调用。
@@ -121,21 +158,24 @@ class AutoBookEngine(private val service: AccessibilityService) {
         val rule = AutoBookRules.forPackage(packageName) ?: return
 
         val now = System.currentTimeMillis()
-        // 页面切换（WINDOW_STATE_CHANGED）是低频且关键的事件，不能被内容变化节流吃掉；
-        // 否则「指纹页 → 支付成功页」这种 400ms 内的切换会永远漏掉（真机已复现）。
-        if (!eventThrottle.shouldProcess(
-                isWindowStateChange = eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-                nowMs = now,
-            )
-        ) return
+        val eventAt = now
+        val isWindowStateChange = eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
 
         val lines = collectPageLines(packageName)
+        val linesAt = System.currentTimeMillis()
         if (lines.isEmpty()) {
-            // 支付结果页刚切换时拿不到内容，等下一次事件即可（节流会挡住高频重复）。
+            // 支付结果页刚切换时拿不到内容，等下一次事件即可。
             // 顺带看一眼「节点是不是被标记成不可见了」——微信就是这么藏支付页的，
             // 两种成因的应对完全不同，别白排查（见 docs/记账/微信支付页识别调研.md）。
             logInvisibleNodesIfAny(packageName)
             Log.d(TAG, "未收集到页面文本，跳过: $packageName")
+            return
+        }
+
+        // 页面文本指纹：渲染完成/内容更新 → 指纹变化 → 立即解析；同一页面重复事件直接跳过。
+        // 不再按时间窗等「页面稳定」，这是浮窗延迟的治本点。
+        val fingerprint = lines.joinToString("\u0000").hashCode().toString()
+        if (!pageChangeDetector.shouldProcess(isWindowStateChange, fingerprint, now)) {
             return
         }
 
@@ -232,6 +272,17 @@ class AutoBookEngine(private val service: AccessibilityService) {
         Log.d(TAG, "识别到账单页面行: ${lines.joinToString(" | ").take(600)}")
 
         lastDraft = merged
+        traceEventAtMs = eventAt
+        traceLinesAtMs = linesAt
+        traceParsedAtMs = System.currentTimeMillis()
+
+        // 浮窗还开着、或正在弹的，就是这一笔：不要重建（会把用户正在填的类型/分类冲掉）。
+        // ⚠️ 必须放在详情页分支之前：详情页会连续抛多个事件（商品说明后加载），
+        // 旧顺序会走 handleDetailPage → showOverlay → 重复建浮窗，第二次要排队等主线程
+        // 绘制第一个浮窗（真机实测排队 679ms，用户感知就是「浮窗慢 1s」）。
+        val showing = overlay.currentDraft
+        if (showing != null && showing.sourceId == merged.sourceId) return
+        if (pendingOverlaySourceId == merged.sourceId) return
 
         // 交易详情页：如果这笔已经自动记过账，不再弹记账浮窗，而是把详情页字段补进已有记录 + Toast。
         // 未匹配到已记账记录时保持原行为（正常弹窗）。
@@ -240,14 +291,16 @@ class AutoBookEngine(private val service: AccessibilityService) {
             return
         }
 
-        // 浮窗还开着且就是这一笔：不要重建（会把用户正在填的类型/分类冲掉）
-        val showing = overlay.currentDraft
-        if (showing != null && showing.sourceId == merged.sourceId) return
-
         // 短期去重：同一笔（已记账 / 已忽略 / 刚弹过）在各自安静期内不再弹
         val blocked = dedup.blockedReason(merged.dedupKeys, now)
         if (blocked != null) {
             Log.d(TAG, "去重命中，本次不弹窗：$blocked")
+            return
+        }
+
+        // 用户点过「忽略」：持久化记忆，跨进程 / 跨天都不再弹这一笔
+        if (ignoreStore.isIgnored(merged.sourceId)) {
+            Log.d(TAG, "该笔已被用户忽略，不再弹窗: ${merged.sourceId}")
             return
         }
 
@@ -378,6 +431,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
                     return@launch
                 }
                 financeManager.dao.updateTransaction(result.transaction)
+                // 详情补全只补字段、不走 FinanceManager.updateTransaction（那会重算账户余额）；
+                // 但 UI 也要立刻看到补全后的商户 / 商品说明，所以显式发一次数据变更通知。
+                financeManager.notifyChanged()
                 Log.i(
                     TAG,
                     "已记账笔补全详情: id=${match.id} merchant=${result.transaction.merchant} " +
@@ -402,19 +458,37 @@ class AutoBookEngine(private val service: AccessibilityService) {
      * 是数据库里的事实，据此可以继续挡住重复弹窗。
      */
     private fun showOverlay(draft: AutoBookDraft) {
+        // 同步占位：同一笔的连续事件（详情页后加载商品说明）在第一次 display 完成前就到，
+        // 靠 overlay.currentDraft 拦不住（窗口还没挂上），这里先占住 sourceId。
+        if (draft.sourceId == pendingOverlaySourceId) return
+        pendingOverlaySourceId = draft.sourceId
         scope.launch {
             val loaded = categoriesByType.ifEmpty { loadCategories().also { categoriesByType = it } }
-            if (isAlreadyBooked(draft)) {
+            val categoriesAt = System.currentTimeMillis()
+            // 已记账查询与「同商户上次选择」互不依赖：并行查，少等一次 SQLite 往返
+            val booked: Boolean
+            val history: Transaction?
+            coroutineScope {
+                val bookedDeferred = async { isAlreadyBooked(draft) }
+                val historyDeferred = async {
+                    try {
+                        if (draft.merchant.isBlank()) null
+                        else financeManager.getLastTransactionByMerchant(draft.merchant)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "查询商户历史失败（按无历史处理）: ${e.message}")
+                        null
+                    }
+                }
+                booked = bookedDeferred.await()
+                history = historyDeferred.await()
+            }
+            if (booked) {
                 Log.d(TAG, "该笔已记账（查库命中），不再弹窗: ${draft.sourceId}")
                 return@launch
             }
-            // 同一家店上次确认时选的类型 / 分类：默认勾选（没有历史就保持解析器结果）
-            val history = try {
-                if (draft.merchant.isBlank()) null
-                else financeManager.getLastTransactionByMerchant(draft.merchant)
-            } catch (e: Exception) {
-                Log.w(TAG, "查询商户历史失败（按无历史处理）: ${e.message}")
-                null
+            if (ignoreStore.isIgnored(draft.sourceId)) {
+                Log.d(TAG, "该笔已被用户忽略，不再弹窗: ${draft.sourceId}")
+                return@launch
             }
             val enriched = AutoBookDefaults.apply(draft, history)
             if (history != null) {
@@ -425,7 +499,15 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 )
             }
             // 回到主线程挂 View（WindowManager 操作要求在同一线程，无障碍服务的主线程即主 Looper）
-            service.mainExecutor.execute { display(enriched, loaded) }
+            val dbAt = System.currentTimeMillis()
+            Log.i(
+                TAG,
+                "延迟追踪: 事件→文本=${traceLinesAtMs - traceEventAtMs}ms " +
+                    "文本→解析=${traceParsedAtMs - traceLinesAtMs}ms " +
+                    "解析→分类=${categoriesAt - traceParsedAtMs}ms " +
+                    "分类→查库=${dbAt - categoriesAt}ms"
+            )
+            service.mainExecutor.execute { display(enriched, loaded, dbAt) }
         }
     }
 
@@ -513,21 +595,58 @@ class AutoBookEngine(private val service: AccessibilityService) {
         false
     }
 
-    private fun display(draft: AutoBookDraft, categories: Map<Int, List<Category>>) {
+    private fun display(
+        draft: AutoBookDraft,
+        categories: Map<Int, List<Category>>,
+        scheduledAtMs: Long = System.currentTimeMillis(),
+    ) {
+        val mainAt = System.currentTimeMillis()
+        scrimHintShown = false
         try {
             overlay.show(
                 draft = draft,
                 categoriesByType = categories,
-                onConfirm = { type, categoryName ->
+                onConfirm = { type, categoryName, remark ->
                     // 先打标再落库：落库是异步的，这期间页面若再抛事件不能复弹
-                    dedup.markConfirmed(draft.dedupKeys, System.currentTimeMillis())
-                    Log.i(TAG, "用户确认记账: type=$type category=$categoryName amount=${draft.amount}")
-                    scope.launch { persist(draft, type, categoryName) }
+                    val effect = AutoBookDismissPolicy.effectOf(AutoBookCloseSource.CONFIRM)
+                    if (effect.markConfirmed) {
+                        dedup.markConfirmed(draft.dedupKeys, System.currentTimeMillis())
+                    }
+                    Log.i(
+                        TAG,
+                        "用户确认记账: type=$type category=$categoryName amount=${draft.amount} 说明=$remark"
+                    )
+                    scope.launch { persist(draft, type, categoryName, remark) }
                 },
-                onDismiss = {
-                    dedup.markDismissed(draft.dedupKeys, System.currentTimeMillis())
+                onIgnore = {
+                    // **唯一**会写「忽略」记忆的地方：只有用户点「忽略」按钮才走到这里
+                    val effect = AutoBookDismissPolicy.effectOf(AutoBookCloseSource.IGNORE)
+                    if (effect.markDismissed) {
+                        dedup.markDismissed(draft.dedupKeys, System.currentTimeMillis())
+                    }
+                    if (effect.persistIgnored) ignoreStore.markIgnored(draft.sourceId)
                     Log.i(TAG, "用户忽略: sourceId=${draft.sourceId}")
+                },
+                onScrimTap = {
+                    // 遮罩点击 = 吞掉点击：不关浮窗、不写 ignore、不写 DISMISSED（2026-10-20 用户要求）
+                    val effect = AutoBookDismissPolicy.effectOf(AutoBookCloseSource.SCRIM_TAP)
+                    Log.d(TAG, "遮罩点击已吞掉（closeOverlay=${effect.closeOverlay}）")
+                    if (!scrimHintShown) {
+                        scrimHintShown = true
+                        service.mainExecutor.execute {
+                            Toast.makeText(
+                                service,
+                                "点「记一笔」或「忽略」才会关闭",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 }
+            )
+            Log.i(
+                TAG,
+                "延迟追踪: 查库→主线程=${mainAt - scheduledAtMs}ms " +
+                    "挂载=${System.currentTimeMillis() - mainAt}ms"
             )
             dedup.markShown(draft.dedupKeys, System.currentTimeMillis())
             shownCount++
@@ -539,6 +658,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
         } catch (e: Exception) {
             // 浮窗挂不上（例如系统限制）不能静默：记日志，下一笔还会再试
             Log.e(TAG, "浮窗展示失败: ${e.message}", e)
+        } finally {
+            pendingOverlaySourceId = null
         }
     }
 
@@ -561,8 +682,15 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     /**
      * 幂等落库：同 source + sourceId 已存在时直接跳过（同一笔被反复确认只记一次）。
+     *
+     * @param editedRemark 用户在浮窗「说明」行里填的文字（空串 = 不写说明）
      */
-    private suspend fun persist(draft: AutoBookDraft, type: Int, categoryName: String) {
+    private suspend fun persist(
+        draft: AutoBookDraft,
+        type: Int,
+        categoryName: String,
+        editedRemark: String,
+    ) {
         try {
             val source = SOURCE_PREFIX + draft.channel
             if (financeManager.dao.transactionExists(source, draft.sourceId)) {
@@ -582,7 +710,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 categoryName = categoryName,
                 amount = draft.amount,
                 accountName = draft.accountName,
-                remark = draft.remark(),
+                // 账本「说明」：只用用户在浮窗里填的文字（编辑值优先、空则不写）。
+                // 商户 / 商品说明 / 付款方式已是独立字段，不再拼进说明。
+                remark = draft.bookedRemark(editedRemark),
                 date = date,
                 dateTime = dateTime,
                 source = source,
@@ -602,7 +732,12 @@ class AutoBookEngine(private val service: AccessibilityService) {
         }
     }
 
-    /** 服务销毁时清理浮窗、预采集、去重表与协程 */
+    /**
+     * 服务销毁时清理浮窗、预采集、去重表与协程。
+     *
+     * 这是**唯一**允许被动卸载浮窗的路径（[AutoBookCloseSource.SERVICE_RELEASE]）：
+     * 用户操作只能通过浮窗里的「记一笔」/「忽略」两个按钮，切 App / 点遮罩都不卸载。
+     */
     fun release() {
         preDraft = null
         pendingRemark = null

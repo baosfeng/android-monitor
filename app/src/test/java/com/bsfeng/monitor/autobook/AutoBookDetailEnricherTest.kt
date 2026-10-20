@@ -75,25 +75,53 @@ class AutoBookDetailEnricherTest {
     }
 
     @Test
-    fun `时间对不上时退到同一天最近的一笔`() {
+    fun `时间对不上时不匹配`() {
+        // 2026-10-17 用户要求：补全只认时间戳精确匹配，不再用「同一天最近一笔」这种猜法。
         val sameDay = booked(id = 3, dateTime = "2026-10-16 09:00:00")
         val otherDay = booked(id = 4, date = "2026-10-15", dateTime = "2026-10-15 18:32:00")
-        val match = AutoBookDetailEnricher.findMatch(
-            listOf(sameDay, otherDay), draft(), nowMs = 10_000L
+        assertNull(
+            AutoBookDetailEnricher.findMatch(
+                listOf(sameDay, otherDay), draft(), nowMs = 10_000L
+            )
         )
-        assertEquals(3L, match?.id)
     }
 
     @Test
-    fun `详情页没给时间时取最近 31 天最新的一笔`() {
+    fun `详情页没给时间时不匹配`() {
+        // 金额相同不代表同一笔：没有时间戳就放弃补全（宁可少补一次，也不改错账）。
         val recent = booked(id = 5, createdAt = 9_000L)
         val ancient = booked(id = 6, createdAt = 1L)
-        val match = AutoBookDetailEnricher.findMatch(
-            listOf(recent, ancient),
-            draft(timeText = ""),
-            nowMs = 10_000L
+        assertNull(
+            AutoBookDetailEnricher.findMatch(
+                listOf(recent, ancient),
+                draft(timeText = ""),
+                nowMs = 10_000L
+            )
         )
-        assertEquals(5L, match?.id)
+    }
+
+    @Test
+    fun `窗口内两笔时间接近时不匹配`() {
+        // 两笔记账时刻只差 5 秒、详情页时间是 18:32:21 → 分不清，放弃
+        val a = booked(id = 8, dateTime = "2026-10-16 18:32:00")
+        val b = booked(id = 9, dateTime = "2026-10-16 18:32:05")
+        assertNull(
+            AutoBookDetailEnricher.findMatch(listOf(a, b), draft(), nowMs = 10_000L)
+        )
+    }
+
+    @Test
+    fun `精确匹配优先于未补全的时间窗口`() {
+        // 已补全过详情的那笔时间与详情页一致 → 必须先认它，不能配到邻近的未补全记录
+        val enriched = booked(id = 10, dateTime = "2026-10-16 18:32:21").copy(
+            tradeTime = "2026-10-16 18:32:21",
+            orderId = "CFP000000000000000000"
+        )
+        val pending = booked(id = 11, dateTime = "2026-10-16 18:32:00")
+        assertEquals(
+            10L,
+            AutoBookDetailEnricher.findMatch(listOf(pending, enriched), draft(), 10_000L)?.id
+        )
     }
 
     @Test
@@ -163,9 +191,10 @@ class AutoBookDetailEnricherTest {
         assertEquals("2026-10-16 18:32:21", tx.dateTime)
         assertEquals("detail-source-id", tx.sourceId)
         assertEquals(99_000L, tx.updatedAt)
-        // 备注：追加商品说明与付款方式，且不重复已有的付款方式
-        assertTrue(tx.remark.contains("充值:阿里云服务购买"))
-        assertEquals(1, Regex("余额宝").findAll(tx.remark).count())
+        // 说明：用户写的文字原样保留，不追加商品说明 / 付款方式（2026-10-20 起说明只由用户写）
+        assertEquals("阿里云", tx.remark)
+        assertEquals("充值:阿里云服务购买", tx.productDesc)
+        assertEquals("余额宝", tx.payMethod)
     }
 
     @Test
@@ -180,7 +209,8 @@ class AutoBookDetailEnricherTest {
             platformCategory = "日用百货",
             tradeTime = "2026-10-16 18:32:21",
             sourceId = "detail-source-id",
-            remark = "阿里云计算有限公司·充值:阿里云服务购买·余额宝"
+            // 说明是用户自己写的，补全不会碰它 —— 所以这里放什么都应该 changed=false
+            remark = "用户写的说明"
         )
         val result = AutoBookDetailEnricher.enrich(existing, draft(), nowMs = 99_000L)
         assertFalse(result.changed)

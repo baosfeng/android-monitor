@@ -26,8 +26,9 @@ internal data class DetailEnrichResult(
  * - 详情页有交易时间：优先 ±30 分钟内时间最近的一笔，其次同一天最近的一笔；
  * - 详情页没时间：最近 31 天内最新的一笔。
  *
- * 补全规则：**只补信息，不改用户的选择** —— 类型 / 分类 / 金额 / 账户原样保留；
- * 商户名只在详情页给的更全（不更短）时替换；备注只追加缺失的商品说明 / 付款方式。
+ * 补全规则：**只补信息，不改用户的选择** —— 类型 / 分类 / 金额 / 账户 / 说明原样保留；
+ * 商户名只在详情页给的更全（不更短）时替换；商品说明 / 付款方式 / 订单号 / 平台分类 / 交易时间
+ * 各补各的结构化字段，**不再拼进账本「说明」**（2026-10-20 起说明只由用户在浮窗里写）。
  */
 internal object AutoBookDetailEnricher {
 
@@ -38,11 +39,17 @@ internal object AutoBookDetailEnricher {
      */
     const val EXACT_WINDOW_MS = 60 * 1000L
 
-    /** 模糊匹配窗口：**只对还没补全过详情的记录**生效（记账时刻与页面时间可能差几分钟） */
-    const val MATCH_WINDOW_MS = 30 * 60 * 1000L
+    /**
+     * 未补全记录的时间窗口：从结果页记账时，记录时间取的是「点记一笔」的时刻，
+     * 与详情页的支付时间通常只差几十秒（自动记账是支付后立即弹窗）。
+     *
+     * 原来用 30 分钟，真机出现过把邻近同金额的另一笔配错；现在收紧到 2 分钟，
+     * 且窗口内出现两笔接近的记录时**直接放弃**（宁可少补一次，也不改错账）。
+     */
+    const val NEAR_WINDOW_MS = 2 * 60 * 1000L
 
-    /** 详情页没给时间时的兜底范围：只和最近 31 天的记录匹配 */
-    const val FALLBACK_WINDOW_MS = 31L * 24 * 60 * 60 * 1000
+    /** 两笔记录的时间差在这个范围内视为「分不清」→ 不补全 */
+    private const val AMBIGUITY_MS = 30 * 1000L
 
     /** 金额比较容差：两端都是页面上解析出来的两位小数，浮点误差远小于它 */
     private const val AMOUNT_EPS = 0.005
@@ -54,34 +61,29 @@ internal object AutoBookDetailEnricher {
         val pool = candidates.filter { abs(it.amount - draft.amount) < AMOUNT_EPS }
         if (pool.isEmpty()) return null
 
-        val normalized = AutoBookParser.normalizeTradeTime(draft.timeText)
-        val detailMs = normalized?.let { parseMs(it) }
-        if (normalized != null && detailMs != null) {
-            // 1) 时间几乎一致：这次就是那一笔（即使已经补全过详情也要认，否则重进详情页会重复弹窗）
-            val exact = pool
-                .mapNotNull { tx -> parseMs(tx.dateTime)?.let { ms -> tx to abs(ms - detailMs) } }
-                .filter { it.second <= EXACT_WINDOW_MS }
-                .minByOrNull { it.second }
-                ?.first
-            if (exact != null) return exact
+        // 详情页没给交易时间就**不猜**：金额相同不代表同一笔，宁可这次不补全。
+        val normalized = AutoBookParser.normalizeTradeTime(draft.timeText) ?: return null
+        val detailMs = parseMs(normalized) ?: return null
 
-            // 2) 模糊匹配只对「还没补全过详情」的记录生效：同金额的第二笔不能匹配到已补全的那笔。
-            val pending = pool.filter { it.isUnenriched() }
-            val nearest = pending
-                .mapNotNull { tx -> parseMs(tx.dateTime)?.let { ms -> tx to abs(ms - detailMs) } }
-                .filter { it.second <= MATCH_WINDOW_MS }
-                .minByOrNull { it.second }
-                ?.first
-            if (nearest != null) return nearest
+        // 1) 已补全过的记录：时间几乎一致就是它（重进同一详情页仍能认出来）
+        val exact = pool.filter { !it.isUnenriched() }
+            .mapNotNull { tx -> parseMs(tx.dateTime)?.let { ms -> tx to abs(ms - detailMs) } }
+            .filter { it.second <= EXACT_WINDOW_MS }
+            .minByOrNull { it.second }
+            ?.first
+        if (exact != null) return exact
 
-            // 3) 记录当时取的是记账时刻（可能差到几小时）→ 退到同一天 + 金额，且同样只认未补全的
-            val date = normalized.substringBefore(" ")
-            return pending.filter { it.date == date }.maxByOrNull { it.createdAt }
-        }
+        // 2) 未补全记录（记录时间 = 记账时刻，与支付时间差几十秒）：只在 ±2 分钟内认
+        val near = pool.filter { it.isUnenriched() }
+            .mapNotNull { tx -> parseMs(tx.dateTime)?.let { ms -> tx to abs(ms - detailMs) } }
+            .filter { it.second <= NEAR_WINDOW_MS }
+            .sortedBy { it.second }
+        if (near.isEmpty()) return null
 
-        return pool
-            .filter { it.isUnenriched() && nowMs - it.createdAt <= FALLBACK_WINDOW_MS }
-            .maxByOrNull { it.createdAt }
+        // 3) 窗口内有第二笔同样接近 → 分不清，放弃（避免把同金额的另一笔改错）
+        val bestGap = near.first().second
+        if (near.count { it.second - bestGap <= AMBIGUITY_MS } > 1) return null
+        return near.first().first
     }
 
     /** 是否还没补全过详情：订单号与页面交易时间都为空，说明它只见过结果页。 */
@@ -137,16 +139,8 @@ internal object AutoBookDetailEnricher {
             changed = true
         }
 
-        // 备注：用户填的文字原样保留，只追加详情页新增的商品说明 / 付款方式
-        var remark = existing.remark
-        if (productDesc.isNotBlank() && !remark.contains(productDesc)) {
-            remark = appendPart(remark, productDesc)
-            changed = true
-        }
-        if (payMethod.isNotBlank() && !remark.contains(payMethod)) {
-            remark = appendPart(remark, payMethod)
-            changed = true
-        }
+        // 说明：**原样保留**。商品说明 / 付款方式各有独立字段，不再拼进账本说明 ——
+        // 2026-10-20 起「说明」只由用户在浮窗里写，补全只改结构化字段。
 
         // 详情页有订单号 / 精确时间时，落库键也升级成更稳定的那一个，后续同一页不会再被当成新账
         var sourceId = existing.sourceId
@@ -166,16 +160,12 @@ internal object AutoBookDetailEnricher {
                 tradeTime = tradeTime,
                 date = date,
                 dateTime = dateTime,
-                remark = remark.take(AutoBookDraft.REMARK_MAX_LENGTH),
                 sourceId = sourceId,
                 updatedAt = nowMs
             ),
             true
         )
     }
-
-    private fun appendPart(remark: String, part: String): String =
-        if (remark.isBlank()) part else "$remark·$part"
 
     private fun parseMs(text: String): Long? = try {
         LocalDateTime.parse(text, DATE_TIME)

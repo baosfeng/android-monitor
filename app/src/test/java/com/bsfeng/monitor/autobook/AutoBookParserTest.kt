@@ -141,6 +141,73 @@ class AutoBookParserTest {
 
     // ==================== 正常路径 ====================
 
+    /**
+     * 真机 dump 还原：微信**首页会话列表**（2026-10-17 20:47，误弹现场）。
+     *
+     * 误弹链路：会话名「微信支付」命中 pageMarkers → 会话预览
+     * `收款方24小时内未接收你的转账，已过期` 被「收款方」标签取到值 → 判成账单详情页；
+     * `微信支付 20:47` 的「支付」前缀又把小时数 20 取成金额 → 「识别到一笔收入 ¥20.00」。
+     */
+    private fun wechatHomeSessionListLines(): List<String> = listOf(
+        "搜索 更多功能",
+        "微信",
+        "Mac 微信已登录",
+        "18:33", "这个阿姨现在才过来，唉",
+        "微信支付 20:47", "[4条] 红包退款到账通知",
+        "李四 20:39",
+        "收款方24小时内未接收你的转账，已过期",
+        "20:36", "新华社: 男子为女友母亲养老送终，老人外…",
+        "服务通知 20:31", "医保码: 医保账户变动提醒",
+        "闲置物品分享群6群 20:17", "[2条] 笨小孩: 出14寸儿童自行车，徐径…",
+        "上海小米YU7车主🤡群🚗 19:55", "月至: 累麻了",
+        "QQ邮箱提醒 19:49", "X: 639100 is your X verification code",
+        "顾晨曦 16:36", "可以的",
+        "通讯录 发现 我",
+        "Cool Request用户交流（1） 12:46"
+    )
+
+    @Test
+    fun `微信首页会话列表不得被识别成账单`() {
+        assertFalse(
+            "首页会话列表没有任何账单页签名，白名单门禁必须拒绝",
+            AutoBookParser.isBillPage(wechatHomeSessionListLines())
+        )
+        assertNull(AutoBookParser.parse(wechat, wechatHomeSessionListLines(), 1_760_000_000_000L))
+    }
+
+    @Test
+    fun `会话列表里的「红包」与「40元」不得凑成红包结果页`() {
+        // 真机 2026-10-17 20:52：会话预览「红包退款到账通知」+ 会话名「微信支付」
+        // + 群消息「徐径自提40元」曾被宽签名（红包 + 微信支付 + 金额）拼成一笔 ¥40.00 收入。
+        val lines = listOf(
+            "搜索 更多功能", "微信", "Mac 微信已登录", "18:33", "这个阿姨现在才过来，唉",
+            "微信支付 20:50", "红包退款到账通知", "李四 20:39",
+            "收款方24小时内未接收你的转账，已过期", "20:36",
+            "新华社: 男子为女友母亲养老送终，老人外…", "服务通知 20:31", "医保码: 医保账户变动提醒",
+            "闲置物品分享群6群 20:17", "笨小孩: 出14寸儿童自行车，徐径自提40元",
+            "上海小米YU7车主🤡群🚗 19:55", "月至: 累麻了", "QQ邮箱提醒 19:49",
+            "X: 639100 is your X verification code", "顾晨曦 16:36", "可以的",
+            "通讯录 发现 我", "Cool Request用户交流（1） 12:46"
+        )
+        assertFalse(AutoBookParser.isBillPage(lines))
+        assertNull(AutoBookParser.parse(wechat, lines, 1_760_000_000_000L))
+    }
+
+    @Test
+    fun `会话名带时间不得被当成金额`() {
+        // 真机：`微信支付 20:47` 里「支付」是前缀、`20:47` 是时间，不是 ¥20.00
+        assertNull(AutoBookParser.extractAmount(listOf("微信支付 20:47")))
+        assertNull(AutoBookParser.extractAmount(listOf("支付 20:47")))
+        // 真实金额仍然要能取到（不能把金额一起抹掉）
+        assertEquals(20.0, AutoBookParser.extractAmount(listOf("微信支付 20.00"))!!.second, 0.0001)
+    }
+
+    @Test
+    fun `会话预览的通知文案不得当作字段值`() {
+        val lines = listOf("李四 20:39", "收款方24小时内未接收你的转账，已过期", "20:36")
+        assertNull(AutoBookParser.labelValue(lines, listOf("收款方")))
+    }
+
     @Test
     fun `支付宝账单详情页：金额商户账户分类时间全部提取正确`() {
         val draft = AutoBookParser.parse(alipay, alipayDetailLines(), 1_760_000_000_000L)
@@ -224,7 +291,8 @@ class AutoBookParserTest {
         val draft = AutoBookParser.parse(wechat, lines, 1L)
         requireNotNull(draft)
         assertEquals("零钱", draft.payMethod)
-        assertEquals("星巴克咖啡·零钱", draft.remark())
+        // 说明只来自用户输入：商户 / 付款方式已是结构化字段，不再拼进说明（2026-10-20）
+        assertEquals("", draft.remark())
     }
 
     @Test
@@ -882,10 +950,9 @@ class AutoBookParserTest {
     }
 
     @Test
-    fun `账本备注带上商品说明与付款方式`() {
-        // 真机（2026-10-16 支付宝账单详情页）：商户名只是平台名「淘宝闪购」，
-        // 真正说明这笔钱花在哪的是商品说明；付款方式说明从哪张卡扣的。
-        // 用户反馈「详情信息没记录正确」就是因为这两项原先全丢。
+    fun `说明不拼接商品说明与付款方式`() {
+        // 2026-10-20 用户要求：账本那一列改成「说明」，只写用户在浮窗里填的文字。
+        // 商品说明 / 付款方式各有结构化字段，再拼进说明只会让账本列表出现一长串重复文字。
         val lines = listOf(
             "返回 全部账单", "账单详情", "淘宝闪购", "支出23.9元", "交易成功",
             "支付时间 2026-10-16 18:32:21", "付款方式 招商银行信用卡(8888)",
@@ -895,15 +962,12 @@ class AutoBookParserTest {
         requireNotNull(draft)
         assertEquals("淘宝闪购", draft.merchant)
         assertEquals("某某湘菜馆(示例店)外卖订单", draft.productDesc)
-        assertEquals(
-            "备注不带前缀，直接以商户名开头",
-            "淘宝闪购·某某湘菜馆(示例店)外卖订单·招商银行信用卡(8888)",
-            draft.remark()
-        )
+        assertEquals("招商银行信用卡(8888)", draft.payMethod)
+        assertEquals("用户没写说明就是空串", "", draft.remark())
     }
 
     @Test
-    fun `商户名取不到时用商品说明顶替备注`() {
+    fun `商户名取不到时说明仍为空`() {
         val lines = listOf(
             "交易成功", "支出23.9元", "支付时间 2026-10-16 18:32:21",
             "商品说明 某某湘菜馆(示例店)外卖订单"
@@ -911,7 +975,7 @@ class AutoBookParserTest {
         val draft = AutoBookParser.parse(alipay, lines, 1L)
         requireNotNull(draft)
         assertEquals("这个模板没有商户字段", "", draft.merchant)
-        assertEquals("某某湘菜馆(示例店)外卖订单", draft.remark())
+        assertEquals("商品说明只进结构化字段，不进说明", "", draft.remark())
     }
 
     @Test
