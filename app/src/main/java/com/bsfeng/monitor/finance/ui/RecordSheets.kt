@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -34,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,14 +42,12 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.model.Account
-import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.BottomSheet
-import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.flow.filter
@@ -73,99 +69,36 @@ import kotlin.math.roundToInt
 private val WHEEL_H: Dp = 132.dp
 private val WHEEL_ITEM_H: Dp = 44.dp
 
-/** 分类网格图标尺寸（一行 6 个，图标相应收小） */
-private val GRID_ICON_SIZE: Dp = 32.dp
-
-/** 分类网格列数：一行 6 个（与自动记账浮窗一致，减少滑动） */
-private const val GRID_COLUMNS = 6
-
 /** 分类网格最大高度 = 屏高的 46%（原型 .s14a-grid 的 max-height:46vh） */
 private const val GRID_MAX_H_RATIO = 0.46f
 
 /** 日期 chip 最小宽度（原型 .s14a-strip .chip 的 min-width:48px） */
 private val CHIP_MIN_W: Dp = 48.dp
 
-/** 选择分类（4 列网格，一屏 20 个 —— 原型 A 版的核心优势） */
+/**
+ * 选择分类：两级同屏（上方一级 chips + 下方 6 列二级网格），与自动记账浮窗共用 [CategoryPicker]。
+ *
+ * 选中二级 / 「不细分」即回传一级或二级名并关抽屉；点一级只切换网格（用户还在挑细分）。
+ */
 @Composable
 internal fun BoxScope.CategorySheet(
     visible: Boolean,
-    categories: List<Category>,
+    tree: CategoryTree,
+    type: Int,
     selectedName: String,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     if (!visible) return
+    // 高度按屏高比例算，不写死（原型 .s14a-grid 的 max-height:46vh）
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * GRID_MAX_H_RATIO).dp
     SheetShell(title = "选择分类", onDismiss = onDismiss) {
-        val t = LocalDesignTokens.current
-        // 一行 6 个：分类最多 22 个，一屏能扫到更多，减少滑动次数。
-        // 用普通 Column + verticalScroll 而不是 LazyVerticalGrid：项数很少，一次性组合成本低，
-        // 滚动时也不会反复组合/回收 item（真机反馈分类网格滑动卡）。
-        val rows = remember(categories) { categories.chunked(GRID_COLUMNS) }
-        val maxHeight = (LocalConfiguration.current.screenHeightDp * GRID_MAX_H_RATIO).dp
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(t.space3),
-        ) {
-            rows.forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(t.space3),
-                ) {
-                    row.forEach { category ->
-                        CategoryGridCell(
-                            name = category.name,
-                            selected = category.name == selectedName,
-                            onClick = { onPick(category.name) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    // 最后一行不足 6 个时补空位，保持每列等宽
-                    repeat(GRID_COLUMNS - row.size) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryGridCell(
-    name: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val t = LocalDesignTokens.current
-    val shape = RoundedCornerShape(t.radiusMd)
-    // 原型 .s14a-grid .s14-cat 是 padding:0 —— 格子自己不带内边距，行距只由网格 gap 决定
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .clickable { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // 选中态 = 图标外描边（原型 .s14a-grid .s14-cat[aria-pressed="true"] .cat-icon）
-        Box(
-            modifier = Modifier
-                .clip(shape)
-                .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
-                .padding(2.dp),
-        ) {
-            CategoryIcon(name = name, color = categoryColorOf(name), size = GRID_ICON_SIZE)
-        }
-        Spacer(Modifier.height(t.space1))
-        Text(
-            name,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) t.accentText else t.fg2,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
+        CategoryPicker(
+            tree = tree,
+            type = type,
+            selectedName = selectedName,
+            onPick = onPick,
+            gridMaxHeight = maxHeight,
         )
     }
 }

@@ -37,7 +37,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.bsfeng.monitor.finance.model.Category
+import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
 
@@ -91,14 +91,14 @@ class AutoBookOverlay(private val service: AccessibilityService) {
     /**
      * 展示浮窗。
      *
-     * @param categoriesByType 0=支出分类 / 1=收入分类，切换类型时无需再查库
+     * @param categoryTree 一级/二级分类树（含全部分类，切换类型时无需再查库）
      * @param onConfirm 用户点「记一笔」：回传最终的类型、分类与编辑后的说明
      * @param onIgnore 用户点「忽略」：**唯一**会让浮窗按用户意愿关闭的回调
      * @param onScrimTap 用户点到遮罩：只做诊断 / 轻提示，浮窗保持显示
      */
     fun show(
         draft: AutoBookDraft,
-        categoriesByType: Map<Int, List<Category>>,
+        categoryTree: CategoryTree,
         onConfirm: (type: Int, categoryName: String, remark: String) -> Unit,
         onIgnore: () -> Unit,
         onScrimTap: () -> Unit = {},
@@ -117,7 +117,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
                 MonitorTheme {
                     AutoBookOverlayContent(
                         draft = draft,
-                        categoriesByType = categoriesByType,
+                        categoryTree = categoryTree,
                         onConfirm = { type, category, remark ->
                             onConfirm(type, category, remark)
                             hide()
@@ -269,7 +269,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
     @Composable
     private fun AutoBookOverlayContent(
         draft: AutoBookDraft,
-        categoriesByType: Map<Int, List<Category>>,
+        categoryTree: CategoryTree,
         onConfirm: (type: Int, categoryName: String, remark: String) -> Unit,
         onIgnore: () -> Unit,
         onScrimTap: () -> Unit,
@@ -303,7 +303,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
             Box(Modifier.align(Alignment.BottomCenter)) {
                 AutoBookConfirmSheet(
                     draft = draft,
-                    categoriesByType = categoriesByType,
+                    categoryTree = categoryTree,
                     onConfirm = onConfirm,
                     onIgnore = onIgnore,
                     onImeFocusRequest = onImeFocusRequest,

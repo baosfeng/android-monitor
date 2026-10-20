@@ -5,8 +5,9 @@ import android.util.Log
 import android.widget.Toast
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
+import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.FinanceManager
-import com.bsfeng.monitor.finance.model.Category
+import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -115,9 +116,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
     /** 本次浮窗是否已经提示过「点遮罩不会关闭」（每笔只一次，避免连点刷屏） */
     private var scrimHintShown = false
 
-    /** 分类缓存：0=支出 / 1=收入，切换类型时不再查库 */
+    /**
+     * 分类树缓存：一级/二级父子关系，浮窗切类型时不再查库。
+     *
+     * 分类种子由系统预置、运行期不会变（导入只会按名称去重），因此进程内缓存一次即够。
+     * 为 null 表示还没加载成功，下次弹窗会重试（服务连上时 [warmUp] 已经预加载）。
+     */
     @Volatile
-    private var categoriesByType: Map<Int, List<Category>> = emptyMap()
+    private var categoryTree: CategoryTree? = null
 
     /** 最近一次识别结果（诊断用） */
     @Volatile
@@ -130,14 +136,14 @@ class AutoBookEngine(private val service: AccessibilityService) {
         private set
 
     /**
-     * 服务连接后预热：提前加载分类，避免第一笔账单弹窗时才发现分类缓存是空的。
+     * 服务连接后预热：提前加载分类树，避免第一笔账单弹窗时才发现分类缓存是空的。
      *
      * 真机反馈「识别到后浮窗还要等一会儿」：分类查询是弹窗链路里唯一可能首次建库/慢查询的一步，
      * 放在服务连接时做，用户在支付页停留的几秒足够完成。
      */
     fun warmUp() {
         scope.launch {
-            if (categoriesByType.isEmpty()) categoriesByType = loadCategories()
+            if (categoryTree == null) categoryTree = loadCategoryTree()
         }
     }
 
@@ -463,7 +469,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         if (draft.sourceId == pendingOverlaySourceId) return
         pendingOverlaySourceId = draft.sourceId
         scope.launch {
-            val loaded = categoriesByType.ifEmpty { loadCategories().also { categoriesByType = it } }
+            val loaded = categoryTree ?: loadCategoryTree().also { categoryTree = it }
             val categoriesAt = System.currentTimeMillis()
             // 已记账查询与「同商户上次选择」互不依赖：并行查，少等一次 SQLite 往返
             val booked: Boolean
@@ -597,7 +603,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
     private fun display(
         draft: AutoBookDraft,
-        categories: Map<Int, List<Category>>,
+        tree: CategoryTree,
         scheduledAtMs: Long = System.currentTimeMillis(),
     ) {
         val mainAt = System.currentTimeMillis()
@@ -605,7 +611,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         try {
             overlay.show(
                 draft = draft,
-                categoriesByType = categories,
+                categoryTree = tree,
                 onConfirm = { type, categoryName, remark ->
                     // 先打标再落库：落库是异步的，这期间页面若再抛事件不能复弹
                     val effect = AutoBookDismissPolicy.effectOf(AutoBookCloseSource.CONFIRM)
@@ -616,7 +622,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
                         TAG,
                         "用户确认记账: type=$type category=$categoryName amount=${draft.amount} 说明=$remark"
                     )
-                    scope.launch { persist(draft, type, categoryName, remark) }
+                    scope.launch { persist(draft, type, categoryName, remark, tree) }
                 },
                 onIgnore = {
                     // **唯一**会写「忽略」记忆的地方：只有用户点「忽略」按钮才走到这里
@@ -663,21 +669,41 @@ class AutoBookEngine(private val service: AccessibilityService) {
         }
     }
 
-    private suspend fun loadCategories(): Map<Int, List<Category>> {
+    /** 加载分类树；失败返回空树（浮窗照常弹，落库时分类回退「其他」） */
+    private suspend fun loadCategoryTree(): CategoryTree {
         return try {
             var all = financeManager.getAllCategories()
             if (all.isEmpty()) {
                 financeManager.seedDefaultCategories()
                 all = financeManager.getAllCategories()
             }
-            mapOf(
-                AutoBookDraft.TYPE_EXPENSE to all.filter { it.type == 0 },
-                AutoBookDraft.TYPE_INCOME to all.filter { it.type == 1 }
-            )
+            CategoryTree(all)
         } catch (e: Exception) {
-            Log.e(TAG, "加载分类失败: ${e.message}", e)
-            emptyMap()
+            Log.e(TAG, "加载分类树失败: ${e.message}", e)
+            CategoryTree(emptyList())
         }
+    }
+
+    /**
+     * 落库前的分类校验：名字必须属于该类型的分类树（一级或二级），否则回退一级兜底。
+     *
+     * 分类名可能来自三处：识别映射（应已是树内名字）、浮窗里用户的选择（树内）、
+     * 或「商户上次选择」的历史值（可能已被分类体系升级后的迁移改掉）。最后一种如果原样落库，
+     * 统计与预算就会遇到分类表里不存在的名字 —— 这里统一兜住。
+     *
+     * 树加载失败（空树）时保留原名：宁可分类名游离，也不能让用户确认过的这笔账记不下来。
+     */
+    private fun sanitizeCategoryName(tree: CategoryTree, type: Int, name: String): String {
+        val pickerType = if (type == AutoBookDraft.TYPE_INCOME) 1 else 0
+        val names = tree.topLevel(pickerType).flatMap { top ->
+            listOf(top.name) + tree.childrenOf(top.name).map { it.name }
+        }
+        if (names.isEmpty()) return name
+        if (names.contains(name)) return name
+        val fallback = if (pickerType == 1) INCOME_FALLBACK else CategoryCatalog.FALLBACK
+        val picked = if (names.contains(fallback)) fallback else names.first()
+        Log.d(TAG, "分类名不在分类树中，回退: [$name] → [$picked]")
+        return picked
     }
 
     /**
@@ -690,6 +716,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
         type: Int,
         categoryName: String,
         editedRemark: String,
+        tree: CategoryTree,
     ) {
         try {
             val source = SOURCE_PREFIX + draft.channel
@@ -698,6 +725,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
                 return
             }
 
+            val bookedCategory = sanitizeCategoryName(tree, type, categoryName)
             val now = LocalDateTime.now()
             // 交易时间优先用**页面上的**（对账口径）；页面没给或格式不认识才退回记账时刻。
             // 用「点记一笔的时刻」会让同一笔在不同时间被识别时算出不同的落库键
@@ -707,7 +735,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
             val date = dateTime.substringBefore(" ")
             val transaction = Transaction(
                 type = type,
-                categoryName = categoryName,
+                categoryName = bookedCategory,
                 amount = draft.amount,
                 accountName = draft.accountName,
                 // 账本「说明」：只用用户在浮窗里填的文字（编辑值优先、空则不写）。
@@ -726,7 +754,7 @@ class AutoBookEngine(private val service: AccessibilityService) {
             )
 
             val id = financeManager.addTransaction(transaction)
-            Log.i(TAG, "自动记账已写入 id=$id 金额=${draft.amount} 分类=$categoryName 商户=${draft.merchant}")
+            Log.i(TAG, "自动记账已写入 id=$id 金额=${draft.amount} 分类=$bookedCategory 商户=${draft.merchant}")
         } catch (e: Exception) {
             Log.e(TAG, "自动记账落库失败: ${e.message}", e)
         }
@@ -753,5 +781,8 @@ class AutoBookEngine(private val service: AccessibilityService) {
 
         /** 落库来源前缀，最终 source 形如 auto_alipay / auto_wechat */
         const val SOURCE_PREFIX = "auto_"
+
+        /** 收入分类的兜底一级（支出侧的兜底是 [CategoryCatalog.FALLBACK]「其他」） */
+        const val INCOME_FALLBACK = "其他收入"
     }
 }
