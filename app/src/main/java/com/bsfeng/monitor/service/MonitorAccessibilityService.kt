@@ -356,6 +356,26 @@ open class MonitorAccessibilityService : AccessibilityService() {
         @Volatile
         var isRunning: Boolean = false
             private set
+
+        /**
+         * 已连接的服务实例：**仅供**设置页调试入口唤起自动记账浮窗（模拟器没有支付 App）。
+         * onDestroy 置空，避免静态引用持住已销毁的 Service。
+         */
+        @Volatile
+        var instance: MonitorAccessibilityService? = null
+            private set
+    }
+
+    /**
+     * 调试入口：不经过识别链路，直接弹出自动记账确认浮窗。
+     *
+     * @return false = 服务未连接（浮窗挂不上），调用方据此提示用户
+     */
+    fun debugShowAutoBookSheet(): Boolean {
+        if (!isRunning) return false
+        runCatching { autoBookEngine.showDebugSheet() }
+            .onFailure { Log.w("MonitorService", "调试浮窗启动失败: ${it.message}") }
+        return true
     }
 
     /**
@@ -465,6 +485,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        instance = this
         // 实验 2 前提验证：确认系统真的把 isAccessibilityTool 读进来了。
         // 属性写在 res/xml/accessibility_service_config.xml，若 ROM 忽略它，
         // 「微信是否放行节点」的实验就会变成假阴性 —— 必须先把这条前提钉死。
@@ -499,6 +520,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         isRunning = false
+        instance = null
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)

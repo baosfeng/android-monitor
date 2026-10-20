@@ -6,6 +6,7 @@ import android.widget.Toast
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import com.bsfeng.monitor.finance.CategoryTree
+import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.Transaction
@@ -601,6 +602,19 @@ class AutoBookEngine(private val service: AccessibilityService) {
         false
     }
 
+    /**
+     * 调试入口：不经过识别链路，直接用 [AutoBookDebugDraft] 弹浮窗。
+     *
+     * 模拟器里没有支付 App，唯一能验证浮窗（关闭契约 / 两级分类 / 说明输入）的办法。
+     * 与真实链路共用 [display]，所以分类推荐、落库口径完全一致；只在 debug 构建的设置页调试区调用。
+     */
+    fun showDebugSheet() {
+        scope.launch {
+            val tree = categoryTree ?: loadCategoryTree().also { categoryTree = it }
+            service.mainExecutor.execute { display(AutoBookDebugDraft.create(), tree) }
+        }
+    }
+
     private fun display(
         draft: AutoBookDraft,
         tree: CategoryTree,
@@ -754,6 +768,9 @@ class AutoBookEngine(private val service: AccessibilityService) {
             )
 
             val id = financeManager.addTransaction(transaction)
+            // 记账列表靠这个一次性信号做「顶部新行高亮 1.6s」：只有自动记账落库才点亮，
+            // 手写记录 / 切 Tab / 回前台重载都不点亮（见 FinanceInsertSignal）
+            FinanceInsertSignal.mark(id)
             Log.i(TAG, "自动记账已写入 id=$id 金额=${draft.amount} 分类=$bookedCategory 商户=${draft.merchant}")
         } catch (e: Exception) {
             Log.e(TAG, "自动记账落库失败: ${e.message}", e)
