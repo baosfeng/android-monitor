@@ -3,6 +3,8 @@ package com.bsfeng.monitor.autobook
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -129,9 +132,13 @@ fun AutoBookConfirmSheet(
         category = resolveCategory(categoryTree, type, category)
     }
 
+    // 卡片高度上限 ≈ 82% 屏高（原型 .ab-sheet max-height:82vh）：小屏上内容区先滚，按钮仍在屏内
+    val panelMaxHeight = (LocalConfiguration.current.screenHeightDp * PANEL_MAX_HEIGHT_RATIO).dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // 高度上限 + 内部滚动：卡片本身不再无限长，底部「记一笔 / 忽略」恒在屏幕内
+            .heightIn(max = panelMaxHeight)
             .clip(RoundedCornerShape(topStart = MonitorRadius.lg, topEnd = MonitorRadius.lg))
             // 实心面板：玻璃主题的 surface 是 74% alpha，直接用会透出下面的支付页文字。
             // opaquePanel 把 surface-warm → surface → bg 合成到 100% 不透明（有意偏离玻璃语言）。
@@ -160,7 +167,7 @@ fun AutoBookConfirmSheet(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "识别到一笔${if (isIncome) "收入" else "支出"}",
+                text = "自动记账",
                 style = MaterialTheme.typography.titleSmall,
                 color = tokens.fg
             )
@@ -186,33 +193,41 @@ fun AutoBookConfirmSheet(
             )
         }
 
-        Divider()
-
-        // 类型
-        Label("类型")
-        Row(
+        // ── 内容区：可滚动（原型 .ab-body）—— 高度受限时只有这里滚，底部按钮固定 ──
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(MonitorRadius.sm))
-                .background(tokens.fg.copy(alpha = 0.06f))
-                .padding(3.dp)
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
         ) {
-            listOf(
-                AutoBookDraft.TYPE_EXPENSE to "支出",
-                AutoBookDraft.TYPE_INCOME to "收入",
-                AutoBookDraft.TYPE_TRANSFER to "转账"
-            ).forEach { (value, label) ->
-                SegmentItem(
-                    text = label,
-                    selected = type == value,
-                    modifier = Modifier.weight(1f)
-                ) { type = value }
-            }
+        Divider()
+
+        // 说明：账本里唯一的自由文本，放在最上面（原型 .ab-sheet 的顺序）
+        Label("说明")
+        RemarkRow(
+            remark = remark,
+            onRemarkChange = { remark = it },
+            editing = editing,
+            onRequestEdit = { if (!editing) editing = true },
+            onFinishEdit = finishEdit,
+            onFocusChange = { remarkFocused = it },
+            focusRequester = remarkFocus,
+        )
+
+        Divider()
+
+        // 结构化单据字段：只读展示，占一行是一行
+        MetaRow("账户", draft.accountName)
+        if (draft.payMethod.isNotBlank()) {
+            MetaRow("支付方式", draft.payMethod)
+        }
+        if (draft.timeText.isNotBlank()) {
+            MetaRow("时间", draft.timeText)
         }
 
         Divider()
 
-        // 分类：两级同屏（一级 chips + 6 列二级网格），与「记一笔」共用 CategoryPicker。
+        // 分类：两级同屏（一级 6×3 图标网格 + 二级 6 列网格），与「记一笔」共用 CategoryPicker。
         // 识别到的分类默认选中（一级/二级都支持），命中的格子右上角标圆点；标题行再写明
         // 「识别：xx」，用户一眼能确认系统猜的是哪个，改选后也还能对照。
         // 点一级只切换网格、点二级才改选中 —— 浮窗仍然只能由「记一笔」/「忽略」关闭。
@@ -245,32 +260,18 @@ fun AutoBookConfirmSheet(
             recognizedName = draft.categoryName,
             gridMaxHeight = PANEL_GRID_MAX_H,
             iconSize = PANEL_CATEGORY_ICON_SIZE,
+            // 浮窗也用 6 列 3 行的图标网格（与记账页一致），不再是一行横向 chips
+            topStyle = com.bsfeng.monitor.finance.ui.CategoryPickerTopStyle.GRID,
         )
-
-        Divider()
-
-        MetaRow("账户", draft.accountName)
-        if (draft.payMethod.isNotBlank()) {
-            MetaRow("支付方式", draft.payMethod)
-        }
-        if (draft.timeText.isNotBlank()) {
-            MetaRow("时间", draft.timeText)
         }
 
-        // 说明：账本里唯一的自由文本。取代原来只读的「备注」行 ——
-        // 2026-10-20 用户要求：说明由用户自己写，不再自动拼商户 / 商品说明 / 付款方式。
-        Label("说明")
-        RemarkRow(
-            remark = remark,
-            onRemarkChange = { remark = it },
-            editing = editing,
-            onRequestEdit = { if (!editing) editing = true },
-            onFinishEdit = finishEdit,
-            onFocusChange = { remarkFocused = it },
-            focusRequester = remarkFocus,
+        // ── 底部按钮：固定（原型 .ab-foot）—— 内容区再长也不把主操作挤出屏幕 ──
+        HorizontalDivider(
+            modifier = Modifier.padding(top = MonitorSpacing.md),
+            thickness = 1.dp,
+            color = tokens.borderSoft,
         )
-
-        Spacer(Modifier.height(MonitorSpacing.lg))
+        Spacer(Modifier.height(MonitorSpacing.md))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -528,16 +529,18 @@ private fun resolveCategory(tree: CategoryTree, type: Int, name: String): String
 private const val INCOME_FALLBACK = "其他收入"
 
 /**
- * 浮窗分类区高度受限：一级 chips（--tap-min 44dp）+ 间距 + 二级网格。
+ * 浮窗分类区高度受限：一级 6 列 3 行（约 3×52dp）+ 间距 + 二级网格。
  *
- * 原实现只有 6 列一级网格（176dp）；加了一级 chips 后把二级网格压到 136dp，
- * 整块约 190dp，与原来接近，小屏上「记一笔 / 忽略」仍能留在屏内。
- * 二级网格自身可滚动，任一常见的 4-9 个二级都能滚到。
+ * 内容区整体可滚动（见 [AutoBookConfirmSheet]），所以二级网格不必再压到极小；
+ * 176dp ≈ 6 列下两行多一点，任一常见的 4-9 个二级都能滚到。
  */
-private val PANEL_GRID_MAX_H: Dp = 136.dp
+private val PANEL_GRID_MAX_H: Dp = 176.dp
 
-/** 浮窗里的二级格子图标（比抽屉略小：一行 6 个 + 浮窗空间更紧） */
-private val PANEL_CATEGORY_ICON_SIZE: Dp = 26.dp
+/** 浮窗里的分类格图标：与「记一笔」同一口径 32dp（原型 .cat-icon 32×32） */
+private val PANEL_CATEGORY_ICON_SIZE: Dp = 32.dp
+
+/** 卡片高度上限占屏高比例（原型 .ab-sheet max-height:82vh） */
+private const val PANEL_MAX_HEIGHT_RATIO = 0.82f
 
 /** 金额格式化：千分位 + 固定两位小数（与记账页交易行口径一致） */
 internal fun formatAmount(amount: Double): String =

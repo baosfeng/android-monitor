@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import com.bsfeng.monitor.autobook.AutoBookConfig
+import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Visibility
@@ -811,6 +812,23 @@ fun SettingsScreen(
                                             trailing = { TailChevron() },
                                         )
                                     }
+                                    // 自动记账浮窗调试入口：模拟器里没有支付 App，只能直接构造草稿唤起；
+                                    // 走 debugUi 闸（debug 构建 + 已解锁），release 构建恒不显示。
+                                    TokenDivider(first = false)
+                                    TokenRow(
+                                        title = "模拟自动记账浮窗",
+                                        subtitle = "好慷在家 · ¥128.00 · 居住·家政（验证浮窗与两级分类）",
+                                        icon = Icons.Outlined.PlayArrow,
+                                        onClick = {
+                                            val shown =
+                                                MonitorAccessibilityService.instance?.debugShowAutoBookSheet() == true
+                                            toast.show(
+                                                if (shown) "已唤起自动记账浮窗"
+                                                else "无障碍服务未运行，先在首页开启服务"
+                                            )
+                                        },
+                                        trailing = { TailChevron() },
+                                    )
                                     Spacer(Modifier.height(t.space1))
                                 }
                             }
