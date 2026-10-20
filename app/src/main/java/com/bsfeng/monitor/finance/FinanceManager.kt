@@ -4,6 +4,7 @@ import android.content.Context
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
+import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Dispatchers
@@ -162,16 +163,67 @@ class FinanceManager internal constructor(context: Context) {
     }
 
     suspend fun seedDefaultCategories() = withContext(Dispatchers.IO) {
-        val existing = dao.getAllCategories()
-        if (existing.isNotEmpty()) return@withContext
+        if (dao.getAllCategories().isNotEmpty()) return@withContext
+        insertCatalog()
+    }
 
-        val expenseCats = Category.defaultExpenseCategories.mapIndexed { index, name ->
-            Category(name = name, type = 0, sortOrder = index)
+    /** 插入一级 + 二级分类（调用方负责事务；一级先插拿到 id，二级挂 parentId） */
+    private fun insertCatalog() {
+        for ((type, seeds) in listOf(0 to CategoryCatalog.expense, 1 to CategoryCatalog.income)) {
+            seeds.forEachIndexed { index, seed ->
+                val topId = dao.insertCategory(
+                    Category(name = seed.name, type = type, parentId = -1, sortOrder = index)
+                )
+                if (topId > 0) {
+                    seed.children.forEachIndexed { childIndex, child ->
+                        dao.insertCategory(
+                            Category(
+                                name = child,
+                                type = type,
+                                parentId = topId,
+                                sortOrder = childIndex,
+                            )
+                        )
+                    }
+                }
+            }
         }
-        val incomeCats = Category.defaultIncomeCategories.mapIndexed { index, name ->
-            Category(name = name, type = 1, sortOrder = index)
+    }
+
+    /**
+     * 分类体系一次性迁移（旧扁平 → 新一级/二级）。
+     *
+     * 事务内：清空分类表 → 插入新体系 → 交易/预算按 [CategoryMigration] 归到一级。
+     * 用落盘标记保证只跑一次；失败整体回滚，旧分类与账目保持原样，下次启动重试。
+     */
+    suspend fun migrateCategoryTreeOnce() {
+        if (prefs.getBoolean(KEY_CATEGORY_TREE, false)) return
+        migrateCategoryTree()
+        prefs.edit().putBoolean(KEY_CATEGORY_TREE, true).apply()
+    }
+
+    /**
+     * 执行分类体系迁移（幂等，可重复调用；单测直接调它）。
+     *
+     * @return 改写的交易/预算行数
+     */
+    internal suspend fun migrateCategoryTree(): Int = withContext(Dispatchers.IO) {
+        val updated = dao.runInTransaction {
+            dao.clearCategories()
+            insertCatalog()
+            var count = 0
+            for ((name, type) in dao.getDistinctTransactionCategoryTypes()) {
+                val target = CategoryMigration.mapLegacy(name, type)
+                count += dao.updateTransactionCategory(name, target)
+            }
+            // 预算只有支出分类（总预算 category_name 为空，查询已跳过）
+            for (name in dao.getDistinctBudgetCategoryNames()) {
+                count += dao.updateBudgetCategory(name, CategoryMigration.mapLegacy(name, 0))
+            }
+            count
         }
-        dao.insertCategories(expenseCats + incomeCats)
+        if (updated > 0) notifyChanged()
+        updated
     }
 
     suspend fun seedDefaultAccounts() = withContext(Dispatchers.IO) {
@@ -223,8 +275,9 @@ class FinanceManager internal constructor(context: Context) {
 
     // ========== 数据完整性 ==========
 
-    /** 初始化：确保分类和账户种子数据存在 */
+    /** 初始化：分类体系迁移（只跑一次）→ 种子兜底 → 其他一次性清理 */
     suspend fun ensureInitialized() {
+        migrateCategoryTreeOnce()
         seedDefaultCategories()
         seedDefaultAccounts()
         cleanLegacyAggregatedRemarksOnce()
@@ -280,6 +333,9 @@ class FinanceManager internal constructor(context: Context) {
 
         /** 旧版拼接说明清理的一次性标记（v1：2026-10-20「说明」语义变更） */
         private const val KEY_LEGACY_REMARK_CLEANED = "legacy_remark_cleaned_v1"
+
+        /** 分类体系迁移的一次性标记（v1：旧扁平分类 → 一级/二级） */
+        private const val KEY_CATEGORY_TREE = "category_tree_v1"
 
         /** 交易类型：支出 */
         const val TYPE_EXPENSE = 0
