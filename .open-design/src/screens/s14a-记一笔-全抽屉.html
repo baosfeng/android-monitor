@@ -30,8 +30,9 @@
   .screen.s14a .s14-toggle{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:44px;
     border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:0;text-align:left}
   .screen.s14a .s14-toggle:not(:first-child){border-top:1px solid var(--border-soft)}
-  .screen.s14a .s14-note{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
+  .screen.s14a .note-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);
     font-family:inherit;font-size:var(--text-sm);font-weight:500}
+  .screen.s14a .note-input::placeholder{color:var(--muted)}
   .screen.s14a .s14-receipt-text{flex:1;min-width:0;text-align:left;color:var(--fg);font-size:var(--text-sm);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .s14a-kv{display:flex;gap:var(--space-3);padding:var(--space-1) 0;font-size:var(--text-sm)}
@@ -39,14 +40,21 @@
   .s14a-kv > span:last-child{flex:1;min-width:0;color:var(--fg);word-break:break-all}
   .s14a-actions{position:sticky;bottom:0;margin-top:auto;padding:var(--space-3) var(--space-4) var(--space-5);
     background:linear-gradient(to top,var(--surface) 62%,transparent)}
-  /* 抽屉内：分类网格 4 列（一屏可见 12+，冷门不用长滑） */
-  .s14a-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3);max-height:46vh;overflow-y:auto}
-  .s14a-grid .s14-cat{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
-    border:0;background:transparent;padding:0;font:inherit;color:var(--muted);cursor:pointer}
-  .s14a-grid .s14-cat .cat-icon{width:44px;height:44px}
-  .s14a-grid .s14-cat[aria-pressed="true"]{color:var(--accent-text)}
-  .s14a-grid .s14-cat[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
-  .s14a-grid .s14-cat-name{font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  /* 抽屉内：两级分类（一级 6 列，点一级展开二级；32px 线描图标，选中 2px accent 描边） */
+  .screen.s14a .cat-picker-scroll{max-height:52vh;overflow-y:auto;padding-right:2px}
+  .screen.s14a .cat-picker{display:flex;flex-direction:column;gap:var(--space-3)}
+  .screen.s14a .cat-picker + .cat-picker{margin-top:var(--space-3)}
+  .screen.s14a .cat-picker-title{margin:0;font-size:var(--text-sm);font-weight:600;color:var(--fg)}
+  .screen.s14a .cat-l1-grid,.screen.s14a .cat-l2-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2)}
+  .screen.s14a .cat-l1,.screen.s14a .cat-l2{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;min-width:0;min-height:52px;padding:4px 2px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--fg-2);font:inherit;font-size:var(--text-xs);cursor:pointer;transition:transform var(--dur-press) var(--ease-out)}
+  .screen.s14a .cat-l1:active,.screen.s14a .cat-l2:active{transform:scale(.93)}
+  .screen.s14a .cat-l1[aria-pressed="true"],.screen.s14a .cat-l2[aria-pressed="true"]{color:var(--accent-text);font-weight:600}
+  .screen.s14a .cat-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:var(--radius-sm)}
+  .screen.s14a .cat-icon svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .screen.s14a .cat-l1[aria-pressed="true"] .cat-icon,.screen.s14a .cat-l2[aria-pressed="true"] .cat-icon{outline:2px solid var(--accent);outline-offset:2px}
+  .screen.s14a .cat-name{max-width:100%;white-space:nowrap;text-align:center;line-height:1.15}
+  .screen.s14a .cat-l2-panel{padding-top:var(--space-2);border-top:1px solid var(--border-soft)}
+  .screen.s14a .cat-l2-title{margin:0 0 var(--space-2);font-size:var(--text-xs);color:var(--muted)}
   /* 抽屉内：横向条（只用于日期快捷） */
   .s14a-strip{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-2);scrollbar-width:none}
   .s14a-strip::-webkit-scrollbar{display:none}
@@ -119,8 +127,8 @@
           <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
         </button>
         <div class="s14-toggle" data-od-id="s14a-note-row">
-          <span class="s14-label">备注</span>
-          <input class="s14-note" id="s14a-note" type="text" autocomplete="off" value="某某湘菜馆(示例店)外卖订单" aria-label="备注">
+          <span class="s14-label">说明</span>
+          <input class="note-input" id="s14a-note" type="text" autocomplete="off" placeholder="写一下买了什么" aria-label="说明">
         </div>
       </div>
     </div>
@@ -141,33 +149,297 @@
 
   </div>
 
-  <!-- 抽屉 1：分类（4 列网格，21 个全在，可滚） -->
+  <!-- 抽屉 1：分类（两级：一级 6 列，点一级展开该一级的二级） -->
   <div class="scrim is-bottom" id="s14a-cat-sheet" hidden data-od-id="s14a-cat-sheet">
     <div class="sheet" role="dialog" aria-modal="true" aria-label="选择分类">
       <div class="sheet-grip"></div>
       <p class="h3">选择分类</p>
-      <div class="s14a-grid mt-3" data-pick="cat" data-od-id="s14a-cat-grid">
-        <button class="s14-cat" type="button" aria-pressed="true" data-cat="餐饮" data-value="餐饮"><span class="cat-icon s1"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="s14-cat-name">餐饮</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="出行" data-value="出行"><span class="cat-icon s2"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/></svg></span><span class="s14-cat-name">出行</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="购物" data-value="购物"><span class="cat-icon s3"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/></svg></span><span class="s14-cat-name">购物</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="日用" data-value="日用"><span class="cat-icon s4"><svg viewBox="0 0 24 24" aria-hidden><path d="M10 2.6h4v3.6l2.2 3v12.2H7.8V9.2l2.2-3z"/><path d="M7.8 13.6h8.4"/></svg></span><span class="s14-cat-name">日用</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="零食" data-value="零食"><span class="cat-icon s5"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.8 10.2a5.2 5.2 0 0 1 10.4 0z"/><path d="M6.8 10.2h10.4L12 21.4z"/></svg></span><span class="s14-cat-name">零食</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="水果" data-value="水果"><span class="cat-icon s6"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 7.6c-4.2 0-7.2 2.6-7.2 6.6s3 6.8 7.2 6.8 7.2-2.8 7.2-6.8-3-6.6-7.2-6.6z"/><path d="M12 7.6V4.2M12 4.2c1.4-1.6 3.4-1.2 3.4-1.2"/></svg></span><span class="s14-cat-name">水果</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="水电" data-value="水电"><span class="cat-icon s7"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 2.6c3.2 4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.8-7 6-11z"/></svg></span><span class="s14-cat-name">水电</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="就医" data-value="就医"><span class="cat-icon s8"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="s14-cat-name">就医</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="通讯" data-value="通讯"><span class="cat-icon s9"><svg viewBox="0 0 24 24" aria-hidden><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.6 5.6h2.8M10.8 18.4h2.4"/></svg></span><span class="s14-cat-name">通讯</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="衣物" data-value="衣物"><span class="cat-icon s10"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="s14-cat-name">衣物</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="美妆" data-value="美妆"><span class="cat-icon s11"><svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="11.2" width="6" height="10.2" rx="1.4"/><path d="M9.8 11.2V7.6c0-1.3 1-2.6 2.2-2.6s2.2 1.3 2.2 2.6v3.6"/></svg></span><span class="s14-cat-name">美妆</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="房租还贷" data-value="房租还贷"><span class="cat-icon s12"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/><circle cx="12" cy="14.6" r="1.8"/></svg></span><span class="s14-cat-name">房租还贷</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="休闲娱乐" data-value="休闲娱乐"><span class="cat-icon s13"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/></svg></span><span class="s14-cat-name">休闲娱乐</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="打车" data-value="打车"><span class="cat-icon s14"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 15.6v-4.2l2.4-4.8h12.8l2.4 4.8v4.2z"/><circle cx="7.2" cy="16.4" r="1.8"/><circle cx="16.8" cy="16.4" r="1.8"/><path d="M5.6 11.4h12.8"/></svg></span><span class="s14-cat-name">打车</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="住宿" data-value="住宿"><span class="cat-icon s15"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 19.4V10h11.6a4.4 4.4 0 0 1 4.4 4.4v5"/><path d="M3.2 15.2h17.6"/><circle cx="7.6" cy="11.6" r="2"/></svg></span><span class="s14-cat-name">住宿</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="旅游度假" data-value="旅游度假"><span class="cat-icon s16"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/></svg></span><span class="s14-cat-name">旅游度假</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="汽车" data-value="汽车"><span class="cat-icon s1"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 16.2v-4.6L6.2 6.8h11.6L20 11.6v4.6z"/><circle cx="7.8" cy="16.8" r="1.8"/><circle cx="16.2" cy="16.8" r="1.8"/><path d="M4 11.4h16"/></svg></span><span class="s14-cat-name">汽车</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="手机数码" data-value="手机数码"><span class="cat-icon s2"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="s14-cat-name">手机数码</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="居家生活" data-value="居家生活"><span class="cat-icon s3"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.4 12.4V9.2a2.2 2.2 0 0 1 4.4 0v3.2h8.4V9.2a2.2 2.2 0 0 1 4.4 0v3.2"/><path d="M3.4 12.4h17.2v6.4H3.4z"/></svg></span><span class="s14-cat-name">居家生活</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="教育" data-value="教育"><span class="cat-icon s4"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="s14-cat-name">教育</span></button>
-        <button class="s14-cat" type="button" aria-pressed="false" data-cat="宽带话费" data-value="宽带话费"><span class="cat-icon s5"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.8 9.2a10.4 10.4 0 0 1 14.4 0"/><path d="M8 12.8a6 6 0 0 1 8 0"/><circle cx="12" cy="17.4" r="1.8"/></svg></span><span class="s14-cat-name">宽带话费</span></button>
+      <div class="cat-picker-scroll mt-3" data-od-id="s14a-cat-grid">
+      <div class="cat-picker" data-kind="expense">
+        <p class="cat-picker-title">一级分类</p>
+        <div class="cat-l1-grid">
+          <button class="cat-l1" type="button" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">餐饮</span></button>
+          <button class="cat-l1" type="button" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/></svg></span><span class="cat-name">购物</span></button>
+          <button class="cat-l1" type="button" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/></svg></span><span class="cat-name">交通</span></button>
+          <button class="cat-l1" type="button" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 15.6v-4.2l2.4-4.8h12.8l2.4 4.8v4.2z"/><circle cx="7.2" cy="16.4" r="1.8"/><circle cx="16.8" cy="16.4" r="1.8"/><path d="M5.6 11.4h12.8"/></svg></span><span class="cat-name">汽车</span></button>
+          <button class="cat-l1" type="button" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">居住</span></button>
+          <button class="cat-l1" type="button" data-l1="通讯" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.6 5.6h2.8M10.8 18.4h2.4"/></svg></span><span class="cat-name">通讯</span></button>
+          <button class="cat-l1" type="button" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="cat-name">医疗健康</span></button>
+          <button class="cat-l1" type="button" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/></svg></span><span class="cat-name">娱乐休闲</span></button>
+          <button class="cat-l1" type="button" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/></svg></span><span class="cat-name">旅游</span></button>
+          <button class="cat-l1" type="button" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="cat-name">教育学习</span></button>
+          <button class="cat-l1" type="button" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">人情往来</span></button>
+          <button class="cat-l1" type="button" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.2 4.8 6v6c0 4 3 7 7.2 8.8 4.2-1.8 7.2-4.8 7.2-8.8V6z"/><path d="M9.2 12.2l2 2 3.6-3.6"/></svg></span><span class="cat-name">金融保险</span></button>
+          <button class="cat-l1" type="button" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">服饰美妆</span></button>
+          <button class="cat-l1" type="button" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.4 8.2h5.2v10.6a1.8 1.8 0 0 1-1.8 1.8h-1.6a1.8 1.8 0 0 1-1.8-1.8z"/><path d="M10.8 8.2V5.4h2.4v2.8"/><path d="M10.2 4.2h3.6"/><path d="M9.4 13.2h5.2"/></svg></span><span class="cat-name">母婴育儿</span></button>
+          <button class="cat-l1" type="button" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="7.6" r="1.6"/><circle cx="12" cy="6.4" r="1.6"/><circle cx="16" cy="7.6" r="1.6"/><path d="M12 10.6c3 0 5.2 2.3 5.2 4.6 0 1.9-1.5 3.1-3.2 3.1-.9 0-1.4-.3-2-.3s-1.1.3-2 .3c-1.7 0-3.2-1.2-3.2-3.1 0-2.3 2.2-4.6 5.2-4.6z"/></svg></span><span class="cat-name">宠物</span></button>
+          <button class="cat-l1" type="button" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">数码电子</span></button>
+          <button class="cat-l1" type="button" data-l1="运动健身" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 8.4v7.2M4.2 10v4M17.4 8.4v7.2M19.8 10v4M6.6 12h10.8"/></svg></span><span class="cat-name">运动健身</span></button>
+          <button class="cat-l1" type="button" data-l1="其他" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="6.4" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="17.6" cy="12" r="1.4"/></svg></span><span class="cat-name">其他</span></button>
+        </div>
+        <div class="cat-l2-panel" data-l1="餐饮" hidden>
+          <p class="cat-l2-title">二级分类 · 餐饮</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="外卖" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/></svg></span><span class="cat-name">外卖</span></button>
+            <button class="cat-l2" type="button" data-l2="早餐" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">早餐</span></button>
+            <button class="cat-l2" type="button" data-l2="午餐" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">午餐</span></button>
+            <button class="cat-l2" type="button" data-l2="晚餐" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">晚餐</span></button>
+            <button class="cat-l2" type="button" data-l2="正餐" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">正餐</span></button>
+            <button class="cat-l2" type="button" data-l2="咖啡奶茶" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M5.4 8.4h11.2v5.6a5.6 5.6 0 0 1-11.2 0z"/><path d="M16.6 9.6h1.8a2.6 2.6 0 0 1 0 5.2h-1.8"/></svg></span><span class="cat-name">咖啡奶茶</span></button>
+            <button class="cat-l2" type="button" data-l2="零食" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">零食</span></button>
+            <button class="cat-l2" type="button" data-l2="水果" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">水果</span></button>
+            <button class="cat-l2" type="button" data-l2="聚餐" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">聚餐</span></button>
+            <button class="cat-l2" type="button" data-l2="烟酒" data-l1="餐饮" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M10 3.4h4v3h-4z"/><path d="M9.2 8.4h5.6v10.4a2 2 0 0 1-2 2h-1.6a2 2 0 0 1-2-2z"/><path d="M9.2 12.4h5.6"/></svg></span><span class="cat-name">烟酒</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="购物" hidden>
+          <p class="cat-l2-title">二级分类 · 购物</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="电商" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/></svg></span><span class="cat-name">电商</span></button>
+            <button class="cat-l2" type="button" data-l2="超市便利" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="9.4" cy="19.4" r="1.6"/><circle cx="17" cy="19.4" r="1.6"/><path d="M3.4 4.4h2.2l2.6 11.2h10.4"/><path d="M6.4 8.2h14l-1.6 6.6H7.8"/></svg></span><span class="cat-name">超市便利</span></button>
+            <button class="cat-l2" type="button" data-l2="家居日用" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">家居日用</span></button>
+            <button class="cat-l2" type="button" data-l2="礼品" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">礼品</span></button>
+            <button class="cat-l2" type="button" data-l2="其他购物" data-l1="购物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.6 7.8h14.8l-1.2 12.6H5.8z"/><path d="M9 7.8V5.8a3 3 0 0 1 6 0v2"/></svg></span><span class="cat-name">其他购物</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="交通" hidden>
+          <p class="cat-l2-title">二级分类 · 交通</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="打车" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 15.6v-4.2l2.4-4.8h12.8l2.4 4.8v4.2z"/><circle cx="7.2" cy="16.4" r="1.8"/><circle cx="16.8" cy="16.4" r="1.8"/><path d="M5.6 11.4h12.8"/></svg></span><span class="cat-name">打车</span></button>
+            <button class="cat-l2" type="button" data-l2="公交地铁" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/></svg></span><span class="cat-name">公交地铁</span></button>
+            <button class="cat-l2" type="button" data-l2="火车高铁" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/></svg></span><span class="cat-name">火车高铁</span></button>
+            <button class="cat-l2" type="button" data-l2="飞机" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/></svg></span><span class="cat-name">飞机</span></button>
+            <button class="cat-l2" type="button" data-l2="共享单车" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="6.6" cy="16.4" r="3.6"/><circle cx="17.4" cy="16.4" r="3.6"/><path d="M6.6 16.4 10 8.4h3.4l3 8M9.6 8.4h4.2"/></svg></span><span class="cat-name">共享单车</span></button>
+            <button class="cat-l2" type="button" data-l2="长途客运" data-l1="交通" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="3.5" width="16" height="14" rx="2.5"/><path d="M4 11h16M9.5 3.5V11M14.5 3.5V11"/><circle cx="8" cy="19.4" r="1.6"/><circle cx="16" cy="19.4" r="1.6"/></svg></span><span class="cat-name">长途客运</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="汽车" hidden>
+          <p class="cat-l2-title">二级分类 · 汽车</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="加油" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M5.4 20.4V4.6h7.2v15.8"/><path d="M5.4 9.8h7.2"/><path d="M12.6 8.4h3.2l2.8 2.8v6.6a1.6 1.6 0 0 1-3.2 0v-3.4h-2.8"/></svg></span><span class="cat-name">加油</span></button>
+            <button class="cat-l2" type="button" data-l2="停车" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4.6" y="3.4" width="14.8" height="17.2" rx="2.6"/><path d="M10 16.6V7.6h2.6a3 3 0 0 1 0 6H10"/></svg></span><span class="cat-name">停车</span></button>
+            <button class="cat-l2" type="button" data-l2="保养维修" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M15.6 3.4a5.2 5.2 0 0 0-5.4 8.6L3.6 18.6a2 2 0 0 0 2.8 2.8l6.6-6.6a5.2 5.2 0 0 0 8.6-5.4l-3.2 3.2-3.4-3.4z"/></svg></span><span class="cat-name">保养维修</span></button>
+            <button class="cat-l2" type="button" data-l2="洗车" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 2.6c3.2 4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.8-7 6-11z"/></svg></span><span class="cat-name">洗车</span></button>
+            <button class="cat-l2" type="button" data-l2="车险" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.2 4.8 6v6c0 4 3 7 7.2 8.8 4.2-1.8 7.2-4.8 7.2-8.8V6z"/><path d="M9.2 12.2l2 2 3.6-3.6"/></svg></span><span class="cat-name">车险</span></button>
+            <button class="cat-l2" type="button" data-l2="违章罚款" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">违章罚款</span></button>
+            <button class="cat-l2" type="button" data-l2="过路费" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4.6" y="3.4" width="14.8" height="17.2" rx="2.6"/><path d="M10 16.6V7.6h2.6a3 3 0 0 1 0 6H10"/></svg></span><span class="cat-name">过路费</span></button>
+            <button class="cat-l2" type="button" data-l2="车贷" data-l1="汽车" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">车贷</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="居住" hidden>
+          <p class="cat-l2-title">二级分类 · 居住</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="房租" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">房租</span></button>
+            <button class="cat-l2" type="button" data-l2="房贷" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">房贷</span></button>
+            <button class="cat-l2" type="button" data-l2="物业" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">物业</span></button>
+            <button class="cat-l2" type="button" data-l2="水电燃气" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 2.6c3.2 4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.8-7 6-11z"/></svg></span><span class="cat-name">水电燃气</span></button>
+            <button class="cat-l2" type="button" data-l2="宽带" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.8 9.2a10.4 10.4 0 0 1 14.4 0"/><path d="M8 12.8a6 6 0 0 1 8 0"/><circle cx="12" cy="17.4" r="1.8"/></svg></span><span class="cat-name">宽带</span></button>
+            <button class="cat-l2" type="button" data-l2="家政" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M15.6 3.4a5.2 5.2 0 0 0-5.4 8.6L3.6 18.6a2 2 0 0 0 2.8 2.8l6.6-6.6a5.2 5.2 0 0 0 8.6-5.4l-3.2 3.2-3.4-3.4z"/></svg></span><span class="cat-name">家政</span></button>
+            <button class="cat-l2" type="button" data-l2="维修" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M15.6 3.4a5.2 5.2 0 0 0-5.4 8.6L3.6 18.6a2 2 0 0 0 2.8 2.8l6.6-6.6a5.2 5.2 0 0 0 8.6-5.4l-3.2 3.2-3.4-3.4z"/></svg></span><span class="cat-name">维修</span></button>
+            <button class="cat-l2" type="button" data-l2="装修" data-l1="居住" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M15.6 3.4a5.2 5.2 0 0 0-5.4 8.6L3.6 18.6a2 2 0 0 0 2.8 2.8l6.6-6.6a5.2 5.2 0 0 0 8.6-5.4l-3.2 3.2-3.4-3.4z"/></svg></span><span class="cat-name">装修</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="通讯" hidden>
+          <p class="cat-l2-title">二级分类 · 通讯</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="话费" data-l1="通讯" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.6 5.6h2.8M10.8 18.4h2.4"/></svg></span><span class="cat-name">话费</span></button>
+            <button class="cat-l2" type="button" data-l2="流量" data-l1="通讯" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4.8 9.2a10.4 10.4 0 0 1 14.4 0"/><path d="M8 12.8a6 6 0 0 1 8 0"/><circle cx="12" cy="17.4" r="1.8"/></svg></span><span class="cat-name">流量</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="医疗健康" hidden>
+          <p class="cat-l2-title">二级分类 · 医疗健康</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="门诊" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="cat-name">门诊</span></button>
+            <button class="cat-l2" type="button" data-l2="药品" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="8.6" y="3" width="6.8" height="18" rx="3.4" transform="rotate(45 12 12)"/><path d="M9.6 9.6l4.8 4.8"/></svg></span><span class="cat-name">药品</span></button>
+            <button class="cat-l2" type="button" data-l2="体检" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="cat-name">体检</span></button>
+            <button class="cat-l2" type="button" data-l2="牙科" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="cat-name">牙科</span></button>
+            <button class="cat-l2" type="button" data-l2="住院" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="4" y="4.5" width="16" height="16" rx="3.5"/><path d="M12 9.2v6.6M8.7 12.5h6.6"/></svg></span><span class="cat-name">住院</span></button>
+            <button class="cat-l2" type="button" data-l2="保健品" data-l1="医疗健康" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="8.6" y="3" width="6.8" height="18" rx="3.4" transform="rotate(45 12 12)"/><path d="M9.6 9.6l4.8 4.8"/></svg></span><span class="cat-name">保健品</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="娱乐休闲" hidden>
+          <p class="cat-l2-title">二级分类 · 娱乐休闲</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="电影" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/></svg></span><span class="cat-name">电影</span></button>
+            <button class="cat-l2" type="button" data-l2="游戏" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="8" width="18.4" height="9.4" rx="4.6"/><path d="M8 11.4v3.2M6.4 13h3.2"/><circle cx="16.4" cy="12.2" r=".9"/><circle cx="18.4" cy="14.2" r=".9"/></svg></span><span class="cat-name">游戏</span></button>
+            <button class="cat-l2" type="button" data-l2="会员订阅" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.4 14.6 9l6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.8l6-.8z"/></svg></span><span class="cat-name">会员订阅</span></button>
+            <button class="cat-l2" type="button" data-l2="演出" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/></svg></span><span class="cat-name">演出</span></button>
+            <button class="cat-l2" type="button" data-l2="KTV" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="9.4" y="2.8" width="5.2" height="10" rx="2.6"/><path d="M6.4 11.2a5.6 5.6 0 0 0 11.2 0"/><path d="M12 16.8v4.4M9.4 21.2h5.2"/></svg></span><span class="cat-name">KTV</span></button>
+            <button class="cat-l2" type="button" data-l2="酒吧" data-l1="娱乐休闲" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M5.4 8.4h11.2v5.6a5.6 5.6 0 0 1-11.2 0z"/><path d="M16.6 9.6h1.8a2.6 2.6 0 0 1 0 5.2h-1.8"/></svg></span><span class="cat-name">酒吧</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="旅游" hidden>
+          <p class="cat-l2-title">二级分类 · 旅游</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="跟团游" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/></svg></span><span class="cat-name">跟团游</span></button>
+            <button class="cat-l2" type="button" data-l2="自由行" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.2 13.4 20.8 5.8l-7 15.4-2.6-6.2z"/></svg></span><span class="cat-name">自由行</span></button>
+            <button class="cat-l2" type="button" data-l2="住宿" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">住宿</span></button>
+            <button class="cat-l2" type="button" data-l2="景点门票" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6.2" width="18" height="13.6" rx="2.6"/><path d="M3 10.6h18M8 6.2l-1.8 4.4M13.4 6.2l-1.8 4.4M18.8 6.2l-1.8 4.4"/></svg></span><span class="cat-name">景点门票</span></button>
+            <button class="cat-l2" type="button" data-l2="签证" data-l1="旅游" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">签证</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="教育学习" hidden>
+          <p class="cat-l2-title">二级分类 · 教育学习</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="课程培训" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="cat-name">课程培训</span></button>
+            <button class="cat-l2" type="button" data-l2="书籍" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="cat-name">书籍</span></button>
+            <button class="cat-l2" type="button" data-l2="考试报名" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">考试报名</span></button>
+            <button class="cat-l2" type="button" data-l2="文具" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="cat-name">文具</span></button>
+            <button class="cat-l2" type="button" data-l2="学习工具" data-l1="教育学习" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">学习工具</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="人情往来" hidden>
+          <p class="cat-l2-title">二级分类 · 人情往来</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="发红包" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="5.6" width="18" height="12.8" rx="2.2"/><path d="M3.4 7 12 13.2 20.6 7"/></svg></span><span class="cat-name">发红包</span></button>
+            <button class="cat-l2" type="button" data-l2="礼物" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">礼物</span></button>
+            <button class="cat-l2" type="button" data-l2="请客" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M7 2.8v6.4M5 2.8v3.6a2 2 0 0 0 4 0V2.8M7 9.2v12"/><path d="M17.5 2.8c-1.6 0-2.7 2.2-2.7 5.2s1.1 4.4 2.7 4.4v8.8"/></svg></span><span class="cat-name">请客</span></button>
+            <button class="cat-l2" type="button" data-l2="孝亲" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">孝亲</span></button>
+            <button class="cat-l2" type="button" data-l2="捐赠" data-l1="人情往来" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">捐赠</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="金融保险" hidden>
+          <p class="cat-l2-title">二级分类 · 金融保险</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="保险" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.2 4.8 6v6c0 4 3 7 7.2 8.8 4.2-1.8 7.2-4.8 7.2-8.8V6z"/><path d="M9.2 12.2l2 2 3.6-3.6"/></svg></span><span class="cat-name">保险</span></button>
+            <button class="cat-l2" type="button" data-l2="手续费" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">手续费</span></button>
+            <button class="cat-l2" type="button" data-l2="利息" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">利息</span></button>
+            <button class="cat-l2" type="button" data-l2="投资" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">投资</span></button>
+            <button class="cat-l2" type="button" data-l2="还款" data-l1="金融保险" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">还款</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="服饰美妆" hidden>
+          <p class="cat-l2-title">二级分类 · 服饰美妆</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="衣服" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">衣服</span></button>
+            <button class="cat-l2" type="button" data-l2="鞋包" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">鞋包</span></button>
+            <button class="cat-l2" type="button" data-l2="化妆品" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M10 3.4h4v3h-4z"/><path d="M9.2 8.4h5.6v10.4a2 2 0 0 1-2 2h-1.6a2 2 0 0 1-2-2z"/><path d="M9.2 12.4h5.6"/></svg></span><span class="cat-name">化妆品</span></button>
+            <button class="cat-l2" type="button" data-l2="美容美发" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">美容美发</span></button>
+            <button class="cat-l2" type="button" data-l2="美甲" data-l1="服饰美妆" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">美甲</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="母婴育儿" hidden>
+          <p class="cat-l2-title">二级分类 · 母婴育儿</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="奶粉" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M10 3.4h4v3h-4z"/><path d="M9.2 8.4h5.6v10.4a2 2 0 0 1-2 2h-1.6a2 2 0 0 1-2-2z"/><path d="M9.2 12.4h5.6"/></svg></span><span class="cat-name">奶粉</span></button>
+            <button class="cat-l2" type="button" data-l2="尿布" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.4 8.2h5.2v10.6a1.8 1.8 0 0 1-1.8 1.8h-1.6a1.8 1.8 0 0 1-1.8-1.8z"/><path d="M10.8 8.2V5.4h2.4v2.8"/><path d="M10.2 4.2h3.6"/><path d="M9.4 13.2h5.2"/></svg></span><span class="cat-name">尿布</span></button>
+            <button class="cat-l2" type="button" data-l2="玩具" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="9.4" width="17.2" height="10.8" rx="1.8"/><path d="M2.6 6.2h18.8v3.2H2.6z"/><path d="M12 6.2v14"/><path d="M12 6.2c-1.4 0-3.2-.8-3.2-2.3A1.7 1.7 0 0 1 12 3.2a1.7 1.7 0 0 1 3.2.7c0 1.5-1.8 2.3-3.2 2.3z"/></svg></span><span class="cat-name">玩具</span></button>
+            <button class="cat-l2" type="button" data-l2="早教" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 6.6C10.4 5 8 4.4 4.4 4.4v13.2c3.6 0 6 .6 7.6 2.2 1.6-1.6 4-2.2 7.6-2.2V4.4c-3.6 0-6 .6-7.6 2.2z"/><path d="M12 6.6v13.2"/></svg></span><span class="cat-name">早教</span></button>
+            <button class="cat-l2" type="button" data-l2="儿童衣物" data-l1="母婴育儿" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3 4 6.2l2.1 3.5 2.1-1.2V20.8h7.6V8.5l2.1 1.2L20 6.2 14.8 3 12 4.9z"/></svg></span><span class="cat-name">儿童衣物</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="宠物" hidden>
+          <p class="cat-l2-title">二级分类 · 宠物</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="宠物食品" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="7.6" r="1.6"/><circle cx="12" cy="6.4" r="1.6"/><circle cx="16" cy="7.6" r="1.6"/><path d="M12 10.6c3 0 5.2 2.3 5.2 4.6 0 1.9-1.5 3.1-3.2 3.1-.9 0-1.4-.3-2-.3s-1.1.3-2 .3c-1.7 0-3.2-1.2-3.2-3.1 0-2.3 2.2-4.6 5.2-4.6z"/></svg></span><span class="cat-name">宠物食品</span></button>
+            <button class="cat-l2" type="button" data-l2="宠物用品" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="7.6" r="1.6"/><circle cx="12" cy="6.4" r="1.6"/><circle cx="16" cy="7.6" r="1.6"/><path d="M12 10.6c3 0 5.2 2.3 5.2 4.6 0 1.9-1.5 3.1-3.2 3.1-.9 0-1.4-.3-2-.3s-1.1.3-2 .3c-1.7 0-3.2-1.2-3.2-3.1 0-2.3 2.2-4.6 5.2-4.6z"/></svg></span><span class="cat-name">宠物用品</span></button>
+            <button class="cat-l2" type="button" data-l2="宠物医疗" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="7.6" r="1.6"/><circle cx="12" cy="6.4" r="1.6"/><circle cx="16" cy="7.6" r="1.6"/><path d="M12 10.6c3 0 5.2 2.3 5.2 4.6 0 1.9-1.5 3.1-3.2 3.1-.9 0-1.4-.3-2-.3s-1.1.3-2 .3c-1.7 0-3.2-1.2-3.2-3.1 0-2.3 2.2-4.6 5.2-4.6z"/></svg></span><span class="cat-name">宠物医疗</span></button>
+            <button class="cat-l2" type="button" data-l2="宠物美容" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="7.6" r="1.6"/><circle cx="12" cy="6.4" r="1.6"/><circle cx="16" cy="7.6" r="1.6"/><path d="M12 10.6c3 0 5.2 2.3 5.2 4.6 0 1.9-1.5 3.1-3.2 3.1-.9 0-1.4-.3-2-.3s-1.1.3-2 .3c-1.7 0-3.2-1.2-3.2-3.1 0-2.3 2.2-4.6 5.2-4.6z"/></svg></span><span class="cat-name">宠物美容</span></button>
+            <button class="cat-l2" type="button" data-l2="寄养" data-l1="宠物" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 10.8 12 4.2l8.4 6.6"/><path d="M6.2 9.4v11h11.6v-11"/></svg></span><span class="cat-name">寄养</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="数码电子" hidden>
+          <p class="cat-l2-title">二级分类 · 数码电子</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="手机" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.6 5.6h2.8M10.8 18.4h2.4"/></svg></span><span class="cat-name">手机</span></button>
+            <button class="cat-l2" type="button" data-l2="电脑" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">电脑</span></button>
+            <button class="cat-l2" type="button" data-l2="配件" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">配件</span></button>
+            <button class="cat-l2" type="button" data-l2="软件" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">软件</span></button>
+            <button class="cat-l2" type="button" data-l2="云服务" data-l1="数码电子" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="4.6" width="18" height="12.4" rx="2.2"/><path d="M8.4 20.4h7.2M12 17v3.4"/></svg></span><span class="cat-name">云服务</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="运动健身" hidden>
+          <p class="cat-l2-title">二级分类 · 运动健身</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="健身房" data-l1="运动健身" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 8.4v7.2M4.2 10v4M17.4 8.4v7.2M19.8 10v4M6.6 12h10.8"/></svg></span><span class="cat-name">健身房</span></button>
+            <button class="cat-l2" type="button" data-l2="器材" data-l1="运动健身" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 8.4v7.2M4.2 10v4M17.4 8.4v7.2M19.8 10v4M6.6 12h10.8"/></svg></span><span class="cat-name">器材</span></button>
+            <button class="cat-l2" type="button" data-l2="运动装备" data-l1="运动健身" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 8.4v7.2M4.2 10v4M17.4 8.4v7.2M19.8 10v4M6.6 12h10.8"/></svg></span><span class="cat-name">运动装备</span></button>
+            <button class="cat-l2" type="button" data-l2="场地费" data-l1="运动健身" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 8.4v7.2M4.2 10v4M17.4 8.4v7.2M19.8 10v4M6.6 12h10.8"/></svg></span><span class="cat-name">场地费</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="其他" hidden>
+          <p class="cat-l2-title">二级分类 · 其他</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="未分类" data-l1="其他" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="6.4" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="17.6" cy="12" r="1.4"/></svg></span><span class="cat-name">未分类</span></button>
+            <button class="cat-l2" type="button" data-l2="杂项" data-l1="其他" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="6.4" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="17.6" cy="12" r="1.4"/></svg></span><span class="cat-name">杂项</span></button>
+            <button class="cat-l2" type="button" data-l2="生活服务" data-l1="其他" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="6.4" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="17.6" cy="12" r="1.4"/></svg></span><span class="cat-name">生活服务</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="cat-picker" data-kind="income" hidden>
+        <p class="cat-picker-title">一级分类</p>
+        <div class="cat-l1-grid">
+          <button class="cat-l1" type="button" data-l1="工资" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">工资</span></button>
+          <button class="cat-l1" type="button" data-l1="奖金" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="14.8" r="4.2"/><path d="M9.6 10.8 7.6 3.4h8.8l-2 7.4"/><path d="M11.2 13.6l.8 1.6 1.6.2-1.2 1.2.3 1.6-1.5-.8-1.5.8.3-1.6-1.2-1.2 1.6-.2z"/></svg></span><span class="cat-name">奖金</span></button>
+          <button class="cat-l1" type="button" data-l1="兼职" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.2" y="8" width="17.6" height="11.4" rx="2.2"/><path d="M8.8 8V6.2a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V8"/><path d="M3.2 12.8h17.6"/></svg></span><span class="cat-name">兼职</span></button>
+          <button class="cat-l1" type="button" data-l1="理财收益" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">理财收益</span></button>
+          <button class="cat-l1" type="button" data-l1="红包" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="5.6" width="18" height="12.8" rx="2.2"/><path d="M3.4 7 12 13.2 20.6 7"/></svg></span><span class="cat-name">红包</span></button>
+          <button class="cat-l1" type="button" data-l1="退款" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.4V9h-4.6"/></svg></span><span class="cat-name">退款</span></button>
+          <button class="cat-l1" type="button" data-l1="报销" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">报销</span></button>
+          <button class="cat-l1" type="button" data-l1="其他收入" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8.2v7.6M8.2 12h7.6"/></svg></span><span class="cat-name">其他收入</span></button>
+        </div>
+        <div class="cat-l2-panel" data-l1="工资" hidden>
+          <p class="cat-l2-title">二级分类 · 工资</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="基本工资" data-l1="工资" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">基本工资</span></button>
+            <button class="cat-l2" type="button" data-l2="绩效" data-l1="工资" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">绩效</span></button>
+            <button class="cat-l2" type="button" data-l2="年终奖" data-l1="工资" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">年终奖</span></button>
+            <button class="cat-l2" type="button" data-l2="补贴" data-l1="工资" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="6.4" width="18.4" height="11.2" rx="2.4"/><circle cx="12" cy="12" r="2.6"/><path d="M6.6 9.8v4.4M17.4 9.8v4.4"/></svg></span><span class="cat-name">补贴</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="奖金" hidden>
+          <p class="cat-l2-title">二级分类 · 奖金</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="绩效奖金" data-l1="奖金" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="14.8" r="4.2"/><path d="M9.6 10.8 7.6 3.4h8.8l-2 7.4"/><path d="M11.2 13.6l.8 1.6 1.6.2-1.2 1.2.3 1.6-1.5-.8-1.5.8.3-1.6-1.2-1.2 1.6-.2z"/></svg></span><span class="cat-name">绩效奖金</span></button>
+            <button class="cat-l2" type="button" data-l2="提成" data-l1="奖金" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="14.8" r="4.2"/><path d="M9.6 10.8 7.6 3.4h8.8l-2 7.4"/><path d="M11.2 13.6l.8 1.6 1.6.2-1.2 1.2.3 1.6-1.5-.8-1.5.8.3-1.6-1.2-1.2 1.6-.2z"/></svg></span><span class="cat-name">提成</span></button>
+            <button class="cat-l2" type="button" data-l2="项目奖金" data-l1="奖金" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="14.8" r="4.2"/><path d="M9.6 10.8 7.6 3.4h8.8l-2 7.4"/><path d="M11.2 13.6l.8 1.6 1.6.2-1.2 1.2.3 1.6-1.5-.8-1.5.8.3-1.6-1.2-1.2 1.6-.2z"/></svg></span><span class="cat-name">项目奖金</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="兼职" hidden>
+          <p class="cat-l2-title">二级分类 · 兼职</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="兼职收入" data-l1="兼职" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.2" y="8" width="17.6" height="11.4" rx="2.2"/><path d="M8.8 8V6.2a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V8"/><path d="M3.2 12.8h17.6"/></svg></span><span class="cat-name">兼职收入</span></button>
+            <button class="cat-l2" type="button" data-l2="稿费" data-l1="兼职" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.2" y="8" width="17.6" height="11.4" rx="2.2"/><path d="M8.8 8V6.2a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V8"/><path d="M3.2 12.8h17.6"/></svg></span><span class="cat-name">稿费</span></button>
+            <button class="cat-l2" type="button" data-l2="外快" data-l1="兼职" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3.2" y="8" width="17.6" height="11.4" rx="2.2"/><path d="M8.8 8V6.2a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V8"/><path d="M3.2 12.8h17.6"/></svg></span><span class="cat-name">外快</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="理财收益" hidden>
+          <p class="cat-l2-title">二级分类 · 理财收益</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="基金" data-l1="理财收益" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">基金</span></button>
+            <button class="cat-l2" type="button" data-l2="股票" data-l1="理财收益" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">股票</span></button>
+            <button class="cat-l2" type="button" data-l2="存款利息" data-l1="理财收益" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">存款利息</span></button>
+            <button class="cat-l2" type="button" data-l2="分红" data-l1="理财收益" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.6 16.8 9.2 11.2l3.4 3.2 7-7.2"/><path d="M15.4 7.2h4.6v4.6"/></svg></span><span class="cat-name">分红</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="红包" hidden>
+          <p class="cat-l2-title">二级分类 · 红包</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="礼金" data-l1="红包" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="5.6" width="18" height="12.8" rx="2.2"/><path d="M3.4 7 12 13.2 20.6 7"/></svg></span><span class="cat-name">礼金</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="退款" hidden>
+          <p class="cat-l2-title">二级分类 · 退款</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="购物退款" data-l1="退款" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.4V9h-4.6"/></svg></span><span class="cat-name">购物退款</span></button>
+            <button class="cat-l2" type="button" data-l2="服务退款" data-l1="退款" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.4V9h-4.6"/></svg></span><span class="cat-name">服务退款</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="报销" hidden>
+          <p class="cat-l2-title">二级分类 · 报销</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="差旅报销" data-l1="报销" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">差旅报销</span></button>
+            <button class="cat-l2" type="button" data-l2="医疗报销" data-l1="报销" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">医疗报销</span></button>
+            <button class="cat-l2" type="button" data-l2="其他报销" data-l1="报销" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M6 3.6h12v16.8l-2.4-1.4-2.4 1.4-1.2-.7-1.2.7-2.4-1.4L6 20.4z"/><path d="M9 8h6M9 12h6"/></svg></span><span class="cat-name">其他报销</span></button>
+          </div>
+        </div>
+        <div class="cat-l2-panel" data-l1="其他收入" hidden>
+          <p class="cat-l2-title">二级分类 · 其他收入</p>
+          <div class="cat-l2-grid">
+            <button class="cat-l2" type="button" data-l2="意外收入" data-l1="其他收入" aria-pressed="false"><span class="cat-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8.2v7.6M8.2 12h7.6"/></svg></span><span class="cat-name">意外收入</span></button>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   </div>
@@ -298,7 +570,6 @@
         </div>
       </div>
       <p class="s14a-picked" data-od-id="s14a-picked">今天 10:30:00</p>
-      </div>
       <button class="btn btn-block mt-3" type="button" data-close="#s14a-time-sheet" data-od-id="s14a-time-ok">确定</button>
     </div>
   </div>

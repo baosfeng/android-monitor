@@ -27,7 +27,14 @@
       <button class="btn btn-ghost" type="button" id="devReplay" data-od-id="dev-replay">重播开屏</button>
       <button class="btn btn-ghost" type="button" id="devToast" data-od-id="dev-toast">Toast</button>
     </div>
-    <p class="dev-hint">接口：App.go / App.back / App.tab / App.toast / App.haptic / App.state / App.theme / App.chart</p>
+    <div class="dev-group dev-actions">
+      <button class="btn btn-ghost" type="button" id="devAutoBook" data-od-id="dev-autobook">自动记账浮窗</button>
+      <button class="btn btn-ghost" type="button" id="devAutoCommit" data-od-id="dev-autocommit">模拟自动记账落库</button>
+    </div>
+    <div class="dev-group dev-actions">
+      <button class="btn btn-ghost" type="button" id="devAutoSwitch" data-od-id="dev-autoswitch">浮窗演示：切到记账页（浮窗不关闭）</button>
+    </div>
+    <p class="dev-hint">接口：App.go / App.back / App.tab / App.toast / App.haptic / App.state / App.theme / App.chart / App.initCategoryPickers / App.openAutoBook / App.autoBookCommitted</p>
   </div>
   <button class="devbar-toggle" type="button" id="devToggle" aria-expanded="false" aria-controls="devPanel" data-od-id="dev-toggle">
     <svg viewBox="0 0 24 24" aria-hidden><path d="M4 7h16M4 12h16M4 17h10"/></svg>
