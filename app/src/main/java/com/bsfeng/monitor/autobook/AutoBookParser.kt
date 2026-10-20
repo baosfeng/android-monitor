@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.autobook
 
+import com.bsfeng.monitor.finance.model.CategoryCatalog
 import java.security.MessageDigest
 import kotlin.math.abs
 /**
@@ -295,43 +296,236 @@ object AutoBookParser {
             "|\\d{4}年\\d{1,2}月\\d{1,2}日\\s*\\d{1,2}:\\d{2}(?::\\d{2})?"
     )
 
-    /** 平台分类 → 本 App 分类 的映射（取不到就按商户关键词猜，再兜底「其他」） */
+    /** 收入侧兜底分类（支出侧兜底用 [CategoryCatalog.FALLBACK]） */
+    private const val INCOME_FALLBACK = "其他收入"
+
+    /** 红包通道的落点：支出红包属于人情往来（商户名是领取人，平台分类也拿不到） */
+    private const val RED_PACKET_CATEGORY = "发红包"
+
+    /** 分类表全部合法名称（一级 + 二级）：映射落点必须在这里面，分类名不允许游离在分类表外 */
+    private val CATEGORY_NAMES: Set<String> = CategoryCatalog.allNames().toSet()
+
+    /**
+     * 平台分类 → 本 App 分类名（**支出侧**，二级优先、粗分类落一级）。
+     *
+     * 平台只给粗分类（支付宝「餐饮美食」/ 微信「购物」），能细分就落二级；
+     * 粗到无法细分时落一级（「交通出行」→ 交通）—— 分类体系允许只记一级。
+     * **顺序即优先级**：具体项（外卖 / 咖啡奶茶 / 电商）排在宽泛项（餐饮 / 购物）之前。
+     */
     private val PLATFORM_CATEGORY_MAP = listOf(
-        "餐饮" to listOf("餐饮", "美食", "餐厅", "外卖"),
-        "出行" to listOf("交通", "出行", "加油", "打车", "停车"),
-        "购物" to listOf("购物", "电商", "商城", "超市"),
-        "日用" to listOf("日用", "百货", "生活服务", "家居", "居家"),
-        "通讯" to listOf("通讯", "话费", "物流", "快递"),
-        "衣物" to listOf("服饰", "装扮", "衣"),
-        "美妆" to listOf("美妆", "化妆", "美容"),
-        "手机数码" to listOf("数码", "电器", "电子"),
-        "就医" to listOf("医疗", "健康", "医药"),
-        "休闲娱乐" to listOf("休闲", "娱乐", "文化", "运动", "游戏"),
-        "教育" to listOf("教育", "培训", "学习"),
-        "房租还贷" to listOf("居住", "物业", "房租", "房", "还款"),
-        "旅游度假" to listOf("旅游", "度假", "酒店", "住宿"),
-        "出行" to listOf("汽车", "交通")
+        // 餐饮
+        "外卖" to listOf("外卖"),
+        "咖啡奶茶" to listOf("咖啡", "奶茶"),
+        "正餐" to listOf("餐厅", "饭店", "正餐", "餐馆"),
+        "餐饮" to listOf("餐饮", "美食", "食品"),
+        // 购物
+        "电商" to listOf("电商", "购物", "商城", "网购"),
+        "超市便利" to listOf("超市", "便利店"),
+        "家居日用" to listOf("日用百货", "日用", "家居", "居家", "百货"),
+        // 交通 / 汽车
+        "打车" to listOf("打车", "网约车"),
+        "公交地铁" to listOf("公交", "地铁"),
+        "火车高铁" to listOf("火车", "铁路", "高铁", "12306"),
+        "飞机" to listOf("机票", "航班", "航空"),
+        "加油" to listOf("加油"),
+        "停车" to listOf("停车"),
+        "汽车" to listOf("汽车", "养车"),
+        "交通" to listOf("交通", "出行"),
+        // 居住 / 通讯
+        "水电燃气" to listOf("水电", "燃气"),
+        "物业" to listOf("物业"),
+        "居住" to listOf("居住", "生活缴费", "房租"),
+        "话费" to listOf("话费", "通讯"),
+        // 医疗健康
+        "门诊" to listOf("门诊"),
+        "医疗健康" to listOf("医疗", "健康", "医药", "就医"),
+        // 娱乐休闲
+        "电影" to listOf("电影"),
+        "游戏" to listOf("游戏"),
+        "会员订阅" to listOf("会员", "视频", "音乐"),
+        "娱乐休闲" to listOf("休闲", "娱乐", "文化"),
+        // 其他平台分类
+        "保险" to listOf("保险"),
+        "数码电子" to listOf("数码", "电器", "电子"),
+        "服饰美妆" to listOf("服饰", "装扮", "美妆", "化妆", "美容"),
+        "教育学习" to listOf("教育", "培训", "学习"),
+        "旅游" to listOf("旅游", "度假", "酒店"),
+        "住宿" to listOf("民宿", "住宿"),
+        "发红包" to listOf("红包"),
+        "其他" to listOf("其他")
     )
 
-    /** 商户关键词 → 本 App 分类 */
+    /**
+     * 商户关键词 → 二级分类名（**支出侧**）。
+     *
+     * **顺序即优先级**：具体商户在前、宽泛品类在后 ——
+     * `美团单车` 必须先于 `美团` 命中，否则共享单车会被判成外卖；命中即返回，不再找更贴切的词。
+     */
     private val MERCHANT_CATEGORY_KEYWORDS = listOf(
-        "餐饮" to listOf("餐", "饭", "麦当劳", "肯德基", "星巴克", "瑞幸", "咖啡", "奶茶", "烧烤", "火锅", "食"),
-        "出行" to listOf("加油", "中石化", "中石油", "停车", "高速", "etc"),
-        "打车" to listOf("滴滴", "打车", "曹操", "t3"),
-        "地铁火车" to listOf("地铁", "公交", "铁路", "12306", "火车"),
-        "购物" to listOf("淘宝", "天猫", "京东", "拼多多", "唯品会", "商场", "超市", "便利店", "小米"),
-        "零食" to listOf("零食", "良品铺子", "三只松鼠"),
-        "水果" to listOf("水果", "百果园"),
-        "日用" to listOf("日用", "百货", "名创优品", "阿里云", "腾讯云", "华为云", "云服务"),
-        "通讯" to listOf("话费", "流量", "联通", "移动", "电信", "宽带"),
-        "水电" to listOf("水费", "电费", "燃气", "物业", "国家电网"),
-        "就医" to listOf("医院", "药", "诊所", "体检"),
-        "休闲娱乐" to listOf("电影", "影院", "ktv", "游戏", "会员", "视频", "音乐"),
-        "住宿" to listOf("酒店", "民宿", "华住", "如家"),
-        "教育" to listOf("教育", "培训", "学费", "书店"),
-        "美妆" to listOf("美妆", "化妆", "屈臣氏", "丝芙兰"),
-        "衣物" to listOf("服饰", "优衣库", "鞋"),
-        "房租还贷" to listOf("房租", "租金", "房贷", "花呗", "白条", "信用卡还款")
+        // 交通：细分项先于「美团」这类会跨品类命中的平台名
+        "共享单车" to listOf("美团单车", "哈啰", "青桔", "共享单车", "摩拜"),
+        "火车高铁" to listOf("12306", "铁路", "火车", "高铁", "中铁"),
+        "飞机" to listOf("航空公司", "机票", "航班"),
+        "公交地铁" to listOf("地铁", "公交", "一卡通", "交通卡", "乘车码", "轨道交通"),
+        "打车" to listOf("滴滴", "打车", "曹操", "t3", "花小猪", "首汽", "享道", "网约车"),
+        // 汽车
+        "车险" to listOf("车险", "交强险"),
+        "加油" to listOf("中石化", "中石油", "中国石化", "中国石油", "加油", "壳牌", "中化石油", "油站"),
+        "停车" to listOf("停车", "泊车", "停车场"),
+        "过路费" to listOf("高速", "etc", "过路费", "通行费"),
+        "违章罚款" to listOf("违章", "罚款", "交警"),
+        "洗车" to listOf("洗车"),
+        "保养维修" to listOf("保养", "汽修", "维修", "4s"),
+        "车贷" to listOf("车贷"),
+        // 餐饮
+        "外卖" to listOf("美团外卖", "饿了么", "外卖", "美团"),
+        "咖啡奶茶" to listOf(
+            "星巴克", "瑞幸", "咖啡", "奶茶", "喜茶", "奈雪", "蜜雪冰城", "霸王茶姬", "茶颜悦色"
+        ),
+        "正餐" to listOf(
+            "麦当劳", "肯德基", "汉堡王", "必胜客", "餐厅", "饭店", "火锅", "烧烤",
+            "湘菜", "川菜", "餐馆", "食府", "面馆", "食堂", "小吃"
+        ),
+        "早餐" to listOf("早餐"),
+        "零食" to listOf("零食", "良品铺子", "三只松鼠", "来伊份"),
+        "水果" to listOf("水果", "百果园", "鲜丰水果"),
+        "烟酒" to listOf("烟酒", "茅台", "五粮液"),
+        // 购物
+        "电商" to listOf(
+            "淘宝", "天猫", "京东", "拼多多", "唯品会", "抖音商城", "苏宁", "闲鱼", "得物"
+        ),
+        "超市便利" to listOf(
+            "超市", "便利店", "盒马", "沃尔玛", "永辉", "家乐福", "美宜佳", "罗森",
+            "全家", "7-11", "便利蜂", "大润发", "华润万家"
+        ),
+        "家居日用" to listOf("日用", "百货", "名创优品", "宜家", "无印良品", "家居"),
+        "其他购物" to listOf("购物中心", "商场", "奥特莱斯", "免税店"),
+        // 居住 / 通讯
+        "水电燃气" to listOf(
+            "水费", "电费", "燃气", "国家电网", "供电", "自来水", "供水", "天然气", "水务", "电力"
+        ),
+        "物业" to listOf("物业"),
+        "房租" to listOf("房租", "租金", "租房"),
+        "房贷" to listOf("房贷", "按揭"),
+        "宽带" to listOf("宽带", "光纤"),
+        "家政" to listOf("家政", "保洁", "保姆"),
+        "装修" to listOf("装修", "建材", "家装"),
+        "话费" to listOf(
+            "话费", "手机充值", "中国移动", "中国联通", "中国电信", "联通", "移动", "电信"
+        ),
+        "流量" to listOf("流量"),
+        // 医疗健康
+        "门诊" to listOf("医院", "诊所", "门诊", "挂号", "卫生院", "卫生服务中心"),
+        "药品" to listOf("药房", "药店", "大药房", "医药", "药品"),
+        "体检" to listOf("体检", "健康检查"),
+        "牙科" to listOf("牙科", "口腔", "齿科"),
+        "住院" to listOf("住院"),
+        "保健品" to listOf("保健"),
+        // 娱乐休闲
+        "电影" to listOf("电影", "影院", "影城", "猫眼", "淘票票"),
+        "游戏" to listOf("游戏", "steam", "王者荣耀", "和平精英", "米哈游", "原神", "点卡"),
+        "会员订阅" to listOf(
+            "会员", "视频", "音乐", "爱奇艺", "优酷", "芒果tv", "网易云", "qq音乐",
+            "酷狗", "喜马拉雅", "哔哩哔哩", "b站", "netflix", "spotify"
+        ),
+        "演出" to listOf("演出", "演唱会", "话剧", "音乐剧", "大麦"),
+        "KTV" to listOf("ktv"),
+        "酒吧" to listOf("酒吧", "酒馆"),
+        // 旅游
+        "住宿" to listOf(
+            "酒店", "民宿", "宾馆", "客栈", "华住", "如家", "汉庭", "万豪", "希尔顿",
+            "亚朵", "锦江", "全季"
+        ),
+        "旅游" to listOf(
+            "旅游", "旅行", "度假", "携程", "飞猪", "去哪儿", "同程", "途牛", "马蜂窝"
+        ),
+        "景点门票" to listOf("景区", "门票", "动物园", "博物馆"),
+        "签证" to listOf("签证"),
+        // 教育学习
+        "课程培训" to listOf("教育", "培训", "学费", "网课", "课程", "学而思", "新东方"),
+        "书籍" to listOf("书店", "图书", "当当", "新华书店", "购书"),
+        "考试报名" to listOf("考试", "报名费", "考证", "托福", "雅思"),
+        "文具" to listOf("文具", "晨光"),
+        // 人情往来
+        "发红包" to listOf("红包"),
+        "礼物" to listOf("礼物", "礼品", "花店", "鲜花"),
+        "捐赠" to listOf("捐赠", "公益", "慈善", "爱心"),
+        // 金融保险
+        "保险" to listOf("保险", "人寿", "众安"),
+        "手续费" to listOf("手续费", "服务费"),
+        "利息" to listOf("利息"),
+        "投资" to listOf("基金", "股票", "证券", "理财", "黄金"),
+        "还款" to listOf("还款", "花呗", "借呗", "白条", "信用卡还款", "分期"),
+        // 服饰美妆
+        "衣服" to listOf("服饰", "服装", "优衣库", "男装", "女装", "内衣"),
+        "鞋包" to listOf(
+            "鞋", "箱包", "皮具", "耐克", "阿迪达斯", "李宁", "安踏", "斯凯奇", "新百伦"
+        ),
+        "化妆品" to listOf(
+            "化妆品", "屈臣氏", "丝芙兰", "完美日记", "花西子", "欧莱雅", "雅诗兰黛",
+            "资生堂", "美妆"
+        ),
+        "美容美发" to listOf("美容", "美发", "理发", "剪发", "沙龙"),
+        "美甲" to listOf("美甲", "美睫"),
+        // 母婴育儿
+        "奶粉" to listOf("奶粉", "爱他美", "飞鹤", "美赞臣", "惠氏"),
+        "尿布" to listOf("尿布", "纸尿裤", "帮宝适", "好奇", "尤妮佳"),
+        "玩具" to listOf("玩具", "乐高", "泡泡玛特"),
+        "早教" to listOf("早教", "亲子"),
+        "儿童衣物" to listOf("童装", "儿童服饰"),
+        // 宠物
+        "宠物食品" to listOf("狗粮", "猫粮", "宠粮", "宠物食品"),
+        "宠物用品" to listOf("宠物用品", "宠物店"),
+        "宠物医疗" to listOf("宠物医院", "宠物医疗", "兽医"),
+        "宠物美容" to listOf("宠物美容"),
+        "寄养" to listOf("寄养"),
+        // 数码电子
+        "手机" to listOf(
+            "手机", "苹果", "iphone", "小米", "华为", "荣耀", "vivo", "oppo", "一加", "三星"
+        ),
+        "电脑" to listOf("电脑", "笔记本", "macbook", "联想", "戴尔", "惠普", "华硕"),
+        "配件" to listOf("配件", "充电器", "耳机", "数据线", "键鼠", "移动电源"),
+        "软件" to listOf("软件", "app store", "应用商店"),
+        "云服务" to listOf("阿里云", "腾讯云", "华为云", "云服务", "服务器", "域名", "云主机"),
+        // 运动健身
+        "健身房" to listOf("健身", "瑜伽", "游泳馆", "私教"),
+        "运动装备" to listOf("迪卡侬", "lululemon", "运动装备", "骑行", "球拍"),
+        "场地费" to listOf("球馆", "网球场", "球场", "羽毛球", "场地"),
+        // 生活服务（其他）
+        "生活服务" to listOf(
+            "快递", "顺丰", "中通", "圆通", "韵达", "申通", "邮政", "打印", "洗衣", "干洗", "洗护"
+        )
+    )
+
+    /**
+     * 平台分类 → 收入侧分类名。
+     *
+     * 收入分类大多是一级（工资 / 退款 / 报销），平台能细分的（基金 / 股票）按二级落。
+     * 顺序同支出侧：具体在前，`其他收入` 兜底在最后。
+     */
+    private val INCOME_PLATFORM_CATEGORY_MAP = listOf(
+        "工资" to listOf("工资", "薪资", "薪酬"),
+        "奖金" to listOf("奖金", "年终奖"),
+        "兼职" to listOf("兼职", "稿费"),
+        "理财收益" to listOf("理财", "基金", "股票", "利息", "分红"),
+        "红包" to listOf("红包", "礼金"),
+        "退款" to listOf("退款", "退货"),
+        "报销" to listOf("报销"),
+        "其他收入" to listOf("其他收入", "收入", "收款", "转账")
+    )
+
+    /** 商户关键词 → 收入侧分类名；退款 / 报销先于「到账」这类宽泛词，避免退款到账被归成其他收入 */
+    private val INCOME_MERCHANT_CATEGORY_KEYWORDS = listOf(
+        "退款" to listOf("退款", "退货", "退票", "返款", "撤销"),
+        "报销" to listOf("报销", "差旅"),
+        "理财收益" to listOf(
+            "理财收益", "基金", "股票", "分红", "利息", "收益", "余额宝", "零钱通"
+        ),
+        "工资" to listOf("工资", "薪资", "薪酬", "代发"),
+        "奖金" to listOf("奖金", "年终奖", "绩效", "提成", "项目奖"),
+        "兼职" to listOf("兼职", "稿费", "外快", "劳务"),
+        "红包" to listOf("红包", "礼金", "压岁钱"),
+        "其他收入" to listOf("收款", "转入", "转账", "到账")
     )
 
     /**
@@ -463,7 +657,8 @@ object AutoBookParser {
             type = type,
             amount = amount,
             merchant = merchant,
-            categoryName = mapCategory(null, merchant, type),
+            // 发红包是固定语义：商户名是领取人（张三），平台分类也拿不到，走关键词只会落到「其他」
+            categoryName = RED_PACKET_CATEGORY,
             accountName = rule.accountName,
             payMethod = pre?.payMethod.orEmpty(),
             productDesc = "",
@@ -1267,22 +1462,36 @@ object AutoBookParser {
     }
 
     /**
-     * 分类：平台自带分类优先（支付宝「日用百货」比关键词更准），其次商户关键词，最后「其他」。
+     * 分类：平台自带分类优先（支付宝「日用百货」比关键词更准），其次商户关键词，最后一级兜底。
+     *
+     * 返回的是**分类表里的名字**：能细分时是二级名（「电商」「外卖」「打车」），
+     * 平台分类粗到无法细分时是一级名（「交通」「旅游」）；支出兜底「其他」、收入兜底「其他收入」。
+     * 映射表写错字时会静默回退兜底一级，保证 [AutoBookDraft.categoryName] 不游离在分类表外。
      */
     fun mapCategory(platformCategory: String?, merchant: String, type: Int): String {
+        val isIncome = type == AutoBookDraft.TYPE_INCOME
         if (!platformCategory.isNullOrBlank()) {
-            for ((target, keywords) in PLATFORM_CATEGORY_MAP) {
-                if (keywords.any { platformCategory.contains(it) }) return target
+            val platformMap = if (isIncome) INCOME_PLATFORM_CATEGORY_MAP else PLATFORM_CATEGORY_MAP
+            for ((target, keywords) in platformMap) {
+                if (keywords.any { platformCategory.contains(it) }) return categoryOrFallback(target, isIncome)
             }
         }
         if (merchant.isNotBlank()) {
             val lower = merchant.lowercase()
-            for ((target, keywords) in MERCHANT_CATEGORY_KEYWORDS) {
-                if (keywords.any { lower.contains(it) }) return target
+            val merchantMap = if (isIncome) INCOME_MERCHANT_CATEGORY_KEYWORDS else MERCHANT_CATEGORY_KEYWORDS
+            for ((target, keywords) in merchantMap) {
+                if (keywords.any { lower.contains(it) }) return categoryOrFallback(target, isIncome)
             }
         }
-        return "其他"
+        return fallbackCategory(isIncome)
     }
+
+    /** 映射目标只允许落在分类表内（一级 + 二级），否则回退兜底一级 */
+    private fun categoryOrFallback(target: String, isIncome: Boolean): String =
+        if (target in CATEGORY_NAMES) target else fallbackCategory(isIncome)
+
+    private fun fallbackCategory(isIncome: Boolean): String =
+        if (isIncome) INCOME_FALLBACK else CategoryCatalog.FALLBACK
 
     /**
      * 生成**落库幂等键**（同一笔只写一条记录）。

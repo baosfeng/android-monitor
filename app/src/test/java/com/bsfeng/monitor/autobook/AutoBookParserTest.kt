@@ -1,5 +1,7 @@
 package com.bsfeng.monitor.autobook
 
+import com.bsfeng.monitor.finance.model.CategoryCatalog
+import com.bsfeng.monitor.finance.model.Transaction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -219,7 +221,8 @@ class AutoBookParserTest {
         assertEquals("支出", draft.typeLabel)
         assertEquals(3.0, draft.amount, 0.0001)
         assertEquals("阿里云计算有限公司", draft.merchant)
-        assertEquals("日用", draft.categoryName)
+        assertEquals("日用百货", draft.platformCategory)
+        assertEquals("家居日用", draft.categoryName)
         assertEquals("支付宝", draft.accountName)
         assertEquals("余额宝", draft.payMethod)
         assertEquals("2026-10-15 23:14:43", draft.timeText)
@@ -274,7 +277,7 @@ class AutoBookParserTest {
         assertEquals("上海星巴克咖啡经营有限公司", draft.merchant)
         assertEquals("微信钱包", draft.accountName)
         assertEquals("零钱", draft.payMethod)
-        assertEquals("餐饮", draft.categoryName)
+        assertEquals("咖啡奶茶", draft.categoryName)
     }
 
     @Test
@@ -874,7 +877,7 @@ class AutoBookParserTest {
         requireNotNull(draft) { "带收尾按钮的结果页应当能识别" }
         assertEquals(25.0, draft.amount, 0.0001)
         assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
-        assertEquals("餐饮", draft.categoryName)
+        assertEquals("咖啡奶茶", draft.categoryName)
     }
 
     @Test
@@ -1147,18 +1150,215 @@ class AutoBookParserTest {
         assertTrue(PageLines.toLines(emptyList()).isEmpty())
     }
 
-    // ==================== 分类映射 ====================
+    // ==================== 分类映射（一级 + 二级） ====================
+
+    /** 分类表全部合法名称：映射结果无论落一级还是二级，都不能游离在表外 */
+    private val categoryNames: Set<String> = CategoryCatalog.allNames().toSet()
+
+    private fun draftWithCategory(category: String): AutoBookDraft = AutoBookDraft(
+        channel = AutoBookRules.CHANNEL_ALIPAY,
+        type = AutoBookDraft.TYPE_EXPENSE,
+        amount = 3.0,
+        merchant = "阿里云计算有限公司",
+        categoryName = category,
+        accountName = "支付宝",
+        payMethod = "余额宝",
+        timeText = "",
+        sourceId = "test:source",
+        dedupKeys = emptyList(),
+        markers = emptyList()
+    )
+
+    private fun historyWithCategory(type: Int, category: String): Transaction = Transaction(
+        type = type,
+        categoryName = category,
+        amount = 3.0,
+        accountName = "支付宝",
+        date = "2026-10-15",
+        dateTime = "2026-10-15 23:14:43",
+        merchant = "阿里云计算有限公司"
+    )
 
     @Test
     fun `平台分类优先于商户关键词`() {
-        assertEquals("日用", AutoBookParser.mapCategory("日用百货", "星巴克", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("家居日用", AutoBookParser.mapCategory("日用百货", "星巴克", AutoBookDraft.TYPE_EXPENSE))
         assertEquals("餐饮", AutoBookParser.mapCategory("餐饮美食", "阿里云", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("电商", AutoBookParser.mapCategory("购物", "阿里云", AutoBookDraft.TYPE_EXPENSE))
         assertEquals("其他", AutoBookParser.mapCategory(null, "某某科技有限公司", AutoBookDraft.TYPE_EXPENSE))
     }
 
     @Test
-    fun `商户关键词兜底分类`() {
-        assertEquals("餐饮", AutoBookParser.mapCategory(null, "上海星巴克咖啡经营有限公司", AutoBookDraft.TYPE_EXPENSE))
-        assertEquals("日用", AutoBookParser.mapCategory(null, "阿里云计算有限公司", AutoBookDraft.TYPE_EXPENSE))
+    fun `平台分类按设计文档映射到二级或一级`() {
+        val cases = listOf(
+            "餐饮美食" to "餐饮",
+            "购物" to "电商",
+            "电商" to "电商",
+            "交通出行" to "交通",
+            "医疗健康" to "医疗健康",
+            "保险" to "保险",
+            "生活缴费" to "居住",
+            "数码电器" to "数码电子",
+            "服饰装扮" to "服饰美妆",
+            "教育培训" to "教育学习",
+            "酒店旅游" to "旅游",
+            "文化休闲" to "娱乐休闲",
+            "日用百货" to "家居日用"
+        )
+        for ((platform, expected) in cases) {
+            assertEquals(
+                "平台分类「$platform」",
+                expected,
+                AutoBookParser.mapCategory(platform, "", AutoBookDraft.TYPE_EXPENSE)
+            )
+        }
+    }
+
+    @Test
+    fun `设计文档列出的高频商户落到二级`() {
+        val cases = listOf(
+            // 购物
+            "淘宝" to "电商",
+            "天猫" to "电商",
+            "京东" to "电商",
+            "拼多多" to "电商",
+            "唯品会" to "电商",
+            // 餐饮
+            "美团" to "外卖",
+            "饿了么" to "外卖",
+            "星巴克" to "咖啡奶茶",
+            "瑞幸咖啡" to "咖啡奶茶",
+            "麦当劳" to "正餐",
+            "肯德基" to "正餐",
+            "某某餐厅" to "正餐",
+            "海底捞火锅" to "正餐",
+            "烧烤店" to "正餐",
+            // 交通 / 汽车
+            "滴滴出行" to "打车",
+            "T3出行" to "打车",
+            "曹操出行" to "打车",
+            "中国铁路12306" to "火车高铁",
+            "上海地铁" to "公交地铁",
+            "公交集团" to "公交地铁",
+            "中国石化" to "加油",
+            "中石油" to "加油",
+            "停车缴费" to "停车",
+            // 娱乐休闲
+            "万达影城" to "电影",
+            "腾讯游戏" to "游戏",
+            "腾讯视频会员" to "会员订阅",
+            // 医疗健康
+            "市第一医院" to "门诊",
+            "社区卫生服务中心" to "门诊",
+            "大药房" to "药品",
+            "药店" to "药品",
+            // 通讯 / 居住
+            "中国联通" to "话费",
+            "中国移动" to "话费",
+            "中国电信" to "话费",
+            "水费缴纳" to "水电燃气",
+            "电费" to "水电燃气",
+            "燃气费" to "水电燃气",
+            "物业管理有限公司" to "物业",
+            // 金融保险 / 旅游
+            "平安保险" to "保险",
+            "如家酒店" to "住宿",
+            "某民宿" to "住宿"
+        )
+        for ((merchant, expected) in cases) {
+            assertEquals(
+                "商户「$merchant」",
+                expected,
+                AutoBookParser.mapCategory(null, merchant, AutoBookDraft.TYPE_EXPENSE)
+            )
+        }
+    }
+
+    @Test
+    fun `未知商户与未知平台分类兜底一级`() {
+        assertEquals(
+            "其他",
+            AutoBookParser.mapCategory(null, "某某科技有限公司", AutoBookDraft.TYPE_EXPENSE)
+        )
+        assertEquals(
+            "其他",
+            AutoBookParser.mapCategory("不明平台分类", "某某科技有限公司", AutoBookDraft.TYPE_EXPENSE)
+        )
+        assertEquals(
+            "其他收入",
+            AutoBookParser.mapCategory(null, "某某科技有限公司", AutoBookDraft.TYPE_INCOME)
+        )
+        assertEquals(
+            "其他收入",
+            AutoBookParser.mapCategory("不明平台分类", "张三", AutoBookDraft.TYPE_INCOME)
+        )
+    }
+
+    @Test
+    fun `收入侧用收入分类表：退款工资与红包落到收入分类`() {
+        assertEquals("退款", AutoBookParser.mapCategory(null, "淘宝退款", AutoBookDraft.TYPE_INCOME))
+        assertEquals("工资", AutoBookParser.mapCategory(null, "某某公司代发工资", AutoBookDraft.TYPE_INCOME))
+        assertEquals("理财收益", AutoBookParser.mapCategory(null, "某某基金分红", AutoBookDraft.TYPE_INCOME))
+        assertEquals("红包", AutoBookParser.mapCategory("红包", "", AutoBookDraft.TYPE_INCOME))
+        // 同一商户在支出侧走支出表，不能把收入分类套到支出上
+        assertEquals("电商", AutoBookParser.mapCategory(null, "淘宝", AutoBookDraft.TYPE_EXPENSE))
+    }
+
+    @Test
+    fun `所有映射结果都在分类表内`() {
+        val probes = listOf(
+            "餐饮美食", "购物", "电商", "交通出行", "医疗健康", "保险", "生活缴费",
+            "数码电器", "服饰装扮", "教育培训", "酒店旅游", "文化休闲", "日用百货",
+            "转账红包", "不明平台分类", "其他"
+        ) + listOf(
+            "淘宝", "美团", "饿了么", "滴滴", "12306", "地铁", "星巴克", "瑞幸", "麦当劳",
+            "肯德基", "火锅", "中石化", "停车", "电影", "游戏", "腾讯视频会员", "医院",
+            "药房", "中国联通", "水费", "电费", "燃气", "物业", "平安保险", "酒店", "民宿",
+            "阿里云", "某市供水公司", "某某科技有限公司"
+        )
+        for (probe in probes) {
+            for (type in listOf(AutoBookDraft.TYPE_EXPENSE, AutoBookDraft.TYPE_INCOME)) {
+                val category = AutoBookParser.mapCategory(probe, probe, type)
+                assertTrue(
+                    "「$probe」在 type=$type 下映射出分类表外的名字「$category」",
+                    category in categoryNames
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `红包聊天页兜底落人情往来的发红包`() {
+        val chat = listOf(
+            "返回 资金往来记录 聊天设置", "张三", "支付宝红包", "清风明月", "¥0.01", "示例留言",
+            "语音 发送消息... 表情 更多"
+        )
+        val draft = AutoBookParser.parseSentRedPacketChat(
+            alipay, chat, null, 2_000L,
+            redPacketFlowPending = true, allowBubbleOnly = true
+        )
+        requireNotNull(draft)
+        assertEquals("发红包", draft.categoryName)
+    }
+
+    @Test
+    fun `历史默认分类是旧扁平名时回退解析结果`() {
+        val draft = draftWithCategory("云服务")
+        val legacy = historyWithCategory(AutoBookDraft.TYPE_EXPENSE, "日用")
+        assertEquals("云服务", AutoBookDefaults.apply(draft, legacy).categoryName)
+    }
+
+    @Test
+    fun `历史默认分类是二级名时原样沿用`() {
+        val draft = draftWithCategory("其他")
+        val last = historyWithCategory(AutoBookDraft.TYPE_EXPENSE, "咖啡奶茶")
+        assertEquals("咖啡奶茶", AutoBookDefaults.apply(draft, last).categoryName)
+    }
+
+    @Test
+    fun `历史默认分类与类型不同侧时忽略`() {
+        val draft = draftWithCategory("其他")
+        // 历史是收入分类「工资」，这次是支出：不能把它套到支出上
+        val last = historyWithCategory(AutoBookDraft.TYPE_EXPENSE, "工资")
+        assertEquals("其他", AutoBookDefaults.apply(draft, last).categoryName)
     }
 }
