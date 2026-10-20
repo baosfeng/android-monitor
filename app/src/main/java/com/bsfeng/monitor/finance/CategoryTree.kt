@@ -25,12 +25,17 @@ class CategoryTree(private val categories: List<Category>) {
         return categories.filter { it.parentId == top.id }.sortedBy { it.sortOrder }
     }
 
-    /** 这个名字属于哪个一级：二级返回父级名，一级返回自身，未知返回「其他」 */
+    /**
+     * 这个名字属于哪个一级：二级返回父级名，一级返回自身。
+     *
+     * 分类表里找不到的名字**保留原名**而不是归「其他」：统计/预算不该把历史脏数据或导入分类
+     * 强行并到一个分类里（会丢信息）；未知分类的兜底「其他」由迁移与识别映射负责。
+     */
     fun topLevelNameOf(name: String): String {
         if (name.isBlank()) return CategoryCatalog.FALLBACK
-        val category = byName[name] ?: return CategoryCatalog.FALLBACK
+        val category = byName[name] ?: return name
         if (category.parentId < 0) return category.name
-        return byId[category.parentId]?.name ?: CategoryCatalog.FALLBACK
+        return byId[category.parentId]?.name ?: name
     }
 
     /** 把「分类名 → 金额」按一级归并 */
