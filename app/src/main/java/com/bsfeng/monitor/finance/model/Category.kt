@@ -18,6 +18,9 @@ data class Category(
     val isExpenseType: Boolean get() = type == 0
     val isIncomeType: Boolean get() = type == 1
 
+    /** 一级分类（parent_id = -1）；二级分类指向一级的 id */
+    val isTopLevel: Boolean get() = parentId < 0
+
     companion object {
         /** 预设支出分类 */
         val defaultExpenseCategories = listOf(
