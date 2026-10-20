@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.ui.components.CategoryIcon
@@ -69,15 +71,34 @@ fun CategoryPicker(
     recognizedName: String = "",
     gridMaxHeight: Dp = PICKER_DEFAULT_GRID_MAX_H,
     iconSize: Dp = PICKER_DEFAULT_ICON_SIZE,
+    topStyle: CategoryPickerTopStyle = CategoryPickerTopStyle.CHIPS,
 ) {
     val t = LocalDesignTokens.current
-    // 当前展示哪个一级是纯 UI 状态：外部选中名没变时，用户点 chip 的结果必须保住
-    var activeTopName by remember(tree, type) {
-        mutableStateOf(CategoryPickerState(tree, type, selectedName).activeTopName)
+    // 识别到的名字属于哪个一级（空 = 没识别 / 不在本类型树里）
+    val recognizedTop = remember(tree, type, recognizedName) {
+        recognizedTopName(tree, type, recognizedName)
     }
-    // 外部选中变化（切换类型 / 编辑交易 / 重新识别）时重新定位：识别到的二级要落回它的一级
+    // 当前展示哪个一级是纯 UI 状态：外部选中名没变时，用户点一级的结果必须保住
+    var activeTopName by remember(tree, type) {
+        mutableStateOf(
+            recognizedTop.ifBlank { CategoryPickerState(tree, type, selectedName).activeTopName }
+        )
+    }
+    // 默认只展示一级；**识别项自动展开它的一级**（原型 pkApplyRecognized 口径），点一级也展开
+    var expanded by remember(tree, type) { mutableStateOf(recognizedTop.isNotBlank()) }
+    // 同一浮窗换了识别结果（下一笔账单）时重新定位回识别项
+    var lastRecognizedTop by remember(tree, type) { mutableStateOf(recognizedTop) }
+    LaunchedEffect(tree, type, recognizedName) {
+        if (recognizedTop.isBlank() || recognizedTop == lastRecognizedTop) return@LaunchedEffect
+        lastRecognizedTop = recognizedTop
+        activeTopName = recognizedTop
+        expanded = true
+    }
+    // 外部选中变化（切换类型 / 编辑交易）时重新定位到选中项的一级；
+    // 同一级里点二级不收起已展开的网格（原型 pkPickL2 保持面板可见）
     LaunchedEffect(tree, type, selectedName) {
-        activeTopName = CategoryPickerState(tree, type, selectedName).activeTopName
+        val top = CategoryPickerState(tree, type, selectedName).activeTopName
+        if (top.isNotBlank() && top != activeTopName) activeTopName = top
     }
     val state = remember(tree, type, selectedName, activeTopName) {
         CategoryPickerState(tree, type, selectedName, activeTopName)
@@ -93,18 +114,29 @@ fun CategoryPicker(
             )
             return@Column
         }
-        TopLevelRow(
-            state = state,
-            onSelectTop = { name -> activeTopName = name },
-        )
-        Spacer(Modifier.height(t.space3))
-        SecondaryGrid(
-            state = state,
-            recognizedName = recognizedName,
-            gridMaxHeight = gridMaxHeight,
-            iconSize = iconSize,
-            onPick = onPick,
-        )
+        when (topStyle) {
+            CategoryPickerTopStyle.CHIPS -> TopLevelRow(
+                state = state,
+                onSelectTop = { name -> activeTopName = name; expanded = true },
+            )
+            CategoryPickerTopStyle.GRID -> {
+                SectionTitle("一级分类")
+                TopLevelGrid(
+                    state = state,
+                    onSelectTop = { name -> activeTopName = name; expanded = true },
+                )
+            }
+        }
+        if (expanded) {
+            Spacer(Modifier.height(t.space3))
+            SecondaryGrid(
+                state = state,
+                recognizedName = recognizedName,
+                gridMaxHeight = gridMaxHeight,
+                iconSize = iconSize,
+                onPick = onPick,
+            )
+        }
     }
 }
 
@@ -186,6 +218,121 @@ private const val PICKER_COLUMNS = 6
 /** 识别标记圆点直径（沿用自动记账浮窗既有视觉：9dp 实心 + 面板色描边） */
 private val RECOGNIZED_DOT_SIZE: Dp = 9.dp
 
+/** 选中格子淡底（原型 accent 描边 + 极淡底，避免 6 列网格一片空白） */
+private const val SELECTED_BG_ALPHA = 0.08f
+
+/** 识别格淡底（原型 .ab-sheet .cat-l2.is-recognized = accent 10%） */
+private const val RECOGNIZED_BG_ALPHA = 0.12f
+
+/**
+ * 识别到的分类名属于哪个一级（纯函数，可 JVM 单测）。
+ *
+ * 空串 = 没识别、名字不在树里、或不属于该类型的分类树 —— 调用方按「无识别」处理（默认折叠）。
+ */
+internal fun recognizedTopName(tree: CategoryTree, type: Int, recognizedName: String): String {
+    if (recognizedName.isBlank()) return ""
+    if (!tree.contains(recognizedName)) return ""
+    val top = tree.topLevelNameOf(recognizedName)
+    return if (tree.topLevel(type).any { it.name == top }) top else ""
+}
+
+/**
+ * 一级显示名：网格里直接用全称（6 列 11sp 放得下 4 字，与原型 s05/s14a 一致）。
+ */
+private fun displayName(name: String): String = name
+
+/** 区块标题：一级 / 二级两层用标题和名字区分，用户一眼知道当前在挑哪一层 */
+@Composable
+private fun SectionTitle(title: String, trailing: String? = null) {
+    val t = LocalDesignTokens.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = t.space2, bottom = t.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.labelSmall, color = t.muted)
+        if (!trailing.isNullOrBlank()) {
+            Spacer(Modifier.width(t.space1))
+            Text(
+                trailing,
+                style = MaterialTheme.typography.labelSmall,
+                color = t.accentText,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/** 一级展示样式：抽屉里完整展示全部一级（网格），浮窗空间小用横向 chips */
+enum class CategoryPickerTopStyle { CHIPS, GRID }
+
+/**
+ * 一级网格：6 列完整展示全部一级（18 个 = 3 行，不用横向翻）。
+ *
+ * 记账抽屉里一级是「主入口」，要一眼看全；浮窗高度有限仍用 chips（[CategoryPickerTopStyle.CHIPS]）。
+ */
+@Composable
+private fun TopLevelGrid(state: CategoryPickerState, onSelectTop: (String) -> Unit) {
+    val t = LocalDesignTokens.current
+    val rows = remember(state.topLevel) { state.topLevel.chunked(PICKER_COLUMNS) }
+    Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(t.space1),
+            ) {
+                row.forEach { top ->
+                    TopLevelCell(
+                        name = top.name,
+                        selected = top.name == state.activeTopName,
+                        onClick = { onSelectTop(top.name) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(PICKER_COLUMNS - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopLevelCell(
+    name: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusMd)
+    // 原型定稿口径：图标是单色线描（未选中 fg2、选中 accent），不再用分类色底纹
+    val color = if (selected) t.accentText else t.fg2
+    Column(
+        modifier = modifier
+            .clip(shape)
+            // 选中：2dp accent 描边 + 淡底（原型 .cat-l1[aria-pressed] 的 accent-text + outline）
+            .background(if (selected) t.accent.copy(alpha = SELECTED_BG_ALPHA) else Color.Transparent)
+            .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
+            .clickable { onClick() }
+            .padding(vertical = t.space1),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CategoryIcon(name = name, color = color, size = 32.dp)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            displayName(name),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+            color = if (selected) t.accentText else t.fg2,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 /** 一级 chips：横向滚动，点一下只切换下方网格 */
 @Composable
 private fun TopLevelRow(state: CategoryPickerState, onSelectTop: (String) -> Unit) {
@@ -251,11 +398,9 @@ private fun SecondaryGrid(
     onPick: (String) -> Unit,
 ) {
     val t = LocalDesignTokens.current
+    // 二级网格只展示真实二级分类：不再有「不细分」伪分类，一级只是导航
     val cells = remember(state.activeTopName, state.children) {
-        buildList {
-            add(PickerCellModel(name = state.activeTopName, label = "不细分", isTopOnly = true))
-            state.children.forEach { add(PickerCellModel(name = it, label = it, isTopOnly = false)) }
-        }
+        state.children.map { PickerCellModel(name = it, label = it) }
     }
     val rows = remember(cells) { cells.chunked(PICKER_COLUMNS) }
     // 切换一级时回到顶部：上一级的滚动位置对新网格没有意义
@@ -267,7 +412,7 @@ private fun SecondaryGrid(
     LaunchedEffect(state.activeTopName, recognizedName, rowHeightPx.floatValue) {
         val rowHeight = rowHeightPx.floatValue
         if (rowHeight <= 0f) return@LaunchedEffect
-        val index = cells.indexOfFirst { !it.isTopOnly && it.name == recognizedName }
+        val index = cells.indexOfFirst { it.name == recognizedName }
         if (index < 0) return@LaunchedEffect
         // 等一帧：maxValue 要按实际内容高度更新后才知道能滚多远
         withFrameNanos { }
@@ -276,12 +421,13 @@ private fun SecondaryGrid(
         scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
     }
 
+    SectionTitle("二级分类", state.activeTopName)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = gridMaxHeight)
             .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(t.space2),
+        verticalArrangement = Arrangement.spacedBy(t.space1),
     ) {
         rows.forEach { row ->
             Row(
@@ -292,24 +438,17 @@ private fun SecondaryGrid(
                             rowHeightPx.floatValue = coords.size.height.toFloat()
                         }
                     },
-                horizontalArrangement = Arrangement.spacedBy(t.space2),
+                horizontalArrangement = Arrangement.spacedBy(t.space1),
             ) {
                 row.forEach { cell ->
                     PickerCell(
                         cell = cell,
-                        selected = if (cell.isTopOnly) {
-                            state.isTopLevelOnlySelected
-                        } else {
-                            cell.name == state.selectedChildName
-                        },
+                        selected = cell.name == state.selectedChildName,
                         recognized = cell.name == recognizedName,
+                        iconName = state.activeTopName,
                         iconSize = iconSize,
                         onClick = {
-                            val picked = if (cell.isTopOnly) {
-                                state.chooseTopOnly()
-                            } else {
-                                state.chooseChild(cell.name)
-                            }
+                            val picked = state.chooseChild(cell.name)
                             if (picked.isNotBlank()) onPick(picked)
                         },
                         modifier = Modifier.weight(1f),
@@ -328,7 +467,6 @@ private fun SecondaryGrid(
 private data class PickerCellModel(
     val name: String,
     val label: String,
-    val isTopOnly: Boolean,
 )
 
 @Composable
@@ -336,27 +474,35 @@ private fun PickerCell(
     cell: PickerCellModel,
     selected: Boolean,
     recognized: Boolean,
+    iconName: String,
     iconSize: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
-    // categoryColorOf 读组合局部 token，必须在 @Composable 上下文直接调用（不能塞进 remember）
-    val color = categoryColorOf(cell.name)
+    // 与一级格同一套视觉：图标单色线描（未选中 fg2、选中 accent），无分类色底纹
+    val color = if (selected) t.accentText else t.fg2
     Column(
         modifier = modifier
             .clip(shape)
-            // 选中态：accent 淡底 + 1dp 描边（浮窗与抽屉同一视觉）
-            .background(if (selected) t.accent.copy(alpha = 0.12f) else Color.Transparent)
-            .border(1.dp, if (selected) t.accent else Color.Transparent, shape)
+            // 与一级格同一套视觉：无底色，选中 2dp 描边 + 淡底；识别项再淡一层（原型 .is-recognized）
+            .background(
+                when {
+                    recognized -> t.accent.copy(alpha = RECOGNIZED_BG_ALPHA)
+                    selected -> t.accent.copy(alpha = SELECTED_BG_ALPHA)
+                    else -> Color.Transparent
+                }
+            )
+            .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
             .clickable { onClick() }
-            .padding(vertical = t.space2, horizontal = t.space1),
+            .padding(vertical = t.space1),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
             // 「不细分」用一级分类的图标；二级多数还没有专属线描图标，CategoryIcon 会回落彩点
-            CategoryIcon(name = cell.name, color = color, size = iconSize)
+            // 二级多数还没有专属线描图标：统一用父级图标，避免一堆同色圆点
+            CategoryIcon(name = iconName, color = color, size = iconSize)
             if (recognized) {
                 // 识别标记（沿用自动记账浮窗）：右上角小圆点，用户改选后仍能对照系统猜的是哪个
                 Box(
@@ -371,8 +517,8 @@ private fun PickerCell(
         }
         Spacer(Modifier.height(t.space1))
         Text(
-            cell.label,
-            style = MaterialTheme.typography.labelSmall,
+            displayName(cell.label),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             color = if (selected) t.accentText else t.fg2,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
