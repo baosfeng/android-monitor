@@ -143,7 +143,8 @@ class AutoBookPrePaymentTest {
         assertEquals("张三(***)", merged.merchant)
         assertEquals("零钱", merged.payMethod)
         assertEquals("午饭", merged.userRemark)
-        assertEquals("成功页没有付款方式时用预采集", true, merged.remark().contains("午饭"))
+        // 说明 = 预采集到的用户备注（不拼商户 / 付款方式），浮窗里可改
+        assertEquals("说明取预采集的备注", "午饭", merged.remark())
     }
 
     @Test

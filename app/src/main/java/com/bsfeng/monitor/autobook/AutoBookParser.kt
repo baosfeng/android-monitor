@@ -38,9 +38,10 @@ data class AutoBookDraft(
     val dedupKeys: List<DedupKey>,
     val markers: List<String>,
     /**
-     * 付款前页面上用户填的备注（微信「转账说明」/ 支付宝「备注」）。
+     * 用户写的「说明」预填值：付款前页面上填的备注（微信「转账说明」/ 支付宝「备注」）。
      *
      * 结果页通常不展示这行字，只能在付款前页面预采集 —— 见 [PrePaymentDraft]。
+     * 浮窗里这行**可编辑**，用户确认时以编辑后的值为准（[bookedRemark]）。
      */
     val userRemark: String = ""
 ) {
@@ -63,33 +64,32 @@ data class AutoBookDraft(
     val isIncome: Boolean get() = type == TYPE_INCOME
 
     /**
-     * 账本备注：把页面上**能拿到的信息尽量带上** —— 商户 + 商品说明 + 付款方式（不带任何前缀）。
+     * 账本「说明」：**只返回用户自己写的文字**，不再拼接商户 / 商品说明 / 付款方式。
      *
-     * 真机反馈「详情信息没记录正确」：原来备注只写商户名，而支付宝账单详情页里
-     * 商品说明（`某某湘菜馆(示例店)外卖订单`）与付款方式
-     * （`招商银行信用卡(8888)`）这些对账时最有用的信息**全部丢失**。
-     *
-     * 按信息量降序拼接，只有超出 [REMARK_MAX_LENGTH] 才截断：
-     * 商户名取不到时用商品说明顶上，两者都没有才退回渠道名。
+     * 2026-10-20 用户要求改语义：账本那一列从「页面信息汇总」变成「说明」——
+     * 商户 / 商品说明 / 付款方式已经是独立结构化字段（[merchant] / [productDesc] / [payMethod]），
+     * 再拼进说明只会让账本列表出现一长串重复文字，用户自己写的那句反而被淹没。
      */
-    fun remark(): String {
-        val parts = mutableListOf<String>()
-        val main = merchant.ifBlank { productDesc }
-        if (main.isNotBlank()) parts += main
-        if (productDesc.isNotBlank() && productDesc != main) parts += productDesc
-        if (userRemark.isNotBlank() && userRemark != main && userRemark != productDesc) parts += userRemark
-        if (payMethod.isNotBlank()) parts += payMethod
-        if (parts.isEmpty()) parts += channelLabel
-        return parts.joinToString("·").take(REMARK_MAX_LENGTH)
-    }
+    fun remark(): String = normalizeRemark(userRemark)
+
+    /**
+     * 确认落库时的说明：**浮窗里编辑过的值优先**，没传才退回预填的 [userRemark]。
+     *
+     * 空串（或只有空白）表示用户没写说明 —— 调用方直接写空串，不编造内容。
+     */
+    fun bookedRemark(editedRemark: String? = null): String =
+        normalizeRemark(editedRemark ?: userRemark)
 
     companion object {
         const val TYPE_EXPENSE = 0
         const val TYPE_INCOME = 1
         const val TYPE_TRANSFER = 2
 
-        /** 备注长度上限：账本列表里一行能看清的宽度；超出只截断尾部，主要信息都在前面 */
+        /** 说明长度上限：账本列表里一行能看清的宽度；超出只截断尾部，主要信息都在前面 */
         const val REMARK_MAX_LENGTH = 80
+
+        /** 说明归一：去首尾空白 + 截断到 [REMARK_MAX_LENGTH]（空串 = 不写说明） */
+        fun normalizeRemark(text: String): String = text.trim().take(REMARK_MAX_LENGTH)
     }
 }
 
@@ -153,6 +153,15 @@ object AutoBookParser {
 
     /** 裸金额：仅用于详情页的大号金额（如 `-3.00`），必须带两位小数 */
     private val PLAIN_AMOUNT = Regex("(?:^|\\s)(-?)([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})(?:\\s|$)")
+
+    /**
+     * 时间戳（`20:47` / `23:14:43`）。
+     *
+     * ⚠️ 真机事故（2026-10-17 微信首页）：`微信支付 20:47` 这行被 [PREFIXED_AMOUNT] 的
+     * 「支付」前缀命中，小时数 `20` 被当成金额 —— 首页于是「识别出一笔收入 ¥20.00」。
+     * 金额提取前先抹掉时间戳：时间永远不是金额。
+     */
+    private val CLOCK = Regex("(?<!\\d)\\d{1,2}:\\d{2}(?::\\d{2})?(?!\\d)")
 
     /** 明确的收入语义 */
     private val INCOME_WORDS = listOf("收款", "到账", "收入", "退款", "已收", "退还", "返现", "入账")
@@ -558,25 +567,19 @@ object AutoBookParser {
     // ==================== 账单页门禁 ====================
 
     /**
-     * 账单页结构标签：账单 / 交易详情页靠这些「标签 → 值」成对呈现。
+     * **账单页白名单的强字段标签**。
      *
-     * 命中任意一个**并且取到了值**，就说明当前确实是账单详情页，而不是首页消息流。
+     * 账单 / 交易详情页才有的字段：支付时间 / 订单号 / 商品说明 / 商户全称 / 账单分类 / 交易状态。
+     * 门禁要求其中 **≥2 个**取到值才认（[isStrongBillDetailPage]），单个字段不算 ——
+     * 聊天 / 通知里也会出现「收款方…」这样的句子（真机 2026-10-17 微信首页会话列表）。
      *
      * ⚠️ **不要放「交易详情 / 付款详情 / 转账详情」**：真机实测微信支付**会话页**的支付消息卡片，
      * 会把按钮文字拼进整张卡片的 content-desc —— `使用零钱支付￥43.00交易详情`，
      * 于是「交易详情」被当成字段标签、又顺手取到了下一行的值，会话页就被误判成详情页、当场弹窗。
      * 它们是标题 / 按钮，不是「标签 → 值」字段。
-     */
-    private val DETAIL_LABELS: List<String> =
-        TIME_LABELS + ACCOUNT_LABELS + CATEGORY_LABELS + ORDER_LABELS + MERCHANT_LABELS +
-            listOf("商品说明", "交易状态", "当前状态")
-
-    /**
-     * **交易详情页**的强字段标签（用于「已记账笔补全详情」）。
      *
-     * 不能复用 [DETAIL_LABELS]：支付宝/微信的**支付成功结果页**也带 `交易方式 余额宝…`，
-     * 用宽标签集会把结果页误判成详情页，刚记完的账一回到结果页就被当成「补全」。
-     * 这里只放详情页才有的字段：支付时间 / 订单号 / 商品说明 / 商户全称 / 账单分类。
+     * ⚠️ **也不要放「付款方式 / 交易方式」这类弱字段**：支付宝/微信的**支付成功结果页**也带
+     * `交易方式 余额宝…`，用宽标签集会把列表页 / 结果页误判成详情页。
      */
     private val STRONG_DETAIL_LABELS: List<String> = TIME_LABELS + ORDER_LABELS + PRODUCT_LABELS +
         listOf("商户全称", "收款方全称", "账单分类", "交易状态", "当前状态")
@@ -590,6 +593,15 @@ object AutoBookParser {
     private val LIST_PAGE_WORDS = listOf(
         "最近消息", "未读服务消息", "松开刷新", "下拉刷新", "上拉加载", "加载更多"
     )
+
+    /**
+     * 通知 / 会话预览文案。
+     *
+     * ⚠️ 真机事故（2026-10-17 20:44~20:47，微信首页会话列表）：会话预览
+     * `收款方24小时内未接收你的转账，已过期` 被 `收款方` 标签当成「标签 → 值」，
+     * 首页于是被判成账单详情页、当场弹浮窗。这类系统通知不是账单字段，不能当值用。
+     */
+    private val NOTIFICATION_TEXT = Regex("(未接收|已过期|请查收|请尽快|超时未|待领取|已领取|领取中)")
 
     /** 相对时间（`9小时前` / `2分钟前`）：账单详情页给的是绝对时间，只有列表项才给相对时间 */
     private val RELATIVE_TIME = Regex("(刚刚|\\d+\\s*(分钟|小时|天|周|个月)前)")
@@ -728,25 +740,65 @@ object AutoBookParser {
     /**
      * 当前页面是不是**单笔**账单 / 交易页。
      *
-     * 判定顺序（顺序本身就是设计）：
-     * 1. **多笔痕迹** → 拒（流水列表 / 支付消息列表，哪怕它带了详情标签）；
-     * 2. **账单详情页** → 放行（有「标签 → 值」结构，支付宝账单详情页就是这种）；
-     * 3. **列表 / 摘要页** → 拒（首页「最近消息」的历史消息摘要靠这条挡掉）；
-     * 4. **独占结果页** → 放行（整行状态锚点 + 收尾按钮，付款后立即跳出的那页）；
-     * 5. **微信红包结果页** → 放行（红包没有锚点页，见 [isRedPacketResultPage]）。
+     * **白名单门禁**：默认拒绝，只有命中下面三种页面签名之一才放行 ——
+     * 账单页的排版是有限几种，而「不像账单页」的页面是无穷的，黑名单永远列不完
+     * （真机教训：2016-10-15 支付宝首页、2026-10-17 微信首页会话列表，都是补一条排除词又被下一个页面绕过）。
+     *
+     * 1. **独占结果页**：整行状态锚点（`支付成功`）+ 收尾按钮（`完成` / `查看账单`）；
+     * 2. **账单详情页**：页面标题命中白名单（`账单详情` / `交易详情` / `付款详情` / `转账详情` / `交易成功` …）
+     *    且 **≥1 个**强字段标签取到了值（支付时间 / 订单号 / 商户全称 / 商品说明 / 账单分类 / 交易状态）+ 有金额；
+     * 3. **微信红包结果页**：`红包` + `微信支付` + 金额（红包没有锚点页，见 [isRedPacketResultPage]）。
      *
      * 公开给 [AutoBookEngine] 做诊断用：识别失败时要能区分「门禁拒绝」和「是账单页但字段没认出来」。
      */
     fun isBillPage(lines: List<String>): Boolean {
-        // 先排掉付款前页面（收银台 / 指纹 / 密码）：它们也有「付款方式 + 金额」，
-        // 不先挡掉就会在用户付款前弹窗（真机反馈「我当前还没完成支付」）。
+        if (lines.isEmpty()) return false
+        // 付款前页面（收银台 / 指纹 / 密码）：不是结果页，页面上的金额还没付出去
         if (lines.any { line -> PRE_PAY_WORDS.any { line.contains(it) } }) return false
+        // 一屏多笔 = 列表 / 流水：单笔账单页只描述一笔交易
         if (hasMultipleTransactions(lines)) return false
-        if (hasDetailStructure(lines)) return true
-        if (isListOrSummaryPage(lines)) return false
+        // 白名单：命中任一账单页签名才识别
         if (isStandaloneResultPage(lines)) return true
+        if (isStrongBillDetailPage(lines)) return true
         return isRedPacketResultPage(lines)
     }
+
+    /**
+     * 白名单签名 2：**账单 / 交易详情页**。
+     *
+     * 页面名单先行：必须有详情页**标题**（页头文字，允许带图标 / 菜单前缀，
+     * 如真机微信的 `服务 会员 交易详情`、支付宝的 `账单详情`、缴费页的 `交易成功`）。
+     * 再叠加 1 个强字段 + 金额，确认页面里确实有交易数据。
+     *
+     * 为什么不再用「≥2 个强字段」单独放行：强字段是正文内容，聊天 / 通知 / 列表页也可能
+     * 凑出两个（真机 2026-10-17 微信首页会话列表就被会话预览凑出过「收款方 → 值」）。
+     * 标题是页面级元素，会话列表 / 聊天页都没有。
+     */
+    private fun isStrongBillDetailPage(lines: List<String>): Boolean {
+        if (extractAmount(lines) == null) return false
+        val hits = STRONG_DETAIL_LABELS.count { label -> labelValue(lines, listOf(label)) != null }
+        if (hits < 1) return false
+        return hasDetailPageTitle(lines)
+    }
+
+    /**
+     * 页面标题是否属于详情页名单。
+     *
+     * 允许标题带前缀（真机微信导航栏与菜单项会被合成一行 `服务 会员 交易详情`），
+     * 但长度只放宽 8 个字符 —— 聊天列表的长句（`收款方24小时内未接收你的转账，已过期`）不会命中。
+     */
+    private fun hasDetailPageTitle(lines: List<String>): Boolean = lines.any { raw ->
+        val text = raw.trim().trim { !it.isLetterOrDigit() && it != ' ' }.trim()
+        DETAIL_PAGE_TITLES.any { title ->
+            text == title || (text.length <= title.length + 8 && text.endsWith(title))
+        }
+    }
+
+    /** 详情页标题 / 状态锚点（消息摘要里带着金额的行不算，见 [hasDetailPageTitle] 的长度约束） */
+    private val DETAIL_PAGE_TITLES = listOf(
+        "账单详情", "交易详情", "付款详情", "转账详情",
+        "交易成功", "支付成功", "付款成功", "转账成功", "已支付"
+    )
 
     /**
      * 当前页面是不是**交易详情页**（比结果页信息更全：支付时间 / 订单号 / 商品说明 / 商户全称）。
@@ -762,10 +814,6 @@ object AutoBookParser {
         if (FUTURE_WORDS.any { word -> lines.any { it.contains(word) } }) return false
         return STRONG_DETAIL_LABELS.any { label -> labelValue(lines, listOf(label)) != null }
     }
-
-    /** 有任意一个账单字段标签取到了值 */
-    private fun hasDetailStructure(lines: List<String>): Boolean =
-        DETAIL_LABELS.any { label -> labelValue(lines, listOf(label)) != null }
 
     private fun isListOrSummaryPage(lines: List<String>): Boolean =
         lines.any { line ->
@@ -794,12 +842,20 @@ object AutoBookParser {
      * ⚠️ 必须叠加 [RED_PACKET_PRE_PAY_WORDS] 排除，否则会在**付款之前**弹窗。
      */
     private fun isRedPacketResultPage(lines: List<String>): Boolean {
+        // 红包结果页是**极简页**（真机只有 4 行：`返回 | 微信红包 | ￥0.01 | 微信支付`）。
+        // 会话列表 / 聊天页动辄 10+ 行，靠行数先挡一道。
+        if (lines.size > RED_PACKET_RESULT_MAX_LINES) return false
         val joined = lines.joinToString(" ")
-        if (!joined.contains("红包")) return false
+        // 必须是产品名「微信红包」整词 —— 会话预览「红包退款到账通知」里的「红包」不算
+        if (!joined.contains("微信红包")) return false
         if (!joined.contains("微信支付")) return false
         if (RED_PACKET_PRE_PAY_WORDS.any { joined.contains(it) }) return false
-        return extractAmount(lines) != null
+        // 红包结果页的金额带货币符号（`￥0.01`）；聊天 / 群消息里的「40元」不是红包金额
+        return lines.any { SYMBOL_AMOUNT.containsMatchIn(stripClock(it)) }
     }
+
+    /** 红包结果页最多这么多行（真机结果页 4 行；会话列表 / 聊天页远多于它） */
+    private const val RED_PACKET_RESULT_MAX_LINES = 8
 
     /**
      * 提取金额。
@@ -808,33 +864,39 @@ object AutoBookParser {
      * 优先级：带方向前缀 > 带货币符号 > 带「元」 > 裸两位小数（详情页大号金额）。
      */
     fun extractAmount(lines: List<String>): Pair<String, Double>? {
+        // 时间戳不是金额：`微信支付 20:47` 会被「支付」前缀命中、把小时数 20 当成金额
+        // （真机 2026-10-17 微信首页「识别出一笔收入 ¥20.00」）。匹配前抹掉时间戳，返回值仍用原文。
+        val pairs = lines.map { it to stripClock(it) }
         // 1) 带方向前缀：最可靠，同时给出方向线索
-        for (line in lines) {
+        for ((raw, line) in pairs) {
             if (isAmountNoise(line)) continue
             val m = PREFIXED_AMOUNT.find(line) ?: continue
-            toAmount(m.groupValues[2])?.let { return line to it }
+            toAmount(m.groupValues[2])?.let { return raw to it }
         }
         // 2) 带货币符号
-        for (line in lines) {
+        for ((raw, line) in pairs) {
             if (isAmountNoise(line)) continue
             val m = SYMBOL_AMOUNT.find(line) ?: continue
-            toAmount(m.groupValues[1])?.let { return line to it }
+            toAmount(m.groupValues[1])?.let { return raw to it }
         }
         // 3) 带「元」
-        for (line in lines) {
+        for ((raw, line) in pairs) {
             if (isAmountNoise(line)) continue
             val m = YUAN_AMOUNT.find(line) ?: continue
-            toAmount(m.groupValues[1])?.let { return line to it }
+            toAmount(m.groupValues[1])?.let { return raw to it }
         }
         // 4) 裸两位小数（支付宝/微信详情页大字金额，如 -3.00）
-        for (line in lines) {
+        for ((raw, line) in pairs) {
             if (isAmountNoise(line)) continue
             if (line.contains('元') || line.contains('¥') || line.contains('￥')) continue
             val m = PLAIN_AMOUNT.find(line) ?: continue
-            toAmount(m.groupValues[2])?.let { return line to it }
+            toAmount(m.groupValues[2])?.let { return raw to it }
         }
         return null
     }
+
+    /** 抹掉时间戳（`20:47` / `23:14:43`），金额匹配只在抹除后的文本上进行 */
+    private fun stripClock(line: String): String = CLOCK.replace(line, " ")
 
     /** 金额候选是否落在噪声上下文里（余额/额度/手续费/营销文案…） */
     private fun isAmountNoise(line: String): Boolean =
@@ -1112,17 +1174,36 @@ object AutoBookParser {
                     .trim()
                     .trimStart('：', ':', ' ', '　', ',', '，', '、', ';', '；')
                     .trim()
-                if (inline.isNotEmpty() && !isLabelLike(inline)) return inline
+                if (inline.isNotEmpty() && !isLabelLike(inline) && !isNotificationText(inline) &&
+                    !isClockOnly(inline)
+                ) {
+                    return inline
+                }
 
                 // 下一行
                 val next = lines.getOrNull(index + 1)?.trim()
                     ?.trimStart(',', '，', '、', ';', '；')
                     ?.trim()
-                if (!next.isNullOrEmpty() && !isLabelLike(next)) return next
+                if (!next.isNullOrEmpty() && !isLabelLike(next) && !isNotificationText(next) &&
+                    !isClockOnly(next)
+                ) {
+                    return next
+                }
             }
         }
         return null
     }
+
+    /**
+     * 取到的「值」其实是系统通知 / 会话预览。
+     *
+     * 真机事故（2026-10-17 微信首页会话列表）：`收款方24小时内未接收你的转账，已过期`
+     * 会被 `收款方` 标签取成值、让整页看起来像账单详情页。通知文案不能当字段值。
+     */
+    private fun isNotificationText(text: String): Boolean = NOTIFICATION_TEXT.containsMatchIn(text)
+
+    /** 值只是一个时间戳（`20:36`）：会话列表的列表项时间，不是字段值 */
+    private fun isClockOnly(text: String): Boolean = CLOCK.matches(text.trim())
 
     /** 是否是汉字（判断标签后面是否紧跟了更长词的片段；全角标点不算） */
     private fun isCjkIdeograph(ch: Char): Boolean = ch.code in 0x4E00..0x9FFF
@@ -1155,6 +1236,8 @@ object AutoBookParser {
     private fun isUsableMerchant(text: String): Boolean {
         val trimmed = text.trim()
         if (trimmed.length !in 2..20) return false
+        // 列表项时间（`20:36`）不是商户名（真机 2026-10-17 微信首页会话列表）
+        if (CLOCK.matches(trimmed)) return false
         if (MERCHANT_NOISE_PATTERNS.any { it.containsMatchIn(trimmed) }) return false
         // 品牌名不是商户（「微信支付」「支付宝」这类在支付页到处都是）
         if (BRAND_WORDS.any { trimmed == it }) return false
