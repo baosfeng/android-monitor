@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,6 +53,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppFab
@@ -99,10 +103,26 @@ fun FinanceMainScreen(
     val monthNotice by viewModel.monthNotice.collectAsState()
 
     // 显式持有滚动状态：每次进入本屏（entryKey 变化）把头部复位，
-    // 避免「记账」标题被上一次的滚动位置顶出屏幕。切 Tab 时本 composable 不会离开组合，
-    // 所以键必须是 entryKey，用 Unit 不会重跑。
+    // 避免「记账」标题被上一次的滚动位置顶出屏幕。
+    // 键必须是 entryKey：切 Tab / 子页返回时 entryKey 会自增，用 Unit 则只在首次组合时跑一次。
     val listState = rememberLazyListState()
-    LaunchedEffect(entryKey) { listState.scrollToItem(0) }
+    // 每次进入本屏（切 Tab / 从子页返回）重新拉当月数据：
+    // 自动记账在无障碍服务里落库，切回来必须能看到新记录，不能等用户手动操作触发刷新。
+    LaunchedEffect(entryKey) {
+        listState.scrollToItem(0)
+        viewModel.loadCurrentMonth()
+    }
+
+    // App 从后台回前台时 Activity 重新 resume，但本 composable 一直在组合里（entryKey 不变），
+    // 所以再挂一个 ON_RESUME：期间自动记账落库的记录同样立刻可见。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadCurrentMonth()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val control = rememberFinanceStateControl()
     val monthDisplay = monthLabelOf(currentMonth)
@@ -517,8 +537,9 @@ private fun TransactionRow(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
-            // 原型 s04-tx-* 的行副标题只有备注（row-sub="午餐 · 公司楼下"）
-            val sub = transaction.remark
+            // 副标题：优先用户手写的「说明」，为空时回退自动采集的商户 · 付款方式
+            // （再退回商品说明），见 RecordForm.subtitle
+            val sub = RecordForm.subtitle(transaction)
             if (sub.isNotEmpty()) {
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = t.muted, maxLines = 1)
             }

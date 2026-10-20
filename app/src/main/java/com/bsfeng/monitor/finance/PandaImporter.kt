@@ -45,7 +45,12 @@ class PandaImporter(private val financeManager: FinanceManager) {
         val importedCategories: Int = 0,
         val importedAccounts: Int = 0,
         val importedBudgets: Int = 0,
-    )
+    ) {
+        /** 事务里真的写进了东西（全重复 / 全跳过时不必触发 UI 重载） */
+        val hasWrites: Boolean
+            get() = importedTransactions > 0 || importedCategories > 0 ||
+                importedAccounts > 0 || importedBudgets > 0
+    }
 
     /**
      * 执行导入。
@@ -66,6 +71,8 @@ class PandaImporter(private val financeManager: FinanceManager) {
             // 整个导入过程在同一个事务中执行：任一步骤抛异常即整体回滚，
             // 避免「分类已写入、账单未写入」这类中间态。
             val stats = financeManager.dao.runInTransaction { doImport(pandaDb, errors) }
+            // 事务已提交：通知 UI 重新加载（导入的数据同样由上面那条刷新链路带出来）
+            if (stats.hasWrites) financeManager.notifyChanged()
             ImportResult(
                 totalTransactions = stats.totalTransactions,
                 importedTransactions = stats.importedTransactions,

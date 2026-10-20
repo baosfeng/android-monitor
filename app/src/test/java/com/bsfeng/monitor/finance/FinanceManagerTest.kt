@@ -245,4 +245,109 @@ class FinanceManagerTest {
     fun `没有预算时返回空列表`() = runBlocking {
         assertTrue(manager.getMonthlyBudget("2030-01").isEmpty())
     }
+
+    // ==================== 变更通知（UI 自动刷新） ====================
+
+    @Test
+    fun `新增交易后变更版本递增`() = runBlocking {
+        manager.ensureInitialized()
+        val before = manager.changeVersion.value
+
+        manager.addTransaction(expense(amount = 12.5, date = "2026-10-16"))
+
+        assertEquals("一笔新增应 bump 一次", before + 1, manager.changeVersion.value)
+    }
+
+    @Test
+    fun `改与删交易各 bump 一次`() = runBlocking {
+        manager.ensureInitialized()
+        val id = manager.addTransaction(expense(amount = 10.0, date = "2026-10-16"))
+        val tx = manager.getTransactionById(id)
+        assertNotNull(tx)
+        val afterAdd = manager.changeVersion.value
+
+        manager.updateTransaction(tx!!.copy(amount = 20.0))
+        assertEquals("改一笔应 bump 一次", afterAdd + 1, manager.changeVersion.value)
+
+        manager.deleteTransaction(id)
+        assertEquals("删一笔应 bump 一次", afterAdd + 2, manager.changeVersion.value)
+    }
+
+    @Test
+    fun `写预算也 bump 变更版本`() = runBlocking {
+        manager.ensureInitialized()
+        val before = manager.changeVersion.value
+
+        manager.setBudget("2026-10", "", 1500.0)
+
+        assertTrue("写预算应 bump 变更版本", manager.changeVersion.value > before)
+    }
+
+    @Test
+    fun `只读查询不 bump 变更版本`() = runBlocking {
+        manager.ensureInitialized()
+        manager.addTransaction(expense(amount = 30.0, date = "2026-10-16"))
+        val before = manager.changeVersion.value
+
+        manager.getMonthlyTransactions("2026-10")
+        manager.getMonthlyStats("2026-10")
+        manager.getMonthlyBudget("2026-10")
+        manager.getAvailableMonths()
+
+        assertEquals("读路径不得 bump，否则 UI 刷新会自激", before, manager.changeVersion.value)
+    }
+
+    // ==================== 旧版自动记账拼接说明清理 ====================
+
+    private fun legacyAuto(
+        remark: String,
+        sourceId: String,
+        merchant: String = "淘宝闪购",
+        productDesc: String = "淘宝闪购订单",
+        payMethod: String = "招商银行信用卡(8888)",
+    ) = Transaction(
+        type = 0, categoryName = "购物", amount = 12.5,
+        accountName = "支付宝", remark = remark,
+        date = "2026-10-16", dateTime = "2026-10-16 12:00:00",
+        source = "auto_alipay", sourceId = sourceId,
+        merchant = merchant, productDesc = productDesc, payMethod = payMethod,
+    )
+
+    @Test
+    fun `旧版拼接说明被清空且单据字段保留`() = runBlocking {
+        manager.ensureInitialized()
+        val id = manager.addTransaction(
+            legacyAuto(
+                remark = "淘宝闪购·淘宝闪购订单·招商银行信用卡(8888)",
+                sourceId = "CFP000000000000000001",
+            )
+        )
+
+        val cleaned = manager.cleanLegacyAggregatedRemarks()
+
+        assertEquals("只应清理这一条拼接说明", 1, cleaned)
+        val loaded = manager.getTransactionById(id)!!
+        assertEquals("拼接说明应清空", "", loaded.remark)
+        assertEquals("商户不能被清掉", "淘宝闪购", loaded.merchant)
+        assertEquals("商品说明不能被清掉", "淘宝闪购订单", loaded.productDesc)
+        assertEquals("付款方式不能被清掉", "招商银行信用卡(8888)", loaded.payMethod)
+        assertEquals("金额不能被改动", 12.5, loaded.amount, 0.0001)
+    }
+
+    @Test
+    fun `手写说明与手动记录不会被清理`() = runBlocking {
+        manager.ensureInitialized()
+        val manualId = manager.addTransaction(
+            expense(amount = 10.0, date = "2026-10-16", remark = "同事聚餐")
+        )
+        val handWrittenId = manager.addTransaction(
+            legacyAuto(remark = "同事聚餐 AA", sourceId = "CFP000000000000000002")
+        )
+
+        val cleaned = manager.cleanLegacyAggregatedRemarks()
+
+        assertEquals("没有拼接说明就不应清理", 0, cleaned)
+        assertEquals("同事聚餐", manager.getTransactionById(manualId)!!.remark)
+        assertEquals("同事聚餐 AA", manager.getTransactionById(handWrittenId)!!.remark)
+    }
 }

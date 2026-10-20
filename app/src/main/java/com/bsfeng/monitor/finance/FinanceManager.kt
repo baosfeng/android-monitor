@@ -7,6 +7,7 @@ import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -20,26 +21,48 @@ class FinanceManager internal constructor(context: Context) {
     private val dbHelper = FinanceDatabaseHelper.getInstance(context)
     val dao = FinanceDao(dbHelper)
 
+    /** 小额迁移标记（当前只用于「旧版自动记账拼接说明」的一次性清理） */
+    private val prefs =
+        context.applicationContext.getSharedPreferences("finance_prefs", Context.MODE_PRIVATE)
+
+    private val mutationSignal = FinanceMutationSignal()
+
+    /**
+     * 进程内数据变更信号（[FinanceMutationSignal.version]）。
+     *
+     * 所有成功的写操作都会 bump，UI 订阅它重新加载当前月；自动记账与首页共用同一个
+     * Manager 单例，所以无障碍服务落库后切回记账 Tab / App 回前台即可见（见 docs/记账/概述.md）。
+     */
+    val changeVersion: StateFlow<Long> = mutationSignal.version
+
+    /** 写操作成功后统一从这里通知订阅方；读路径不调用，避免「加载 → 再加载」自激。 */
+    internal fun notifyChanged() {
+        mutationSignal.bump()
+    }
+
     // ========== 交易 ==========
 
     suspend fun addTransaction(tx: Transaction): Long = withContext(Dispatchers.IO) {
         val id = dao.insertTransaction(tx)
         applyTransactionEffect(tx, sign = 1.0)
+        notifyChanged()
         id
     }
 
-    suspend fun deleteTransaction(id: Long) = withContext(Dispatchers.IO) {
+    suspend fun deleteTransaction(id: Long): Unit = withContext(Dispatchers.IO) {
         val existing = dao.getTransactionById(id)
         dao.deleteTransaction(id)
         if (existing != null) applyTransactionEffect(existing, sign = -1.0)
+        notifyChanged()
     }
 
-    suspend fun updateTransaction(tx: Transaction) = withContext(Dispatchers.IO) {
+    suspend fun updateTransaction(tx: Transaction): Unit = withContext(Dispatchers.IO) {
         val old = dao.getTransactionById(tx.id)
         dao.updateTransaction(tx)
         // 先按旧值回冲、再按新值计入：换账户 / 改金额 / 支出↔转账互转都由这一条路径覆盖
         if (old != null) applyTransactionEffect(old, sign = -1.0)
         applyTransactionEffect(tx, sign = 1.0)
+        notifyChanged()
     }
 
     /** 交易对账户余额的影响（收入为正、支出为负；退款交易 amount 本身为负，故回冲为正）。 */
@@ -191,10 +214,11 @@ class FinanceManager internal constructor(context: Context) {
         }
     }
 
-    suspend fun setBudget(month: String, categoryName: String, amount: Double) = withContext(Dispatchers.IO) {
+    suspend fun setBudget(month: String, categoryName: String, amount: Double): Unit = withContext(Dispatchers.IO) {
         val existing = dao.getBudgetsByMonth(month)
         val spent = existing.find { it.categoryName == categoryName }?.spentAmount ?: 0.0
         dao.upsertBudget(Budget(month = month, categoryName = categoryName, budgetAmount = amount, spentAmount = spent))
+        notifyChanged()
     }
 
     // ========== 数据完整性 ==========
@@ -203,9 +227,60 @@ class FinanceManager internal constructor(context: Context) {
     suspend fun ensureInitialized() {
         seedDefaultCategories()
         seedDefaultAccounts()
+        cleanLegacyAggregatedRemarksOnce()
+    }
+
+    /**
+     * 旧版自动记账把「商户·商品说明·付款方式」拼进 remark；2026-10-20 起「说明」只存用户手写内容。
+     *
+     * 只跑一次：按旧算法精确重算并比对，能确定是拼接产生的说明才清空（见 [LegacyRemarkCleaner]）。
+     * 用标记落盘避免每次启动扫全表；迁移失败不影响 App 启动。
+     */
+    private suspend fun cleanLegacyAggregatedRemarksOnce() {
+        if (prefs.getBoolean(KEY_LEGACY_REMARK_CLEANED, false)) return
+        val cleaned = cleanLegacyAggregatedRemarks()
+        prefs.edit().putBoolean(KEY_LEGACY_REMARK_CLEANED, true).apply()
+        if (cleaned > 0) {
+            android.util.Log.i(
+                TAG,
+                "已清理 $cleaned 条旧版自动记账拼接说明（单据信息保留在商户 / 商品说明 / 付款方式字段）"
+            )
+        }
+    }
+
+    /**
+     * 清理旧版拼接说明（幂等，可重复调用；单测直接调它）。
+     *
+     * 判定完全在 [LegacyRemarkCleaner] 的纯逻辑里：只有 `source` 以 `auto_` 开头、
+     * 旧拼接至少两段且与字段重算结果完全一致才清空。只写 remark 列，不动金额 / 余额 / 时间。
+     *
+     * @return 实际清空的条数
+     */
+    internal suspend fun cleanLegacyAggregatedRemarks(): Int = withContext(Dispatchers.IO) {
+        val rows = dao.getAutoTransactionsWithRemark()
+        if (rows.isEmpty()) return@withContext 0
+        var cleaned = 0
+        dao.runInTransaction {
+            for (tx in rows) {
+                val channelLabel = LegacyRemarkCleaner.channelLabelOf(tx.source)
+                if (LegacyRemarkCleaner.isLegacyAggregate(
+                        tx.remark, tx.merchant, tx.productDesc, tx.payMethod, channelLabel
+                    )
+                ) {
+                    cleaned += dao.clearTransactionRemark(tx.id)
+                }
+            }
+        }
+        if (cleaned > 0) notifyChanged()
+        cleaned
     }
 
     companion object {
+        private const val TAG = "FinanceManager"
+
+        /** 旧版拼接说明清理的一次性标记（v1：2026-10-20「说明」语义变更） */
+        private const val KEY_LEGACY_REMARK_CLEANED = "legacy_remark_cleaned_v1"
+
         /** 交易类型：支出 */
         const val TYPE_EXPENSE = 0
 

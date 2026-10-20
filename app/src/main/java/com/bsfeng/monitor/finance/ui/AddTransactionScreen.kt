@@ -77,7 +77,8 @@ private enum class RecordSheet { NONE, CATEGORY, ACCOUNT, TO_ACCOUNT, TIME, RECE
  *
  * 与旧 s05 的差别就是用户当初提的三条：**一屏不放滚**（分类从 6 行网格改成抽屉里的 4 列网格）、
  * **账户不再是裸露的 pill**（走同一套抽屉）、**时间能选到「昨天 10 点」**（日期快捷 + 时/分滚轮）。
- * 四个字段行（分类 / 账户 / 时间 / 备注）同构：标签 + 值 + ▸，抽屉开合不影响上方表单高度。
+ * 四个字段行（分类 / 账户 / 时间 / 说明）同构：标签 + 值 + ▸，抽屉开合不影响上方表单高度。
+ * 「说明」行只存用户手写内容，自动采集的商户 / 商品说明 / 付款方式留在交易的独立字段里。
  *
  * @param editing 非空表示编辑已有交易：表单预填该交易，保存时保留 id/createdAt/source，
  *                并允许通过 [onDelete] 删除；为空表示新增。
@@ -221,7 +222,7 @@ fun AddTransactionScreen(
                 modifier = Modifier.weight(1f),
                 emptyText = "分类数据为空，先从熊猫记账导入历史账目",
                 errorText = "无法读取本地分类表，暂时不能保存新的交易",
-                edgeText = "边界态：超长分类名 / 超长备注 / 缺失分类字段",
+                edgeText = "边界态：超长分类名 / 超长说明 / 缺失分类字段",
                 onRetry = { vm?.loadCurrentMonth() },
             ) {
                 Box(Modifier.fillMaxSize().imePadding()) {
@@ -322,7 +323,7 @@ fun AddTransactionScreen(
                             )
                         }
 
-                        // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 备注 —— 四行同构，与原型一致
+                        // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 说明 —— 四行同构，与原型一致
                         Spacer(Modifier.height(t.space3))
                         AppCard(padding = 0.dp) {
                             // 原型 .s14-card 的 padding 是 12/16；行分隔线（.s14-toggle 的 border-top）
@@ -564,7 +565,7 @@ private fun FieldRow(
     }
 }
 
-/** 备注行：与上面三行同构，但值是直接输入的（无 ▸，因为不需要再开一层） */
+/** 说明行：与上面三行同构，但值是直接输入的（无 ▸，因为不需要再开一层） */
 @Composable
 private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
     val t = LocalDesignTokens.current
@@ -572,12 +573,12 @@ private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = FIELD_ROW_MIN_H),
-        // 同上：备注行也是 .s14-toggle，零内边距 + min-height 44
+        // 同上：说明行也是 .s14-toggle，零内边距 + min-height 44
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(t.space3),
     ) {
         Text(
-            "备注",
+            "说明",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
             modifier = Modifier.width(FIELD_LABEL_W),
@@ -596,7 +597,7 @@ private fun NoteRow(value: String, onValueChange: (String) -> Unit) {
             )
             if (value.isEmpty()) {
                 Text(
-                    "添加备注",
+                    "写一下买了什么",
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                 )
@@ -697,5 +698,5 @@ private fun initialTimeParts(editing: Transaction?, fromMonth: String?): RecordF
 /** 金额字距（原型 .s14a-input 的 letter-spacing:-.02em，56px 下约 -1.12px） */
 private val AMOUNT_LETTER_SPACING = (-0.02).em
 
-/** 原型 s05-edge：备注 200 字上限 */
+/** 原型 s05-edge：说明 200 字上限 */
 private const val REMARK_MAX_LEN = 200
