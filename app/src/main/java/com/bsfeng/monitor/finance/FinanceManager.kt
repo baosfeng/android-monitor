@@ -125,8 +125,9 @@ class FinanceManager internal constructor(context: Context) {
         val transactions = dao.getTransactionsByMonth(yearMonth)
         val budgets = dao.getBudgetsByMonth(yearMonth)
 
-        // 找 Top 分类
-        val breakdown = dao.getMonthlyCategoryBreakdown(yearMonth, 0)
+        // 找 Top 分类：按一级汇总（二级归到父级），与统计页/预算口径一致
+        val breakdown = CategoryTree(dao.getAllCategories())
+            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, 0))
         val topCategory = if (breakdown.isEmpty()) "" else breakdown.entries.first().key
 
         // 预算进度
@@ -145,7 +146,9 @@ class FinanceManager internal constructor(context: Context) {
     }
 
     suspend fun getCategoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> = withContext(Dispatchers.IO) {
-        dao.getMonthlyCategoryBreakdown(yearMonth, type)
+        // 交易可能存二级名（电商）或一级名（购物）：统一归到一级，环形图/图例只出现一级
+        CategoryTree(dao.getAllCategories())
+            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, type))
     }
 
     suspend fun getAvailableMonths(): List<String> = withContext(Dispatchers.IO) {
@@ -258,7 +261,9 @@ class FinanceManager internal constructor(context: Context) {
         if (budgets.isEmpty()) return@withContext emptyList()
 
         val expenseTotal = dao.getMonthlyExpenseTotal(yearMonth)
-        val breakdown = dao.getMonthlyCategoryBreakdown(yearMonth, TYPE_EXPENSE)
+        // 预算按一级：二级支出（电商）要先归到父级（购物）才能对上分类预算行
+        val breakdown = CategoryTree(dao.getAllCategories())
+            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, TYPE_EXPENSE))
         budgets.map { budget ->
             val spent = if (budget.isOverall) expenseTotal
             else breakdown[budget.categoryName] ?: 0.0

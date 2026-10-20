@@ -58,7 +58,7 @@ class CategoryTreeTest {
         assertEquals("购物", t.topLevelNameOf("电商"))
         assertEquals("餐饮", t.topLevelNameOf("外卖"))
         assertEquals("购物", t.topLevelNameOf("购物"))
-        assertEquals("其他", t.topLevelNameOf("随便写一个不存在的分类"))
+        assertEquals("未知分类保留原名，统计不强行归并", "随便写一个不存在的分类", t.topLevelNameOf("随便写一个不存在的分类"))
         assertEquals("其他", t.topLevelNameOf(""))
     }
 

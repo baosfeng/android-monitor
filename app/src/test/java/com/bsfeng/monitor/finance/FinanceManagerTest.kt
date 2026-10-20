@@ -334,6 +334,35 @@ class FinanceManagerTest {
         assertEquals("金额不能被改动", 12.5, loaded.amount, 0.0001)
     }
 
+    // ==================== 一级/二级分类聚合 ====================
+
+    @Test
+    fun `二级支出按一级聚合到统计与预算`() = runBlocking {
+        manager.ensureInitialized()
+        manager.addTransaction(
+            Transaction(
+                type = 0, categoryName = "电商", amount = 10.0,
+                accountName = "支付宝", date = "2026-10-16",
+            )
+        )
+        manager.addTransaction(
+            Transaction(
+                type = 0, categoryName = "购物", amount = 5.0,
+                accountName = "支付宝", date = "2026-10-16",
+            )
+        )
+
+        val breakdown = manager.getCategoryBreakdown("2026-10")
+        assertEquals("电商 + 购物 应合并到一级购物", 15.0, breakdown["购物"] ?: 0.0, 0.0001)
+
+        val stats = manager.getMonthlyStats("2026-10")
+        assertEquals("购物", stats.topCategory)
+
+        manager.setBudget("2026-10", "购物", 100.0)
+        val budget = manager.getMonthlyBudget("2026-10").first { it.categoryName == "购物" }
+        assertEquals("预算已支出按一级汇总", 15.0, budget.spentAmount, 0.0001)
+    }
+
     @Test
     fun `手写说明与手动记录不会被清理`() = runBlocking {
         manager.ensureInitialized()

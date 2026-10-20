@@ -75,7 +75,10 @@ fun BudgetScreen(
     val overallBudget = remember(budgets) { budgets.find { it.isOverall } }
     val categoryBudgets = remember(budgets) { budgets.filterNot { it.isOverall } }
     val budgetByCategory = remember(budgets) { budgets.associateBy { it.categoryName } }
-    val expenseCategories = remember(categories) { categories.filter { it.type == TYPE_EXPENSE } }
+    // 预算按一级分类设置：二级不单独占预算行
+    val expenseCategories = remember(categories) {
+        categories.filter { it.type == TYPE_EXPENSE && it.isTopLevel }
+    }
 
     // 分类预算合计即总预算（原型口径）；一条分类预算都没有时回退到总预算行
     val categorySum = remember(categoryBudgets) { categoryBudgets.sumOf { it.budgetAmount } }
