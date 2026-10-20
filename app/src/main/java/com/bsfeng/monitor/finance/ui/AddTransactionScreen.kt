@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
@@ -75,13 +76,17 @@ private enum class RecordSheet { NONE, CATEGORY, ACCOUNT, TO_ACCOUNT, TIME, RECE
 /**
  * s14a「记一笔」——一屏放得下的表单 + 全抽屉（定版原型 `.open-design/26-a-quan-chouti.html`）。
  *
- * 与旧 s05 的差别就是用户当初提的三条：**一屏不放滚**（分类从 6 行网格改成抽屉里的 4 列网格）、
- * **账户不再是裸露的 pill**（走同一套抽屉）、**时间能选到「昨天 10 点」**（日期快捷 + 时/分滚轮）。
+ * 与旧 s05 的差别就是用户当初提的三条：**一屏不放滚**（分类从 6 行网格改成抽屉里的两级选择器：
+ * 一级 chips + 6 列二级网格）、**账户不再是裸露的 pill**（走同一套抽屉）、
+ * **时间能选到「昨天 10 点」**（日期快捷 + 时/分滚轮）。
  * 四个字段行（分类 / 账户 / 时间 / 说明）同构：标签 + 值 + ▸，抽屉开合不影响上方表单高度。
  * 「说明」行只存用户手写内容，自动采集的商户 / 商品说明 / 付款方式留在交易的独立字段里。
  *
  * @param editing 非空表示编辑已有交易：表单预填该交易，保存时保留 id/createdAt/source，
  *                并允许通过 [onDelete] 删除；为空表示新增。
+ * @param categoryTree 一级/二级分类树：分类抽屉用它做两级同屏选择。
+ *                     默认由 [categories] 现构（MainActivity 已一次性提供全量分类）；
+ *                     显式传入时以树为准，[categories] 只用于空态判定。
  * @param fromMonth 浏览月（MainActivity 的 FinanceRoute.AddTransaction(fromMonth)）。
  *                  非空且 ≠ 当前系统月时，表单日期默认取该月最后一天，否则取今天——
  *                  否则在历史月里新增的账会落到本月，用户看着像「没保存」。
@@ -97,6 +102,7 @@ fun AddTransactionScreen(
     onDelete: ((Transaction) -> Unit)? = null,
     fromMonth: String? = null,
     onImportClick: (() -> Unit)? = null,
+    categoryTree: CategoryTree? = null,
 ) {
     val t = LocalDesignTokens.current
     val editingId = editing?.id
@@ -124,14 +130,23 @@ fun AddTransactionScreen(
     val loading = vm?.loading?.collectAsState()?.value == true
     val control = rememberFinanceStateControl()
 
-    val typeCategories = remember(categories, txType) { categories.filter { it.type == txType } }
+    // 分类树：MainActivity 传全量分类（一级 + 二级），这里构造成树供两级选择器使用。
+    // 类型校正要按「该类型下所有分类名（一级 + 二级）」判断，否则编辑一笔二级分类的交易
+    // （例如「电商」）会被误判成不在当前类型里而被改成第一个分类。
+    val localTree = remember(categories) { CategoryTree(categories) }
+    val tree = categoryTree ?: localTree
+    val typeCategoryNames = remember(tree, txType) {
+        tree.topLevel(txType).flatMap { top ->
+            listOf(top.name) + tree.childrenOf(top.name).map { it.name }
+        }
+    }
     val today = LocalDate.now()
 
-    LaunchedEffect(typeCategories, accounts, txType) {
+    LaunchedEffect(typeCategoryNames, accounts, txType) {
         // 切换支出/收入后原选中项可能不属于当前类型（例如「餐饮」不属于收入）：必须校正，
         // 否则会出现「芯片全未选中却仍能保存支出分类的收入记录」
         if (txType != RecordForm.TYPE_TRANSFER) {
-            selectedCategory = RecordForm.correctCategory(selectedCategory, typeCategories.map { it.name })
+            selectedCategory = RecordForm.correctCategory(selectedCategory, typeCategoryNames)
         }
         if (accountName.isBlank()) accountName = accounts.firstOrNull()?.name ?: ""
         if (txType == RecordForm.TYPE_TRANSFER && toAccountName.isBlank()) {
@@ -429,7 +444,8 @@ fun AddTransactionScreen(
         when (openSheet) {
             RecordSheet.CATEGORY -> CategorySheet(
                 visible = true,
-                categories = typeCategories,
+                tree = tree,
+                type = txType,
                 selectedName = selectedCategory,
                 onPick = {
                     selectedCategory = it

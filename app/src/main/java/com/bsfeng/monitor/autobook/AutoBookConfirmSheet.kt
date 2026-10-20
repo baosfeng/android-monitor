@@ -1,7 +1,6 @@
 package com.bsfeng.monitor.autobook
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -16,13 +15,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -31,7 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,19 +38,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.bsfeng.monitor.finance.model.Category
-import com.bsfeng.monitor.finance.ui.categoryColorOf
-import com.bsfeng.monitor.ui.components.CategoryIcon
+import com.bsfeng.monitor.finance.CategoryTree
+import com.bsfeng.monitor.finance.model.CategoryCatalog
+import com.bsfeng.monitor.finance.ui.CategoryPicker
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorRadius
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
@@ -74,7 +67,7 @@ import com.bsfeng.monitor.ui.theme.opaquePanel
 @Composable
 fun AutoBookConfirmSheet(
     draft: AutoBookDraft,
-    categoriesByType: Map<Int, List<Category>>,
+    categoryTree: CategoryTree,
     onConfirm: (type: Int, categoryName: String, remark: String) -> Unit,
     onIgnore: () -> Unit,
     onImeFocusRequest: (Boolean) -> Unit = {},
@@ -82,7 +75,11 @@ fun AutoBookConfirmSheet(
     val tokens = LocalDesignTokens.current
 
     var type by remember(draft.sourceId) { mutableStateOf(draft.type) }
-    var category by remember(draft.sourceId) { mutableStateOf(draft.categoryName) }
+    // 识别到的分类落到树内的合法名字：旧名 / 历史商户默认值可能已经不在分类表里，
+    // 回退该类型的兜底一级，避免「识别：出行」却一个格子都没选中（落库口径与之一致）
+    var category by remember(draft.sourceId, categoryTree) {
+        mutableStateOf(resolveCategory(categoryTree, draft.type, draft.categoryName))
+    }
     // 说明：预填付款前页面的备注，用户可在浮窗里改；确认时以这里为准
     var remark by remember(draft.sourceId) { mutableStateOf(draft.userRemark) }
     var editing by remember(draft.sourceId) { mutableStateOf(false) }
@@ -122,17 +119,14 @@ fun AutoBookConfirmSheet(
 
     val isIncome = type == AutoBookDraft.TYPE_INCOME
     val amountColor = if (isIncome) tokens.success else tokens.danger
-    // 识别出的分类不一定在预设分类表里（例如平台分类「保险」当前没有对应分类，解析器兜底成「其他」，
-    // 而支出预设里没有「其他」）。这里把它补进网格，保证「识别到的分类」一定有可高亮的格子，
-    // 否则用户看到的就是「一个都没选中」。
-    val categories = remember(type, categoriesByType, draft.sourceId, draft.type, draft.categoryName) {
-        val base = categoriesByType[if (type == AutoBookDraft.TYPE_INCOME) 1 else 0].orEmpty()
-        val recognized = draft.categoryName
-        if (type == draft.type && recognized.isNotBlank() && base.none { it.name == recognized }) {
-            base + Category(name = recognized, type = type, sortOrder = Int.MAX_VALUE)
-        } else {
-            base
-        }
+    // 分类树只有支出(0)/收入(1)两棵；浮窗里的「转账」沿用它原来的口径（按支出分类选），
+    // 落库时由 AutoBookEngine 校验分类名，不在树里就回退一级「其他」。
+    val pickerType = if (type == AutoBookDraft.TYPE_INCOME) 1 else 0
+
+    // 切换支出/收入：原选中项可能不属于该类型（例如「餐饮」不是收入分类），换成该类型的合法分类。
+    // 用户点分类不触发这里（key 只有 type / tree），改选不会被覆盖。
+    LaunchedEffect(type, categoryTree) {
+        category = resolveCategory(categoryTree, type, category)
     }
 
     Column(
@@ -218,9 +212,10 @@ fun AutoBookConfirmSheet(
 
         Divider()
 
-        // 分类：6 列图标网格（与「记一笔」同一套分类格）。
-        // 识别到的分类额外标一个圆点 + 选中底色；标题行再写明「识别：xx」，
-        // 用户一眼能确认系统猜的是哪个，改选后也还能对照。
+        // 分类：两级同屏（一级 chips + 6 列二级网格），与「记一笔」共用 CategoryPicker。
+        // 识别到的分类默认选中（一级/二级都支持），命中的格子右上角标圆点；标题行再写明
+        // 「识别：xx」，用户一眼能确认系统猜的是哪个，改选后也还能对照。
+        // 点一级只切换网格、点二级才改选中 —— 浮窗仍然只能由「记一笔」/「忽略」关闭。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -242,11 +237,14 @@ fun AutoBookConfirmSheet(
                 )
             }
         }
-        CategoryGrid(
-            categories = categories,
+        CategoryPicker(
+            tree = categoryTree,
+            type = pickerType,
             selectedName = category,
+            onPick = { category = it },
             recognizedName = draft.categoryName,
-            onSelect = { category = it },
+            gridMaxHeight = PANEL_GRID_MAX_H,
+            iconSize = PANEL_CATEGORY_ICON_SIZE,
         )
 
         Divider()
@@ -378,134 +376,6 @@ private fun SegmentItem(
     }
 }
 
-/**
- * 分类网格：6 列，图标 + 名称，一屏约 3 行。
- *
- * 与「记一笔」的 [com.bsfeng.monitor.finance.ui] 分类抽屉同一套视觉：
- * 选中 = 图标外描边 + 淡色底；识别到的分类右上角多一个圆点（改选后仍保留，便于对照）。
- *
- * 用普通 Column + verticalScroll 而不是 LazyVerticalGrid：分类最多 22 个，一次性组合成本很低，
- * 但能避免懒加载网格在受限高度里滚动时反复组合/回收 item。真机反馈浮窗里滑动「很卡」，
- * 这里优先保证滚动跟手（2026-10-20）。
- *
- * 识别项可能在第二屏：打开后按行高把它滚进可视区，用户不需要自己翻（2026-10-20 反馈）。
- */
-@Composable
-private fun CategoryGrid(
-    categories: List<Category>,
-    selectedName: String,
-    recognizedName: String,
-    onSelect: (String) -> Unit,
-) {
-    val rows = remember(categories) { categories.chunked(CATEGORY_COLUMNS) }
-    val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-    val rowGapPx = with(density) { MonitorSpacing.sm.toPx() }
-    // 行高由第一行实测（不同字号/主题会变），拿到后才知道该滚多少
-    var rowHeightPx by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(selectedName, categories, rowHeightPx) {
-        if (rowHeightPx <= 0f) return@LaunchedEffect
-        val index = categories.indexOfFirst { it.name == selectedName }
-        if (index < 0) return@LaunchedEffect
-        // 先等一帧，保证 maxValue 已按实际内容高度更新
-        withFrameNanos { }
-        val row = index / CATEGORY_COLUMNS
-        val target = (row * (rowHeightPx + rowGapPx)).toInt()
-        scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 176.dp)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(MonitorSpacing.sm),
-    ) {
-        rows.forEach { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coords ->
-                        if (rowHeightPx <= 0f) rowHeightPx = coords.size.height.toFloat()
-                    },
-                horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm),
-            ) {
-                row.forEach { item ->
-                    CategoryGridCell(
-                        name = item.name,
-                        selected = item.name == selectedName,
-                        recognized = item.name == recognizedName,
-                        onClick = { onSelect(item.name) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                // 最后一行不足 6 个时补空位，保持每列等宽
-                repeat(CATEGORY_COLUMNS - row.size) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-/** 分类网格列数（一行 6 个：一屏能扫到更多分类，减少滑动） */
-private const val CATEGORY_COLUMNS = 6
-
-@Composable
-private fun CategoryGridCell(
-    name: String,
-    selected: Boolean,
-    recognized: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val tokens = LocalDesignTokens.current
-    val shape = RoundedCornerShape(MonitorRadius.md)
-    // categoryColorOf 读取组合局部 token，只能在 @Composable 上下文直接调用（不能塞进 remember）
-    val color = categoryColorOf(name)
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .background(if (selected) tokens.accent.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(vertical = MonitorSpacing.xxs),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box {
-            Box(
-                modifier = Modifier
-                    .clip(shape)
-                    .border(2.dp, if (selected) tokens.accent else Color.Transparent, shape)
-                    .padding(2.dp),
-            ) {
-                CategoryIcon(name = name, color = color, size = 26.dp)
-            }
-            // 识别标记：系统猜的分类，改选后仍保留（用户可对照自己选的和系统猜的）
-            if (recognized) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(tokens.accent)
-                        .border(1.dp, tokens.opaquePanel, CircleShape)
-                )
-            }
-        }
-        Spacer(Modifier.height(MonitorSpacing.xxs))
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) tokens.accentText else tokens.fg2,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
 @Composable
 private fun Label(text: String) {
     val tokens = LocalDesignTokens.current
@@ -633,6 +503,41 @@ private fun RemarkRow(
         }
     }
 }
+
+/**
+ * 把分类名归一成「该类型分类树里存在的名字」。
+ *
+ * 识别结果不一定在树里：分类体系升级前的旧名（如「出行」）或历史商户默认值都可能残留。
+ * 树里没有时回退该类型的兜底一级（支出「其他」/ 收入「其他收入」），与
+ * [com.bsfeng.monitor.autobook.AutoBookEngine] 落库前的校验同一口径 ——
+ * 否则浮窗会显示一个「一个都没选中」的分类，用户不知道最终会记成什么。
+ * 树为空（加载失败）时原样返回：浮窗照常可用，落库时由引擎兜底。
+ */
+private fun resolveCategory(tree: CategoryTree, type: Int, name: String): String {
+    val pickerType = if (type == AutoBookDraft.TYPE_INCOME) 1 else 0
+    val topNames = tree.topLevel(pickerType).map { it.name }
+    if (topNames.isEmpty()) return name
+    if (name.isNotBlank() && tree.contains(name) && tree.topLevelNameOf(name) in topNames) {
+        return name
+    }
+    val fallback = if (pickerType == 1) INCOME_FALLBACK else CategoryCatalog.FALLBACK
+    return if (fallback in topNames) fallback else topNames.first()
+}
+
+/** 收入分类的兜底一级：支出侧兜底是 [CategoryCatalog.FALLBACK]「其他」 */
+private const val INCOME_FALLBACK = "其他收入"
+
+/**
+ * 浮窗分类区高度受限：一级 chips（--tap-min 44dp）+ 间距 + 二级网格。
+ *
+ * 原实现只有 6 列一级网格（176dp）；加了一级 chips 后把二级网格压到 136dp，
+ * 整块约 190dp，与原来接近，小屏上「记一笔 / 忽略」仍能留在屏内。
+ * 二级网格自身可滚动，任一常见的 4-9 个二级都能滚到。
+ */
+private val PANEL_GRID_MAX_H: Dp = 136.dp
+
+/** 浮窗里的二级格子图标（比抽屉略小：一行 6 个 + 浮窗空间更紧） */
+private val PANEL_CATEGORY_ICON_SIZE: Dp = 26.dp
 
 /** 金额格式化：千分位 + 固定两位小数（与记账页交易行口径一致） */
 internal fun formatAmount(amount: Double): String =
