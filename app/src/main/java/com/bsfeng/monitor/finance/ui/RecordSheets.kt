@@ -98,7 +98,10 @@ internal fun BoxScope.CategorySheet(
             type = type,
             selectedName = selectedName,
             onPick = onPick,
-            gridMaxHeight = maxHeight,
+            // 一级 18 个用 6 列网格完整展示（3 行）；二级最多 2 行，留出固定高度可滚动
+            gridMaxHeight = 140.dp,
+            iconSize = 32.dp,
+            topStyle = CategoryPickerTopStyle.GRID,
         )
     }
 }
