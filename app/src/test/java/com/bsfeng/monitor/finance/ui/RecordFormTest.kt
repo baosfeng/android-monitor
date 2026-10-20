@@ -198,4 +198,25 @@ class RecordFormTest {
         assertEquals("转账", RecordForm.transferTitle(Transaction(type = 2, accountName = "支付宝")))
         assertEquals("转账", RecordForm.transferTitle(Transaction(type = 2)))
     }
+
+    // ===== 列表行副标题（说明 → 单据摘要） =====
+
+    @Test
+    fun `列表副标题优先说明为空时回退单据摘要`() {
+        // 有手写说明时只显示说明：商户 / 付款方式不再拼进来
+        assertEquals("同事聚餐 AA", RecordForm.subtitle(receiptTx.copy(remark = "同事聚餐 AA")))
+        // 说明为空（自动记账的常态）：回退「商户 · 付款方式」
+        assertEquals("淘宝闪购 · 招商银行信用卡(8888)", RecordForm.subtitle(receiptTx))
+        // 商户与付款方式都缺：退回商品说明
+        assertEquals("外卖订单", RecordForm.subtitle(Transaction(productDesc = "外卖订单")))
+        // 手动记账且没写说明：这一行没有副标题
+        assertEquals("", RecordForm.subtitle(Transaction()))
+        assertEquals("", RecordForm.subtitle(null))
+    }
+
+    @Test
+    fun `列表副标题去掉说明两端空白并清掉只有空白的说明`() {
+        assertEquals("午餐", RecordForm.subtitle(Transaction(remark = "  午餐  ")))
+        assertEquals("淘宝闪购", RecordForm.subtitle(Transaction(remark = "   ", merchant = "淘宝闪购")))
+    }
 }

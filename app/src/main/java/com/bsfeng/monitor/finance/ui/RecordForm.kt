@@ -173,6 +173,20 @@ internal object RecordForm {
         return tx.productDesc
     }
 
+    /**
+     * 交易列表行的副标题。
+     *
+     * 「说明」列只存用户手写内容（自动记账的商户 / 商品说明 / 付款方式各自留在独立字段），
+     * 所以副标题先看 [Transaction.remark]，空的时候才回退 [receiptSummary]：
+     * 自动记账记下的那笔即使没写说明，也能看出是「商户 · 付款方式」。
+     */
+    fun subtitle(tx: Transaction?): String {
+        if (tx == null) return ""
+        val note = tx.remark.trim()
+        if (note.isNotEmpty()) return note
+        return receiptSummary(tx)
+    }
+
     /** 是否有可展示的单据信息 —— 决定单据卡是否出现在表单里（手动记账没有，就不摆一个空行） */
     fun hasReceipt(tx: Transaction?): Boolean = receiptItems(tx).isNotEmpty()
 }

@@ -28,7 +28,8 @@ import com.bsfeng.monitor.ui.components.AppDialog
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
- * 记账模块的文本输入弹窗 — 记账模块内复用（备注、日期、预算金额）。
+ * 记账模块的文本输入弹窗 — 记账模块内复用（说明、日期、预算金额）。
+ * 「说明」只收用户手写内容，自动采集的商户 / 商品说明 / 付款方式在交易的独立字段里。
  *
  * 视觉按原型 s06 `#s06-dlg`（08-prototype.html:4008-4021）自绘：`.scrim > .dialog` ——
  * 标题 `.h3`、说明 `.meta`、输入容器 `.card`、动作 1fr 1fr 的 `.btn-ghost`「取消」+ `.btn`「确定」。

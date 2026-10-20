@@ -11,13 +11,16 @@ import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 记账模块 ViewModel。
@@ -74,6 +77,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
+    /** 当前这次加载的协程（新加载会取消它，避免过期结果覆盖新结果） */
+    private var loadJob: Job? = null
+
+    /** 加载序号：只有最新一次加载有权写状态、清 loading */
+    private val loadSequence = AtomicInteger(0)
+
     // ========== 初始化 ==========
 
     init {
@@ -83,6 +92,23 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             manager.ensureInitialized()
             loadCurrentMonth()
         }
+        observeExternalChanges()
+    }
+
+    /**
+     * 订阅 [FinanceManager.changeVersion]：任何写操作（含自动记账落库、导入、预算）成功后
+     * 重新加载当前浏览月。
+     *
+     * - `drop(1)` 跳过订阅瞬间的版本值 —— 首次加载由上面的 init 协程负责，不必重复读库；
+     * - 加载是只读的，不会 bump，所以不存在「加载 → 版本变化 → 再加载」的自激循环；
+     * - 重入由 [loadMonth] 里的 job 取消 + token 兜住，连着触发两次也只留最后一次结果。
+     */
+    private fun observeExternalChanges() {
+        viewModelScope.launch {
+            manager.changeVersion.drop(1).collect {
+                loadMonth(_currentMonth.value)
+            }
+        }
     }
 
     fun loadCurrentMonth() {
@@ -91,18 +117,31 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun loadMonth(yearMonth: String) {
         _currentMonth.value = yearMonth
-        viewModelScope.launch {
+        // 同一时刻只保留一次加载：切 Tab / ON_RESUME / 变更通知常在同一批帧里连着触发。
+        // token 防止被取消的旧协程把过期结果写回来（跨月切换时尤其明显）。
+        val token = loadSequence.incrementAndGet()
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _loading.value = true
             try {
-                _monthlyTransactions.value = manager.getMonthlyTransactions(yearMonth)
-                _monthlyStats.value = manager.getMonthlyStats(yearMonth)
-                _categoryBreakdown.value = manager.getCategoryBreakdown(yearMonth)
-                _budgets.value = manager.getMonthlyBudget(yearMonth)
-                _categories.value = manager.getAllCategories()
-                _accounts.value = manager.getAllAccounts()
-                _availableMonths.value = manager.getAvailableMonths()
+                val transactions = manager.getMonthlyTransactions(yearMonth)
+                val stats = manager.getMonthlyStats(yearMonth)
+                val breakdown = manager.getCategoryBreakdown(yearMonth)
+                val budgets = manager.getMonthlyBudget(yearMonth)
+                val categories = manager.getAllCategories()
+                val accounts = manager.getAllAccounts()
+                val months = manager.getAvailableMonths()
+                if (token != loadSequence.get()) return@launch
+                _monthlyTransactions.value = transactions
+                _monthlyStats.value = stats
+                _categoryBreakdown.value = breakdown
+                _budgets.value = budgets
+                _categories.value = categories
+                _accounts.value = accounts
+                _availableMonths.value = months
             } finally {
-                _loading.value = false
+                // 只有仍在位的那次加载有权清掉 loading，否则会把新加载的指示器提前灭掉
+                if (token == loadSequence.get()) _loading.value = false
             }
         }
     }
@@ -143,6 +182,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ========== 交易操作 ==========
+    //
+    // 这里保留写后显式 loadMonth 作为兜底（即使通知订阅出问题，自己的改动也立刻可见）；
+    // 通知链路同时会触发一次加载，两者被 [loadMonth] 的 job 取消 + token 合并成一次结果。
 
     fun addTransaction(tx: Transaction) {
         viewModelScope.launch {

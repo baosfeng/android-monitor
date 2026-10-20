@@ -131,6 +131,31 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     }
 
     /**
+     * 自动记账记录里「说明」非空的全部行（旧版拼接残留清理用，见 [LegacyRemarkCleaner]）。
+     *
+     * `LIKE 'auto_%'` 覆盖 auto_alipay / auto_wechat；手动记账（manual）与熊猫导入不参与。
+     */
+    fun getAutoTransactionsWithRemark(): List<Transaction> {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            TransactionEntity.TABLE_NAME, null,
+            "${TransactionEntity.COL_SOURCE} LIKE 'auto\\_%' ESCAPE '\\' AND ${TransactionEntity.COL_REMARK} != ''",
+            null, null, null, null
+        )
+        return TransactionEntity.listFromCursor(cursor)
+    }
+
+    /** 只清说明列（旧拼接迁移用）：不动类型 / 分类 / 金额 / 余额。 */
+    fun clearTransactionRemark(id: Long): Int {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply { put(TransactionEntity.COL_REMARK, "") }
+        return db.update(
+            TransactionEntity.TABLE_NAME, values,
+            "${TransactionEntity.COL_ID} = ?", arrayOf(id.toString())
+        )
+    }
+
+    /**
      * 同一商户最近一笔交易（自动记账「上次选过的类型 / 分类」默认值用）。
      *
      * 精确匹配商户名：自动记账落库的商户来自同一页面，跨次稳定；手工录入的商户名与页面
@@ -150,7 +175,7 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         return TransactionEntity.listFromCursor(cursor).firstOrNull()
     }
 
-    /** 搜索交易（按备注或分类名模糊匹配） */
+    /** 搜索交易（按说明或分类名模糊匹配） */
     fun searchTransactions(query: String, limit: Int = 50): List<Transaction> {
         val db = dbHelper.readableDatabase
         val pattern = "%$query%"
