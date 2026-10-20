@@ -1,7 +1,9 @@
 package com.bsfeng.monitor.finance.ui
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -56,10 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppFab
 import com.bsfeng.monitor.ui.components.AppToast
+import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.MotionToken
@@ -101,6 +106,18 @@ fun FinanceMainScreen(
     val budgets by viewModel.budgets.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val monthNotice by viewModel.monthNotice.collectAsState()
+
+    // 自动记账落库后的一次性「新行高亮」：信号只消费一次（clear 后不再亮），
+    // 所以切 Tab / 回前台重新加载列表都不会重复高亮 —— 它表示「刚刚多了这笔」。
+    val latestInsertId by FinanceInsertSignal.latestId.collectAsState()
+    var highlightId by remember { mutableStateOf(0L) }
+    LaunchedEffect(latestInsertId) {
+        val id = latestInsertId ?: return@LaunchedEffect
+        FinanceInsertSignal.clear()
+        highlightId = id
+        kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
+        if (highlightId == id) highlightId = 0L
+    }
 
     // 显式持有滚动状态：每次进入本屏（entryKey 变化）把头部复位，
     // 避免「记账」标题被上一次的滚动位置顶出屏幕。
@@ -333,6 +350,7 @@ fun FinanceMainScreen(
                                 TransactionRow(
                                     transaction = tx,
                                     color = categoryColorOf(tx.categoryName),
+                                    highlighted = tx.id == highlightId,
                                     enterIndex = if (rowIndex < STAGGER_MAX_STEPS) rowIndex++ else -1,
                                     onClick = {
                                         view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
@@ -509,6 +527,8 @@ private fun DayGroupRow(
 private fun TransactionRow(
     transaction: Transaction,
     color: Color,
+    /** 自动记账刚落库：整行淡 accent 底点亮，1.6s 后淡出（其余行恒为透明） */
+    highlighted: Boolean = false,
     /** >= 0 走错落入场；-1 表示离屏行不做入场动画（每行一个 Animatable 会拖帧） */
     enterIndex: Int,
     onClick: () -> Unit,
@@ -516,12 +536,20 @@ private fun TransactionRow(
     val t = LocalDesignTokens.current
     val amountIsPositive = !transaction.isExpense || transaction.isRefundEntry
     val isTransfer = transaction.isTransfer
+    // 来源徽标：自动记账 / 带 sourceId 的导入行才判 true，手写记录恒 false（见 TransactionSourceBadge）
+    val isAutoBooked = TransactionSourceBadge.isAutoBooked(transaction.source, transaction.sourceId)
     val enterModifier = if (enterIndex >= 0) rememberStaggerEnter(enterIndex) else Modifier
+    val highlightColor by animateColorAsState(
+        targetValue = if (highlighted) t.accent.copy(alpha = 0.12f) else Color.Transparent,
+        animationSpec = tween(240),
+        label = "autoBookHighlight",
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(enterModifier)
             .clip(RoundedCornerShape(t.radiusMd))
+            .background(highlightColor)
             .clickable { onClick() }
             .padding(horizontal = t.space3, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
@@ -529,14 +557,22 @@ private fun TransactionRow(
         LegendDot(color)
         Spacer(Modifier.width(t.space3))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                // 转账没有分类：标题显示「转出账户 → 转入账户」，否则这一行会是空的
-                if (isTransfer) RecordForm.transferTitle(transaction) else transaction.categoryName,
-                style = MaterialTheme.typography.titleSmall,
-                color = t.fg,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    // 转账没有分类：标题显示「转出账户 → 转入账户」，否则这一行会是空的
+                    if (isTransfer) RecordForm.transferTitle(transaction) else transaction.categoryName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = t.fg,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (isAutoBooked) {
+                    // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、token 着色）
+                    Spacer(Modifier.width(t.space1))
+                    Badge(TransactionSourceBadge.AUTO_LABEL, BadgeTone.Accent)
+                }
+            }
             // 副标题：优先用户手写的「说明」，为空时回退自动采集的商户 · 付款方式
             // （再退回商品说明），见 RecordForm.subtitle
             val sub = RecordForm.subtitle(transaction)
@@ -576,6 +612,9 @@ internal fun groupLabel(date: String): String {
 
 /** 交易明细右侧「最近 N 天」的天数（原型 s04-listmeta：最近 3 天 · 8 笔）。 */
 private const val LIST_META_DAYS = 3
+
+/** 自动记账新行高亮时长（原型 s04「高亮 1.6s」） */
+private const val HIGHLIGHT_DURATION_MS = 1600L
 
 /** 最近 [days] 天（含今天）的笔数：日期为 ISO yyyy-MM-dd，可直接做字典序比较。 */
 internal fun recentDayCount(transactions: List<Transaction>, days: Int): Int {
