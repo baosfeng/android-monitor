@@ -37,6 +37,8 @@
 .s04-amt{font-weight:600}
 .s04-amt.is-exp{color:var(--expense-text)}
 .s04-amt.is-inc{color:var(--income-text)}
+/* 自动记账来源徽标：小号、浅色、圆角 */
+.tx-auto{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 6%,transparent);color:var(--fg-2);font-size:var(--text-xs);line-height:1;letter-spacing:.02em}
 .s04-edge-amt{font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);margin:var(--space-2) 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--expense-text)}
 .s04-in{animation:s04-in 300ms var(--ease-out) both;animation-delay:calc(var(--stagger) * var(--i,0))}
 @keyframes s04-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
@@ -105,52 +107,54 @@
 
       <p class="group-label">10 月 14 日 · 今天</p>
       <div class="group">
-        <button class="list-row s04-tx s04-in" style="--i:4" type="button" data-tx data-kind="expense" data-cat="餐饮" data-amt="38.00" data-note="午餐 · 公司楼下" data-od-id="s04-tx-1">
+        <button class="list-row s04-tx s04-in" style="--i:4" type="button" data-tx data-kind="expense" data-cat="午餐" data-amt="38.00" data-note="公司楼下" data-od-id="s04-tx-1">
           <span class="legend-dot s1"></span>
-          <span class="row-body"><span class="row-title">餐饮</span><span class="row-sub">午餐 · 公司楼下</span></span>
+          <span class="row-body"><span class="row-title">午餐</span><span class="row-sub">公司楼下</span></span>
+          <span class="tx-auto">自动</span>
           <span class="row-tail num s04-amt is-exp">-¥38.00</span>
         </button>
-        <button class="list-row s04-tx s04-in" style="--i:5" type="button" data-tx data-kind="expense" data-cat="交通" data-amt="12.00" data-note="地铁 通勤" data-od-id="s04-tx-2">
+        <button class="list-row s04-tx s04-in" style="--i:5" type="button" data-tx data-kind="expense" data-cat="公交地铁" data-amt="12.00" data-note="早高峰通勤" data-od-id="s04-tx-2">
           <span class="legend-dot s2"></span>
-          <span class="row-body"><span class="row-title">交通</span><span class="row-sub">地铁 通勤</span></span>
+          <span class="row-body"><span class="row-title">公交地铁</span><span class="row-sub">早高峰通勤</span></span>
           <span class="row-tail num s04-amt is-exp">-¥12.00</span>
         </button>
-        <button class="list-row s04-tx s04-in" style="--i:6" type="button" data-tx data-kind="expense" data-cat="购物" data-amt="96.00" data-note="超市 日用品" data-od-id="s04-tx-3">
+        <button class="list-row s04-tx s04-in" style="--i:6" type="button" data-tx data-kind="expense" data-cat="超市便利" data-amt="96.00" data-note="日用品" data-od-id="s04-tx-3">
           <span class="legend-dot s3"></span>
-          <span class="row-body"><span class="row-title">购物</span><span class="row-sub">超市 日用品</span></span>
+          <span class="row-body"><span class="row-title">超市便利</span><span class="row-sub">日用品</span></span>
+          <span class="tx-auto">自动</span>
           <span class="row-tail num s04-amt is-exp">-¥96.00</span>
         </button>
-        <button class="list-row s04-tx s04-in" style="--i:7" type="button" data-tx data-kind="expense" data-cat="娱乐" data-amt="58.00" data-note="电影票" data-od-id="s04-tx-4">
+        <button class="list-row s04-tx s04-in" style="--i:7" type="button" data-tx data-kind="expense" data-cat="电影" data-amt="58.00" data-note="晚场 2 张" data-od-id="s04-tx-4">
           <span class="legend-dot s4"></span>
-          <span class="row-body"><span class="row-title">娱乐</span><span class="row-sub">电影票</span></span>
+          <span class="row-body"><span class="row-title">电影</span><span class="row-sub">晚场 2 张</span></span>
           <span class="row-tail num s04-amt is-exp">-¥58.00</span>
         </button>
-        <button class="list-row s04-tx s04-in" style="--i:8" type="button" data-tx data-kind="expense" data-cat="居住" data-amt="64.00" data-note="水电费" data-od-id="s04-tx-5">
+        <button class="list-row s04-tx s04-in" style="--i:8" type="button" data-tx data-kind="expense" data-cat="水电燃气" data-amt="64.00" data-note="本月水费 + 燃气" data-od-id="s04-tx-5">
           <span class="legend-dot s5"></span>
-          <span class="row-body"><span class="row-title">居住</span><span class="row-sub">水电费</span></span>
+          <span class="row-body"><span class="row-title">水电燃气</span><span class="row-sub">本月水费 + 燃气</span></span>
           <span class="row-tail num s04-amt is-exp">-¥64.00</span>
         </button>
-        <button class="list-row s04-tx s04-in" style="--i:9" type="button" data-tx data-kind="income" data-cat="收入" data-amt="1200.00" data-note="工资到账" data-od-id="s04-tx-6">
+        <button class="list-row s04-tx s04-in" style="--i:9" type="button" data-tx data-kind="income" data-cat="基本工资" data-amt="1200.00" data-note="10 月工资" data-od-id="s04-tx-6">
           <span class="legend-dot s1"></span>
-          <span class="row-body"><span class="row-title">工资</span><span class="row-sub">工资到账 · 10 月</span></span>
+          <span class="row-body"><span class="row-title">基本工资</span><span class="row-sub">10 月工资</span></span>
           <span class="row-tail num s04-amt is-inc">+¥1,200.00</span>
         </button>
       </div>
 
       <p class="group-label mt-3">10 月 13 日 · 昨天</p>
       <div class="group">
-        <button class="list-row s04-tx s04-in" style="--i:10" type="button" data-tx data-kind="income" data-cat="收入" data-amt="800.00" data-note="项目尾款" data-od-id="s04-tx-7">
+        <button class="list-row s04-tx s04-in" style="--i:10" type="button" data-tx data-kind="income" data-cat="项目奖金" data-amt="800.00" data-note="项目尾款结清" data-od-id="s04-tx-7">
           <span class="legend-dot s1"></span>
-          <span class="row-body"><span class="row-title">收入</span><span class="row-sub">项目尾款</span></span>
+          <span class="row-body"><span class="row-title">项目奖金</span><span class="row-sub">项目尾款结清</span></span>
           <span class="row-tail num s04-amt is-inc">+¥800.00</span>
         </button>
       </div>
 
       <p class="group-label mt-3">10 月 12 日 · 周一</p>
       <div class="group">
-        <button class="list-row s04-tx s04-in" style="--i:11" type="button" data-tx data-kind="income" data-cat="收入" data-amt="1000.00" data-note="周末兼职" data-od-id="s04-tx-8">
+        <button class="list-row s04-tx s04-in" style="--i:11" type="button" data-tx data-kind="income" data-cat="兼职收入" data-amt="1000.00" data-note="周末兼职" data-od-id="s04-tx-8">
           <span class="legend-dot s1"></span>
-          <span class="row-body"><span class="row-title">收入</span><span class="row-sub">周末兼职</span></span>
+          <span class="row-body"><span class="row-title">兼职收入</span><span class="row-sub">周末兼职</span></span>
           <span class="row-tail num s04-amt is-inc">+¥1,000.00</span>
         </button>
       </div>
@@ -189,7 +193,7 @@
       </div>
       <p class="group-label mt-3">超长分类名与超长备注（单行截断）</p>
       <div class="group">
-        <button class="list-row s04-tx" type="button" data-tx data-kind="expense" data-cat="购物" data-amt="1234567.89" data-note="超长备注" data-od-id="s04-edge-tx">
+        <button class="list-row s04-tx" type="button" data-tx data-kind="expense" data-cat="电商" data-amt="1234567.89" data-note="超长备注" data-od-id="s04-edge-tx">
           <span class="legend-dot s3"></span>
           <span class="row-body">
             <span class="row-title">购物 · 双十一预售定金与尾款合并自动分期</span>

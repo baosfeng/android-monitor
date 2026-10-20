@@ -96,6 +96,418 @@
     return true;
   }
 
+  /* ── 两级分类选择器（结构冻结，s15 / s05 / s14a 共用，交互只此一份） ──
+     <div class="cat-picker" data-kind="expense" data-recognized="居住·家政">
+       .cat-l1[data-l1]  →  .cat-l2-panel[data-l1]  →  .cat-l2[data-l2][data-l1]
+     点一级展开 / 收起对应面板；点二级选中该二级并把父一级置为展开；
+     data-recognized="A·B" 自动展开 A、选中 B、给 B 加 .is-recognized 并滚到可见。
+     选中结果写在 picker 的 data-value（二级）/ data-value-l1（一级）上，供提交方读。 */
+  function pkList(scope) {
+    var box = scope && scope.querySelectorAll ? scope : document;
+    return Array.prototype.slice.call(box.querySelectorAll('.cat-picker'));
+  }
+  function pkL1s(pk) { return Array.prototype.slice.call(pk.querySelectorAll('.cat-l1')); }
+  function pkPanels(pk) { return Array.prototype.slice.call(pk.querySelectorAll('.cat-l2-panel')); }
+  function pkPanelOf(pk, l1) {
+    var ps = pkPanels(pk);
+    for (var i = 0; i < ps.length; i++) {
+      if (ps[i].getAttribute('data-l1') === l1) return ps[i];
+    }
+    return null;
+  }
+  function pkL1Of(pk, l1) {
+    var bs = pkL1s(pk);
+    for (var i = 0; i < bs.length; i++) {
+      if (bs[i].getAttribute('data-l1') === l1) return bs[i];
+    }
+    return null;
+  }
+  function pkMarkL1(pk, active) {
+    pkL1s(pk).forEach(function (b) {
+      b.setAttribute('aria-pressed', b === active ? 'true' : 'false');
+    });
+  }
+  function pkPickL2(pk, item, silent) {
+    var l1 = item.getAttribute('data-l1') || '';
+    var l2 = item.getAttribute('data-l2') || '';
+    Array.prototype.forEach.call(pk.querySelectorAll('.cat-l2'), function (b) {
+      b.setAttribute('aria-pressed', b === item ? 'true' : 'false');
+    });
+    pkMarkL1(pk, pkL1Of(pk, l1));
+    var panel = pkPanelOf(pk, l1);
+    if (panel) panel.hidden = false;
+    if (l1) pk.setAttribute('data-value-l1', l1);
+    pk.setAttribute('data-value', l2);
+    pkLegacySync(pk);
+    if (!silent) haptic('light');
+    return l2;
+  }
+  /* 选中一级（不改展开状态 —— 供回填使用；交互点击走 pkToggleL1 的展开 / 收起语义） */
+  function pkSelectL1(pk, name, silent) {
+    var btn = pkL1Of(pk, name);
+    var panel = pkPanelOf(pk, name);
+    if (!btn || !panel) return false;
+    pkPanels(pk).forEach(function (p) { p.hidden = p !== panel; });
+    pkMarkL1(pk, btn);
+    pk.setAttribute('data-value-l1', name);
+    pk.removeAttribute('data-value');
+    pkLegacySync(pk);
+    if (!silent) haptic('light');
+    return true;
+  }
+  /* s04 的共用表单脚本（editTx / setS05 / 保存）仍在读 .s05-cat / .s14-cat；
+     把新结构的当前选中项映射过去，s04 脚本迁到 .cat-picker 后这一段可整段删掉。 */
+  function pkLegacySync(pk) {
+    var screen = pk.closest ? pk.closest('.screen') : null;
+    if (!screen) return;
+    var sid = screen.getAttribute('data-screen');
+    var cls = sid === 's05' ? 's05-cat' : (sid === 's14a' ? 's14-cat' : '');
+    if (!cls) return;
+    Array.prototype.forEach.call(screen.querySelectorAll('.cat-l1, .cat-l2'), function (b) {
+      b.classList.remove('s05-cat', 's14-cat');
+      b.removeAttribute('data-cat');
+    });
+    var pickers = screen.querySelectorAll('.cat-picker');
+    for (var i = 0; i < pickers.length; i++) {
+      if (pickers[i].hidden) continue;
+      var on = pickers[i].querySelector('.cat-l2[aria-pressed="true"]') || pickers[i].querySelector('.cat-l1[aria-pressed="true"]');
+      if (!on) continue;
+      var name = on.getAttribute('data-l2') || on.getAttribute('data-l1') || '';
+      on.classList.add(cls);
+      on.setAttribute('data-cat', name);
+      return;
+    }
+  }
+  /* 收支切换：一屏内的两个 .cat-picker（expense / income）只显示与 kind 一致的那个 */
+  function pkKindSync(screen, kind) {
+    if (!screen) return;
+    Array.prototype.forEach.call(screen.querySelectorAll('.cat-picker'), function (pk) {
+      if (!pk.getAttribute('data-kind')) return;
+      pk.hidden = pk.getAttribute('data-kind') !== kind;
+      pkLegacySync(pk);
+    });
+  }
+  /* s04 的共用脚本把「任何带 data-kind 的点击」都当成收支切换 —— .cat-picker 自身也带
+     data-kind，所以点分类会把它写成「支出 / 无选中」。这里在它跑完后把分段控件与
+     picker 可见性拉回正确状态（s05 的 #s05-kind-label 一并修）。 */
+  function pkKindRestore(screen, kind) {
+    if (!screen || !kind) return;
+    Array.prototype.forEach.call(screen.querySelectorAll('button[data-kind]'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kind ? 'true' : 'false');
+    });
+    var label = screen.querySelector('#s05-kind-label');
+    if (label) label.textContent = kind === 'income' ? '收入' : '支出';
+    pkKindSync(screen, kind);
+  }
+
+  /* 按分类名回填（一级 / 二级名全局唯一，先找二级再找一级） */
+  function pkApplyName(screen, name, silent) {
+    if (!screen || !name) return false;
+    var valueEl = screen.querySelector('[data-value-for="cat"]');
+    if (valueEl) valueEl.textContent = name;
+    var pickers = screen.querySelectorAll('.cat-picker');
+    for (var i = 0; i < pickers.length; i++) {
+      var pk = pickers[i];
+      if (pk.hidden) continue;
+      var l2 = pk.querySelector('.cat-l2[data-l2="' + name + '"]');
+      if (l2) return !!pkPickL2(pk, l2, silent);
+      if (pkSelectL1(pk, name, silent)) return true;
+    }
+    return false;
+  }
+  function pkToggleL1(pk, btn) {
+    var name = btn.getAttribute('data-l1') || '';
+    var wasOpen = btn.getAttribute('aria-pressed') === 'true';
+    var prevL1 = pk.getAttribute('data-value-l1') || '';
+    pkPanels(pk).forEach(function (p) { p.hidden = true; });
+    if (wasOpen) {
+      pkMarkL1(pk, null);
+      pk.removeAttribute('data-value-l1');
+      return null;
+    }
+    var panel = pkPanelOf(pk, name);
+    if (!panel) return null;
+    panel.hidden = false;
+    pkMarkL1(pk, btn);
+    pk.setAttribute('data-value-l1', name);
+    /* 换了一级：原二级选中值失效，回落到一级；.is-recognized 是「系统识别」标记，保留 */
+    Array.prototype.forEach.call(pk.querySelectorAll('.cat-l2'), function (b) {
+      if (b.getAttribute('data-l1') !== name) b.setAttribute('aria-pressed', 'false');
+    });
+    if (prevL1 !== name) pk.removeAttribute('data-value');
+    haptic('light');
+    return name;
+  }
+  function pkApplyRecognized(pk) {
+    var rec = pk.getAttribute('data-recognized') || '';
+    if (!rec) return null;
+    var parts = rec.split(/[·・]/);
+    var l1 = (parts[0] || '').replace(/^\s+|\s+$/g, '');
+    var l2 = (parts[1] || '').replace(/^\s+|\s+$/g, '');
+    var btn = pkL1Of(pk, l1);
+    var panel = pkPanelOf(pk, l1);
+    if (!panel) return null;
+    pkPanels(pk).forEach(function (p) { p.hidden = p !== panel; });
+    pkMarkL1(pk, btn);
+    pk.setAttribute('data-value-l1', l1);
+    var target = l2 ? panel.querySelector('.cat-l2[data-l2="' + l2 + '"]') : null;
+    if (target) {
+      target.classList.add('is-recognized');
+      Array.prototype.forEach.call(pk.querySelectorAll('.cat-l2'), function (b) {
+        b.setAttribute('aria-pressed', b === target ? 'true' : 'false');
+      });
+      pk.setAttribute('data-value', l2);
+    }
+    return target;
+  }
+  function pkScroller(el) {
+    var node = el && el.parentNode;
+    while (node && node.nodeType === 1) {
+      var cs = window.getComputedStyle ? window.getComputedStyle(node) : null;
+      var oy = cs ? cs.overflowY : '';
+      if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+  /* 只滚自己的滚动容器（block:"nearest" 语义），不用 scrollIntoView —— 后者会连宿主页面一起拽动 */
+  function pkScrollTo(target) {
+    if (!target) return;
+    var box = pkScroller(target);
+    if (!box) return;
+    var br = box.getBoundingClientRect();
+    var tr = target.getBoundingClientRect();
+    var top = box.scrollTop;
+    if (tr.top < br.top) top -= (br.top - tr.top) + 8;
+    else if (tr.bottom > br.bottom) top += (tr.bottom - br.bottom) + 8;
+    top = Math.max(0, Math.min(box.scrollHeight - box.clientHeight, top));
+    var behavior = reduced() ? 'auto' : 'smooth';
+    try {
+      if (typeof box.scrollTo === 'function') box.scrollTo({ top: top, left: 0, behavior: behavior });
+      else box.scrollTop = top;
+    } catch (err) {
+      box.scrollTop = top;
+    }
+  }
+  function initCategoryPickers(scope) {
+    pkList(scope).forEach(function (pk) {
+      if (pk.getAttribute('data-pk-ready') === '1') return;
+      pk.setAttribute('data-pk-ready', '1');
+      pk.addEventListener('click', function (e) {
+        var node = e.target;
+        if (!node || !node.closest) return;
+        var l2 = node.closest('.cat-l2');
+        if (l2) { pkPickL2(pk, l2); return; }
+        var l1 = node.closest('.cat-l1');
+        if (l1) pkToggleL1(pk, l1);
+      });
+      pkApplyRecognized(pk);
+    });
+  }
+  function focusCategoryPickers(scope) {
+    pkList(scope).forEach(function (pk) {
+      var rec = pk.getAttribute('data-recognized') || '';
+      if (!rec) return;
+      var l2 = (rec.split(/[·・]/)[1] || '').replace(/^\s+|\s+$/g, '');
+      var target = pk.querySelector('.cat-l2.is-recognized' + (l2 ? '[data-l2="' + l2 + '"]' : ''));
+      pkScrollTo(target);
+    });
+  }
+
+  /* s14a 回填：用新结构（.cat-picker）把分类写进摘要行；row 为 null 表示新增交易 */
+  function s14aFill(screen, row) {
+    if (!screen) return false;
+    var kind = row ? (row.getAttribute('data-kind') || 'expense') : 'expense';
+    pkKindSync(screen, kind);
+    var name = row ? (row.getAttribute('data-cat') || '') : '餐饮';
+    if (!name) { pkKindSync(screen, kind); return false; }
+    return pkApplyName(screen, name, true);
+  }
+
+  /* ── 自动记账浮窗（s15） ─────────────────────────────────────────
+     契约（docs/记账/自动记账.md）：只有「记一笔」和「忽略」能关闭浮窗；
+     点遮罩只吞点击（轻震 + 每笔一次 Toast）；切到任何屏 / App 都不关闭
+     —— 所以浮层带自己的可见状态（.ab-layer 的 hidden），与当前屏无关。 */
+  var AB = { toasted: false, freshTimer: null };
+  var AB_DEFAULT = {
+    key: 'ab-housekeeping-128',
+    merchant: '好慷在家',
+    amount: 128,
+    time: '10-20 12:18',
+    channel: '支付宝',
+    pay: '招商银行信用卡(1570)',
+    cat: '居住',
+    catL2: '家政',
+    note: ''
+  };
+  function abLayer() { return document.getElementById('odAutoBook'); }
+  function abPart(sel) { var layer = abLayer(); return layer ? layer.querySelector(sel) : null; }
+  function abOpenNow() {
+    var layer = abLayer();
+    return !!(layer && !layer.hidden);
+  }
+  function mountAutoBook() {
+    var layer = abLayer();
+    var od = document.getElementById('odScreen');
+    if (!layer || !od) return null;
+    /* 移到设备屏上：覆盖状态栏 / 导航条，并且切屏后继续覆盖（屏内子节点做不到这两点） */
+    if (layer.parentNode !== od) od.appendChild(layer);
+    return layer;
+  }
+  function showAutoBook() {
+    var layer = mountAutoBook();
+    if (!layer) return false;
+    layer.hidden = false;
+    AB.toasted = false;
+    initCategoryPickers(layer);
+    /* 每笔重新识别：上一次用户收起的二级面板，再次打开时回到「识别项展开 + 选中」 */
+    var pk = layer.querySelector('.cat-picker');
+    if (pk) pkApplyRecognized(pk);
+    focusCategoryPickers(layer);
+    return true;
+  }
+  function hideAutoBook() {
+    var layer = abLayer();
+    if (!layer) return false;
+    layer.hidden = true;
+    AB.toasted = false;
+    return true;
+  }
+  function syncAutoBook(el) {
+    if (el && el.getAttribute('data-screen') === 's15') showAutoBook();
+  }
+  function openAutoBook() {
+    mountAutoBook();
+    if (current && current.getAttribute('data-screen') === 's15') return showAutoBook();
+    if (go('s15')) return true;
+    return showAutoBook();
+  }
+  function abShake() {
+    var sheet = abPart('.ab-sheet');
+    if (!sheet || reduced()) return;
+    sheet.classList.remove('is-shake');
+    void sheet.offsetWidth;
+    sheet.classList.add('is-shake');
+    window.setTimeout(function () { sheet.classList.remove('is-shake'); }, 150);
+  }
+  function abScrimTap() {
+    haptic('light');
+    abShake();
+    if (!AB.toasted) {
+      AB.toasted = true;
+      toast('点遮罩不会关闭，请选『记一笔』或『忽略』');
+    }
+    return false;
+  }
+  function abSwitch() {
+    haptic('light');
+    if (current && current.getAttribute('data-screen') === 's04') {
+      toast('已经在记账页 · 浮窗保持覆盖');
+      return true;
+    }
+    go('s04', { replace: true });
+    toast('已切到记账页 · 浮窗不关闭');
+    return true;
+  }
+  function abConfirm() {
+    haptic('medium');
+    var pk = abPart('.cat-picker');
+    var l1 = pk ? (pk.getAttribute('data-value-l1') || '') : '';
+    var l2 = pk ? (pk.getAttribute('data-value') || '') : '';
+    var input = abPart('.ab-note .note-input');
+    var note = input ? String(input.value || '').replace(/^\s+|\s+$/g, '') : '';
+    var tx = abTx({});
+    if (l1) tx.cat = l1;
+    tx.catL2 = l2;
+    tx.note = note;
+    hideAutoBook();
+    toast('已自动记账');
+    autoBookCommitted(tx);
+    return true;
+  }
+  function abIgnore() {
+    haptic('light');
+    hideAutoBook();
+    toast('已忽略，7 天内不再提示同笔');
+    if (!current || current.getAttribute('data-screen') !== 's04') go('s04', { replace: true });
+    return true;
+  }
+  function abTx(over) {
+    var t = {};
+    Object.keys(AB_DEFAULT).forEach(function (k) { t[k] = AB_DEFAULT[k]; });
+    if (over) Object.keys(over).forEach(function (k) { if (over[k] != null) t[k] = over[k]; });
+    return t;
+  }
+  function money(v) {
+    var n = Number(v);
+    if (isNaN(n)) n = 0;
+    var s = n.toFixed(2).split('.');
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return s.join('.');
+  }
+  function bumpTxCounters(s04) {
+    ['#s04-sub', '#s04-listmeta'].forEach(function (sel) {
+      var el = s04.querySelector(sel);
+      if (!el) return;
+      el.textContent = String(el.textContent).replace(/(\d+)(\s*笔)/, function (m, n, tail) {
+        return (Number(n) + 1) + tail;
+      });
+    });
+  }
+  /* 自动记账落库 → 记账列表即时刷新。同一笔（data-fresh-key）重复触发只更新不重复插入。 */
+  function autoBookCommitted(tx) {
+    var t = abTx(tx);
+    hideAutoBook();
+    var s04 = byId('s04');
+    if (!s04) { console.warn('[App.autoBookCommitted] 未找到屏 s04'); return false; }
+    if (current !== s04) go('s04');
+    var list = s04.querySelector('[data-od-id="s04-list"]') || s04;
+    var group = list.querySelector('.group');
+    if (!group) {
+      var anyTx = list.querySelector('.s04-tx');
+      group = anyTx ? anyTx.closest('.group') : null;
+    }
+    if (!group) { console.warn('[App.autoBookCommitted] s04 缺少交易列表'); return false; }
+    var key = t.key || ('ab-' + t.merchant);
+    /* s04 列表用的是二级名（电影 / 基本工资 …）：能落到二级就只写二级名，只选了一级才写一级 */
+    var catLabel = t.catL2 || t.cat;
+    var sub = t.merchant + (t.note ? ' · ' + t.note : '') + ' · ' + (t.channel || '支付宝');
+    var row = group.querySelector('[data-fresh-key="' + key + '"]');
+    var isNew = !row;
+    if (isNew) {
+      row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'list-row s04-tx';
+      row.setAttribute('data-tx', '');
+      row.setAttribute('data-kind', 'expense');
+      row.setAttribute('data-fresh-key', key);
+      row.innerHTML =
+        '<span class="legend-dot s5"></span>' +
+        '<span class="row-body"><span class="row-title"><span class="tx-t"></span></span>' +
+        '<span class="row-sub"></span></span>' +
+        '<span class="tx-auto">自动</span>' +
+        '<span class="row-tail num s04-amt is-exp"></span>';
+      group.insertBefore(row, group.firstChild);
+    }
+    row.setAttribute('data-cat', catLabel);
+    row.setAttribute('data-amt', String(Number(t.amount) || 0));
+    row.setAttribute('data-note', sub);
+    var title = row.querySelector('.tx-t');
+    if (title) title.textContent = catLabel;
+    var subEl = row.querySelector('.row-sub');
+    if (subEl) subEl.textContent = sub;
+    var amtEl = row.querySelector('.row-tail');
+    if (amtEl) amtEl.textContent = '-¥' + money(t.amount);
+    row.classList.remove('is-fresh');
+    void row.offsetWidth;
+    row.classList.add('is-fresh');
+    if (AB.freshTimer) window.clearTimeout(AB.freshTimer);
+    AB.freshTimer = window.setTimeout(function () { row.classList.remove('is-fresh'); }, 1600);
+    if (isNew) bumpTxCounters(s04);
+    toast('自动记账已落库 · 列表已刷新');
+    return true;
+  }
+
   /* ── 状态演示 ─────────────────────────────────────────────────── */
   function state(id, st) {
     var el = null;
@@ -145,6 +557,7 @@
     next.classList.remove('is-entering');
     current = next;
     syncChrome(next);
+    syncAutoBook(next);
     if (prev) {
       var old = prev;
       window.setTimeout(function () {
@@ -443,6 +856,56 @@
       screenBox.addEventListener('click', function (e) {
         var node = e.target;
         if (!node || !node.closest) return;
+        /* 浮窗打开时先吃浮层上的点击：只有两个按钮能关闭，遮罩只吞点击 */
+        if (abOpenNow()) {
+          if (node.closest('[data-ab-confirm]')) { abConfirm(); return; }
+          if (node.closest('[data-ab-ignore]')) { abIgnore(); return; }
+          if (node.closest('[data-ab-switch]')) { abSwitch(); return; }
+          if (node.closest('.ab-scrim')) { abScrimTap(); return; }
+          if (!node.closest('.ab-sheet')) return;
+        }
+        /* 收支切换：一屏内的两个 .cat-picker（data-kind）只显示与 kind 一致的那个 */
+        var kindBtn = node.closest('[data-kind]');
+        if (kindBtn && kindBtn.tagName === 'BUTTON' && !kindBtn.hasAttribute('data-tx') && !kindBtn.closest('.cat-picker')) {
+          var kindScreen = kindBtn.closest('.screen');
+          if (kindScreen) pkKindSync(kindScreen, kindBtn.getAttribute('data-kind'));
+          haptic('light');
+        }
+        /* 点分类（.cat-picker 自带 data-kind）会把旧脚本的收支分段打乱，跑完就拉回来 */
+        var pickerHit = node.closest('.cat-picker');
+        if (pickerHit && pickerHit.getAttribute('data-kind')) {
+          var pkScreen = node.closest('.screen');
+          var pkKind = pickerHit.getAttribute('data-kind');
+          window.setTimeout(function () { pkKindRestore(pkScreen, pkKind); }, 0);
+        }
+        /* s14a 分类抽屉（新结构已无 [data-pick="cat"]）：点二级 → 写回分类行并收起抽屉；
+           点一级 → 先把一级名写回，抽屉留着继续选二级（可只记一级）。 */
+        if (node.closest('#s14a-cat-sheet')) {
+          var pickL2 = node.closest('.cat-l2');
+          var pickL1 = pickL2 ? null : node.closest('.cat-l1');
+          if (pickL2 || pickL1) {
+            var pickScreen = node.closest('.screen');
+            var pickPk = node.closest('.cat-picker');
+            var pickName = pickL2
+              ? ((pickPk && pickPk.getAttribute('data-value')) || pickL2.getAttribute('data-l2') || '')
+              : (pickL1.getAttribute('data-l1') || '');
+            var pickVal = pickScreen ? pickScreen.querySelector('[data-value-for="cat"]') : null;
+            if (pickVal) pickVal.textContent = pickName;
+            haptic('light');
+            if (pickL2) close('#s14a-cat-sheet');
+            return;
+          }
+        }
+        /* s14a 回填：编辑 / 新增交易时用新结构把分类名写进摘要行（s04 脚本只认旧 .s14-cat），
+           等它先跑完再补，避免与它的 select 逻辑抢顺序 */
+        var txHit = node.closest('[data-tx]');
+        if ((txHit && txHit.hasAttribute('data-tx')) || node.closest('[data-newtx]')) {
+          var txRow = txHit && txHit.hasAttribute('data-tx') ? txHit : null;
+          window.setTimeout(function () {
+            var s14a = byId('s14a');
+            if (s14a) s14aFill(s14a, txRow);
+          }, 0);
+        }
         var tabBtn = node.closest('[data-tab]');
         if (tabBtn) { tab(tabBtn.getAttribute('data-tab')); haptic('light'); return; }
         var goto = node.closest('[data-goto]');
@@ -488,8 +951,19 @@
     if (replay) replay.addEventListener('click', function () { splash(true); });
     var devToast = document.getElementById('devToast');
     if (devToast) devToast.addEventListener('click', function () { toast('已保存 · ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })); });
+    var devAutoBook = document.getElementById('devAutoBook');
+    if (devAutoBook) devAutoBook.addEventListener('click', function () { openAutoBook(); });
+    var devAutoCommit = document.getElementById('devAutoCommit');
+    if (devAutoCommit) devAutoCommit.addEventListener('click', function () { autoBookCommitted(null); });
+    var devAutoSwitch = document.getElementById('devAutoSwitch');
+    if (devAutoSwitch) devAutoSwitch.addEventListener('click', function () {
+      if (!abOpenNow()) openAutoBook();   /* 演示入口：没有浮窗就先开，再模拟「切到记账页」 */
+      abSwitch();
+    });
 
     document.addEventListener('keydown', function (e) {
+      /* Esc 也关不掉浮窗：等价于点遮罩（轻震 + 每笔一次 Toast） */
+      if (e.key === 'Escape' && abOpenNow()) { abScrimTap(); e.preventDefault(); return; }
       if (e.altKey && e.key >= '1' && e.key <= '5') {
         var t = TABS[Number(e.key) - 1];
         if (t) { tab(t.id); e.preventDefault(); }
@@ -527,6 +1001,8 @@
       syncChrome(first);
     }
     bind();
+    mountAutoBook();
+    initCategoryPickers(document);
     splash(false);
   }
 
@@ -543,6 +1019,10 @@
     count: count,
     chart: Charts,
     splash: splash,
+    initCategoryPickers: initCategoryPickers,
+    openAutoBook: openAutoBook,
+    closeAutoBook: hideAutoBook,
+    autoBookCommitted: autoBookCommitted,
     current: function () { return current ? current.getAttribute('data-screen') : null; },
     screens: function () { return screenList().map(function (el) { return el.getAttribute('data-screen'); }); },
     stack: function () { return stack.slice(); },
