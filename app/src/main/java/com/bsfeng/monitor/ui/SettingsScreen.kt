@@ -1023,225 +1023,225 @@ private fun TransferFeatureSettings(
         val autoCloseMinutes by transferViewModel.autoCloseMinutes.collectAsState()
         val myAlias by transferViewModel.aliasFlow.collectAsState()
 
-            TokenRow(
-                title = "本机名称",
-                subtitle = myAlias + " · 对端设备列表里显示的名字",
-                icon = Icons.Outlined.Smartphone,
-                onClick = {
-                    nameDraft = myAlias
-                    editingName = true
-                },
-                trailing = { TailChevron() },
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "后台接收",
-                subtitle = if (backgroundReceive) {
-                    "常驻前台服务 · 通知显示在线设备"
-                } else {
-                    "仅 App 可见时运行 · 默认关闭"
-                },
-                icon = Icons.Outlined.NotificationsActive,
-                trailing = {
-                    AppSwitch(backgroundReceive, { enabled ->
-                        transferViewModel.setBackgroundReceive(enabled)
-                        view.performConfirmHaptic()
-                        toast.show(
-                            if (enabled) "已开启后台接收（常驻通知）" else "已关闭后台接收（仅 App 内可见）"
-                        )
-                    })
-                },
-            )
-            TokenDivider(first = false)
-            // 「自动关闭接收」：到点自动停服务，避免不用时白白耗电。
-            // 只持久化时长，不持久化计时起点（进程重启后重新计时）。
-            TokenRow(
-                title = "自动关闭接收",
-                subtitle = if (autoCloseMinutes == ReceivingAutoClose.OFF) {
-                    "关闭：一直保持接收，直到手动关闭（默认）"
-                } else {
-                    "开启接收后 " + ReceivingAutoClose.label(autoCloseMinutes) + "自动停止 · 省电"
-                },
-                icon = Icons.Outlined.Timer,
-            )
-            ChipRow(
-                items = ReceivingAutoClose.MINUTES_OPTIONS.map {
-                    ReceivingAutoClose.label(it)
-                },
-                selectedIndex = ReceivingAutoClose.MINUTES_OPTIONS
-                    .indexOf(autoCloseMinutes).coerceAtLeast(0),
-                onSelect = { index ->
-                    val minutes = ReceivingAutoClose.MINUTES_OPTIONS[index]
-                    transferViewModel.setAutoCloseMinutes(minutes)
+        TokenRow(
+            title = "本机名称",
+            subtitle = myAlias + " · 对端设备列表里显示的名字",
+            icon = Icons.Outlined.Smartphone,
+            onClick = {
+                nameDraft = myAlias
+                editingName = true
+            },
+            trailing = { TailChevron() },
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "后台接收",
+            subtitle = if (backgroundReceive) {
+                "常驻前台服务 · 通知显示在线设备"
+            } else {
+                "仅 App 可见时运行 · 默认关闭"
+            },
+            icon = Icons.Outlined.NotificationsActive,
+            trailing = {
+                AppSwitch(backgroundReceive, { enabled ->
+                    transferViewModel.setBackgroundReceive(enabled)
                     view.performConfirmHaptic()
                     toast.show(
-                        if (minutes == ReceivingAutoClose.OFF) {
-                            "已关闭「自动关闭接收」"
+                        if (enabled) "已开启后台接收（常驻通知）" else "已关闭后台接收（仅 App 内可见）"
+                    )
+                })
+            },
+        )
+        TokenDivider(first = false)
+        // 「自动关闭接收」：到点自动停服务，避免不用时白白耗电。
+        // 只持久化时长，不持久化计时起点（进程重启后重新计时）。
+        TokenRow(
+            title = "自动关闭接收",
+            subtitle = if (autoCloseMinutes == ReceivingAutoClose.OFF) {
+                "关闭：一直保持接收，直到手动关闭（默认）"
+            } else {
+                "开启接收后 " + ReceivingAutoClose.label(autoCloseMinutes) + "自动停止 · 省电"
+            },
+            icon = Icons.Outlined.Timer,
+        )
+        ChipRow(
+            items = ReceivingAutoClose.MINUTES_OPTIONS.map {
+                ReceivingAutoClose.label(it)
+            },
+            selectedIndex = ReceivingAutoClose.MINUTES_OPTIONS
+                .indexOf(autoCloseMinutes).coerceAtLeast(0),
+            onSelect = { index ->
+                val minutes = ReceivingAutoClose.MINUTES_OPTIONS[index]
+                transferViewModel.setAutoCloseMinutes(minutes)
+                view.performConfirmHaptic()
+                toast.show(
+                    if (minutes == ReceivingAutoClose.OFF) {
+                        "已关闭「自动关闭接收」"
+                    } else {
+                        "接收将在 " + ReceivingAutoClose.label(minutes) + "后自动关闭"
+                    },
+                )
+            },
+            modifier = Modifier.padding(
+                horizontal = t.space4,
+                vertical = t.space2,
+            ),
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "通知栏磁贴",
+            subtitle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                "一键添加到快捷设置，下拉即开关"
+            } else {
+                "下拉通知栏 → 编辑 → 添加「局域网互传」"
+            },
+            icon = Icons.Outlined.Widgets,
+            trailing = {
+                AppButton(
+                    text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
+                    onClick = {
+                        view.performConfirmHaptic()
+                        requestTile()
+                    },
+                    variant = AppButtonVariant.Ghost,
+                )
+            },
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "传输完成提示",
+            subtitle = "系统通知音 + 震动",
+            icon = Icons.Outlined.VolumeUp,
+            trailing = {
+                AppSwitch(sound.complete, { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
+                    view.performConfirmHaptic()
+                    toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
+                })
+            },
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "传输失败提示",
+            subtitle = "提示音 + 震动（默认关）",
+            icon = Icons.Outlined.VolumeOff,
+            trailing = {
+                AppSwitch(sound.failure, { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
+                    view.performConfirmHaptic()
+                })
+            },
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "新设备出现提示",
+            subtitle = "仅震动（默认关）",
+            icon = Icons.Outlined.Vibration,
+            trailing = {
+                AppSwitch(sound.newDevice, { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
+                    view.performConfirmHaptic()
+                })
+            },
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "免配对码窗口",
+            subtitle = if (windowState.enabled) {
+                "剩余 " + TransferFormat.windowRemaining(windowLeftMs) + " · 到期自动回到需配对"
+            } else {
+                "未开启：未配对设备需输入 4 位 PIN"
+            },
+            subtitleColor = if (windowLeftMs > 0L) t.successText else t.muted,
+            icon = Icons.Outlined.LockOpen,
+            trailing = {
+                AppSwitch(windowState.enabled, { enabled ->
+                    transferViewModel.setOpenPairingWindow(enabled)
+                    view.performConfirmHaptic()
+                    toast.show(
+                        if (enabled) {
+                            "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
                         } else {
-                            "接收将在 " + ReceivingAutoClose.label(minutes) + "后自动关闭"
-                        },
+                            "已关闭免配对窗口"
+                        }
                     )
-                },
-                modifier = Modifier.padding(
-                    horizontal = t.space4,
-                    vertical = t.space2,
-                ),
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "通知栏磁贴",
-                subtitle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    "一键添加到快捷设置，下拉即开关"
-                } else {
-                    "下拉通知栏 → 编辑 → 添加「局域网互传」"
-                },
-                icon = Icons.Outlined.Widgets,
-                trailing = {
-                    AppButton(
-                        text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
-                        onClick = {
-                            view.performConfirmHaptic()
-                            requestTile()
-                        },
-                        variant = AppButtonVariant.Ghost,
-                    )
-                },
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "传输完成提示",
-                subtitle = "系统通知音 + 震动",
-                icon = Icons.Outlined.VolumeUp,
-                trailing = {
-                    AppSwitch(sound.complete, { enabled ->
-                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
+                })
+            },
+        )
+        // 窗口时长：开启时切换会以新时长重新计时；
+        // 未开启时整行降透明度，避免「未开启」与高亮的「10 分钟」并排读成自相矛盾
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = if (windowState.enabled) 1f else 0.55f }
+                .padding(horizontal = t.space4, vertical = t.space2),
+            horizontalArrangement = Arrangement.spacedBy(t.space2),
+        ) {
+            PairingPolicy.WINDOW_MINUTES.forEach { minutes ->
+                Chip(
+                    label = minutes.toString() + " 分钟",
+                    selected = windowState.minutes == minutes,
+                    onClick = {
+                        transferViewModel.setOpenPairingMinutes(minutes)
                         view.performConfirmHaptic()
-                        toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
-                    })
-                },
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "传输失败提示",
-                subtitle = "提示音 + 震动（默认关）",
-                icon = Icons.Outlined.VolumeOff,
-                trailing = {
-                    AppSwitch(sound.failure, { enabled ->
-                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
-                        view.performConfirmHaptic()
-                    })
-                },
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "新设备出现提示",
-                subtitle = "仅震动（默认关）",
-                icon = Icons.Outlined.Vibration,
-                trailing = {
-                    AppSwitch(sound.newDevice, { enabled ->
-                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
-                        view.performConfirmHaptic()
-                    })
-                },
-            )
-            TokenDivider(first = false)
-            TokenRow(
-                title = "免配对码窗口",
-                subtitle = if (windowState.enabled) {
-                    "剩余 " + TransferFormat.windowRemaining(windowLeftMs) + " · 到期自动回到需配对"
-                } else {
-                    "未开启：未配对设备需输入 4 位 PIN"
-                },
-                subtitleColor = if (windowLeftMs > 0L) t.successText else t.muted,
-                icon = Icons.Outlined.LockOpen,
-                trailing = {
-                    AppSwitch(windowState.enabled, { enabled ->
-                        transferViewModel.setOpenPairingWindow(enabled)
+                    },
+                )
+            }
+        }
+        TokenDivider(first = false)
+        TokenRow(
+            title = "小于 N MB 免配对码",
+            subtitle = if (thresholdMb > 0) {
+                "≤ " + TransferFormat.threshold(thresholdMb) + " 的文件直接接收"
+            } else {
+                "关闭：一律需要 PIN（默认）"
+            },
+            icon = Icons.Outlined.DataUsage,
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
+            horizontalArrangement = Arrangement.spacedBy(t.space2),
+        ) {
+            PairingPolicy.THRESHOLD_OPTIONS_MB.forEach { mb ->
+                Chip(
+                    label = TransferFormat.threshold(mb),
+                    selected = thresholdMb == mb,
+                    onClick = {
+                        transferViewModel.setAutoApproveThresholdMb(mb)
                         view.performConfirmHaptic()
                         toast.show(
-                            if (enabled) {
-                                "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
-                            } else {
-                                "已关闭免配对窗口"
-                            }
+                            if (mb == 0) "已关闭体积阈值" else "≤ ${TransferFormat.threshold(mb)} 的文件免配对"
                         )
-                    })
-                },
-            )
-            // 窗口时长：开启时切换会以新时长重新计时；
-            // 未开启时整行降透明度，避免「未开启」与高亮的「10 分钟」并排读成自相矛盾
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer { alpha = if (windowState.enabled) 1f else 0.55f }
-                    .padding(horizontal = t.space4, vertical = t.space2),
-                horizontalArrangement = Arrangement.spacedBy(t.space2),
-            ) {
-                PairingPolicy.WINDOW_MINUTES.forEach { minutes ->
-                    Chip(
-                        label = minutes.toString() + " 分钟",
-                        selected = windowState.minutes == minutes,
-                        onClick = {
-                            transferViewModel.setOpenPairingMinutes(minutes)
-                            view.performConfirmHaptic()
-                        },
-                    )
-                }
+                    },
+                )
             }
-            TokenDivider(first = false)
-            TokenRow(
-                title = "小于 N MB 免配对码",
-                subtitle = if (thresholdMb > 0) {
-                    "≤ " + TransferFormat.threshold(thresholdMb) + " 的文件直接接收"
-                } else {
-                    "关闭：一律需要 PIN（默认）"
-                },
-                icon = Icons.Outlined.DataUsage,
-            )
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
-                horizontalArrangement = Arrangement.spacedBy(t.space2),
-            ) {
-                PairingPolicy.THRESHOLD_OPTIONS_MB.forEach { mb ->
-                    Chip(
-                        label = TransferFormat.threshold(mb),
-                        selected = thresholdMb == mb,
-                        onClick = {
-                            transferViewModel.setAutoApproveThresholdMb(mb)
-                            view.performConfirmHaptic()
-                            toast.show(
-                                if (mb == 0) "已关闭体积阈值" else "≤ ${TransferFormat.threshold(mb)} 的文件免配对"
-                            )
-                        },
-                    )
-                }
-            }
-            TokenDivider(first = false)
-            TokenRow(
-                title = "接收目录",
-                subtitle = if (stats.isEmpty) {
-                    "暂无已接收文件"
-                } else {
-                    "占用 " + TransferFormat.fileSize(stats.totalBytes) + " · 共 " + stats.count + " 个"
-                },
-                icon = Icons.Outlined.Folder,
-                trailing = {
-                    AppButton(
-                        text = "清理",
-                        onClick = {
-                            view.performConfirmHaptic()
-                            // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
-                            if (stats.isEmpty) {
-                                toast.show("暂无可清理的接收文件")
-                            } else {
-                                confirmClear = true
-                            }
-                        },
-                        variant = AppButtonVariant.Ghost,
-                    )
-                },
-            )
-            Spacer(Modifier.height(t.space1))
+        }
+        TokenDivider(first = false)
+        TokenRow(
+            title = "接收目录",
+            subtitle = if (stats.isEmpty) {
+                "暂无已接收文件"
+            } else {
+                "占用 " + TransferFormat.fileSize(stats.totalBytes) + " · 共 " + stats.count + " 个"
+            },
+            icon = Icons.Outlined.Folder,
+            trailing = {
+                AppButton(
+                    text = "清理",
+                    onClick = {
+                        view.performConfirmHaptic()
+                        // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
+                        if (stats.isEmpty) {
+                            toast.show("暂无可清理的接收文件")
+                        } else {
+                            confirmClear = true
+                        }
+                    },
+                    variant = AppButtonVariant.Ghost,
+                )
+            },
+        )
+        Spacer(Modifier.height(t.space1))
 
         ConfirmDialog(
             visible = editingName,
