@@ -30,11 +30,11 @@ val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKe
 
 android {
     namespace = "com.bsfeng.monitor"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.bsfeng.monitor"
         minSdk = 29
-        targetSdk = 34
+        targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
 
@@ -153,7 +153,12 @@ tasks.withType<Test> {
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-        "--add-opens=java.base/java.util=ALL-UNNAMED"
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        // Robolectric 4.17 在 API 37 沙箱里建 ApplicationSharedMemory 时会反射 SharedSecrets
+        // 改写 FileDescriptor，JDK 21 默认不导出该包（报 "Failed to interact with raw
+        // FileDescriptor internals; perhaps JRE has changed?"）
+        "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED"
     )
 
     // 测试并行执行以加快反馈（质量基线要求）。
@@ -264,25 +269,25 @@ dependencies {
     implementation(project(":domain"))
 
     // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.animation:animation")
     debugImplementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended")
 
     // Core
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.19.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.robolectric:robolectric:4.17")
 }
 
 // =============================================
