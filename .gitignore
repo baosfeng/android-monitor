@@ -95,3 +95,5 @@ tools/
 # 实施过程取证与原型预览图（由原型/设备现场生成，不入库）
 .open-design/impl-notes/
 .open-design/*.preview.png
+# 只读审计/取证报告：结论已提炼进 docs/，原文按取证产物处理
+.open-design/perf-audit.md
