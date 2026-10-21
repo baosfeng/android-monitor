@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.util
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.pm.PackageManager
 import com.bsfeng.monitor.MonitorApp
 import java.util.UUID
@@ -16,7 +17,7 @@ object AppUtils {
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_DEVICE_ID, null) ?: run {
             val id = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+            prefs.edit { putString(KEY_DEVICE_ID, id) }
             id
         }
     }
@@ -38,7 +39,7 @@ object AppUtils {
 
     fun saveToken(token: String) {
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_AUTH_TOKEN, token).apply()
+            .edit { putString(KEY_AUTH_TOKEN, token) }
     }
 
     fun getDeviceName(): String {

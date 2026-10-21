@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.finance
 
 import android.content.Context
+import androidx.core.content.edit
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
@@ -202,7 +203,7 @@ class FinanceManager internal constructor(context: Context) {
     suspend fun migrateCategoryTreeOnce() {
         if (prefs.getBoolean(KEY_CATEGORY_TREE, false)) return
         migrateCategoryTree()
-        prefs.edit().putBoolean(KEY_CATEGORY_TREE, true).apply()
+        prefs.edit { putBoolean(KEY_CATEGORY_TREE, true) }
     }
 
     /**
@@ -297,7 +298,7 @@ class FinanceManager internal constructor(context: Context) {
     private suspend fun cleanLegacyAggregatedRemarksOnce() {
         if (prefs.getBoolean(KEY_LEGACY_REMARK_CLEANED, false)) return
         val cleaned = cleanLegacyAggregatedRemarks()
-        prefs.edit().putBoolean(KEY_LEGACY_REMARK_CLEANED, true).apply()
+        prefs.edit { putBoolean(KEY_LEGACY_REMARK_CLEANED, true) }
         if (cleaned > 0) {
             android.util.Log.i(
                 TAG,

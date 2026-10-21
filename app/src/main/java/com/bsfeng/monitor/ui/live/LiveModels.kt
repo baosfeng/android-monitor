@@ -76,10 +76,12 @@ const val HOURS_PER_DAY: Int = 24
 
 // J8：DateTimeFormatter 不可变且线程安全（SimpleDateFormat 非线程安全，且随默认时区在类加载时固化）。
 private val ZONE: ZoneId = ZoneId.systemDefault()
-private val clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
-private val clockSecFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault())
-private val dayLabelFormat = DateTimeFormatter.ofPattern("MM-dd", Locale.getDefault())
-private val fullDateFormat = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日", Locale.getDefault())
+// 固定 Locale.CHINA：这些格式只含数字与中文字面量，跟随系统语言没有意义；
+// 用常量还避免「用户切系统语言后静态 formatter 不更新」的 ConstantLocale 问题
+private val clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)
+private val clockSecFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.CHINA)
+private val dayLabelFormat = DateTimeFormatter.ofPattern("MM-dd", Locale.CHINA)
+private val fullDateFormat = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日", Locale.CHINA)
 
 private fun zonedOf(timestamp: Long): ZonedDateTime = Instant.ofEpochMilli(timestamp).atZone(ZONE)
 

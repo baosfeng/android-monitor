@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicInteger
@@ -157,7 +158,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val parts = ym.split("-")
         val year = parts[0].toInt()
         val month = parts[1].toInt()
-        val newMonth = if (month == 1) "${year - 1}-12" else String.format("%04d-%02d", year, month - 1)
+        val newMonth = if (month == 1) "${year - 1}-12" else String.format(Locale.US, "%04d-%02d", year, month - 1)
         loadMonth(newMonth)
     }
 
@@ -172,7 +173,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val parts = ym.split("-")
         val year = parts[0].toInt()
         val month = parts[1].toInt()
-        val newMonth = if (month == 12) "${year + 1}-01" else String.format("%04d-%02d", year, month + 1)
+        val newMonth = if (month == 12) "${year + 1}-01" else String.format(Locale.US, "%04d-%02d", year, month + 1)
         loadMonth(newMonth)
     }
 

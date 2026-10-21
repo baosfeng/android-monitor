@@ -15,6 +15,11 @@ import kotlinx.coroutines.launch
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // 本接收器有两个入口：系统 BOOT_COMPLETED（action 有值）与 AlarmManager 心跳（显式组件、action 为空）。
+        // 其他 action 一律忽略，防止外部伪造广播触发上报与进程唤醒。
+        val action = intent.action
+        if (action != null && action != Intent.ACTION_BOOT_COMPLETED) return
+        if (action == null && intent.component?.className != javaClass.name) return
         // 系统重启后 AlarmManager 闹钟丢失,重新调度(重复调用会更新同一 PendingIntent,不会叠加)
         scheduleAlarmCheck(context)
         // 定期备份的闹钟同理：Restart 后补排一次（已在跑时是空操作，不会把触发时间往后推）

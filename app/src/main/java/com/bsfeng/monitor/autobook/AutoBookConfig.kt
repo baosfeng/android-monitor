@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.autobook
 
 import android.content.Context
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,9 +46,7 @@ object AutoBookConfig {
         _enabledFlow.value = enabled
         initialized = true
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_ENABLED, enabled)
-            .apply()
+            .edit { putBoolean(KEY_ENABLED, enabled) }
     }
 
     /** 原型阶段默认开启 */

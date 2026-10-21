@@ -1,7 +1,9 @@
 package com.bsfeng.monitor
 
+import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
@@ -122,8 +124,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (!nm.areNotificationsEnabled()) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+        // POST_NOTIFICATIONS 是 API 33+ 的运行时权限：29–32 没有该权限，直接申请会被拒
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !nm.areNotificationsEnabled()) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
         }
 
         setContent {

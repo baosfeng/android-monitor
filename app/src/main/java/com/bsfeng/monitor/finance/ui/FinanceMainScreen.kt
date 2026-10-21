@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.finance.ui
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -59,6 +58,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.AppFab
@@ -261,7 +261,7 @@ fun FinanceMainScreen(
                         subtitle = "分类占比 · 近 7 天",
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            view.performConfirmHaptic()
                             onStatsClick()
                         },
                         icon = {
@@ -283,7 +283,7 @@ fun FinanceMainScreen(
                         },
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            view.performConfirmHaptic()
                             onBudgetClick()
                         },
                         icon = {
@@ -362,7 +362,7 @@ fun FinanceMainScreen(
                                     highlighted = tx.id == highlightId,
                                     enterIndex = if (rowIndex < STAGGER_MAX_STEPS) rowIndex++ else -1,
                                     onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                        view.performConfirmHaptic()
                                         onEditClick(tx)
                                     },
                                 )

@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.autobook
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 
 /**
@@ -25,7 +26,7 @@ class AutoBookIgnoreStore(
     fun markIgnored(sourceId: String) {
         if (sourceId.isBlank()) return
         val at = now()
-        prefs.edit().putLong(KEY_PREFIX + sourceId, at).apply()
+        prefs.edit { putLong(KEY_PREFIX + sourceId, at) }
         prune(at)
     }
 
@@ -35,7 +36,7 @@ class AutoBookIgnoreStore(
         val at = prefs.getLong(KEY_PREFIX + sourceId, 0L)
         if (at <= 0L) return false
         if (now() - at > ttlMs) {
-            prefs.edit().remove(KEY_PREFIX + sourceId).apply()
+            prefs.edit { remove(KEY_PREFIX + sourceId) }
             return false
         }
         return true
@@ -43,13 +44,13 @@ class AutoBookIgnoreStore(
 
     /** 清理过期条目，避免偏好文件无限增长 */
     private fun prune(nowMs: Long) {
-        val editor = prefs.edit()
-        for ((key, value) in prefs.all) {
-            if (key.startsWith(KEY_PREFIX) && value is Long && nowMs - value > ttlMs) {
-                editor.remove(key)
+        prefs.edit {
+            for ((key, value) in prefs.all) {
+                if (key.startsWith(KEY_PREFIX) && value is Long && nowMs - value > ttlMs) {
+                    remove(key)
+                }
             }
         }
-        editor.apply()
     }
 
     /**
@@ -57,14 +58,14 @@ class AutoBookIgnoreStore(
      */
     fun clearAll(): Int {
         var removed = 0
-        val editor = prefs.edit()
-        for (key in prefs.all.keys) {
-            if (key.startsWith(KEY_PREFIX)) {
-                editor.remove(key)
-                removed++
+        prefs.edit {
+            for (key in prefs.all.keys) {
+                if (key.startsWith(KEY_PREFIX)) {
+                    remove(key)
+                    removed++
+                }
             }
         }
-        editor.apply()
         return removed
     }
 
@@ -78,7 +79,7 @@ class AutoBookIgnoreStore(
     fun migrateLegacyOnce() {
         if (prefs.getBoolean(KEY_LEGACY_CLEARED, false)) return
         val removed = clearAll()
-        prefs.edit().putBoolean(KEY_LEGACY_CLEARED, true).apply()
+        prefs.edit { putBoolean(KEY_LEGACY_CLEARED, true) }
         if (removed > 0) {
             android.util.Log.i(
                 "AutoBook",

@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.backup
 
 import android.content.Context
+import androidx.core.content.edit
 
 /**
  * 自动备份频率。
@@ -37,7 +38,7 @@ class BackupConfig(context: Context) {
         BackupFrequency.fromValue(prefs.getString(KEY_FREQUENCY, null))
 
     fun setFrequency(frequency: BackupFrequency) {
-        prefs.edit().putString(KEY_FREQUENCY, frequency.value).apply()
+        prefs.edit { putString(KEY_FREQUENCY, frequency.value) }
     }
 
     fun lastBackup(): LastBackup? {
@@ -51,11 +52,11 @@ class BackupConfig(context: Context) {
     }
 
     fun recordBackup(at: Long, publicPath: String?, localName: String?) {
-        prefs.edit()
-            .putLong(KEY_LAST_AT, at)
-            .putString(KEY_LAST_PUBLIC_PATH, publicPath)
-            .putString(KEY_LAST_LOCAL_NAME, localName)
-            .apply()
+        prefs.edit {
+            putLong(KEY_LAST_AT, at)
+            putString(KEY_LAST_PUBLIC_PATH, publicPath)
+            putString(KEY_LAST_LOCAL_NAME, localName)
+        }
     }
 
     companion object {
