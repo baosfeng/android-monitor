@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.AppFab
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
@@ -554,7 +555,8 @@ private fun TransactionRow(
             .padding(horizontal = t.space3, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LegendDot(color)
+        // 列表行展示分类线描图标（与分类选择格同一套配色），不再只用色点
+        CategoryIcon(name = transaction.categoryName, color = color, size = 34.dp)
         Spacer(Modifier.width(t.space3))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
