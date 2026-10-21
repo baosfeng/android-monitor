@@ -37,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.drawText
@@ -64,6 +63,7 @@ import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
 /**
  * s07 统计分析。
@@ -110,7 +110,7 @@ fun FinanceStatsScreen(
     // EMPTY 只作为演示态：内容仍渲染，空态卡画在列表首位（原型 s07-empty 带「新增一笔」）
     val containerState = if (state == FiveState.EMPTY) FiveState.POPULATED else state
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier

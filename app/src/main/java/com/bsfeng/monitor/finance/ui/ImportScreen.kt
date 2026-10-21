@@ -40,7 +40,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +60,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentSoftFill
 import java.io.File
 import java.io.FileOutputStream
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
 /**
  * s08 数据导入。
@@ -133,7 +133,7 @@ fun ImportScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier

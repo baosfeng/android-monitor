@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +50,8 @@ import com.bsfeng.monitor.ui.components.rememberStaggerEnter
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.live.StackRow
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 /**
  * s11 应用白名单（原型 s11-whitelist.html）。
@@ -81,14 +82,15 @@ fun WhitelistScreen(
         else -> FiveState.POPULATED
     }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(
                 title = "应用白名单",
                 meta = "白名单内的应用不会被跳过开屏广告",
                 onBack = onBack,
+                consumeTopInset = true,
             )
-            Column(Modifier.fillMaxWidth().weight(1f)) {
+            Column(Modifier.fillMaxWidth().weight(1f).navigationBarsPadding()) {
                 // 五态切换器（演示用）留在 content **之外**：StateContainer 的 loading / empty /
                 // error / edge 分支不渲染 content（States.kt:91-106），放进去就再没有切回有数据态的入口。
                 // 与 StateContainer 之间的 space3 间距挂在自身 modifier 上：未解锁演示时它不 emit 任何

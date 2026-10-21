@@ -69,6 +69,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.util.Locale
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
 /** 一次只开一个抽屉（原型 s14a 的四个抽屉互斥） */
 private enum class RecordSheet { NONE, CATEGORY, ACCOUNT, TO_ACCOUNT, TIME, RECEIPT }
@@ -205,7 +206,7 @@ fun AddTransactionScreen(
     // EMPTY 只作为演示态：内容仍渲染，空态卡画在表单首位（原型 s05-empty 带「去导入历史账目」）
     val containerState = if (state == FiveState.EMPTY) FiveState.POPULATED else state
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             // 顶栏：关闭 / 标题。保存不再放顶栏 —— 它吸在底部，永远可点（原型 .s14a-actions）
             Row(
