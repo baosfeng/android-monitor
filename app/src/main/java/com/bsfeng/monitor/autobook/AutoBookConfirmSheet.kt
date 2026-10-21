@@ -41,8 +41,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -132,8 +133,13 @@ fun AutoBookConfirmSheet(
         category = resolveCategory(categoryTree, type, category)
     }
 
-    // 卡片高度上限 ≈ 82% 屏高（原型 .ab-sheet max-height:82vh）：小屏上内容区先滚，按钮仍在屏内
-    val panelMaxHeight = (LocalConfiguration.current.screenHeightDp * PANEL_MAX_HEIGHT_RATIO).dp
+    // 卡片高度上限 ≈ 82% 窗口高（原型 .ab-sheet max-height:82vh）：小屏上内容区先滚，按钮仍在屏内。
+    // 取 WindowInfo.containerSize（px → dp）而非 Configuration.screenHeightDp：后者的 insets 口径随
+    // targetSdk 变化、还会取整到 dp；浮窗外层窗口的实际可用高度以容器尺寸为准。
+    val density = LocalDensity.current
+    val panelMaxHeight = with(density) {
+        (LocalWindowInfo.current.containerSize.height * PANEL_MAX_HEIGHT_RATIO).toDp()
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()

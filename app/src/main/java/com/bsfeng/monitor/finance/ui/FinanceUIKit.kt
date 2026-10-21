@@ -93,8 +93,8 @@ internal fun monthLabelOf(yearMonth: String): String {
 @Composable
 internal fun FinanceScreenHead(
     title: String,
-    subtitle: String? = null,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
     onLongPress: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     consumeTopInset: Boolean = false,

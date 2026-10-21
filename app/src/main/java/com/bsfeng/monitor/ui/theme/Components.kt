@@ -61,9 +61,9 @@ fun InsetGroupedCard(
  */
 @Composable
 fun InsetGroupedSection(
+    modifier: Modifier = Modifier,
     header: String? = null,
     footer: String? = null,
-    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = modifier) {
@@ -108,10 +108,10 @@ fun InsetGroupedSection(
 @Composable
 fun IOSRow(
     title: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     trailing: @Composable RowScope.() -> Unit = {},
     onClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
@@ -249,8 +249,8 @@ fun IOSNavigationBar(
 fun CategoryDot(
     categoryName: String,
     color: Color,
-    size: Dp = 32.dp,
     modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
 ) {
     Box(
         modifier = modifier

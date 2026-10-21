@@ -71,7 +71,7 @@ import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.animatedAmount
 import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -90,12 +90,12 @@ fun FinanceMainScreen(
     viewModel: FinanceViewModel,
     onAddClick: () -> Unit,
     onImportClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onEditClick: (Transaction) -> Unit = {},
     onStatsClick: () -> Unit = {},
     onBudgetClick: () -> Unit = {},
     /** 每次进入本屏（Tab 切回来 / 路由返回）自增，用于把列表滚回顶部。 */
     entryKey: Int = 0,
-    modifier: Modifier = Modifier
 ) {
     val t = LocalDesignTokens.current
     val view = LocalView.current
@@ -556,7 +556,7 @@ private fun TransactionRow(
     val isTransfer = transaction.isTransfer
     // 来源徽标：自动记账 / 带 sourceId 的导入行才判 true，手写记录恒 false（见 TransactionSourceBadge）
     val isAutoBooked = TransactionSourceBadge.isAutoBooked(transaction.source, transaction.sourceId)
-    val enterModifier = if (enterIndex >= 0) rememberStaggerEnter(enterIndex) else Modifier
+    val enterModifier = if (enterIndex >= 0) Modifier.staggerEnterAt(enterIndex) else Modifier
     val rowShape = remember(t.radiusMd) { RoundedCornerShape(t.radiusMd) }
     // 沿用原本的「背景 + clip」口径；只有高亮行才组合动画对象（非高亮行走 Color.Transparent 的零对象路径）
     val highlightColor = if (highlighted) autoBookHighlightColor() else Color.Transparent
@@ -592,7 +592,7 @@ private fun TransactionRow(
                 if (isAutoBooked) {
                     // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、token 着色）
                     Spacer(Modifier.width(t.space1))
-                    Badge(TransactionSourceBadge.AUTO_LABEL, BadgeTone.Accent)
+                    Badge(TransactionSourceBadge.AUTO_LABEL, tone = BadgeTone.Accent)
                 }
             }
             // 副标题：优先用户手写的「说明」，为空时回退自动采集的商户 · 付款方式

@@ -152,11 +152,11 @@ import java.io.InputStream
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
+    modifier: Modifier = Modifier,
     onNavigateToSkipRules: () -> Unit = {},
     onNavigateToWhitelist: () -> Unit = {},
     onNavigateToAppearance: (() -> Unit)? = null,
     onNavigateToGallery: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val context = LocalContext.current

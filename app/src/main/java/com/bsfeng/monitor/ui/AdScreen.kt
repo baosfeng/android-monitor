@@ -50,7 +50,7 @@ import com.bsfeng.monitor.ui.components.ChipRow
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
 import com.bsfeng.monitor.ui.components.StateContainer
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.DAY_MS
@@ -161,7 +161,7 @@ fun AdScreen(
                     verticalArrangement = Arrangement.spacedBy(t.space3),
                 ) {
                     item(key = "stat") {
-                        AppCard(modifier = Modifier.then(rememberStaggerEnter(0))) {
+                        AppCard(modifier = Modifier.staggerEnterAt(0)) {
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -216,7 +216,7 @@ fun AdScreen(
                     }
 
                     item(key = "trend") {
-                        AppCard(modifier = Modifier.then(rememberStaggerEnter(1))) {
+                        AppCard(modifier = Modifier.staggerEnterAt(1)) {
                             CardHead("近 7 天跳过趋势", labels.first() + " – " + labels.last())
                             Spacer(Modifier.height(t.space3))
                             BarChart(
@@ -271,7 +271,7 @@ fun AdScreen(
                             // 合成/矩阵成本在冷启动窗口被放大 4~6 倍）。入场动画只对首屏可见项有意义，
                             // 超出的行直接不加 modifier，滚动中不再为它们付 layer 成本。
                             val enterMod = if (index < STAGGER_MAX_STEPS) {
-                                rememberStaggerEnter(index)
+                                Modifier.staggerEnterAt(index)
                             } else {
                                 Modifier
                             }

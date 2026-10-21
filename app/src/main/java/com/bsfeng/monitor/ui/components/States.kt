@@ -112,7 +112,7 @@ fun StateContainer(
 
 /** 骨架屏：细行 shimmer（原型 .sk：12 / 20px 高、宽 40/60/80/100%、radius-sm）。 */
 @Composable
-fun StateSkeleton(rows: Int = 3, modifier: Modifier = Modifier) {
+fun StateSkeleton(modifier: Modifier = Modifier, rows: Int = 3) {
     val t = LocalDesignTokens.current
     val transition = rememberInfiniteTransition(label = "skeleton")
     val phase by transition.animateFloat(
@@ -136,10 +136,10 @@ fun StateSkeleton(rows: Int = 3, modifier: Modifier = Modifier) {
 @Composable
 fun SkeletonRow(
     height: Dp,
+    modifier: Modifier = Modifier,
     widthFraction: Float = 1f,
     phase: Float = SHIMMER_PHASE_STATIC,
     alpha: Float = 1f,
-    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val base = t.fgFade(6).let { if (alpha == 1f) it else it.copy(alpha = it.alpha * alpha) }
@@ -161,7 +161,7 @@ fun SkeletonRow(
 
 /** 单块骨架（兼容旧调用点：满宽）。 */
 @Composable
-fun SkeletonBlock(height: Dp, alpha: Float = 1f, modifier: Modifier = Modifier) {
+fun SkeletonBlock(height: Dp, modifier: Modifier = Modifier, alpha: Float = 1f) {
     SkeletonRow(height = height, widthFraction = 1f, alpha = alpha, modifier = modifier)
 }
 
@@ -192,8 +192,8 @@ fun EmptyState(
 @Composable
 fun ErrorState(
     text: String,
-    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
     title: String = "出错",
     icon: ImageVector = Icons.Filled.Warning,
     iconSize: Dp = STATE_ICON,
@@ -238,7 +238,7 @@ fun EdgeState(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("¥9,876,543.21", style = MaterialTheme.typography.titleMedium, color = t.fg)
                 Spacer(Modifier.width(t.space3))
-                Badge("10,000+", BadgeTone.Accent)
+                Badge("10,000+", tone = BadgeTone.Accent)
             }
         }
         Spacer(Modifier.height(t.space1))

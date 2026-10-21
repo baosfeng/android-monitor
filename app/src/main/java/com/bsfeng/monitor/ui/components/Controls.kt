@@ -122,7 +122,7 @@ fun Chip(
 enum class BadgeTone { Neutral, Accent, Success, Warn, Danger }
 
 @Composable
-fun Badge(text: String, tone: BadgeTone = BadgeTone.Neutral, modifier: Modifier = Modifier) {
+fun Badge(text: String, modifier: Modifier = Modifier, tone: BadgeTone = BadgeTone.Neutral) {
     val t = LocalDesignTokens.current
     val color = when (tone) {
         BadgeTone.Neutral -> t.muted

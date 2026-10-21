@@ -82,7 +82,7 @@ import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.components.StateSkeleton
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.animatedCount
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.finance.ui.categoryColorOf
@@ -304,7 +304,7 @@ internal fun GroupLabel(text: String, modifier: Modifier = Modifier) {
 
 /** 小节头：左标题 + 右说明（原型 .sec-head）。 */
 @Composable
-internal fun SecHead(label: String, right: String? = null, modifier: Modifier = Modifier) {
+internal fun SecHead(label: String, modifier: Modifier = Modifier, right: String? = null) {
     val t = LocalDesignTokens.current
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = t.space4),
@@ -486,7 +486,7 @@ internal fun FiveStateSlot(
     when (state) {
         FiveState.LOADING -> AppCard { StateSkeleton(rows = 4) }
         FiveState.EMPTY -> EmptyState(emptyText)
-        FiveState.ERROR -> ErrorState(errorText, onRetry)
+        FiveState.ERROR -> ErrorState(errorText, onRetry = onRetry)
         FiveState.EDGE -> EdgeState(edgeText)
         FiveState.POPULATED -> content()
     }
@@ -1001,7 +1001,7 @@ private fun GalleryMotion(toast: com.bsfeng.monitor.ui.components.ToastHostState
                 repeat(5) { i ->
                     Row(
                         Modifier
-                            .then(rememberStaggerEnter(i))
+                            .staggerEnterAt(i)
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(t.radiusSm))
                             .background(t.surfaceWarm)
@@ -1016,7 +1016,7 @@ private fun GalleryMotion(toast: com.bsfeng.monitor.ui.components.ToastHostState
                 }
             }
             Spacer(Modifier.height(t.space2))
-            Text("计数动画已落地：" + animatedCount(42) + " 条（rememberStaggerEnter / springOf 见 s10 规则列表与按钮）", style = MaterialTheme.typography.labelSmall, color = t.meta)
+            Text("计数动画已落地：" + animatedCount(42) + " 条（staggerEnterAt / springOf 见 s10 规则列表与按钮）", style = MaterialTheme.typography.labelSmall, color = t.meta)
         }
     }
 }

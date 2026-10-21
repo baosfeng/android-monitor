@@ -67,7 +67,7 @@ import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.StateSkeleton
 import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.components.animatedCount
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.live.DAY_MS
 import com.bsfeng.monitor.ui.live.StackRow
@@ -239,7 +239,7 @@ fun SkipRuleScreen(
                                             modifier = Modifier.weight(1f),
                                         )
                                         Spacer(Modifier.width(t.space2))
-                                        Badge(state.subscriptions.size.toString() + " 个源", BadgeTone.Accent)
+                                        Badge(state.subscriptions.size.toString() + " 个源", tone = BadgeTone.Accent)
                                     }
                                     if (updating) {
                                         Spacer(Modifier.height(t.space2))
@@ -316,7 +316,7 @@ fun SkipRuleScreen(
 
                         // ── 规则列表 ──
                         item(key = "rules-head") {
-                            SecHead("规则列表", "点击行展开选择器明细", Modifier.padding(bottom = t.space2))
+                            SecHead("规则列表", Modifier.padding(bottom = t.space2), right = "点击行展开选择器明细")
                         }
 
                         // 规则行 = 一卡一行（不是一卡一规则卡）：StackRow 首行圆上角 / 末行圆下角、
@@ -333,7 +333,7 @@ fun SkipRuleScreen(
                         ) { index, rule ->
                             // 入场动画只给首屏可见项：staggerEnter 会给每行挂一个 graphicsLayer，
                             // 长列表滚动时合成成本被放大（AdScreen.kt:271-278 同一处理）。
-                            val enterMod = if (index < STAGGER_MAX_STEPS) rememberStaggerEnter(index) else Modifier
+                            val enterMod = if (index < STAGGER_MAX_STEPS) Modifier.staggerEnterAt(index) else Modifier
                             StackRow(
                                 first = index == 0,
                                 last = index == state.rules.lastIndex,
@@ -517,7 +517,7 @@ private fun RuleRow(
                 )
             }
             Spacer(Modifier.width(t.space2))
-            Badge(if (rule.enabled) "启用" else "停用", if (rule.enabled) BadgeTone.Success else BadgeTone.Neutral)
+            Badge(if (rule.enabled) "启用" else "停用", tone = if (rule.enabled) BadgeTone.Success else BadgeTone.Neutral)
             Spacer(Modifier.width(t.space2))
             Icon(
                 Icons.Filled.KeyboardArrowRight,
