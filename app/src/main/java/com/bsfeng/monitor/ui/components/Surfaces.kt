@@ -33,18 +33,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.dialogEnter
+import com.bsfeng.monitor.ui.foundation.dialogExit
+import com.bsfeng.monitor.ui.foundation.sheetEnterFromBottom
+import com.bsfeng.monitor.ui.foundation.sheetExitToBottom
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.opaquePanel
 import com.bsfeng.monitor.ui.theme.sparkHeight
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -262,16 +259,8 @@ fun BottomSheet(
             // Modifier.align(Alignment.BottomCenter) 来把抽屉贴底，而 align 是 Box 的 parentData ——
             // 落在子节点上才会被读取（此前它被传给内部的 Column，所有抽屉都退回 TopStart）。
             modifier = Modifier.align(Alignment.BottomCenter).then(modifier),
-            enter = slideInVertically(
-                animationSpec = tween(t.durOverlayIn)
-            ) + fadeIn(
-                animationSpec = tween(t.durOverlayIn)
-            ),
-            exit = slideOutVertically(
-                animationSpec = tween(t.durOverlayOut)
-            ) + fadeOut(
-                animationSpec = tween(t.durOverlayOut)
-            ),
+            enter = sheetEnterFromBottom(),
+            exit = sheetExitToBottom(),
         ) {
             Column(
                 modifier = Modifier
@@ -381,8 +370,8 @@ fun AppDialog(
         AnimatedVisibility(
             visible = entered,
             modifier = Modifier.align(Alignment.Center),
-            enter = fadeIn(tween(t.durOverlayIn)) + scaleIn(initialScale = 0.94f, animationSpec = tween(t.durOverlayIn)),
-            exit = fadeOut(tween(t.durOverlayOut)) + scaleOut(targetScale = 0.94f, animationSpec = tween(t.durOverlayOut)),
+            enter = dialogEnter(),
+            exit = dialogExit(),
         ) {
             Column(
                 modifier = Modifier

@@ -3,10 +3,6 @@ package com.bsfeng.monitor.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +76,8 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.bsfeng.monitor.ui.foundation.expandEnter
+import com.bsfeng.monitor.ui.foundation.expandExit
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import androidx.compose.foundation.layout.navigationBarsPadding
 
@@ -530,8 +528,8 @@ private fun RuleRow(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(animationSpec = tween(t.durOverlayIn, easing = t.easeOut)) + fadeIn(animationSpec = tween(t.durOverlayIn)),
-            exit = shrinkVertically(animationSpec = tween(t.durOverlayOut, easing = t.easeIn)) + fadeOut(animationSpec = tween(t.durOverlayOut)),
+            enter = expandEnter(),
+            exit = expandExit(),
         ) {
             RuleDetail(rule)
         }
