@@ -17,7 +17,8 @@ jobs:
   test:
     name: Unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Robolectric 首跑要下载 ~228MB 的 API 37 android-all-instrumented，20 分钟会压线
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -35,13 +36,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # compileSdk 37 依赖 runner 上有对应平台包；官方镜像未必预装
+      - name: Install Android SDK platform 37
+        run: |
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMGR" ] || SDKMGR="$(command -v sdkmanager)"
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" "platforms;android-37.0"
+
       - name: Unit tests
         run: ./gradlew test --stacktrace
 
   assemble:
     name: Assemble APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -55,6 +64,13 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK platform 37
+        run: |
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMGR" ] || SDKMGR="$(command -v sdkmanager)"
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" "platforms;android-37.0"
 
       - name: Decode release keystore
         run: |
