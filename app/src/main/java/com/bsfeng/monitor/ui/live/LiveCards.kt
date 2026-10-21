@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -117,6 +118,12 @@ fun MetaText(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier = modifier, style = MaterialTheme.typography.labelMedium, color = t.meta)
 }
 
+/**
+ * 页面大标题：副标题 meta 在上、标题在下，右侧可选动作按钮。
+ *
+ * [consumeTopInset] 默认 false：页头在 Scaffold 内容区里，状态栏避让已由 Scaffold 的 inset 完成。
+ * true 时页头自己加 `statusBarsPadding()`，供 Scaffold 之外的整屏页（覆盖层）使用。
+ */
 @Composable
 fun ScreenHead(
     title: String,
@@ -125,11 +132,13 @@ fun ScreenHead(
     actionIcon: ImageVector? = null,
     actionDesc: String = "",
     onAction: (() -> Unit)? = null,
+    consumeTopInset: Boolean = false,
 ) {
     val t = LocalDesignTokens.current
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (consumeTopInset) Modifier.statusBarsPadding() else Modifier)
             .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
