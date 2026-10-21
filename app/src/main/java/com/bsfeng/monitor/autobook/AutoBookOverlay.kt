@@ -5,7 +5,6 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.util.Log
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
@@ -40,6 +39,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 
 /**
  * 自动记账确认浮窗。
@@ -294,7 +294,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
                     ) {
                         // 吞掉点击：浮窗只能由「记一笔」/「忽略」关闭（2026-10-20 用户要求）
                         if (scrimEffect.hapticFeedback) {
-                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            view.performConfirmHaptic()
                         }
                         onScrimTap()
                     }

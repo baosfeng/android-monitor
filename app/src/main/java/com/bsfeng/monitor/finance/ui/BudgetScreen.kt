@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.finance.ui
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
@@ -157,7 +157,7 @@ fun BudgetScreen(
                                     icon = Icons.Filled.Savings,
                                     actionText = "设置总预算",
                                     onAction = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                        view.performConfirmHaptic()
                                         editingTarget = BudgetEditorTarget(
                                             categoryName = "",
                                             title = "总预算",
@@ -182,7 +182,7 @@ fun BudgetScreen(
                                             value = yen(animatedAmount(totalBudget.toFloat()).toDouble(), 0),
                                             color = t.fg,
                                             onClick = {
-                                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                                view.performConfirmHaptic()
                                                 editingTarget = BudgetEditorTarget(
                                                     categoryName = "",
                                                     title = "总预算",
@@ -246,7 +246,7 @@ fun BudgetScreen(
                                         spentAmount = budget?.spentAmount ?: 0.0,
                                         enterIndex = index,
                                         onClick = {
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                             editingTarget = BudgetEditorTarget(
                                                 categoryName = category.name,
                                                 title = category.name,
@@ -303,7 +303,7 @@ fun BudgetScreen(
                 } else {
                     viewModel.setCategoryBudget(target.categoryName, amount)
                 }
-                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                view.performConfirmHaptic()
                 editingTarget = null
             },
             onDismiss = { editingTarget = null },

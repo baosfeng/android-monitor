@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.ui
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.pm.ApplicationInfo
 import android.graphics.drawable.Drawable
 import android.util.Log
@@ -136,7 +137,7 @@ class WhitelistViewModel : ViewModel() {
     }
 
     private fun saveWhitelist(whitelist: Set<String>) {
-        prefs.edit().putStringSet("whitelist", whitelist).apply()
+        prefs.edit { putStringSet("whitelist", whitelist) }
     }
 
     fun refresh() {

@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.ui
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -53,6 +52,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
@@ -149,7 +149,7 @@ internal fun AppButton(
                 indication = null,
                 enabled = enabled,
                 onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    view.performConfirmHaptic()
                     onClick()
                 },
             )
@@ -182,7 +182,7 @@ internal fun AppIconButton(
             .clip(RoundedCornerShape(t.radiusMd))
             .background(t.surfaceWarm)
             .clickable {
-                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                view.performConfirmHaptic()
                 onClick()
             },
         contentAlignment = Alignment.Center,
@@ -667,7 +667,7 @@ private fun GallerySwitchesAndBadges(
                 trailing = {
                     AppSwitch(on, {
                         onOn(!on)
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        view.performConfirmHaptic()
                         toast.show(if (on) "开关已关闭" else "开关已开启")
                     })
                 },
@@ -679,7 +679,7 @@ private fun GallerySwitchesAndBadges(
                 trailing = {
                     AppSwitch(off, {
                         onOff(!off)
-                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        view.performConfirmHaptic()
                         toast.show(if (off) "开关已关闭" else "开关已开启")
                     })
                 },

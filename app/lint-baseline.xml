@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.2.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.2.1)" variant="all" version="9.2.1">
+
+    <!--
+      仅过滤已确认可接受的项：OldTargetApi（targetSdk = 34，compileSdk 36）。
+      targetSdk 升级会强制 edge-to-edge 等行为变更，属产品决策、由 lead 单独排期；
+      升级完成（或确认可升）后请删除本条目乃至整个文件。
+      本文件不过滤其他规则：新增代码的 lint 问题照常让构建失败。
+    -->
+
+    <issue
+        id="OldTargetApi"
+        message="Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."
+        errorLine1="        targetSdk = 34"
+        errorLine2="        ~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="37"
+            column="9"/>
+    </issue>
+
+</issues>

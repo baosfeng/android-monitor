@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.finance
 
 import android.content.ContentValues
+import androidx.core.database.sqlite.transaction
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteConstraintException
 import com.bsfeng.monitor.finance.model.Account
@@ -28,19 +29,15 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         if (txs.isEmpty()) return 0
         val db = dbHelper.writableDatabase
         var count = 0
-        db.beginTransaction()
-        try {
+        db.transaction {
             for (tx in txs) {
-                val id = db.insertWithOnConflict(
+                val id = insertWithOnConflict(
                     TransactionEntity.TABLE_NAME, null,
                     TransactionEntity.toContentValues(tx),
                     SQLiteDatabase.CONFLICT_IGNORE
                 )
                 if (id > 0) count++
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
         return count
     }
@@ -280,19 +277,15 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
         if (categories.isEmpty()) return 0
         val db = dbHelper.writableDatabase
         var inserted = 0
-        db.beginTransaction()
-        try {
+        db.transaction {
             for (cat in categories) {
                 try {
-                    db.insertOrThrow(CategoryEntity.TABLE_NAME, null, CategoryEntity.toContentValues(cat))
+                    insertOrThrow(CategoryEntity.TABLE_NAME, null, CategoryEntity.toContentValues(cat))
                     inserted++
                 } catch (_: SQLiteConstraintException) {
                     // UNIQUE 冲突忽略
                 }
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
         return inserted
     }
@@ -485,14 +478,7 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
      */
     fun <T> runInTransaction(block: () -> T): T {
         val db = dbHelper.writableDatabase
-        db.beginTransaction()
-        try {
-            val result = block()
-            db.setTransactionSuccessful()
-            return result
-        } finally {
-            db.endTransaction()
-        }
+        return db.transaction { block() }
     }
 
     /** 获取下个月起始日期字符串 yyyy-MM-dd */
