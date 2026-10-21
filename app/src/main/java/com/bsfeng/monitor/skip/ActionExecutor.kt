@@ -1,5 +1,7 @@
 package com.bsfeng.monitor.skip
 
+import android.annotation.SuppressLint
+
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
@@ -24,6 +26,7 @@ import com.bsfeng.monitor.domain.model.MatchAction
  * 坐标越界等场景一律安全返回 false（异步回调场景通过 `onResult(false)` 回报），
  * 不向调用方抛异常；关键失败一律打 [Log.w]（TAG = "SkipAction"）。
  */
+@SuppressLint("StaticFieldLeak")
 object ActionExecutor {
 
     private const val TAG = "SkipAction"

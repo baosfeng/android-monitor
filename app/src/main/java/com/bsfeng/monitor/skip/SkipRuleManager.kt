@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.skip
 
 import android.content.Context
+import androidx.core.content.edit
 import android.util.Log
 import com.bsfeng.monitor.domain.model.SkipRule
 import org.json.JSONArray
@@ -53,7 +54,7 @@ class SkipRuleManager(private val context: Context) {
         builtInRules = BuiltInRules.getRules(SkipConfig.watchWindowMs)
         subscriptionRules = readAllSubscriptionRules()
         disabledIds = (prefs.getStringSet(KEY_DISABLED_IDS, emptySet()) ?: emptySet()).toMutableSet()
-        prefs.edit().putInt(KEY_BUILT_IN_VERSION, BuiltInRules.BUILT_IN_VERSION).apply()
+        prefs.edit { putInt(KEY_BUILT_IN_VERSION, BuiltInRules.BUILT_IN_VERSION) }
         SelectorCache.clear()
         Log.d(TAG, "规则加载完成: 内置 " + builtInRules.size + " 条, 订阅 " + subscriptionRules.size +
             " 条（" + subscriptionMetas.size + " 个订阅源）, 自定义 " + customRules.size + " 条, 禁用 " + disabledIds.size + " 条")
@@ -104,7 +105,7 @@ class SkipRuleManager(private val context: Context) {
         } else {
             disabledIds.add(ruleId)
         }
-        prefs.edit().putStringSet(KEY_DISABLED_IDS, disabledIds).apply()
+        prefs.edit { putStringSet(KEY_DISABLED_IDS, disabledIds) }
     }
 
     /** 新增/更新自定义规则 */
@@ -112,7 +113,7 @@ class SkipRuleManager(private val context: Context) {
         customRules = customRules.filter { it.id != rule.id } + rule
         saveRules(customRulesFile, customRules)
         disabledIds.remove(rule.id)
-        prefs.edit().putStringSet(KEY_DISABLED_IDS, disabledIds).apply()
+        prefs.edit { putStringSet(KEY_DISABLED_IDS, disabledIds) }
     }
 
     fun updateRule(rule: SkipRule) = addRule(rule)
@@ -138,10 +139,11 @@ class SkipRuleManager(private val context: Context) {
         legacySubscriptionFile.delete()
         subscriptionRules = emptyList()
         subscriptionMetas = mutableListOf()
-        prefs.edit().remove(KEY_DISABLED_IDS)
-            .remove(KEY_SUBSCRIPTION_METAS)
-            .remove(LEGACY_KEY_SUBSCRIPTION_META)
-            .apply()
+        prefs.edit {
+            remove(KEY_DISABLED_IDS)
+            remove(KEY_SUBSCRIPTION_METAS)
+            remove(LEGACY_KEY_SUBSCRIPTION_META)
+        }
         disabledIds = mutableSetOf()
         load()
     }
@@ -198,7 +200,7 @@ class SkipRuleManager(private val context: Context) {
 
     /** 记录订阅自动检查时间 */
     fun markSubscriptionChecked(atMs: Long) {
-        prefs.edit().putLong(KEY_SUBSCRIPTION_CHECK_AT, atMs).apply()
+        prefs.edit { putLong(KEY_SUBSCRIPTION_CHECK_AT, atMs) }
     }
 
     /**
@@ -216,7 +218,7 @@ class SkipRuleManager(private val context: Context) {
     private fun persistSubscriptionMetas() {
         val array = JSONArray()
         subscriptionMetas.forEach { array.put(it.toJson()) }
-        prefs.edit().putString(KEY_SUBSCRIPTION_METAS, array.toString()).apply()
+        prefs.edit { putString(KEY_SUBSCRIPTION_METAS, array.toString()) }
     }
 
     private fun readSubscriptionMetas(): List<SubscriptionMeta> {
@@ -272,7 +274,7 @@ class SkipRuleManager(private val context: Context) {
                 Log.i(TAG, "已迁移单订阅数据: " + url)
             }
             legacySubscriptionFile.delete()
-            prefs.edit().remove(LEGACY_KEY_SUBSCRIPTION_META).apply()
+            prefs.edit { remove(LEGACY_KEY_SUBSCRIPTION_META) }
         } catch (e: Exception) {
             Log.w(TAG, "迁移单订阅数据失败，保留原文件", e)
         }

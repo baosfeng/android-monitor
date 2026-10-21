@@ -1,5 +1,7 @@
 package com.bsfeng.monitor.service
 
+import android.annotation.SuppressLint
+
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.KeyEvent
@@ -157,6 +159,8 @@ open class MonitorAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleContentChanged(event)
+            // 其余事件类型（通知、焦点、手势等）故意不处理：显式兜底，避免漏 case 的静默差异
+            else -> Unit
         }
 
         // ===== 自动记账：识别微信/支付宝支付结果页并弹确认浮窗 =====
@@ -361,6 +365,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
          * 已连接的服务实例：**仅供**设置页调试入口唤起自动记账浮窗（模拟器没有支付 App）。
          * onDestroy 置空，避免静态引用持住已销毁的 Service。
          */
+        @SuppressLint("StaticFieldLeak")
         @Volatile
         var instance: MonitorAccessibilityService? = null
             private set

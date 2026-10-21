@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.ui.theme
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
@@ -62,7 +63,7 @@ object ThemeRepository {
     fun setTheme(id: String): Boolean {
         if (!isKnown(id)) return false
         themeIdState.value = id
-        prefs?.edit()?.putString(KEY_THEME_ID, id)?.apply()
+        prefs?.edit { putString(KEY_THEME_ID, id) }
         return true
     }
 

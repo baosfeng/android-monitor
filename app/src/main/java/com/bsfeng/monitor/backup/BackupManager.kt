@@ -14,6 +14,7 @@ import com.bsfeng.monitor.finance.FinanceDatabaseHelper
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,6 +51,8 @@ sealed class RestoreOutcome {
  * - 备份包落在两处：公共 `Downloads/行为记录备份/`（用户可见、卸载不丢）+ `getExternalFilesDir("backups")`
  *   （快速列表来源，扫描快）。两处各留最多 [RetentionPolicy.MAX_BACKUPS] 份。
  * - 还原是「先备份、再校验、后替换」：任何一步失败都不动现有数据。
+ * - 替换走 [RestoreFileOperator]（临时文件 + 原子 rename + restore.marker）：中途中断的数据由
+ *   启动时的 [healIfNeeded] 用 pre-restore 包回滚。
  * - 替换文件后旧连接已失效（单例 helper 已被 close），**必须重启进程**，见 [restartProcess]。
  */
 class BackupManager(context: Context) {
@@ -104,25 +107,20 @@ class BackupManager(context: Context) {
     // ---------------------------------------------------------------- 还原
 
     /**
-     * 还原第一步（同步 IO）：拷贝所选 zip → 校验清单与 sha256 → 自动备份当前数据 → 解包到暂存目录。
+     * 还原第一步（同步 IO）：读 URI 流 → 校验清单与 sha256 → 自动备份当前数据 → 解包到暂存目录。
      *
-     * 任何一步失败都返回 [RestoreOutcome.Rejected]，且**不改动现有数据**；
-     * 校验不过时绝不删 `pre-restore` 包。
+     * 读取动作由调用方注入（SAF 的 `contentResolver.openInputStream`），编排本身在
+     * [RestoreIntake] 里且可纯 JVM 测试。任何一步失败都返回 [RestoreOutcome.Rejected]，
+     * 且**不改动现有数据**；校验不过时绝不删 `pre-restore` 包。
      */
-    fun prepareRestore(uri: Uri): RestoreOutcome {
-        val imported = File(cacheDir("restore-import"), "import.zip")
+    suspend fun prepareRestore(openStream: suspend () -> InputStream?): RestoreOutcome {
+        val intake = RestoreIntake(File(cacheDir("restore-import"), "import.zip"))
+        val verified = when (val outcome = intake.intake(openStream)) {
+            is RestoreIntakeOutcome.Rejected -> return RestoreOutcome.Rejected(outcome.reason)
+            is RestoreIntakeOutcome.Verified -> outcome
+        }
+        val imported = verified.zipFile
         return try {
-            app.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(imported).use { output -> input.copyTo(output) }
-            } ?: return RestoreOutcome.Rejected("无法读取所选文件")
-
-            if (imported.length() == 0L) return RestoreOutcome.Rejected("所选文件为空")
-
-            val manifest = when (val verified = BackupUnpacker.verify(imported)) {
-                is BackupVerify.Invalid -> return RestoreOutcome.Rejected(verified.reason)
-                is BackupVerify.Ok -> verified.manifest
-            }
-
             // 先给当前数据留一份兜底包：还原后发现问题还能再导回来
             val preRestore = backupNow(BackupOrigin.PRE_RESTORE)
             if (preRestore is BackupOutcome.Failed) {
@@ -131,10 +129,10 @@ class BackupManager(context: Context) {
             val preRestoreName = (preRestore as BackupOutcome.Success).localName
 
             val staging = cacheDir("restore-staging")
-            if (!BackupUnpacker.extract(imported, manifest, staging)) {
+            if (!BackupUnpacker.extract(imported, verified.manifest, staging)) {
                 return RestoreOutcome.Rejected("解包失败：备份包内容与清单不一致")
             }
-            RestoreOutcome.Ready(RestorePlan(staging, manifest, preRestoreName))
+            RestoreOutcome.Ready(RestorePlan(staging, verified.manifest, preRestoreName))
         } catch (t: Throwable) {
             RestoreOutcome.Rejected("还原准备失败：${t.message ?: t.javaClass.simpleName}")
         } finally {
@@ -143,32 +141,36 @@ class BackupManager(context: Context) {
     }
 
     /**
-     * 还原第二步（同步 IO）：关闭数据库连接 → 用暂存目录覆盖应用数据文件。
+     * 还原第二步（同步 IO）：关闭数据库连接 → 原子替换应用数据文件。
      *
-     * 失败后果（写进文档）：文件替换到一半被中断，库可能打不开 —— 用
-     * `Downloads/行为记录备份/` 里最新的 `pre-restore` 包再还原一次即可。
-     * 替换完成后必须尽快 [restartProcess]：单例 helper 已 close，继续使用会抛
-     * “attempt to re-open an already-closed object”。
+     * 替换前先校验暂存区、再落 `restore.marker`；每个文件走「同目录临时文件 + 原子 rename」。
+     * 成功返回 [RestoreApplyOutcome.Applied]，调用方随后必须 [restartProcess]：单例 helper 已
+     * close，继续使用会抛“attempt to re-open an already-closed object”。
+     * 中途中断（进程被杀/崩溃）时 marker 留在盘上，下次启动由 [healIfNeeded] 回滚。
      */
-    fun applyRestore(plan: RestorePlan) {
+    fun applyRestore(plan: RestorePlan): RestoreApplyOutcome {
         closeDatabases()
-        val root = app.dataDir
-        // 旧的 WAL/SHM/journal 必须清掉，否则可能把还原后的库回滚回旧状态
-        dbNames().forEach { dbName ->
-            listOf("-wal", "-shm", "-journal").forEach { suffix ->
-                File(File(root, BackupPaths.DB_DIR), "$dbName$suffix").delete()
-            }
-        }
-        plan.stagingDir.walkTopDown().filter { it.isFile }.forEach { source ->
-            val relative = source.relativeTo(plan.stagingDir).path.replace(File.separatorChar, '/')
-            if (!BackupPaths.isSafe(relative)) return@forEach
-            val target = File(root, relative)
-            target.parentFile?.mkdirs()
-            if (target.exists()) target.delete()
-            source.copyTo(target, overwrite = true)
-        }
-        plan.stagingDir.deleteRecursively()
+        return RestoreFileOperator.apply(
+            stagingDir = plan.stagingDir,
+            manifest = plan.manifest,
+            dataDir = app.dataDir,
+            preRestoreName = plan.preRestoreName,
+            dbNames = dbNames(),
+        )
     }
+
+    /**
+     * 启动自愈（同步 IO）：上次还原是否中断？中断则用 pre-restore 包回滚。
+     *
+     * 应用启动早期调用（见 `MonitorApp.onCreate`），在任何库句柄打开之前完成，避免读到
+     * 半新半旧的文件。无 marker 时是纯文件存在性检查，开销可忽略。
+     */
+    fun healIfNeeded(): HealOutcome = RestoreRecovery.recover(
+        dataDir = app.dataDir,
+        stagingDir = cacheDir("restore-heal"),
+        findBackup = { name -> File(localBackupDir(), name).takeIf { it.isFile } },
+        dbNames = dbNames(),
+    )
 
     /**
      * 让新文件真的被读取：结束本进程，连接在下一次启动时重建。

@@ -49,6 +49,7 @@ import com.bsfeng.monitor.backup.BackupManager
 import com.bsfeng.monitor.backup.BackupOrigin
 import com.bsfeng.monitor.backup.BackupOutcome
 import com.bsfeng.monitor.backup.BackupScheduler
+import com.bsfeng.monitor.backup.RestoreApplyOutcome
 import com.bsfeng.monitor.backup.RestoreOutcome
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
@@ -90,6 +91,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.bsfeng.monitor.skip.SkipConfig
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
@@ -111,7 +113,6 @@ import android.app.StatusBarManager
 import android.content.ComponentName
 import android.graphics.drawable.Icon
 import android.os.Build
-import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.Folder
@@ -138,6 +139,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.withContext
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import android.annotation.SuppressLint
+import java.io.InputStream
 
 /**
  * s09 设置（原型 s09-settings.html）。
@@ -308,7 +311,7 @@ fun SettingsScreen(
                                         selected = option == watchWindowMs,
                                         onClick = {
                                             viewModel.setWatchWindowMs(option)
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                             toast.show("监控时长窗口：" + (option / 1000) + " 秒")
                                         },
                                     )
@@ -362,7 +365,7 @@ fun SettingsScreen(
                                     trailing = {
                                         AppSwitch(autoBookEnabled, { enabled ->
                                             AutoBookConfig.setEnabled(context, enabled)
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                             toast.show(
                                                 if (enabled) "已开启支付后弹窗记账" else "已关闭支付后弹窗记账"
                                             )
@@ -384,7 +387,7 @@ fun SettingsScreen(
                                     trailing = {
                                         AppSwitch(!isPaused, {
                                             viewModel.togglePause()
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                             toast.show(if (isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                                         })
                                     },
@@ -921,8 +924,9 @@ fun SettingsScreen(
                                         restoreBusy = true
                                         toast.show("正在校验备份包…")
                                         scope.launch {
-                                            val outcome = withContext(Dispatchers.IO) {
-                                                BackupManager(context).prepareRestore(uri)
+                                            // URI 读取在 IO 线程里注入给编排层（RestoreIntake），校验失败不碰现有数据
+                                            val outcome = BackupManager(context).prepareRestore {
+                                                openRestoreStream(context, uri)
                                             }
                                             when (outcome) {
                                                 is RestoreOutcome.Rejected -> {
@@ -930,11 +934,19 @@ fun SettingsScreen(
                                                     toast.show(outcome.reason)
                                                 }
                                                 is RestoreOutcome.Ready -> {
-                                                    withContext(Dispatchers.IO) {
+                                                    val applied = withContext(Dispatchers.IO) {
                                                         BackupManager(context).applyRestore(outcome.plan)
                                                     }
-                                                    toast.show("还原完成，App 即将重启")
-                                                    delay(900)
+                                                    // 这一步已 close 数据库句柄：无论成败都要重启，
+                                                    // 失败时由下次启动的 marker 自愈回滚
+                                                    toast.show(
+                                                        if (applied is RestoreApplyOutcome.Failed) {
+                                                            "还原未完成：" + applied.reason + "，App 将重启并自动回滚"
+                                                        } else {
+                                                            "还原完成，App 即将重启"
+                                                        }
+                                                    )
+                                                    delay(1200)
                                                     BackupManager(context).restartProcess()
                                                 }
                                             }
@@ -956,7 +968,7 @@ fun SettingsScreen(
                                         trailing = {
                                             AppSwitch(debugEnabled, {
                                                 viewModel.toggleDebug()
-                                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                                view.performConfirmHaptic()
                                                 toast.show("调试模式" + if (debugEnabled) "已关闭" else "已开启，日志级别 DEBUG")
                                             })
                                         },
@@ -1134,22 +1146,24 @@ fun SettingsScreen(
  * 若要精确到「服务运行时长」，需在 MonitorAccessibilityService 记录 onServiceConnected 时间戳
  * 并由状态层暴露（超出本文件范围）。
  */
+
+/**
+ * 打开所选备份包的字节流。
+ *
+ * 流的所有权交给 [com.bsfeng.monitor.backup.RestoreIntake]（内部 `use {}` 负责关闭），
+ * 因此这里不关闭；lint 的 Recycle 检查无法跨 suspend lambda 看到关闭点，定向豁免。
+ */
+@SuppressLint("Recycle")
+private fun openRestoreStream(context: Context, uri: Uri): InputStream? =
+    context.contentResolver.openInputStream(uri)
+
 private fun processUptimeMs(): Long =
     (SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()).coerceAtLeast(0L)
-
-/** 运行时长文案：≥1 小时用「X 小时 Y 分」（同原型），不足 1 分钟用「不足 1 分钟」。 */
-/** API 30 的 CONFIRM 触觉在 minSdk 29 上回落 VIRTUAL_KEY（不新增 InlinedApi）。 */
-private fun View.performConfirmHaptic() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-    } else {
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-    }
-}
 
 private fun formatBackupTime(at: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(at))
 
+/** 运行时长文案：≥1 小时用「X 小时 Y 分」（同原型），不足 1 分钟用「不足 1 分钟」。 */
 private fun formatUptime(ms: Long): String {
     val totalMinutes = ms / 60_000L
     val hours = totalMinutes / 60L

@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.util
 
 import android.content.Context
+import androidx.core.content.edit
 import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.MonitorApp
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,7 +40,7 @@ object DebugConfig {
         if (_unlocked.value) return
         _unlocked.value = true
         MonitorApp.instance.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_UNLOCKED, true).apply()
+            .edit { putBoolean(KEY_UNLOCKED, true) }
     }
 
     /** 可观察的开关状态：Compose 侧读它，切换后界面自动重组 */
@@ -60,7 +61,7 @@ object DebugConfig {
     fun setEnabled(value: Boolean) {
         _enabled.value = value
         val prefs = MonitorApp.instance.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_DEBUG_ENABLED, value).apply()
+        prefs.edit { putBoolean(KEY_DEBUG_ENABLED, value) }
         if (value) log("DebugConfig: enabled=$value")
     }
 
