@@ -91,6 +91,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- 定期备份：每天/每周由 AlarmManager 触发（频率「关闭」时闹钟会被取消） -->
+        <receiver
+            android:name=".backup.BackupReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 应用内更新：下载的 APK 通过 FileProvider 交给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"
