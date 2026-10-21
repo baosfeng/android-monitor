@@ -87,6 +87,11 @@ android {
         debug {
             isMinifyEnabled = true
             isShrinkResources = true
+            // 与 release 共用同一签名：debug 包可直接覆盖安装 release 包，更新链路不用卸载重装；
+            // 没有签名材料（CI / 新 clone）时退回默认 debug keystore，保证仍可构建
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             // 单元测试覆盖率：AGP 会对 class 做离线插桩，
             // Robolectric 沙箱类加载器加载的正是插桩后的类，覆盖率才能被统计到
             enableUnitTestCoverage = true
@@ -105,6 +110,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // 性能验证包：与 release 相同的编译优化（R8 + shrink + 非 debuggable），
+        // 签名跟随统一签名（有 release 材料时用 release，否则用 debug），
+        // 可与日常包**覆盖安装**（同包名同签名，数据库与无障碍授权都保留）。
+        //   ./gradlew :app:assemblePerf && adb install -r app/build/outputs/apk/perf/app-perf.apk
+        create("perf") {
+            initWith(getByName("release"))
+            signingConfig =
+                if (hasReleaseSigning) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
