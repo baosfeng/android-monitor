@@ -57,7 +57,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -123,6 +122,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.withContext
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
 /**
  * s09 设置（原型 s09-settings.html）。
@@ -194,7 +194,7 @@ fun SettingsScreen(
     Box(
         modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))
+            .pageBackdrop()
     ) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(

@@ -342,6 +342,7 @@ private fun LiveScreenHead(
     viewModel: MainViewModel,
     count: Int,
     onSortClick: () -> Unit,
+    consumeTopInset: Boolean = false,
 ) {
     val lastUpdatedAt by viewModel.lastUpdatedAt.collectAsStateWithLifecycle()
     ScreenHead(
@@ -351,5 +352,6 @@ private fun LiveScreenHead(
         actionIcon = Icons.Outlined.Sort,
         actionDesc = "按时间倒序排列",
         onAction = onSortClick,
+        consumeTopInset = consumeTopInset,
     )
 }

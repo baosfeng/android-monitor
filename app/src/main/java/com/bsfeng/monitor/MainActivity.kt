@@ -6,10 +6,7 @@ import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -78,7 +75,8 @@ import com.bsfeng.monitor.transfer.service.TransferService
 import com.bsfeng.monitor.transfer.ui.TransferScreen
 import com.bsfeng.monitor.transfer.ui.TransferViewModel
 import com.bsfeng.monitor.ui.OverviewScreen
-import com.bsfeng.monitor.ui.components.appBackdrop
+import com.bsfeng.monitor.ui.foundation.MonitorEdgeToEdge
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.MonitorTheme
@@ -107,17 +105,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 全应用仅浅色主题：状态栏/导航栏透明，图标用深色，保证压在浅色底衬上清晰可辨
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
-        )
-
-        // 双保险：显式关掉系统栏对比度/深色图标自动推断，避免不同 ROM 行为不一致
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
-        }
+        // 全应用仅浅色主题：窗口外观（系统栏透明 + 图标定色）统一由 MonitorEdgeToEdge 负责
+        MonitorEdgeToEdge.apply(this)
 
         startTab = intent?.getIntExtra(EXTRA_START_TAB, 0) ?: 0
 
@@ -199,7 +188,7 @@ class MainActivity : ComponentActivity() {
                     if (startTab in tabs.indices) selectedTab = startTab
                 }
 
-                Box(Modifier.fillMaxSize().appBackdrop()) {
+                Box(Modifier.fillMaxSize().pageBackdrop()) {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         containerColor = Color.Transparent,
@@ -366,72 +355,73 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
+                        }
+                    }
 
-                            // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
-                            AnimatedVisibility(
-                                visible = showSkipRuleScreen,
-                                enter = slideInHorizontally() + fadeIn(),
-                                exit = slideOutHorizontally() + fadeOut()
-                            ) {
-                                Box(Modifier.fillMaxSize()) {
-                                    BackHandler {
-                                        showSkipRuleScreen = false
-                                        skipRuleViewModel.refresh()
-                                    }
-                                    SkipRuleScreen(
-                                        onBack = {
-                                            showSkipRuleScreen = false
-                                            skipRuleViewModel.refresh()
-                                        },
-                                        viewModel = skipRuleViewModel
-                                    )
-                                }
+                    // 整屏覆盖层：与 Scaffold 同级（不吃内容区 padding），遮罩与底衬铺到系统栏之下
+                    // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
+                    AnimatedVisibility(
+                        visible = showSkipRuleScreen,
+                        enter = slideInHorizontally() + fadeIn(),
+                        exit = slideOutHorizontally() + fadeOut()
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            BackHandler {
+                                showSkipRuleScreen = false
+                                skipRuleViewModel.refresh()
                             }
+                            SkipRuleScreen(
+                                onBack = {
+                                    showSkipRuleScreen = false
+                                    skipRuleViewModel.refresh()
+                                },
+                                viewModel = skipRuleViewModel
+                            )
+                        }
+                    }
 
-                            // 广告白名单页面（覆盖层）— 从右侧滑入
-                            AnimatedVisibility(
-                                visible = showWhitelistScreen,
-                                enter = slideInHorizontally() + fadeIn(),
-                                exit = slideOutHorizontally() + fadeOut()
-                            ) {
-                                Box(Modifier.fillMaxSize()) {
-                                    BackHandler(showWhitelistScreen) {
-                                        showWhitelistScreen = false
-                                        whitelistViewModel.refresh()
-                                    }
-                                    WhitelistScreen(
-                                        onBack = {
-                                            showWhitelistScreen = false
-                                            whitelistViewModel.refresh()
-                                        },
-                                        viewModel = whitelistViewModel
-                                    )
-                                }
+                    // 广告白名单页面（覆盖层）— 从右侧滑入
+                    AnimatedVisibility(
+                        visible = showWhitelistScreen,
+                        enter = slideInHorizontally() + fadeIn(),
+                        exit = slideOutHorizontally() + fadeOut()
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            BackHandler(showWhitelistScreen) {
+                                showWhitelistScreen = false
+                                whitelistViewModel.refresh()
                             }
+                            WhitelistScreen(
+                                onBack = {
+                                    showWhitelistScreen = false
+                                    whitelistViewModel.refresh()
+                                },
+                                viewModel = whitelistViewModel
+                            )
+                        }
+                    }
 
-                            // s12 组件展厅（占位屏，W2 接手）
-                            AnimatedVisibility(
-                                visible = showGallery,
-                                enter = slideInHorizontally() + fadeIn(),
-                                exit = slideOutHorizontally() + fadeOut()
-                            ) {
-                                Box(Modifier.fillMaxSize()) {
-                                    BackHandler(showGallery) { showGallery = false }
-                                    ComponentGalleryScreen(onBack = { showGallery = false })
-                                }
-                            }
+                    // s12 组件展厅（占位屏，W2 接手）
+                    AnimatedVisibility(
+                        visible = showGallery,
+                        enter = slideInHorizontally() + fadeIn(),
+                        exit = slideOutHorizontally() + fadeOut()
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            BackHandler(showGallery) { showGallery = false }
+                            ComponentGalleryScreen(onBack = { showGallery = false })
+                        }
+                    }
 
-                            // s13 外观 / 主题切换（占位屏，W3 接手）
-                            AnimatedVisibility(
-                                visible = showAppearance,
-                                enter = slideInHorizontally() + fadeIn(),
-                                exit = slideOutHorizontally() + fadeOut()
-                            ) {
-                                Box(Modifier.fillMaxSize()) {
-                                    BackHandler(showAppearance) { showAppearance = false }
-                                    AppearanceScreen(onBack = { showAppearance = false })
-                                }
-                            }
+                    // s13 外观 / 主题切换（占位屏，W3 接手）
+                    AnimatedVisibility(
+                        visible = showAppearance,
+                        enter = slideInHorizontally() + fadeIn(),
+                        exit = slideOutHorizontally() + fadeOut()
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            BackHandler(showAppearance) { showAppearance = false }
+                            AppearanceScreen(onBack = { showAppearance = false })
                         }
                     }
 

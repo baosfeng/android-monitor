@@ -8,7 +8,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +37,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalView
@@ -82,6 +80,8 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 /**
  * s10 订阅源与规则（原型 s10-skip-rules.html）。
@@ -129,14 +129,15 @@ fun SkipRuleScreen(
     // 丢掉（旧实现是整页 Column，不存在回收），提升后滚动回来仍是展开态。
     val expandedRuleIds = remember { mutableStateMapOf<String, Boolean>() }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(
                 title = "订阅源与规则",
                 meta = "从镜像源拉取规则包，本地合并后按顺序匹配",
                 onBack = onBack,
+                consumeTopInset = true,
             )
-            Column(Modifier.fillMaxWidth().weight(1f)) {
+            Column(Modifier.fillMaxWidth().weight(1f).navigationBarsPadding()) {
                 // 五态切换器（演示用）留在 content **之外**：StateContainer 的 loading / empty /
                 // error / edge 分支不渲染 content（States.kt:91-106），放进去就再没有切回有数据态的入口。
                 // 与 StateContainer 之间的 space4 间距挂在自身 modifier 上：未解锁演示时它不 emit
