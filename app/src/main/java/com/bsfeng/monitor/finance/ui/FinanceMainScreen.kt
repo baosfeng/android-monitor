@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.finance.ui
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -44,8 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -116,7 +115,8 @@ fun FinanceMainScreen(
         val id = latestInsertId ?: return@LaunchedEffect
         FinanceInsertSignal.clear()
         highlightId = id
-        kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
+        // 高亮保持 1.6s 后 240ms 淡出：状态多留一个淡出时长，行内的动画层才能把淡出走完再卸载
+        kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS + HIGHLIGHT_FADE_MS)
         if (highlightId == id) highlightId = 0L
     }
 
@@ -147,6 +147,11 @@ fun FinanceMainScreen(
     val grouped = remember(transactions) { viewModel.getTransactionsGroupedByDate(transactions) }
     val overallBudget = remember(budgets) { budgets.find { it.isOverall } }
     val today = remember(transactions, currentMonth) { todayTotals(transactions, currentMonth) }
+    // O(n) 计数 + LocalDate.now()：只随列表数据 / 月份变化重算（放在屏级，列表头滚出再滚回不重算）；
+    // 跨零点不自刷，取舍同 groupLabel。
+    val recentCount = remember(transactions, currentMonth) {
+        recentDayCount(transactions, LIST_META_DAYS)
+    }
 
     val derivedState = when {
         loading && transactions.isEmpty() -> FiveState.LOADING
@@ -155,12 +160,9 @@ fun FinanceMainScreen(
     }
     val state = control.value ?: derivedState
 
-    // 沉浸式：底衬画在 inset 之外（内容才吃 Scaffold 的 padding），顶部与状态栏连成一片
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))
-    ) {
+    // 沉浸式底衬由 MainActivity 最外层 appBackdrop() 负责（同一套 backdrop-a/b token 渐变），
+    // 本屏不再叠一层全屏渐变：滚动时少一次全屏填充与两次 Brush/listOf 分配。
+    Box(modifier = modifier.fillMaxSize()) {
         // 底部避让：列表末端留出 FAB 盒（fab-size 56）+ FAB 外边距（16）+ 一行余量（24），
         // 滚到列表底部时最后一行金额不再压在 FAB 下（原先是列表尾部的假 item，等效但不可见）。
         LazyColumn(
@@ -315,7 +317,7 @@ fun FinanceMainScreen(
                         if (grouped.isEmpty()) {
                             "暂无记录"
                         } else if (isCurrentMonth(currentMonth)) {
-                            "最近 3 天 · " + recentDayCount(transactions, LIST_META_DAYS) + " 笔"
+                            "最近 3 天 · " + recentCount + " 笔"
                         } else {
                             "共 " + transactions.size + " 笔"
                         },
@@ -332,8 +334,12 @@ fun FinanceMainScreen(
             when (state) {
                 FiveState.POPULATED -> grouped.forEach { (date, txs) ->
                     item(key = "day-" + date) {
+                        // 日期解析 + LocalDate.now() 只在挂载时算一次；
+                        // 「今天/昨天」跨零点不会自动刷新 —— 本屏每次进入 Tab / 回前台都会重新 loadMonth 并重组，
+                        // 可接受；若要求跨零点实时，应换成「每天变一次」的日期状态源。
+                        val label = remember(date) { groupLabel(date) }
                         Text(
-                            groupLabel(date),
+                            label,
                             style = MaterialTheme.typography.labelMedium,
                             color = t.muted,
                             modifier = Modifier
@@ -342,8 +348,10 @@ fun FinanceMainScreen(
                         )
                     }
                     txs.forEachIndexed { index, tx ->
-                        // key 稳定：日期 + 组内下标 + 主键（下标兜底，避免历史数据 id 重复时 key 撞车）
-                        item(key = "tx-" + date + "-" + index + "-" + tx.id) {
+                        // key 只用主键：finance_transactions.id 是 INTEGER PRIMARY KEY AUTOINCREMENT，
+                        // toContentValues 不写 id（导入同样走自增），同一查询内 id 必然唯一。
+                        // 带组内下标会让「插入/删除一笔」把该日后续行的 key 全改掉 → 整组丢状态、重播入场动画。
+                        item(key = "tx-" + tx.id) {
                             DayGroupRow(
                                 first = index == 0,
                                 last = index == txs.lastIndex,
@@ -495,28 +503,37 @@ private fun DayGroupRow(
 ) {
     val t = LocalDesignTokens.current
     val r = t.radiusLg
-    val shape = RoundedCornerShape(
-        topStart = if (first) r else 0.dp,
-        topEnd = if (first) r else 0.dp,
-        bottomStart = if (last) r else 0.dp,
-        bottomEnd = if (last) r else 0.dp,
-    )
+    val shape = remember(first, last, r) {
+        RoundedCornerShape(
+            topStart = if (first) r else 0.dp,
+            topEnd = if (first) r else 0.dp,
+            bottomStart = if (last) r else 0.dp,
+            bottomEnd = if (last) r else 0.dp,
+        )
+    }
     Column(
         modifier = Modifier
             .padding(horizontal = t.space4)
             .fillMaxWidth()
             .background(t.surface, shape)
-            .drawBehind {
+            // drawWithCache：outline / Stroke / 裁剪边界只在尺寸或 shape 变化时构建，
+            // 滚动重绘时只重放 onDrawBehind（不再每帧 createOutline + new Stroke × 可见行数）
+            .drawWithCache {
                 // 只画外缘描边：把 outline 的上/下 1px 带裁掉（相邻行各自画竖线，接缝处仍是 1px）
                 val w = 1.dp.toPx()
                 val outline = shape.createOutline(size, layoutDirection, this)
-                clipRect(
-                    left = 0f,
-                    top = if (first) 0f else w,
-                    right = size.width,
-                    bottom = if (last) size.height else size.height - w,
-                ) {
-                    drawOutline(outline, color = t.borderSoft, style = Stroke(w))
+                val stroke = Stroke(w)
+                val clipTop = if (first) 0f else w
+                val clipBottom = if (last) size.height else size.height - w
+                onDrawBehind {
+                    clipRect(
+                        left = 0f,
+                        top = clipTop,
+                        right = size.width,
+                        bottom = clipBottom,
+                    ) {
+                        drawOutline(outline, color = t.borderSoft, style = stroke)
+                    }
                 }
             }
             .padding(t.space1),
@@ -540,16 +557,19 @@ private fun TransactionRow(
     // 来源徽标：自动记账 / 带 sourceId 的导入行才判 true，手写记录恒 false（见 TransactionSourceBadge）
     val isAutoBooked = TransactionSourceBadge.isAutoBooked(transaction.source, transaction.sourceId)
     val enterModifier = if (enterIndex >= 0) rememberStaggerEnter(enterIndex) else Modifier
-    val highlightColor by animateColorAsState(
-        targetValue = if (highlighted) t.accent.copy(alpha = 0.12f) else Color.Transparent,
-        animationSpec = tween(240),
-        label = "autoBookHighlight",
-    )
+    val rowShape = remember(t.radiusMd) { RoundedCornerShape(t.radiusMd) }
+    // 沿用原本的「背景 + clip」口径；只有高亮行才组合动画对象（非高亮行走 Color.Transparent 的零对象路径）
+    val highlightColor = if (highlighted) autoBookHighlightColor() else Color.Transparent
+    // 行内金额的 String.format 只随金额 / 收支方向变化重算，滚动挂载不重复格式化
+    val amountText = remember(transaction.amount, isTransfer, amountIsPositive) {
+        if (isTransfer) "¥" + transaction.displayAmount
+        else (if (amountIsPositive) "+" else "-") + "¥" + transaction.displayAmount
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(enterModifier)
-            .clip(RoundedCornerShape(t.radiusMd))
+            .clip(rowShape)
             .background(highlightColor)
             .clickable { onClick() }
             .padding(horizontal = t.space3, vertical = t.space2),
@@ -585,8 +605,7 @@ private fun TransactionRow(
         Spacer(Modifier.width(t.space2))
         Text(
             // 转账既不是花掉也不是赚到：不带正负号、用中性色（账户余额仍按双向真实增减）
-            text = if (isTransfer) "¥" + transaction.displayAmount
-            else (if (amountIsPositive) "+" else "-") + "¥" + transaction.displayAmount,
+            text = amountText,
             // 原型 .list-row .row-tail = 14px/600（同行 .row-title 17px/500）：金额不得抢过标题
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
@@ -597,6 +616,24 @@ private fun TransactionRow(
             },
         )
     }
+}
+
+/**
+ * 自动记账新行的高亮底色。
+ *
+ * 只有 [highlighted] 为 true 的行才会组合到这里：非高亮行不建 Animatable / 动画状态对象，
+ * 滚动挂载 8–12 行时省下 8–12 套对象。挂载即满亮（新行插入时原先就是直接满高亮），
+ * 1.6s 后 240ms 淡出；外层计时同为「1.6s + 淡出」，淡出跑完才卸载这一层。
+ */
+@Composable
+private fun autoBookHighlightColor(): Color {
+    val t = LocalDesignTokens.current
+    val alpha = remember { Animatable(HIGHLIGHT_ALPHA) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
+        alpha.animateTo(0f, tween(HIGHLIGHT_FADE_MS))
+    }
+    return t.accent.copy(alpha = alpha.value)
 }
 
 /** 分组标题：10 月 14 日 · 今天 / 昨天 / 前天。 */
@@ -617,6 +654,12 @@ private const val LIST_META_DAYS = 3
 
 /** 自动记账新行高亮时长（原型 s04「高亮 1.6s」） */
 private const val HIGHLIGHT_DURATION_MS = 1600L
+
+/** 高亮淡出时长（与原 animateColorAsState 的 tween(240) 一致） */
+private const val HIGHLIGHT_FADE_MS = 240
+
+/** 高亮底色不透明度（原 t.accent.copy(alpha = 0.12f)） */
+private const val HIGHLIGHT_ALPHA = 0.12f
 
 /** 最近 [days] 天（含今天）的笔数：日期为 ISO yyyy-MM-dd，可直接做字典序比较。 */
 internal fun recentDayCount(transactions: List<Transaction>, days: Int): Int {

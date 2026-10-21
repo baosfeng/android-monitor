@@ -26,6 +26,7 @@ import com.bsfeng.monitor.ui.theme.ThemeRepository
 import kotlinx.coroutines.delay
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.PI
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -77,12 +78,19 @@ fun <T> DesignTokens.tweenOf(token: MotionToken = MotionToken.Press): TweenSpec<
 
 // ─────────────────────────── 1 · 数字滚动 ───────────────────────────
 
+/** 进程级缓存：系统「动画时长缩放」只读一次（每次读都是 ContentResolver → binder IPC）。 */
+private val motionEnabledCache = AtomicReference<Boolean?>(null)
+
 /**
  * 当前主题下系统是否允许播动画（reduced-motion 兜底，契约 §7）。
  * 系统「动画时长缩放 = 0」或读取失败时返回 false → 基元直接落终态。
+ *
+ * 它写在 [rememberStaggerEnter] / [rememberStaggerProgress] 等基元的 `animated:` 默认参数上，
+ * 列表每行挂载都会求值一次，因此结果按进程缓存：首次读到的值一直复用，后续零 IPC。
  */
 @Composable
 fun rememberMotionEnabled(): Boolean {
+    motionEnabledCache.get()?.let { return it }
     val context = LocalContext.current
     return remember(context) {
         runCatching {
@@ -91,7 +99,7 @@ fun rememberMotionEnabled(): Boolean {
                 Settings.Global.ANIMATOR_DURATION_SCALE,
                 1f,
             ) > 0f
-        }.getOrDefault(true)
+        }.getOrDefault(true).also { motionEnabledCache.set(it) }
     }
 }
 

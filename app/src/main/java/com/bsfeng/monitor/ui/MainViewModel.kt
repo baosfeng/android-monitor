@@ -45,8 +45,6 @@ data class MonitorState(
     val hourlyIntensity: List<Float> = List(24) { 0f },
     /** 今日各类型事件条数（s02 类型 chip 的计数） */
     val typeCounts: Map<RecordType, Int> = emptyMap(),
-    /** 最近一次数据更新时间（页头 meta） */
-    val lastUpdatedAt: Long = 0L
 )
 
 class MainViewModel : ViewModel() {
@@ -55,6 +53,15 @@ class MainViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(MonitorState())
     val state: StateFlow<MonitorState> = _state.asStateFlow()
+
+    /**
+     * 最近一次数据刷新时间（s02 页头「最近更新」）。
+     *
+     * 独立于 [state]：它每轮轮询都会变，若留在列表 state 里，data class 就永远不等 →
+     * 每 3s 强制 emit 一次 → 整页重组 + LazyColumn DSL 重建。页头自己收这个值即可。
+     */
+    private val _lastUpdatedAt = MutableStateFlow(0L)
+    val lastUpdatedAt: StateFlow<Long> = _lastUpdatedAt.asStateFlow()
 
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
@@ -126,18 +133,20 @@ class MainViewModel : ViewModel() {
             cachedTodayRecords = records
             loadedCount = PAGE_SIZE.coerceAtMost(records.size)
 
-            // 先更新列表（尽快显示）
-            _state.value = _state.value.copy(
+            // 先更新列表（尽快显示）：数据没变就不发（刷新时页面照常，列表不必重组）
+            val old = _state.value
+            val next = old.copy(
                 recentEvents = records.take(loadedCount),
                 todayEventCount = records.size,
                 isLoadingMore = false,
                 hasMore = loadedCount < records.size,
                 hourlyIntensity = hourlyIntensityOf(records),
                 typeCounts = records.groupingBy { it.type }.eachCount(),
-                lastUpdatedAt = now,
                 isLoading = false,
                 loadError = null
             )
+            if (next != old) _state.value = next
+            _lastUpdatedAt.value = now
 
             // 再加载统计数据（较慢的聚合查询）
             val (usage, screens) = withContext(Dispatchers.IO) {
@@ -145,10 +154,12 @@ class MainViewModel : ViewModel() {
                 val s = store.queryByType(RecordType.SCREEN, todayStart, now)
                 u to s
             }
-            _state.value = _state.value.copy(
+            val statsOld = _state.value
+            val statsNext = statsOld.copy(
                 appUsageStats = usage,
                 screenEvents = screens
             )
+            if (statsNext != statsOld) _state.value = statsNext
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -181,15 +192,19 @@ class MainViewModel : ViewModel() {
                     loadedCount = records.size
                 }
 
-                _state.value = _state.value.copy(
+                // 数据没变就不发：StateFlow 每 3s 发一次会让整页重组 + LazyColumn DSL 重建
+                val old = _state.value
+                val next = old.copy(
                     recentEvents = records.take(loadedCount),
                     todayEventCount = records.size,
                     hasMore = loadedCount < records.size,
                     hourlyIntensity = hourlyIntensityOf(records),
                     typeCounts = records.groupingBy { it.type }.eachCount(),
-                    lastUpdatedAt = now,
                     loadError = null
                 )
+                if (next != old) _state.value = next
+                // 页头「最近更新」照常逐轮刷新，但它只带动页头一行的重组
+                _lastUpdatedAt.value = now
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

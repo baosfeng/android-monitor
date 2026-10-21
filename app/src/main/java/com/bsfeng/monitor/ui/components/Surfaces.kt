@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,14 +62,15 @@ import kotlinx.coroutines.delay
 @Composable
 fun Modifier.appBackdrop(): Modifier {
     val t = LocalDesignTokens.current
-    return this.drawBehind {
-        drawRect(
-            Brush.verticalGradient(
-                listOf(t.backdropA, t.backdropB),
-                startY = 0f,
-                endY = size.height,
-            )
+    // drawWithCache：build 块只在尺寸 / token 变化时执行；全屏底衬随可见区每次滚动重绘，
+    // 逐帧重跑的只剩 drawRect，不再每帧 new Brush + listOf。
+    return this.drawWithCache {
+        val brush = Brush.verticalGradient(
+            listOf(t.backdropA, t.backdropB),
+            startY = 0f,
+            endY = size.height,
         )
+        onDrawBehind { drawRect(brush) }
     }
 }
 
