@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,11 +70,38 @@ import com.bsfeng.monitor.ui.live.recordTypeLabel
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.heatHeight
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /** 无数据热力轨的尺寸 / 文案（原型空态无热力条，这里保留一行极浅空轨以示「无数据」）。 */
 private val EMPTY_TRACK_HEIGHT = 2.dp
 private val EMPTY_TRACK_RADIUS = 2.dp
 private const val EMPTY_HEAT_TEXT = "暂无数据"
+
+/**
+ * 进屏后的入场窗口（ms）：进屏 / 切筛选后这段时间内首次挂载的行才播入场动画。
+ * `dur-page(340) + stagger(24) × STAGGER_MAX_STEPS(12) = 628ms` 是首屏整段的动画时长，
+ * 窗口取 600ms 保证「进屏那一屏」能播完整套错峰，又不让后续滚动继续起动画。
+ */
+private const val ENTER_WINDOW_MS = 600L
+
+/**
+ * 入场窗口开关：进屏 / 切筛选后重新打开，窗口内首次挂载的组头与行才播入场动画。
+ *
+ * 有意**不用** Compose 状态：只有「之后挂载」的行需要读它，屏上已挂载的行不该因为
+ * 窗口关闭而多重组一次（窗口开关与 UI 无关，只是组合期的瞬时判定）。
+ */
+private class EnterWindow {
+    var open: Boolean = true
+        private set
+
+    fun reopen() {
+        open = true
+    }
+
+    fun close() {
+        open = false
+    }
+}
 
 /**
  * s02 实时事件流（原型 .open-design/08-prototype.html → parts/s02-live.html）。
@@ -94,6 +122,16 @@ fun MainScreen(
 
     var filterIndex by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<Record?>(null) }
+
+    // 进屏后的入场窗口：进屏 / 切筛选时重新开窗，窗口内首次挂载的组头与行才播入场动画；
+    // 窗口关掉之后滚动新挂载的一律落终态（否则每滚到一个新小时组，组头 12 行都会重播 340ms 入场，
+    // 动画期间每行每帧重组）。
+    val enterWindow = remember { EnterWindow() }
+    LaunchedEffect(filterIndex) {
+        enterWindow.reopen()
+        delay(ENTER_WINDOW_MS)
+        enterWindow.close()
+    }
 
     val filter = LiveFilter.entries[filterIndex]
     val visibleEvents = remember(state.recentEvents, filterIndex) {
@@ -126,13 +164,10 @@ fun MainScreen(
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            ScreenHead(
-                title = "实时事件流",
-                meta = "今日已记录 " + state.todayEventCount + " 条 · 最近更新 " +
-                    (if (state.lastUpdatedAt > 0L) formatClock(state.lastUpdatedAt) else PLACEHOLDER),
-                actionIcon = Icons.Outlined.Sort,
-                actionDesc = "按时间倒序排列",
-                onAction = { toast.show("已按时间倒序排列") },
+            LiveScreenHead(
+                viewModel = viewModel,
+                count = state.todayEventCount,
+                onSortClick = { toast.show("已按时间倒序排列") },
             )
 
             ChipRow(
@@ -185,26 +220,30 @@ fun MainScreen(
                 ) {
                     groups.forEachIndexed { gi, group ->
                         stickyHeader(key = "head-" + group.hour) {
+                            // 只在首次挂载时判定（失败即落终态）：滚动中新挂载的组头不重播入场
+                            val headEnter = remember(group.hour) {
+                                if (enterWindow.open && gi < STAGGER_MAX_STEPS) gi else -1
+                            }
                             HourGroupHead(
                                 label = group.label,
                                 count = group.events.size,
                                 showCount = filter == LiveFilter.ALL,
-                                // J5：入场动画只给首屏可见项（STAGGER_MAX_STEPS 条），滚动中新挂载的组头直接落终态
-                                modifier = Modifier.then(
-                                    rememberStaggerEnter(if (gi < STAGGER_MAX_STEPS) gi else -1),
-                                ),
+                                modifier = Modifier.then(rememberStaggerEnter(headEnter)),
                             )
                         }
                         itemsIndexed(
                             items = group.events,
                             key = { _, record -> record.id },
                         ) { ei, record ->
+                            // J5：入场动画只给「进屏那一屏」的行；滚动新挂载的一律落终态。
+                            // 用 remember 快照，窗口关闭时不会把正在播的行掐到终态。
+                            val rowEnter = remember(record.id) {
+                                if (enterWindow.open && ei < STAGGER_MAX_STEPS) ei + 1 else -1
+                            }
                             StackRow(
                                 first = false,
                                 last = ei == group.events.lastIndex,
-                                modifier = Modifier.then(
-                                    rememberStaggerEnter(if (ei < STAGGER_MAX_STEPS) ei + 1 else -1),
-                                ),
+                                modifier = Modifier.then(rememberStaggerEnter(rowEnter)),
                             ) {
                                 // 原型 s02 时间列是 HH:mm（.s02-t / .tl-time，s02-live.html:196），
                                 // 46dp 时间列放得下 5 字符等宽；带秒（8 字符）会折行/裁切。
@@ -290,4 +329,27 @@ fun MainScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
+}
+
+/**
+ * s02 页头（标题 + 「今日已记录 N 条 · 最近更新 HH:mm」+ 排序按钮）。
+ *
+ * 只订阅 [MainViewModel.lastUpdatedAt]：该值每轮轮询都变，收在这里后重组范围就是这一行，
+ * 列表 state 因此可以在数据没变时完全不发（见 [MainViewModel.refreshData]）。
+ */
+@Composable
+private fun LiveScreenHead(
+    viewModel: MainViewModel,
+    count: Int,
+    onSortClick: () -> Unit,
+) {
+    val lastUpdatedAt by viewModel.lastUpdatedAt.collectAsStateWithLifecycle()
+    ScreenHead(
+        title = "实时事件流",
+        meta = "今日已记录 " + count + " 条 · 最近更新 " +
+            (if (lastUpdatedAt > 0L) formatClock(lastUpdatedAt) else PLACEHOLDER),
+        actionIcon = Icons.Outlined.Sort,
+        actionDesc = "按时间倒序排列",
+        onAction = onSortClick,
+    )
 }
