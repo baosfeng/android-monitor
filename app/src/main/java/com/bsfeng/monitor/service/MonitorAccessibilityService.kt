@@ -9,6 +9,8 @@ import android.content.Context
 import android.view.accessibility.AccessibilityEvent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.autobook.AutoBookEngine
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
@@ -184,6 +186,8 @@ open class MonitorAccessibilityService : AccessibilityService() {
      * 系统 UI/桌面事件直接丢弃（监控目标仅限应用窗口）。
      */
     private fun handleContentChanged(event: AccessibilityEvent) {
+        // 广告跳过关闭：内容变化事件不进规则引擎（不扫描节点、不评估规则）
+        if (!FeatureFlags.get().isEnabled(Feature.AD_SKIP)) return
         val pkg = event.packageName?.toString() ?: return
         if (isSystemUi(pkg) || isHomeApp(pkg)) return
         skipEngine.onContentChanged(pkg)
@@ -213,13 +217,16 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // ===== 开屏广告跳过 =====
         // 引擎以「App 切换时刻」为锚点开窗匹配：窗口内由 CONTENT_CHANGED 事件驱动扫描 +
         // 兜底轮询，根节点未就绪时自行重试（旧实现在 root 为 null 时整次启动直接漏检）。
+        // 广告跳过关闭：不打开匹配窗口（不扫描、不轮询、不执行点击规则）。
+        // 只跳过这一段：前台 App 追踪、自动记账、页面快照等本文件其余逻辑照常运行。
+        val skipEnabled = FeatureFlags.get().isEnabled(Feature.AD_SKIP)
         try {
             if (packageName == "com.bsfeng.monitor") {
                 // 进入本 App：停止监控并重置状态
-                skipEngine.resetAppState(packageName)
+                if (skipEnabled) skipEngine.resetAppState(packageName)
             } else {
                 if (packageName != lastPackageName) removeCurrentDanmaku()
-                skipEngine.onWindowChanged(packageName, className)
+                if (skipEnabled) skipEngine.onWindowChanged(packageName, className)
             }
         } catch (e: Exception) {
             Log.w("MonitorService", "skipEngine.onWindowChanged 异常", e)

@@ -8,6 +8,8 @@ import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import com.bsfeng.monitor.BuildConfig
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.domain.transfer.CONFIRM_TIMEOUT_MS
 import com.bsfeng.monitor.domain.transfer.NO_PROGRESS_TIMEOUT_MS
 import com.bsfeng.monitor.domain.transfer.DeletedTask
@@ -175,8 +177,13 @@ class TransferEngine private constructor(
         hapticTarget = view?.let { WeakReference(it) }
     }
 
-    /** 启动发现与服务（幂等）。返回实际 HTTP 端口（失败 -1）。 */
+    /** 启动发现与服务（幂等）。返回实际 HTTP 端口（失败 / 功能关闭 -1）。 */
     fun start(): Int {
+        // 功能关闭 = 真停活：不绑 HTTP 端口、不发 UDP 公告、不写历史
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) {
+            Log.i(TAG, "传送功能已关闭：不启动 HTTP / UDP")
+            return -1
+        }
         if (started.compareAndSet(false, true)) {
             val httpServer = MiniHttpServer(this)
             val boundPort = runCatching { httpServer.start(scope) }

@@ -8,6 +8,8 @@ import com.bsfeng.monitor.domain.transfer.DeletedTask
 import com.bsfeng.monitor.domain.transfer.PeerDevice
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.TransferEngine
 import com.bsfeng.monitor.transfer.service.TransferService
@@ -32,7 +34,8 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
         // ViewModel 由 UI 创建即代表 App 在前台：显式标记可见。
         // 只依赖 Activity 的 ON_START 时，观察者注册晚于事件会漏掉首帧，
         // 表现为「开启接收后端口在跑、组播/广播不发、对端搜不到本机」。
-        engine.setAppVisible(true)
+        // 功能关闭时不碰引擎：UI 层本就不该创建本 VM，这里再兜一层。
+        if (FeatureFlags.get().isEnabled(Feature.TRANSPORT)) engine.setAppVisible(true)
     }
 
     /** 在线设备。 */
@@ -125,6 +128,8 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
      * 保证「磁贴关了、App 里就真的是关的」。
      */
     fun startReceiving() {
+        // 功能关闭：不开「可被发现」、不拉服务（磁贴 / 旧入口遗留调用也走这里）
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
         val settings = engine.settings()
         settings.discoverable = true
         // 用户此刻就在界面上操作：先标记可见，再启动服务，
@@ -154,6 +159,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
 
     /** App 回到前台：只更新可见性，不自动开启接收。 */
     fun onAppForeground() {
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
         engine.setAppVisible(true)
     }
 
@@ -165,6 +171,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
 
     /** 切换「后台接收」：开启→常驻前台服务；关闭→退前台、仅 App 可见时运行。 */
     fun setBackgroundReceive(enabled: Boolean) {
+        if (enabled && !FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
         engine.settings().backgroundReceive = enabled
         backgroundReceiveState.value = enabled
         if (enabled) {
