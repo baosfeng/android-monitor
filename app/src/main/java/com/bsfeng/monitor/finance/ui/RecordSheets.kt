@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,9 +68,6 @@ import kotlin.math.roundToInt
 private val WHEEL_H: Dp = 132.dp
 private val WHEEL_ITEM_H: Dp = 44.dp
 
-/** 分类网格最大高度 = 屏高的 46%（原型 .s14a-grid 的 max-height:46vh） */
-private const val GRID_MAX_H_RATIO = 0.46f
-
 /** 日期 chip 最小宽度（原型 .s14a-strip .chip 的 min-width:48px） */
 private val CHIP_MIN_W: Dp = 48.dp
 
@@ -90,8 +86,6 @@ internal fun BoxScope.CategorySheet(
     onDismiss: () -> Unit,
 ) {
     if (!visible) return
-    // 高度按屏高比例算，不写死（原型 .s14a-grid 的 max-height:46vh）
-    val maxHeight = (LocalConfiguration.current.screenHeightDp * GRID_MAX_H_RATIO).dp
     SheetShell(title = "选择分类", onDismiss = onDismiss) {
         CategoryPicker(
             tree = tree,

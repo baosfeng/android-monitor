@@ -85,7 +85,7 @@ import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.rememberMotionEnabled
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.ui.components.tokenShadow
 import com.bsfeng.monitor.ui.live.ScreenHead
@@ -105,7 +105,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 提示音、免配对窗口时长、体积阈值、接收目录清理都收敛到「设置 → 局域网互传」，本页不再放设置项。
  *
  * 动效全部取 `DesignTokenTable` 的 `dur-*` / `ease-*`（含 reduced-motion 兜底）：
- * 设备与任务入场 = `rememberStaggerEnter`（`dur-page` + `ease-out` + 逐项 `stagger`），
+ * 设备与任务入场 = `Modifier.staggerEnterAt`（`dur-page` + `ease-out` + 逐项 `stagger`），
  * 进度推进 = `dur-state`（120ms），完成对勾 = `springOf(OverlayIn)`（220ms 过冲曲线），
  * 失败抖动 = `dur-page` + `ease-in`（协议 300ms 无独立 token，取最近一档）。
  */
@@ -433,7 +433,7 @@ private fun DeviceRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(rememberStaggerEnter(index))
+            .staggerEnterAt(index)
             .tokenShadow(if (selected) 1 else 0, shape)
             .clip(shape)
             .background(t.surface)
@@ -467,7 +467,7 @@ private fun DeviceRow(
                 Text(alias, style = MaterialTheme.typography.titleSmall, color = t.fg)
                 if (paired) {
                     Spacer(Modifier.width(t.space2))
-                    Badge("已配对", BadgeTone.Accent)
+                    Badge("已配对", tone = BadgeTone.Accent)
                 }
             }
             Spacer(Modifier.height(t.space1))
@@ -610,7 +610,7 @@ private fun TaskCard(
     }
     AppCard(
         modifier = Modifier
-            .then(rememberStaggerEnter(index))
+            .staggerEnterAt(index)
             .graphicsLayer { translationX = shake.value },
         elevation = if (task.isActive) 1 else 0,
     ) {

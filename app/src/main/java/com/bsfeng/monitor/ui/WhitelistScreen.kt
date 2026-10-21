@@ -46,7 +46,7 @@ import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
 import com.bsfeng.monitor.ui.components.SkeletonBlock
 import com.bsfeng.monitor.ui.components.StateContainer
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.live.StackRow
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -202,8 +202,8 @@ fun WhitelistScreen(
                         item(key = "apps-head") {
                             SecHead(
                                 "应用列表",
-                                "匹配 " + filteredApps.size + " 个",
                                 Modifier.padding(bottom = t.space3),
+                                right = "匹配 " + filteredApps.size + " 个",
                             )
                         }
 
@@ -241,9 +241,9 @@ fun WhitelistScreen(
                                 // 若日后 apps 改成多来源拼接，这里要回退成 packageName + "#" + index。
                                 key = { _, app -> app.packageName },
                             ) { index, app ->
-                                // 入场动画只给首屏可见项：rememberStaggerEnter 会给每行挂一个 graphicsLayer，
+                                // 入场动画只给首屏可见项：Modifier.staggerEnterAt 会给每行挂一个 graphicsLayer，
                                 // 长列表滚动时合成成本被放大（AdScreen.kt:271-278、SkipRuleScreen.kt:334 同一处理）。
-                                val enterMod = if (index < STAGGER_MAX_STEPS) rememberStaggerEnter(index) else Modifier
+                                val enterMod = if (index < STAGGER_MAX_STEPS) Modifier.staggerEnterAt(index) else Modifier
                                 StackRow(
                                     first = index == 0,
                                     last = index == filteredApps.lastIndex,

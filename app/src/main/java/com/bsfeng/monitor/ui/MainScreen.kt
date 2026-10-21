@@ -44,7 +44,7 @@ import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.HeatBar
 import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
 import com.bsfeng.monitor.ui.components.StateContainer
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.live.CardHead
@@ -228,7 +228,7 @@ fun MainScreen(
                                 label = group.label,
                                 count = group.events.size,
                                 showCount = filter == LiveFilter.ALL,
-                                modifier = Modifier.then(rememberStaggerEnter(headEnter)),
+                                modifier = Modifier.staggerEnterAt(headEnter),
                             )
                         }
                         itemsIndexed(
@@ -243,7 +243,7 @@ fun MainScreen(
                             StackRow(
                                 first = false,
                                 last = ei == group.events.lastIndex,
-                                modifier = Modifier.then(rememberStaggerEnter(rowEnter)),
+                                modifier = Modifier.staggerEnterAt(rowEnter),
                             ) {
                                 // 原型 s02 时间列是 HH:mm（.s02-t / .tl-time，s02-live.html:196），
                                 // 46dp 时间列放得下 5 字符等宽；带秒（8 字符）会折行/裁切。

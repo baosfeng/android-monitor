@@ -47,7 +47,7 @@ import com.bsfeng.monitor.ui.components.LegendItem
 import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.StateContainer
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.FiveStateDemo
@@ -77,7 +77,7 @@ import java.util.Locale
  * 三段面板：今日 / 近 7 天 / 近 30 天。
  * 今日段：2×2 KPI（AnimatedNumber + sparkline + 较昨日增减）→ 24 小时活跃面积图 + 24 格热力条
  *        → 类型环图 + 图例 → 最近事件 → 快捷入口。
- * 卡片入场统一走 rememberStaggerEnter(index)。
+ * 卡片入场统一走 Modifier.staggerEnterAt(index)。
  */
 @Composable
 fun OverviewScreen(
@@ -175,7 +175,7 @@ private fun LazyListScope.todayPanel(
                 spark = state.dailyEventCounts7,
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(0)),
+                    .staggerEnterAt(0),
             ) { KpiValue(state.todayEventCount) }
             LiveKpiCard(
                 label = "活跃",
@@ -184,7 +184,7 @@ private fun LazyListScope.todayPanel(
                 spark = state.dailyActiveMinutes7,
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(1)),
+                    .staggerEnterAt(1),
             ) { KpiActive(state.todayActiveMinutes) }
         }
     }
@@ -199,14 +199,14 @@ private fun LazyListScope.todayPanel(
                 spark = state.dailySkipCounts7,
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(2)),
+                    .staggerEnterAt(2),
             ) { KpiValue(state.todaySkipCount) }
             LiveKpiCard(
                 label = "今日支出",
                 delta = "收入 ¥" + money(state.todayIncome) + " · 结余 ¥" + money(state.todayIncome - state.todayExpense),
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(3)),
+                    .staggerEnterAt(3),
             ) { KpiMoney(state.todayExpense) }
         }
     }
@@ -214,7 +214,7 @@ private fun LazyListScope.todayPanel(
     item(key = "card-24h") {
         val t = LocalDesignTokens.current
         val peak = peakOf(state.hourlyIntensity)
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(4))) {
+        AppCard(modifier = Modifier.staggerEnterAt(4)) {
             CardHead("最近 24 小时活跃", "合计 " + state.todayActiveMinutes + " 分钟")
             Spacer(Modifier.height(t.space3))
             // 峰值标注保持默认开启：原型 area 引擎按 d.peak !== false 判定（08-prototype.html:5839），
@@ -242,7 +242,7 @@ private fun LazyListScope.todayPanel(
 
     item(key = "card-ring-today") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(5))) {
+        AppCard(modifier = Modifier.staggerEnterAt(5)) {
             CardHead("事件类型分布", "共 " + state.todayEventCount + " 条")
             Spacer(Modifier.height(t.space3))
             if (state.typeSlicesToday.isEmpty()) {
@@ -276,7 +276,7 @@ private fun LazyListScope.todayPanel(
 
     item(key = "card-recent") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(6))) {
+        AppCard(modifier = Modifier.staggerEnterAt(6)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "最近事件",
@@ -340,14 +340,14 @@ private fun LazyListScope.weekPanel(state: OverviewState) {
                 delta = "日均 " + (state.weekEventCount / 7) + " 条",
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(0)),
+                    .staggerEnterAt(0),
             ) { KpiValue(state.weekEventCount) }
             LiveKpiCard(
                 label = "活跃",
                 delta = "日均 " + formatHoursMinutes(state.weekActiveMinutes / 7),
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(1)),
+                    .staggerEnterAt(1),
             ) { KpiActive(state.weekActiveMinutes) }
         }
     }
@@ -360,14 +360,14 @@ private fun LazyListScope.weekPanel(state: OverviewState) {
                 delta = "日均 " + String.format(Locale.US, "%.1f", state.weekSkipCount / 7.0) + " 次",
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(2)),
+                    .staggerEnterAt(2),
             ) { KpiValue(state.weekSkipCount) }
             LiveKpiCard(
                 label = "支出",
                 delta = "收入 ¥" + money(state.weekIncome) + " · 结余 ¥" + money(state.weekIncome - state.weekExpense),
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(3)),
+                    .staggerEnterAt(3),
             ) { KpiMoney(state.weekExpense) }
         }
     }
@@ -375,7 +375,7 @@ private fun LazyListScope.weekPanel(state: OverviewState) {
     item(key = "card-7d-bars") {
         val t = LocalDesignTokens.current
         val labels = remember { dayLabels(7) }
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(4))) {
+        AppCard(modifier = Modifier.staggerEnterAt(4)) {
             CardHead("近 7 天每日事件量", labels.first() + " – " + labels.last())
             Spacer(Modifier.height(t.space3))
             BarChart(
@@ -390,7 +390,7 @@ private fun LazyListScope.weekPanel(state: OverviewState) {
 
     item(key = "card-top7d") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(5))) {
+        AppCard(modifier = Modifier.staggerEnterAt(5)) {
             CardHead("本周跳过最多", "共 " + state.weekSkipCount + " 次")
             Spacer(Modifier.height(t.space1))
             if (state.topSkippedApps.isEmpty()) {
@@ -436,14 +436,14 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
                 delta = "日均 " + (state.monthEventCount / 30) + " 条",
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(0)),
+                    .staggerEnterAt(0),
             ) { KpiValue(state.monthEventCount) }
             LiveKpiCard(
                 label = "活跃",
                 delta = "日均 " + formatHoursMinutes(state.monthActiveMinutes / 30),
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(1)),
+                    .staggerEnterAt(1),
             ) { KpiValue((state.monthActiveMinutes / 60).toInt()) }
         }
     }
@@ -456,14 +456,14 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
                 delta = "日均 " + String.format(Locale.US, "%.1f", state.monthSkipCount / 30.0) + " 次",
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(2)),
+                    .staggerEnterAt(2),
             ) { KpiValue(state.monthSkipCount) }
             LiveKpiCard(
                 label = "支出",
                 delta = "收入 ¥" + money(state.monthIncome) + " · 结余 ¥" + money(state.monthIncome - state.monthExpense),
                 modifier = Modifier
                     .weight(1f)
-                    .then(rememberStaggerEnter(3)),
+                    .staggerEnterAt(3),
             ) { KpiMoney(state.monthExpense) }
         }
     }
@@ -471,7 +471,7 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
     item(key = "card-30d-trend") {
         val t = LocalDesignTokens.current
         val labels = remember { dayLabels(30) }
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(4))) {
+        AppCard(modifier = Modifier.staggerEnterAt(4)) {
             CardHead("近 30 天活跃趋势", "单位 分钟")
             Spacer(Modifier.height(t.space3))
             // 与 24h 同口径：原型 s01-chart30d（2550-2554）同样是 area 且未传 peak 关闭标记
@@ -488,7 +488,7 @@ private fun LazyListScope.monthPanel(state: OverviewState) {
 
     item(key = "card-30d-ring") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.then(rememberStaggerEnter(5))) {
+        AppCard(modifier = Modifier.staggerEnterAt(5)) {
             CardHead("近 30 天类型分布", "共 " + state.monthEventCount + " 条")
             Spacer(Modifier.height(t.space3))
             if (state.typeSlices30.isEmpty()) {

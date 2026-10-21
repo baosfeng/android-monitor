@@ -85,7 +85,7 @@ private val motionEnabledCache = AtomicReference<Boolean?>(null)
  * 当前主题下系统是否允许播动画（reduced-motion 兜底，契约 §7）。
  * 系统「动画时长缩放 = 0」或读取失败时返回 false → 基元直接落终态。
  *
- * 它写在 [rememberStaggerEnter] / [rememberStaggerProgress] 等基元的 `animated:` 默认参数上，
+ * 它写在 [staggerEnterAt] / [rememberStaggerProgress] 等基元的 `animated:` 默认参数上，
  * 列表每行挂载都会求值一次，因此结果按进程缓存：首次读到的值一直复用，后续零 IPC。
  */
 @Composable
@@ -304,17 +304,17 @@ fun Modifier.staggerEnter(progress: Float, riseFrom: Dp = STAGGER_RISE): Modifie
 }
 
 /**
- * 一步到位：Modifier 直接由 index 得到，内部已含 reduced-motion 兜底。
+ * 一步到位：`Modifier.staggerEnterAt(index)` 直接由 index 得到入场效果，内部已含 reduced-motion 兜底。
  * [index] 传 `-1` = 该项不做入场动画（直接可见），长列表滚动挂载新项时用。
  */
 @Composable
-fun rememberStaggerEnter(
+fun Modifier.staggerEnterAt(
     index: Int,
     animated: Boolean = rememberMotionEnabled(),
     durationToken: MotionToken = MotionToken.Page,
     maxSteps: Int = STAGGER_MAX_STEPS,
     riseFrom: Dp = STAGGER_RISE,
-): Modifier = Modifier.staggerEnter(
+): Modifier = this.staggerEnter(
     progress = rememberStaggerProgress(index, animated, durationToken, maxSteps),
     riseFrom = riseFrom,
 )

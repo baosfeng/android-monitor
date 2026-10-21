@@ -413,8 +413,8 @@ fun ImportScreen(
                                             color = t.fg,
                                         )
                                         Badge(
-                                            formatCount(result.totalTransactions),
-                                            if (result.hasErrors) BadgeTone.Warn else BadgeTone.Success,
+                                            text = formatCount(result.totalTransactions),
+                                            tone = if (result.hasErrors) BadgeTone.Warn else BadgeTone.Success,
                                         )
                                     }
                                     Spacer(Modifier.height(t.space3))

@@ -251,9 +251,9 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 Spacer(Modifier.height(t.space3))
                                 Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
                                     val preview = DesignTokens(current)
-                                    Badge("bg " + hex(preview.bg), BadgeTone.Neutral)
-                                    Badge("accent " + hex(preview.accent), BadgeTone.Accent)
-                                    Badge("fg " + hex(preview.fg), BadgeTone.Neutral)
+                                    Badge("bg " + hex(preview.bg), tone = BadgeTone.Neutral)
+                                    Badge("accent " + hex(preview.accent), tone = BadgeTone.Accent)
+                                    Badge("fg " + hex(preview.fg), tone = BadgeTone.Neutral)
                                 }
                                 Spacer(Modifier.height(t.space2))
                                 Text(

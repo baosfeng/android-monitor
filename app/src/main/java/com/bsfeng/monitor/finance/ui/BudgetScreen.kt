@@ -44,7 +44,7 @@ import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.animatedAmount
-import com.bsfeng.monitor.ui.components.rememberStaggerEnter
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.tweenOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
@@ -374,7 +374,7 @@ private fun BudgetRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(rememberStaggerEnter(enterIndex))
+            .staggerEnterAt(enterIndex)
             .clip(RoundedCornerShape(t.radiusMd))
             .clickable { onClick() }
             .padding(horizontal = t.space3, vertical = t.space3),
