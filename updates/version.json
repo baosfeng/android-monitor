@@ -1,8 +1,8 @@
 {
-  "versionCode": 1,
-  "versionName": "1.0.0",
-  "apkUrl": "https://github.com/baosfeng/android-monitor/releases/download/v1.0.0/app-release.apk",
-  "apkSha256": "0787c920226c3a1131b616458a1620ab100259d986850717b85734e36ae76cde",
-  "changelog": "- chore: 完善发版流程（版本号、签名注入、发布脚本与 Release workflow）",
-  "publishedAt": "2026-10-19T14:38:00Z"
+  "versionCode": 2,
+  "versionName": "1.1.0",
+  "apkUrl": "https://github.com/baosfeng/android-monitor/releases/download/v1.1.0/app-release.apk",
+  "apkSha256": "f3d8f29886e9f4c2f93f3e186b1d86d14cd957f84f4b781535d291d9c9af2068",
+  "changelog": "- chore: 发布 v1.1.0\n- fix: 发布脚本变量展开兼容全角标点\n- feat: 记账列表行展示分类图标\n- feat: 记账列表行展示分类图标\n- fix: 分类图标恢复彩色分类色（12% 淡底 + 分类色线描）\n- feat: 分类图标恢复彩色分类色口径\n- feat: 原型分类图标同步为 145 个专属图标\n- docs: 分类图标无底色与唯一性口径\n- feat: 145 个分类图标各自独立不重复\n- docs: 自动记账调试入口与列表刷新徽标\n- feat: 记账列表自动来源徽标与落库高亮\n- feat: 自动记账浮窗对齐原型与调试入口\n- feat: 分类二级专属图标与线描显示口径\n- feat: 记账原型补齐自动记账浮窗、刷新与两级分类\n- docs: 分类体系两级与自动记账映射文档同步\n- feat: 两级分类选择器（一级 chips + 二级网格）\n- feat: 自动记账按商户与平台分类映射到二级\n- docs: 分类设计同步通讯二级（宽带归居住，避免名称冲突）\n- feat: 统计与预算按一级分类汇总\n- feat: 分类体系一次性迁移，历史交易与预算归到一级\n- feat: 新增一级/二级分类种子与分类树\n- docs: 分类体系实现计划（数据迁移、识别映射、两级选择器、统计预算）\n- docs: 新增分类体系设计（一级/二级、迁移与识别映射）\n- feat: 自动记账浮窗关闭契约、可编辑说明与即时弹出\n- feat: 新增自动记账页面变化检测器\n- feat: 记账数据变更通知、说明字段与历史拼接说明清理\n- refactor: 压缩文档体系，13813 行降至 5289 行\n- refactor: 压缩 AGENTS.md 至 30 行并补充隐私红线\n- refactor: 原型按屏拆分为 16 个分片，产物由组装脚本生成\n- chore: 用 GitHub Pages 托管可交互原型\n- fix: 原型截图改为底部导航并更新 README 预览图\n- docs: README 增加界面预览（原型渲染截图）\n- fix: 更新源镜像按实测可用性排序，完善首版发布说明\n- chore: 更新版本清单 v1.0.0",
+  "publishedAt": "2026-10-21T00:43:48Z"
 }
