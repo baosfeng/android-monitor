@@ -51,6 +51,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.feature.AppTab
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureCatalog
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
 import com.bsfeng.monitor.finance.ui.BudgetScreen
@@ -87,13 +91,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 class MainActivity : ComponentActivity() {
 
-    /** 从通知点进来的目标 Tab（默认 0 = 概览）。 */
+    /** 从通知点进来的目标 Tab 下标（默认 0 = 概览；下标 = [AppTab] 枚举顺序）。 */
     private var startTab by mutableIntStateOf(0)
+
+    /** 自增序号：同一条通知再点一次也要重新落点（只对比下标会漏掉「已在同一 Tab」的情况）。 */
+    private var startTabRequest by mutableIntStateOf(0)
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         startTab = intent.getIntExtra(EXTRA_START_TAB, startTab)
+        startTabRequest++
     }
 
     private sealed class FinanceRoute {
@@ -132,14 +140,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             MonitorTheme {
                 val viewModel: MainViewModel = viewModel()
-                val transferViewModel: TransferViewModel = viewModel()
+                // 功能开关：一处读，下面所有 Tab / 页面 / 服务的取舍都按它判断
+                val featureFlags = FeatureFlags.get()
+                val enabledFeatures by featureFlags.enabled.collectAsState()
+                fun featureOn(feature: Feature): Boolean = enabledFeatures[feature] == true
+                val adSkipOn = featureOn(Feature.AD_SKIP)
                 val lifecycleOwner = LocalLifecycleOwner.current
-                val financeViewModel: FinanceViewModel = viewModel()
-                val skipRuleViewModel: SkipRuleViewModel = viewModel()
-                val whitelistViewModel: WhitelistViewModel = viewModel()
+                // 关闭的功能不创建对应 ViewModel：不建状态、不读库、不起线程。
+                // 传送到 MV 的 init 会把引擎标记为可见，所以关闭时连实例都不能要。
+                val transferViewModel: TransferViewModel? =
+                    if (featureOn(Feature.TRANSPORT)) viewModel() else null
+                val financeViewModel: FinanceViewModel? =
+                    if (featureOn(Feature.FINANCE)) viewModel() else null
+                val skipRuleViewModel: SkipRuleViewModel? = if (adSkipOn) viewModel() else null
+                val whitelistViewModel: WhitelistViewModel? = if (adSkipOn) viewModel() else null
                 val tokens = LocalDesignTokens.current
-                // 6 Tab：0 概览(s01) / 1 实时(s02) / 2 广告(s03) / 3 记账(s04) / 4 传送(局域网互传) / 5 设置(s09)
-                var selectedTab by remember { mutableIntStateOf(0) }
+                // 6 Tab：概览(s01) / 实时(s02) / 广告(s03) / 记账(s04) / 传送(局域网互传) / 设置(s09)
+                // 动态列表见 tabs：关闭的功能不生成 Tab，选中项被关闭时回退概览
+                var selectedTab by rememberSaveable { mutableStateOf(AppTab.OVERVIEW) }
                 var financeRoute by rememberSaveable(stateSaver = FinanceRouteSaver) {
                     mutableStateOf<FinanceRoute>(FinanceRoute.Main)
                 }
@@ -153,42 +171,67 @@ class MainActivity : ComponentActivity() {
                 val view = LocalView.current
                 val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery || showAppearance
                 // 原型二级页（记账子页 / 设置子页）无 Tab 栏
-                val financeSubPage = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main
+                val financeSubPage = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main
                 val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
 
-                // 「后台接收」关闭时：前台启动监听、后台停服务（ServiceModePolicy 的 UI 侧接线）
-                DisposableEffect(lifecycleOwner, transferViewModel) {
-                    val observer = LifecycleEventObserver { _, event ->
-                        when (event) {
-                            // 只更新可见性：接收由用户显式开启（磁贴 / 传送页），App 打开不自动启动
-                            Lifecycle.Event.ON_START -> transferViewModel.onAppForeground()
-                            Lifecycle.Event.ON_STOP -> transferViewModel.onAppBackground()
-                            else -> Unit
-                        }
+                // 底部 Tab 由开关驱动：关闭的功能不生成 Tab
+                val tabs = remember(enabledFeatures) {
+                    FeatureCatalog.visibleTabs { feature -> enabledFeatures[feature] == true }
+                }
+
+                // 当前选中 Tab 被关闭（用户在设置里关掉）→ 立即回退概览，不留空白页
+                LaunchedEffect(enabledFeatures) {
+                    if (!FeatureCatalog.isTabVisible(selectedTab, ::featureOn)) {
+                        selectedTab = FeatureCatalog.FALLBACK_TAB
                     }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    // 页面同时被关掉时，覆盖层也跟着收起（规则管理 / 白名单属于广告跳过）
+                    if (!adSkipOn) {
+                        showSkipRuleScreen = false
+                        showWhitelistScreen = false
+                    }
+                }
+
+                // 关闭「传送」：立刻停掉服务与发现线程（不等下次前后台切换）
+                LaunchedEffect(featureOn(Feature.TRANSPORT)) {
+                    if (!featureOn(Feature.TRANSPORT)) {
+                        TransferService.stop(applicationContext)
+                    }
+                }
+
+                // 「后台接收」关闭时：前台启动监听、后台停服务（ServiceModePolicy 的 UI 侧接线）
+                // 功能关闭时连观察者都不挂：开关一关，这里没有任何传送相关的回调在跑
+                DisposableEffect(lifecycleOwner, transferViewModel) {
+                    val vm = transferViewModel
+                    if (vm == null) {
+                        onDispose { }
+                    } else {
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                // 只更新可见性：接收由用户显式开启（磁贴 / 传送页），App 打开不自动启动
+                                Lifecycle.Event.ON_START -> vm.onAppForeground()
+                                Lifecycle.Event.ON_STOP -> vm.onAppBackground()
+                                else -> Unit
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    }
                 }
                 // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到记账首页
-                BackHandler(enabled = selectedTab == FINANCE_TAB && financeRoute != FinanceRoute.Main) {
+                BackHandler(enabled = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main) {
                     financeRoute = FinanceRoute.Main
                     financeEntryKey++
                 }
 
-                val tabs = remember {
-                    listOf(
-                        TabItem("概览", Icons.Outlined.DateRange, Icons.Filled.DateRange),
-                        TabItem("实时", Icons.Outlined.Home, Icons.Filled.Home),
-                        TabItem("广告", Icons.Outlined.Visibility, Icons.Outlined.Visibility),
-                        TabItem("记账", Icons.Outlined.AddCircle, Icons.Filled.AddCircle),
-                        TabItem("传送", Icons.Outlined.SwapHoriz, Icons.Outlined.SwapHoriz),
-                        TabItem("设置", Icons.Outlined.Settings, Icons.Filled.Settings),
-                    )
-                }
-
-                // 通知点击「直达传送页」
-                LaunchedEffect(startTab) {
-                    if (startTab in tabs.indices) selectedTab = startTab
+                // 通知点击「直达传送页」：目标功能已关闭时回退概览（不崩溃、不留空 Tab）
+                LaunchedEffect(startTabRequest) {
+                    // 首次冷启动没有深链（下标 0）时不覆盖 rememberSaveable 恢复的 Tab；
+                    // 从通知再次进入时一律按深链落点走（同一 Tab 连点也生效，靠序号而非下标比较）
+                    if (startTabRequest > 0 || startTab != 0) {
+                        selectedTab = FeatureCatalog.resolveTab(
+                            FeatureCatalog.tabOfIndex(startTab),
+                        ) { feature -> enabledFeatures[feature] == true }
+                    }
                 }
 
                 Box(Modifier.fillMaxSize().pageBackdrop()) {
@@ -219,8 +262,8 @@ class MainActivity : ComponentActivity() {
                                     containerColor = tokens.surface.copy(alpha = tokens.surface.alpha * 0.84f),
                                     tonalElevation = 0.dp,
                                 ) {
-                                    tabs.forEachIndexed { index, tab ->
-                                        val isSelected = selectedTab == index
+                                    tabs.forEach { tab ->
+                                        val isSelected = selectedTab == tab
                                         val tabColor by animateColorAsState(
                                             targetValue = if (isSelected) tokens.accent else tokens.muted,
                                             animationSpec = tokens.springOf<Color>(MotionToken.State),
@@ -229,16 +272,17 @@ class MainActivity : ComponentActivity() {
                                             colors = barColors,
                                             selected = isSelected,
                                             onClick = {
-                                                selectedTab = index
+                                                // 已关闭的功能即使被点到也不会留空页：走 resolveTab 兜底到概览
+                                                selectedTab = FeatureCatalog.resolveTab(tab, ::featureOn)
                                                 view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                                if (index == FINANCE_TAB) {
+                                                if (tab == AppTab.FINANCE) {
                                                     financeRoute = FinanceRoute.Main
                                                     financeEntryKey++
                                                 }
                                             },
                                             icon = {
                                                 Icon(
-                                                    if (isSelected) tab.selectedIcon else tab.icon,
+                                                    tab.icon(isSelected),
                                                     contentDescription = tab.title,
                                                     modifier = Modifier.size(22.dp),
                                                     tint = tabColor,
@@ -266,29 +310,31 @@ class MainActivity : ComponentActivity() {
                                 .padding(paddingValues)
                         ) {
                             when (selectedTab) {
-                                0 -> OverviewScreen(
-                                    onOpenLive = { selectedTab = LIVE_TAB },
-                                    onOpenFinance = { selectedTab = FINANCE_TAB },
+                                AppTab.OVERVIEW -> OverviewScreen(
+                                    // 功能关闭时点概览上的「实时 / 记账」快捷入口：原地不动，不回退、不崩溃
+                                    onOpenLive = { selectedTab = FeatureCatalog.resolveTab(AppTab.LIVE, ::featureOn) },
+                                    onOpenFinance = { selectedTab = FeatureCatalog.resolveTab(AppTab.FINANCE, ::featureOn) },
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                LIVE_TAB -> MainScreen(
+                                AppTab.LIVE -> MainScreen(
                                     viewModel = viewModel,
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                AD_TAB -> AdScreen(
-                                    onOpenRules = { showSkipRuleScreen = true },
+                                AppTab.AD -> AdScreen(
+                                    // 跳过引擎关闭后规则管理不可进（广告记录页本身照常可看）
+                                    onOpenRules = { if (featureOn(Feature.AD_SKIP)) showSkipRuleScreen = true },
                                     adViewModel = viewModel(),
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                TRANSFER_TAB -> TransferScreen(modifier = Modifier.fillMaxSize())
-                                FINANCE_TAB -> {
+                                AppTab.TRANSFER -> TransferScreen(modifier = Modifier.fillMaxSize())
+                                AppTab.FINANCE -> financeViewModel?.let { fvm ->
                                     when (val route = financeRoute) {
                                         is FinanceRoute.Main -> FinanceMainScreen(
-                                            viewModel = financeViewModel,
+                                            viewModel = fvm,
                                             entryKey = financeEntryKey,
                                             onAddClick = {
                                                 financeRoute = FinanceRoute.AddTransaction(
-                                                    financeViewModel.currentMonth.value
+                                                    fvm.currentMonth.value
                                                 )
                                             },
                                             onImportClick = {
@@ -302,54 +348,54 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxSize()
                                         )
                                         is FinanceRoute.AddTransaction -> AddTransactionScreen(
-                                            categories = financeViewModel.categories.collectAsState().value,
-                                            accounts = financeViewModel.accounts.collectAsState().value,
+                                            categories = fvm.categories.collectAsState().value,
+                                            accounts = fvm.accounts.collectAsState().value,
                                             // 记账首页当前浏览月（W2 的 AddTransactionScreen.fromMonth）；形如 "2026-07"
                                             fromMonth = route.fromMonth,
                                             onSave = { tx ->
-                                                financeViewModel.addTransaction(tx)
+                                                fvm.addTransaction(tx)
                                                 financeRoute = FinanceRoute.Main
                                             },
                                             onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ }
                                         )
                                         is FinanceRoute.EditTransaction -> AddTransactionScreen(
-                                            categories = financeViewModel.categories.collectAsState().value,
-                                            accounts = financeViewModel.accounts.collectAsState().value,
+                                            categories = fvm.categories.collectAsState().value,
+                                            accounts = fvm.accounts.collectAsState().value,
                                             editing = route.transaction,
                                             onSave = { tx ->
-                                                financeViewModel.updateTransaction(tx)
+                                                fvm.updateTransaction(tx)
                                                 financeRoute = FinanceRoute.Main
                                             },
                                             onDelete = { tx ->
-                                                financeViewModel.deleteTransaction(tx.id)
+                                                fvm.deleteTransaction(tx.id)
                                                 financeRoute = FinanceRoute.Main
                                             },
                                             onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ }
                                         )
                                         is FinanceRoute.Stats -> FinanceStatsScreen(
-                                            currentMonth = financeViewModel.currentMonth.collectAsState().value,
-                                            stats = financeViewModel.monthlyStats.collectAsState().value,
-                                            categoryBreakdown = financeViewModel.categoryBreakdown.collectAsState().value,
-                                            onPreviousMonth = { financeViewModel.previousMonth() },
-                                            onNextMonth = { financeViewModel.nextMonth() },
+                                            currentMonth = fvm.currentMonth.collectAsState().value,
+                                            stats = fvm.monthlyStats.collectAsState().value,
+                                            categoryBreakdown = fvm.categoryBreakdown.collectAsState().value,
+                                            onPreviousMonth = { fvm.previousMonth() },
+                                            onNextMonth = { fvm.nextMonth() },
                                             onBack = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
                                             modifier = Modifier.fillMaxSize()
                                         )
                                         is FinanceRoute.Budget -> BudgetScreen(
-                                            viewModel = financeViewModel,
+                                            viewModel = fvm,
                                             onBack = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
                                             modifier = Modifier.fillMaxSize()
                                         )
                                         is FinanceRoute.Import -> ImportScreen(
-                                            importing = financeViewModel.importing.collectAsState().value,
-                                            importResult = financeViewModel.importResult.collectAsState().value,
-                                            onImport = { path -> financeViewModel.importFromPanda(path) },
+                                            importing = fvm.importing.collectAsState().value,
+                                            importResult = fvm.importResult.collectAsState().value,
+                                            onImport = { path -> fvm.importFromPanda(path) },
                                             onDismiss = { financeRoute = FinanceRoute.Main; financeEntryKey++ },
-                                            onClearResult = { financeViewModel.clearImportResult() }
+                                            onClearResult = { fvm.clearImportResult() }
                                         )
                                     }
                                 }
-                                SETTINGS_TAB -> SettingsScreen(
+                                AppTab.SETTINGS -> SettingsScreen(
                                     viewModel = viewModel,
                                     onNavigateToSkipRules = { showSkipRuleScreen = true },
                                     onNavigateToWhitelist = { showWhitelistScreen = true },
@@ -363,43 +409,46 @@ class MainActivity : ComponentActivity() {
 
                     // 整屏覆盖层：与 Scaffold 同级（不吃内容区 padding），遮罩与底衬铺到系统栏之下
                     // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
+                    // 覆盖层跟着功能开关走：跳过引擎关闭时 VM 为 null，这里不渲染
                     AnimatedVisibility(
-                        visible = showSkipRuleScreen,
+                        visible = showSkipRuleScreen && skipRuleViewModel != null,
                         enter = slideInHorizontally() + fadeIn(),
                         exit = slideOutHorizontally() + fadeOut()
                     ) {
                         Box(Modifier.fillMaxSize()) {
+                            val vm = skipRuleViewModel ?: return@Box
                             BackHandler {
                                 showSkipRuleScreen = false
-                                skipRuleViewModel.refresh()
+                                vm.refresh()
                             }
                             SkipRuleScreen(
                                 onBack = {
                                     showSkipRuleScreen = false
-                                    skipRuleViewModel.refresh()
+                                    vm.refresh()
                                 },
-                                viewModel = skipRuleViewModel
+                                viewModel = vm
                             )
                         }
                     }
 
                     // 广告白名单页面（覆盖层）— 从右侧滑入
                     AnimatedVisibility(
-                        visible = showWhitelistScreen,
+                        visible = showWhitelistScreen && whitelistViewModel != null,
                         enter = slideInHorizontally() + fadeIn(),
                         exit = slideOutHorizontally() + fadeOut()
                     ) {
                         Box(Modifier.fillMaxSize()) {
+                            val vm = whitelistViewModel ?: return@Box
                             BackHandler(showWhitelistScreen) {
                                 showWhitelistScreen = false
-                                whitelistViewModel.refresh()
+                                vm.refresh()
                             }
                             WhitelistScreen(
                                 onBack = {
                                     showWhitelistScreen = false
-                                    whitelistViewModel.refresh()
+                                    vm.refresh()
                                 },
-                                viewModel = whitelistViewModel
+                                viewModel = vm
                             )
                         }
                     }
@@ -442,6 +491,8 @@ class MainActivity : ComponentActivity() {
         /** 启动/通知点击时指定目标 Tab 的 Intent extra。 */
         const val EXTRA_START_TAB = "com.bsfeng.monitor.EXTRA_START_TAB"
 
+        // 历史下标（= AppTab 枚举顺序）：通知里仍按 int 传，落点由 FeatureCatalog 转成 AppTab。
+        // 顺序不要改（旧通知的 int 会错位），新增 Tab 追加在末尾。
         const val LIVE_TAB = 1
         const val AD_TAB = 2
         const val FINANCE_TAB = 3
@@ -495,8 +546,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class TabItem(
-    val title: String,
-    val icon: ImageVector,
-    val selectedIcon: ImageVector,
-)
+/** Tab 图标（选中态用实心图标，未选中用线描；与改造前一一对应）。 */
+private fun AppTab.icon(selected: Boolean): ImageVector = when (this) {
+    AppTab.OVERVIEW -> if (selected) Icons.Filled.DateRange else Icons.Outlined.DateRange
+    AppTab.LIVE -> if (selected) Icons.Filled.Home else Icons.Outlined.Home
+    AppTab.AD -> Icons.Outlined.Visibility
+    AppTab.FINANCE -> if (selected) Icons.Filled.AddCircle else Icons.Outlined.AddCircle
+    AppTab.TRANSFER -> Icons.Outlined.SwapHoriz
+    AppTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+}
