@@ -31,7 +31,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
@@ -48,6 +47,7 @@ import com.bsfeng.monitor.ui.components.animatedAmount
 import com.bsfeng.monitor.ui.components.rememberStaggerEnter
 import com.bsfeng.monitor.ui.components.tweenOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
 /**
  * s06 预算设置。
@@ -101,7 +101,7 @@ fun BudgetScreen(
     // EMPTY 只作为演示态：内容仍按 POPULATED 渲染，空态卡画在列表里
     val containerState = if (state == FiveState.EMPTY) FiveState.POPULATED else state
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(Modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier

@@ -51,6 +51,8 @@ import com.bsfeng.monitor.ui.theme.ThemeRepository
 import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.sparkHeight
+import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 /**
  * s13 外观（原型 s13-appearance.html）：8 套主题选择器 + 实时预览。
@@ -64,17 +66,19 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val current by ThemeRepository.themeId.collectAsState()
     var state by remember { mutableStateOf(FiveState.POPULATED) }
 
-    Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(t.backdropA, t.backdropB)))) {
+    Box(modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(
                 title = "外观",
                 meta = "切换即时生效，重启后保持",
                 onBack = onBack,
+                consumeTopInset = true,
             )
             Column(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .navigationBarsPadding()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(t.space4),
             ) {
