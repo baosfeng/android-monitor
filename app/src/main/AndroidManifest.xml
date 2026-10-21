@@ -18,9 +18,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!--
+        enableOnBackInvokedCallback：显式打开预测式返回体系（targetSdk 33+ 默认已进入，这里写死口径便于审阅）。
+        Compose 的 BackHandler 在该体系下自动经 OnBackInvokedDispatcher 分发（后注册者优先），
+        现有各屏 BackHandler 的触发条件与顺序不变；整屏覆盖层的转场与返回键统一收口在
+        ui/foundation/Transitions.kt 的 AnimatedScreenOverlay。
+    -->
     <application
         android:name=".MonitorApp"
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/data_extraction_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"

@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui.components
 
-import android.provider.Settings
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.snap
@@ -12,6 +12,8 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,13 +22,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.FULL_STAGGER_MAX_STEPS
+import com.bsfeng.monitor.ui.foundation.MotionConfig
+import com.bsfeng.monitor.ui.foundation.MotionTier
+import com.bsfeng.monitor.ui.foundation.scaleDuration
+import com.bsfeng.monitor.ui.foundation.staggerStepsFor
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.ThemeRepository
 import kotlinx.coroutines.delay
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.PI
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -45,8 +51,9 @@ import kotlin.math.sqrt
  *     —— 逐项 delay = index × --stagger(24ms)，单条 --dur-page + --ease-out + 位移 10px，
  *        对齐原型 @keyframes od-rise / .rise / .s04-in。
  *
- * 契约 §7 的 reduced-motion 兜底由 [rememberMotionEnabled] 统一提供：系统「动画时长缩放」为 0 时
- * 三条基元全部直接落到终态，不播动画。
+ * 契约 §7 的 reduced-motion 兜底由 [rememberMotionTier] 统一提供：档位（[MotionTier]）为
+ * [MotionTier.REDUCED]，或系统「动画时长缩放」为 0 时（系统优先级最高，强制按 REDUCED 生效），
+ * 三条基元全部直接落到终态；[MotionTier.NORMAL] 则保留时长、去掉 stagger 与 spring 过冲。
  */
 
 /** 动效时长 token 名（与 DesignTokenTable 的 CSS 变量一一对应）。 */
@@ -55,8 +62,8 @@ enum class MotionToken { Press, State, OverlayIn, OverlayOut, Page, Chart, Chart
 /** --ease-spring：位置/缩放/旋转类 spring 观感的近似曲线（契约 §7）。 */
 const val EASE_SPRING_TOKEN: String = "ease-spring"
 
-/** 错峰步数上限：长列表末尾不至于等太久（24ms × 12 = 288ms）。 */
-const val STAGGER_MAX_STEPS: Int = 12
+/** 错峰步数上限：长列表末尾不至于等太久（24ms × 12 = 288ms）；唯一口径在 [FULL_STAGGER_MAX_STEPS]。 */
+const val STAGGER_MAX_STEPS: Int = FULL_STAGGER_MAX_STEPS
 
 /** 列表项入场位移起点：原型 @keyframes od-rise 的 translate3d(0,10px,0)。 */
 val STAGGER_RISE: Dp = 10.dp
@@ -78,30 +85,30 @@ fun <T> DesignTokens.tweenOf(token: MotionToken = MotionToken.Press): TweenSpec<
 
 // ─────────────────────────── 1 · 数字滚动 ───────────────────────────
 
-/** 进程级缓存：系统「动画时长缩放」只读一次（每次读都是 ContentResolver → binder IPC）。 */
-private val motionEnabledCache = AtomicReference<Boolean?>(null)
-
 /**
- * 当前主题下系统是否允许播动画（reduced-motion 兜底，契约 §7）。
- * 系统「动画时长缩放 = 0」或读取失败时返回 false → 基元直接落终态。
+ * 当前生效的动效档位（[MotionTier]），点击一次订阅、档位变化立即重组。
  *
- * 它写在 [staggerEnterAt] / [rememberStaggerProgress] 等基元的 `animated:` 默认参数上，
- * 列表每行挂载都会求值一次，因此结果按进程缓存：首次读到的值一直复用，后续零 IPC。
+ * 系统「动画时长缩放 = 0」时始终返回 [MotionTier.REDUCED]（系统优先级最高，忽略用户选择）；
+ * 首次读系统设置有进程级缓存（ContentResolver 读是 binder IPC），缓存装在
+ * [MotionConfig.systemAnimationsAllowed] 里，与基础层同源。
  */
 @Composable
-fun rememberMotionEnabled(): Boolean {
-    motionEnabledCache.get()?.let { return it }
+fun rememberMotionTier(): MotionTier {
     val context = LocalContext.current
-    return remember(context) {
-        runCatching {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f,
-            ) > 0f
-        }.getOrDefault(true).also { motionEnabledCache.set(it) }
-    }
+    val config = remember(context) { MotionConfig.get(context) }
+    val tier by config.tier.collectAsState()
+    return tier
 }
+
+/**
+ * 当前是否允许播动画（Boolean 兼容层，语义 = 档位 != [MotionTier.REDUCED]）。
+ *
+ * 它写在 [staggerEnterAt] / [rememberStaggerProgress] 等基元的 `animated:` 默认参数上，
+ * 列表每行挂载都会求值一次 —— 内部只读 [MotionConfig] 的内存态，零 IPC、零磁盘。
+ * 需要区分三档时用 [rememberMotionTier]。
+ */
+@Composable
+fun rememberMotionEnabled(): Boolean = rememberMotionTier() != MotionTier.REDUCED
 
 /**
  * 整型数字滚动（值层）。
@@ -240,12 +247,26 @@ fun <T> springSpecOf(durationMs: Int, easeSpringSpec: String): SpringSpec<T> {
     return spring(dampingRatio = z, stiffness = stiffnessForDuration(durationMs, z))
 }
 
-/** spring 规格缓存：themeId → (token → SpringSpec)。SpringSpec 与泛型 T 无关（同一实现类），按 * 缓存后回投。 */
-private val springCache = ConcurrentHashMap<String, HashMap<MotionToken, SpringSpec<*>>>()
+/** spring 规格缓存：themeId → (档位,token → SpringSpec)。SpringSpec 与泛型 T 无关（同一实现类），按 * 缓存后回投。 */
+private val springCache = ConcurrentHashMap<String, HashMap<Pair<MotionTier, MotionToken>, SpringSpec<*>>>()
+
+/** 无过冲 spring：临界阻尼（dampingRatio = 1），时长语义与 [springOf] 的 FULL 档一致。 */
+fun <T> flatSpringOf(durationMs: Int): SpringSpec<T> =
+    spring(dampingRatio = 1f, stiffness = stiffnessForDuration(durationMs, 1f))
+
+/** 生成 [springOf] / [flatSpringOf] 结果：FULL = 有过冲配方，其余档位 = 临界阻尼无过冲。 */
+private fun <T> springFor(tier: MotionTier, durationMs: Int, easeSpringSpec: String): SpringSpec<T> =
+    if (tier == MotionTier.FULL) springSpecOf(durationMs, easeSpringSpec) else flatSpringOf(durationMs)
 
 /**
- * 按 token 取 spring 规格：时长取 [token]，过冲取当前主题的 --ease-spring；结果按 (themeId, token) 缓存，
- * 同一主题同一 token 只做一次「正则 + 513 次采样」推导（底栏 5 个 tab 每帧各调一次也不重复算）。
+ * 按 token 取 spring 规格：时长取 [token]，过冲取当前主题的 --ease-spring；
+ * [MotionTier.NORMAL] / [MotionTier.REDUCED] 档返回临界阻尼（无过冲）规格。
+ *
+ * 结果按 (themeId, 档位, token) 缓存，同一组合只做一次「正则 + 513 次采样」推导
+ * （底栏 5 个 tab 每帧各调一次也不重复算）。
+ *
+ * 档位从 [MotionConfig] 内存态同步读（非 composable 签名保留，避免改 12 处调用点）；
+ * 档位变化后第一次调用会取到新档位的规格，旧规格留在缓存里不影响正确性。
  *
  * ```
  * val scale by animateFloatAsState(pressed, animationSpec = t.springOf(MotionToken.Press))
@@ -253,13 +274,30 @@ private val springCache = ConcurrentHashMap<String, HashMap<MotionToken, SpringS
  */
 @Suppress("UNCHECKED_CAST")
 fun <T> DesignTokens.springOf(token: MotionToken = MotionToken.State): SpringSpec<T> {
-    val cache = springCache[themeId] ?: HashMap<MotionToken, SpringSpec<*>>().also { springCache[themeId] = it }
-    val hit = cache[token] as SpringSpec<T>?
+    val tier = MotionConfig.peek()?.current() ?: MotionTier.FULL
+    val key = tier to token
+    val cache = springCache[themeId] ?: HashMap<Pair<MotionTier, MotionToken>, SpringSpec<*>>()
+        .also { springCache[themeId] = it }
+    val hit = cache[key] as SpringSpec<T>?
     if (hit != null) return hit
-    val spec = springSpecOf<T>(durationMsOf(token), ThemeRepository.rawToken(themeId, EASE_SPRING_TOKEN))
-    cache[token] = spec
+    val spec = springFor<T>(tier, durationMsOf(token), ThemeRepository.rawToken(themeId, EASE_SPRING_TOKEN))
+    cache[key] = spec
     return spec
 }
+
+/**
+ * 按 token 取**任意**动画规格，供「REDUCED 档直接落终态」的调用点一步替换：
+ * FULL → spring（有过冲）；NORMAL → 等时长 tween（0.75 倍时长、--ease-out、无过冲）；
+ * REDUCED → `snap()`（不播）。
+ *
+ * 与 [springOf] 的区别：调用点接受 `AnimationSpec<T>` 而非 `SpringSpec<T>`，且能表达「不播」。
+ */
+fun <T> DesignTokens.motionSpecOf(token: MotionToken = MotionToken.State): AnimationSpec<T> =
+    when (val tier = MotionConfig.peek()?.current() ?: MotionTier.FULL) {
+        MotionTier.FULL -> springOf(token)
+        MotionTier.NORMAL -> tween(durationMillis = tier.scaleDuration(durationMsOf(token)), easing = easeOut)
+        MotionTier.REDUCED -> snap()
+    }
 
 // ─────────────────────────── 3 · 列表错落入场 ───────────────────────────
 
@@ -272,13 +310,15 @@ fun staggerDelayMs(index: Int, staggerMs: Int, maxSteps: Int = STAGGER_MAX_STEPS
  * 值层，可自行用于 alpha / scale / 自定义位移。
  *
  * [index] 传 `-1` = **不做入场动画**，直接落终态（J5：滚动中新挂载的项不该再起动画）。
+ * [maxSteps] 默认取当前档位的 stagger 步数（[staggerStepsFor]）：只有 FULL 逐项延迟，
+ * NORMAL / REDUCED 下 all-at-once（步数为 0 = 全部同时入场）。
  */
 @Composable
 fun rememberStaggerProgress(
     index: Int,
     animated: Boolean = rememberMotionEnabled(),
     durationToken: MotionToken = MotionToken.Page,
-    maxSteps: Int = STAGGER_MAX_STEPS,
+    maxSteps: Int = staggerStepsFor(rememberMotionTier()),
 ): Float {
     val t = LocalDesignTokens.current
     if (index < 0) return 1f
@@ -312,7 +352,7 @@ fun Modifier.staggerEnterAt(
     index: Int,
     animated: Boolean = rememberMotionEnabled(),
     durationToken: MotionToken = MotionToken.Page,
-    maxSteps: Int = STAGGER_MAX_STEPS,
+    maxSteps: Int = staggerStepsFor(rememberMotionTier()),
     riseFrom: Dp = STAGGER_RISE,
 ): Modifier = this.staggerEnter(
     progress = rememberStaggerProgress(index, animated, durationToken, maxSteps),

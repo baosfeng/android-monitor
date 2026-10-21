@@ -9,12 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.os.SystemClock
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -59,7 +53,9 @@ import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Animation
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.MaterialTheme
@@ -147,7 +143,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.withContext
+import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import com.bsfeng.monitor.ui.foundation.MotionConfig
+import com.bsfeng.monitor.ui.foundation.MotionTier
+import com.bsfeng.monitor.ui.foundation.HapticConfig
+import com.bsfeng.monitor.ui.foundation.HapticStrength
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.performHaptic
 import android.annotation.SuppressLint
 import java.io.InputStream
 
@@ -188,6 +191,14 @@ fun SettingsScreen(
     val demoVisible = rememberDemoVisible()
     val watchWindowMs by viewModel.watchWindowMs.collectAsState()
     val themeId by ThemeRepository.themeId.collectAsState()
+    // 动效档位：选中态读 userTier（不受系统「动画时长缩放=0」覆盖），生效档位另由基元读 tier
+    val motionConfig = remember(context) { MotionConfig.get(context) }
+    val motionTier by motionConfig.userTier.collectAsState()
+    val autoDowngraded by motionConfig.autoDowngraded.collectAsState()
+    // 触觉：开关 / 强度档（改完立即生效，压测时不需要重启）
+    HapticConfig.attach(context)
+    val hapticEnabled by HapticConfig.enabled.collectAsState()
+    val hapticStrength by HapticConfig.strength.collectAsState()
     var demoState by remember { mutableStateOf(FiveState.POPULATED) }
     // 屏内兜底桥：导航任务接线之前，setter 回调为 null 时本屏自行托管 s12 / s13，
     // 保证「外观与主题」「组件与状态演示」两个入口在真机上真的能进（接线后自动走宿主导航）。
@@ -633,6 +644,113 @@ fun SettingsScreen(
                             }
                         }
 
+                        // ===== 动效与触感：动效档位 / 卡顿自动降档 / 触觉开关 / 触觉强度 =====
+                        SectionHeader("动效与触感")
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("动效")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "动效强度",
+                                    subtitle = motionTierSubtitle(motionTier),
+                                    icon = Icons.Outlined.Animation,
+                                    trailing = {
+                                        TailNum(motionTierLabel(motionTier))
+                                    },
+                                )
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = t.space4, vertical = t.space2),
+                                    horizontalArrangement = Arrangement.spacedBy(t.space2),
+                                ) {
+                                    MotionTier.entries.forEach { tier ->
+                                        Chip(
+                                            label = motionTierLabel(tier),
+                                            selected = motionTier == tier,
+                                            onClick = {
+                                                if (motionConfig.setTier(tier)) {
+                                                    view.performHaptic(HapticTone.LIGHT)
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                                if (autoDowngraded) {
+                                    TokenDivider(first = false)
+                                    TokenRow(
+                                        title = "已自动降档",
+                                        subtitle = "检测到卡顿，已自动切到常规",
+                                        subtitleColor = t.warnText,
+                                        icon = Icons.Outlined.Speed,
+                                        trailing = {
+                                            AppButton(
+                                                text = "恢复默认",
+                                                onClick = {
+                                                    motionConfig.resetToDefault()
+                                                    view.performHaptic(HapticTone.LIGHT)
+                                                },
+                                                variant = AppButtonVariant.Ghost,
+                                            )
+                                        },
+                                    )
+                                }
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("触感")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "触觉反馈",
+                                    subtitle = if (hapticEnabled) {
+                                        "操作时轻震一下（遵循系统触觉总开关）"
+                                    } else {
+                                        "已关闭：所有操作都不震"
+                                    },
+                                    icon = Icons.Outlined.Vibration,
+                                    trailing = {
+                                        AppSwitch(hapticEnabled, { enabled ->
+                                            HapticConfig.setEnabled(enabled)
+                                            view.performHaptic(HapticTone.LIGHT)
+                                        })
+                                    },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "触觉强度",
+                                    subtitle = if (hapticEnabled) {
+                                        hapticStrengthSubtitle(hapticStrength)
+                                    } else {
+                                        "开启触觉反馈后可用"
+                                    },
+                                    subtitleColor = if (hapticEnabled) t.muted else t.meta,
+                                    icon = Icons.Outlined.Tune,
+                                )
+                                // 关闭触觉时整组降透明度：与「未开启」文案一致，不做成假开关
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer { alpha = if (hapticEnabled) 1f else 0.55f }
+                                        .padding(horizontal = t.space4, vertical = t.space2),
+                                    horizontalArrangement = Arrangement.spacedBy(t.space2),
+                                ) {
+                                    HapticStrength.entries.forEach { strength ->
+                                        Chip(
+                                            label = hapticStrengthLabel(strength),
+                                            selected = hapticStrength == strength,
+                                            onClick = {
+                                                if (HapticConfig.setStrength(strength)) {
+                                                    view.performHaptic(HapticTone.LIGHT)
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
+
                         // ===== 数据：数据与备份 =====
                         SectionHeader("数据")
                         // ⑧ 数据与备份（立即备份 / 从备份还原 / 自动频率 / 最近一次）
@@ -930,27 +1048,13 @@ fun SettingsScreen(
         )
 
         // 兜底桥：s13 外观（真实屏见 ui/AppearanceScreen.kt）
-        AnimatedVisibility(
-            visible = localAppearance,
-            enter = slideInHorizontally() + fadeIn(),
-            exit = slideOutHorizontally() + fadeOut(),
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                BackHandler { localAppearance = false }
-                AppearanceScreen(onBack = { localAppearance = false })
-            }
+        AnimatedScreenOverlay(visible = localAppearance, onBack = { localAppearance = false }) {
+            AppearanceScreen(onBack = { localAppearance = false })
         }
 
         // 兜底桥：s12 组件与五态展示厅（真实屏见 ui/ComponentGalleryScreen.kt）
-        AnimatedVisibility(
-            visible = localGallery,
-            enter = slideInHorizontally() + fadeIn(),
-            exit = slideOutHorizontally() + fadeOut(),
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                BackHandler { localGallery = false }
-                ComponentGalleryScreen(onBack = { localGallery = false })
-            }
+        AnimatedScreenOverlay(visible = localGallery, onBack = { localGallery = false }) {
+            ComponentGalleryScreen(onBack = { localGallery = false })
         }
     }
 }
@@ -1418,4 +1522,34 @@ private fun formatBytes(bytes: Long): String {
         index++
     }
     return if (index == 0) "$bytes B" else String.format(Locale.US, "%.1f %s", value, units[index])
+}
+
+// ── 动效与触感：文案映射（放文件尾，屏内多处引用） ──────────────────────
+
+/** 动效档位的短标签（Chip 与右对齐数值共用）。 */
+internal fun motionTierLabel(tier: MotionTier): String = when (tier) {
+    MotionTier.FULL -> "完整"
+    MotionTier.NORMAL -> "常规"
+    MotionTier.REDUCED -> "精简"
+}
+
+/** 动效档位的一句话说明（给用户看的，不写技术术语）。 */
+internal fun motionTierSubtitle(tier: MotionTier): String = when (tier) {
+    MotionTier.FULL -> "全部动效，含逐个入场与回弹（默认）"
+    MotionTier.NORMAL -> "保留转场与数字滚动，去掉逐个入场"
+    MotionTier.REDUCED -> "关闭动效，响应最快"
+}
+
+/** 触觉强度档的短标签。 */
+internal fun hapticStrengthLabel(strength: HapticStrength): String = when (strength) {
+    HapticStrength.LIGHT -> "轻"
+    HapticStrength.NORMAL -> "标准"
+    HapticStrength.STRONG -> "强"
+}
+
+/** 触觉强度档的一句话说明。 */
+internal fun hapticStrengthSubtitle(strength: HapticStrength): String = when (strength) {
+    HapticStrength.LIGHT -> "震动偏轻，安静场合更合适"
+    HapticStrength.NORMAL -> "默认力度"
+    HapticStrength.STRONG -> "震动更明显，嘈杂环境更容易察觉"
 }

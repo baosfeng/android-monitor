@@ -9,12 +9,7 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -82,7 +77,10 @@ import com.bsfeng.monitor.transfer.ui.TransferScreen
 import com.bsfeng.monitor.transfer.ui.TransferViewModel
 import com.bsfeng.monitor.ui.OverviewScreen
 import com.bsfeng.monitor.ui.foundation.MonitorEdgeToEdge
+import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import com.bsfeng.monitor.ui.foundation.JankMonitor
+import com.bsfeng.monitor.ui.foundation.MotionConfig
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.MonitorTheme
@@ -111,6 +109,27 @@ class MainActivity : ComponentActivity() {
         data object Stats : FinanceRoute()
         data object Budget : FinanceRoute()
         data object Import : FinanceRoute()
+    }
+
+    /**
+     * 卡顿采样器：前台期间统计超标帧，超标占比超过阈值时把动效档从 FULL 自动降到 NORMAL。
+     *
+     * 只在 onResume/onPause 之间采样——后台/锁屏不算用户感知的卡顿；且不 start 就完全
+     * 不生效（自动降档形同虚设），所以这两处必须成对存在。
+     */
+    private val jankMonitor by lazy { JankMonitor(config = MotionConfig.get(this)) }
+
+    override fun onResume() {
+        super.onResume()
+        // 系统「动画时长缩放」可能被用户在系统设置里改过：每次回前台重读一次（进程内缓存，
+        // 不重置就永远用首次读到的值）
+        MotionConfig.get(this).refreshSystemPolicy()
+        jankMonitor.start()
+    }
+
+    override fun onPause() {
+        jankMonitor.stop()
+        super.onPause()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -408,73 +427,58 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // 整屏覆盖层：与 Scaffold 同级（不吃内容区 padding），遮罩与底衬铺到系统栏之下
+                    // 转场（右侧滑入 + 淡入）与返回键统一由 AnimatedScreenOverlay 提供，取 token 并响应减弱动效
                     // 开屏跳过规则管理页面（覆盖层）— 从右侧滑入
                     // 覆盖层跟着功能开关走：跳过引擎关闭时 VM 为 null，这里不渲染
-                    AnimatedVisibility(
+                    AnimatedScreenOverlay(
                         visible = showSkipRuleScreen && skipRuleViewModel != null,
-                        enter = slideInHorizontally() + fadeIn(),
-                        exit = slideOutHorizontally() + fadeOut()
+                        onBack = {
+                            showSkipRuleScreen = false
+                            skipRuleViewModel?.refresh()
+                        },
                     ) {
-                        Box(Modifier.fillMaxSize()) {
-                            val vm = skipRuleViewModel ?: return@Box
-                            BackHandler {
+                        val vm = skipRuleViewModel ?: return@AnimatedScreenOverlay
+                        SkipRuleScreen(
+                            onBack = {
                                 showSkipRuleScreen = false
                                 vm.refresh()
-                            }
-                            SkipRuleScreen(
-                                onBack = {
-                                    showSkipRuleScreen = false
-                                    vm.refresh()
-                                },
-                                viewModel = vm
-                            )
-                        }
+                            },
+                            viewModel = vm
+                        )
                     }
 
                     // 广告白名单页面（覆盖层）— 从右侧滑入
-                    AnimatedVisibility(
+                    AnimatedScreenOverlay(
                         visible = showWhitelistScreen && whitelistViewModel != null,
-                        enter = slideInHorizontally() + fadeIn(),
-                        exit = slideOutHorizontally() + fadeOut()
+                        onBack = {
+                            showWhitelistScreen = false
+                            whitelistViewModel?.refresh()
+                        },
                     ) {
-                        Box(Modifier.fillMaxSize()) {
-                            val vm = whitelistViewModel ?: return@Box
-                            BackHandler(showWhitelistScreen) {
+                        val vm = whitelistViewModel ?: return@AnimatedScreenOverlay
+                        WhitelistScreen(
+                            onBack = {
                                 showWhitelistScreen = false
                                 vm.refresh()
-                            }
-                            WhitelistScreen(
-                                onBack = {
-                                    showWhitelistScreen = false
-                                    vm.refresh()
-                                },
-                                viewModel = vm
-                            )
-                        }
+                            },
+                            viewModel = vm
+                        )
                     }
 
                     // s12 组件展厅（占位屏，W2 接手）
-                    AnimatedVisibility(
+                    AnimatedScreenOverlay(
                         visible = showGallery,
-                        enter = slideInHorizontally() + fadeIn(),
-                        exit = slideOutHorizontally() + fadeOut()
+                        onBack = { showGallery = false },
                     ) {
-                        Box(Modifier.fillMaxSize()) {
-                            BackHandler(showGallery) { showGallery = false }
-                            ComponentGalleryScreen(onBack = { showGallery = false })
-                        }
+                        ComponentGalleryScreen(onBack = { showGallery = false })
                     }
 
                     // s13 外观 / 主题切换（占位屏，W3 接手）
-                    AnimatedVisibility(
+                    AnimatedScreenOverlay(
                         visible = showAppearance,
-                        enter = slideInHorizontally() + fadeIn(),
-                        exit = slideOutHorizontally() + fadeOut()
+                        onBack = { showAppearance = false },
                     ) {
-                        Box(Modifier.fillMaxSize()) {
-                            BackHandler(showAppearance) { showAppearance = false }
-                            AppearanceScreen(onBack = { showAppearance = false })
-                        }
+                        AppearanceScreen(onBack = { showAppearance = false })
                     }
 
                     // 开屏：品牌 C2 动效，时序同原型 §8 —— 1600ms 起 240ms ease-in 淡出、1900ms 结束；

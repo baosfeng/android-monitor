@@ -3,10 +3,12 @@ package com.bsfeng.monitor.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +40,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.gpuSlideX
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
@@ -84,6 +90,8 @@ fun Chip(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     // 原型 .chip.is-on：底 color-mix(fg 7%) / 描边 color-mix(fg 24%) / 字 --fg —— 中性，不占强调色预算
     val bg by animateColorAsState(
         targetValue = if (selected) t.fgFade(7) else Color.Transparent,
@@ -103,10 +111,15 @@ fun Chip(
     Box(
         modifier = modifier
             .height(t.tapMin)
+            .pressFeedback(interaction)
             .clip(RoundedCornerShape(t.radiusPill))
             .background(bg)
             .border(1.dp, stroke, RoundedCornerShape(t.radiusPill))
-            .clickable { onClick() }
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                // 选中切换属轻触级：震动收敛在控件内，调用点不再各补一次
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
             .padding(horizontal = t.space4),
         contentAlignment = Alignment.Center,
     ) {
@@ -209,6 +222,7 @@ fun AppSwitch(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
     val trackColor by animateColorAsState(
         // 关闭态轨道用前景 18% 覆盖：border-soft 在浅色主题里只有 6% 透明度，
         // 白 knob 落在白卡片上几乎看不见（用户会以为这里没有开关）。
@@ -228,7 +242,11 @@ fun AppSwitch(
             .size(width = t.switchTrackW, height = t.switchTrackH)
             .clip(RoundedCornerShape(t.switchTrackH / 2))
             .background(trackColor)
-            .clickable { onCheckedChange(!checked) },
+            .clickable {
+                // 开关切换是轻触级；调用点此前各自补 performConfirmHaptic，现收敛到控件内
+                haptic(HapticTone.LIGHT)
+                onCheckedChange(!checked)
+            },
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
@@ -250,12 +268,19 @@ fun AppFab(
     contentDescription: String = "新增",
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .size(t.fabSize)
+            .pressFeedback(interaction)
             .clip(CircleShape)
             .background(t.accent)
-            .clickable { onClick() },
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                // 主操作给中触（区别于列表点击的轻触），按下就出现缩放
+                haptic(HapticTone.MEDIUM)
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = t.accentOn, modifier = Modifier.size(t.iconSize / 2))

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # 渲染期（GPU）规则门禁：命中即 exit 1。
 #
-# 三项检查，各由一个 grep / awk 判定、期望值为 0、命中时打印「文件:行:内容」：
+# 四项检查，各由一个 grep / awk 判定、期望值为 0、命中时打印「文件:行:内容」：
 #   1. 页面自画底衬渐变：*Screen.kt 出现 Brush.verticalGradient(listOf(t.backdropA
 #      （底衬统一走 foundation/Backdrop.kt，避免每屏各建一份全屏渐变）
 #   2. 绘制 lambda 内分配：onDrawBehind / onDrawWithContent 体内出现 Path() 或 Brush. 构造
 #      （对象进 drawWithCache 的 build 块，绘制期只读）
 #   3. 动画值走布局：Modifier.offset(...) 引用 animate*AsState / animateFloat 得到的值
 #      （改走 foundation/GpuMotion.kt 的绘制期位移，避免每帧 measure/layout）
+#   4. 转场裸 spec：AnimatedVisibility(...) 参数块内出现不带 animationSpec 的
+#      slideInHorizontally() / slideOutHorizontally() / slideInVertically() / slideOutVertically() /
+#      fadeIn() / fadeOut()（这类裸调用取 Compose 默认 spec：不读设计 token、不响应减弱动效）
+#      （统一改用 foundation/Transitions.kt 的 slideInFromRight / sheetEnterFromBottom / dialogEnter /
+#        expandEnter 等基元，或 AnimatedScreenOverlay 一步式载体）
 #
 # 已知局限：按行判定，字符串 / 注释里的花括号可能影响块结束位置；
 # 跨行书写的 offset(x = 变量) 不在此判定范围内 —— 这两类写法在本仓库不出现。
@@ -16,7 +21,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/app/src/main/java"
-TOTAL_CHECKS=3
+TOTAL_CHECKS=4
 FAILED=0
 SUMMARY=()
 
@@ -84,12 +89,48 @@ scan_animated_offset() {
     done
 }
 
+# 检查 4：AnimatedVisibility 的 enter/exit 里不得出现不带 animationSpec 的裸转场调用。
+# 判定方式：按括号深度取出每个 `AnimatedVisibility(` 的参数块（不是它的 content lambda），
+# 块内匹配「函数名 + 空括号」，即 slideInHorizontally() / fadeIn() 这类取 Compose 默认 spec 的写法；
+# 带参数的写法（tween(...) / fadeIn(tween(...))）不命中。同一文件可多次出现，逐个报。
+scan_bare_transition_spec() {
+    find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
+        awk -v rel="${f#"$ROOT"/}" '
+            function opens(s,   t) { t = s; gsub(/\{[^{}]*\}/, "", t); return gsub(/\(/, "", t) }
+            function closes(s,   t) { t = s; gsub(/\{[^{}]*\}/, "", t); return gsub(/\)/, "", t) }
+            function scan(buf,   name) {
+                if (match(buf, /(slideInHorizontally|slideOutHorizontally|slideInVertically|slideOutVertically|fadeIn|fadeOut)[[:space:]]*\([[:space:]]*\)/)) {
+                    name = substr(buf, RSTART, RLENGTH)
+                    gsub(/[[:space:]]+/, "", name)
+                    return name
+                }
+                return ""
+            }
+            {
+                if (!inblock && $0 ~ /AnimatedVisibility[[:space:]]*\(/) {
+                    inblock = 1; start = NR; buf = ""; depth = 0
+                }
+                if (inblock) {
+                    buf = buf " " $0
+                    depth += opens($0) - closes($0)
+                    if (depth <= 0) {
+                        hit = scan(buf)
+                        if (hit != "") print rel ":" start ": " hit
+                        inblock = 0
+                    }
+                }
+            }
+        ' "$f"
+    done
+}
+
 echo "渲染期规则门禁：$SRC"
 echo
 
 run_check 1 "页面自画底衬渐变" 0 scan_page_backdrop
 run_check 2 "绘制 lambda 内分配 Path/Brush" 0 scan_draw_alloc
 run_check 3 "动画值走 Modifier.offset（布局属性）" 0 scan_animated_offset
+run_check 4 "AnimatedVisibility 转场走统一基元（无裸 spec）" 0 scan_bare_transition_spec
 
 echo "================ 汇总 ================"
 for row in "${SUMMARY[@]}"; do
