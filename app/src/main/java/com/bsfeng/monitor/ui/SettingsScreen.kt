@@ -2,7 +2,10 @@ package com.bsfeng.monitor.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.PowerManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
@@ -36,7 +39,17 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Save
 import com.bsfeng.monitor.autobook.AutoBookConfig
+import com.bsfeng.monitor.backup.BackupConfig
+import com.bsfeng.monitor.backup.BackupFrequency
+import com.bsfeng.monitor.backup.BackupManager
+import com.bsfeng.monitor.backup.BackupOrigin
+import com.bsfeng.monitor.backup.BackupOutcome
+import com.bsfeng.monitor.backup.BackupScheduler
+import com.bsfeng.monitor.backup.RestoreOutcome
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Speed
@@ -73,6 +86,8 @@ import com.bsfeng.monitor.update.UpdateManifest
 import com.bsfeng.monitor.update.UpdateUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.ui.components.AppCard
@@ -168,6 +183,17 @@ fun SettingsScreen(
     var subscriptionCount by remember { mutableStateOf(0) }
     var whitelistCount by remember { mutableStateOf(0) }
     var batteryIgnored by remember { mutableStateOf(false) }
+    // 数据与备份：频率 / 最近一次 / 已存份数（进设置页即刷新，见 reloadCounters）
+    var backupFrequency by remember { mutableStateOf(BackupConfig(context).frequency()) }
+    var lastBackup by remember { mutableStateOf(BackupConfig(context).lastBackup()) }
+    var backupCount by remember { mutableStateOf(0) }
+    var backupBusy by remember { mutableStateOf(false) }
+    var restoreBusy by remember { mutableStateOf(false) }
+    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    // SAF 选包：OpenDocument 拿到的是可读 uri，minSdk 29 下无需申请存储权限
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) pendingRestoreUri = uri
+    }
 
     fun reloadCounters() {
         ruleCount = MonitorApp.instance.container.skipRuleManager.getAllRules().size
@@ -178,6 +204,10 @@ fun SettingsScreen(
             ?.size ?: 0
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         batteryIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        val backupConfig = BackupConfig(context)
+        backupFrequency = backupConfig.frequency()
+        lastBackup = backupConfig.lastBackup()
+        backupCount = BackupManager(context).listBackups().size
     }
 
     // 从系统设置页返回时立即刷新（不看轮询的运气）
@@ -781,7 +811,140 @@ fun SettingsScreen(
                             )
                         }
 
-                        // ⑧ 调试模式（默认不显示：仅 debug 构建 + 关于页长按版本解锁后出现）
+                        // ⑧ 数据与备份（立即备份 / 从备份还原 / 自动频率 / 最近一次）
+                        // 备份包只含本机数据文件（两张库 + shared_prefs + 规则快照），不含任何账号凭据；
+                        // 公共 Downloads 一份给用户自己拷走，换机 / 重装后靠它还原。
+                        Column(Modifier.fillMaxWidth()) {
+                            GroupLabel("数据与备份")
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "立即备份",
+                                    subtitle = if (backupBusy) "正在打包账目与记录…" else "打包账目、记录与设置到 Downloads",
+                                    icon = Icons.Outlined.Save,
+                                    trailing = {
+                                        AppButton(
+                                            text = if (backupBusy) "备份中" else "备份",
+                                            onClick = {
+                                                if (!backupBusy) {
+                                                    backupBusy = true
+                                                    view.performConfirmHaptic()
+                                                    scope.launch {
+                                                        val outcome = withContext(Dispatchers.IO) {
+                                                            BackupManager(context).backupNow(BackupOrigin.MANUAL)
+                                                        }
+                                                        backupBusy = false
+                                                        reloadCounters()
+                                                        when (outcome) {
+                                                            is BackupOutcome.Success -> toast.show(
+                                                                "已备份：" + (outcome.publicPath ?: outcome.localName ?: ""),
+                                                            )
+                                                            is BackupOutcome.Failed -> toast.show(outcome.message)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            variant = AppButtonVariant.Ghost,
+                                            enabled = !backupBusy,
+                                        )
+                                    },
+                                )
+                                TokenDivider(first = false)
+                                // 还原走 SAF：选包 → 校验 sha256 → 自动留 pre-restore 包 → 替换文件 → 重启进程
+                                TokenRow(
+                                    title = "从备份还原",
+                                    subtitle = if (restoreBusy) "正在校验并还原…" else "选 zip 覆盖当前数据，先自动留一份",
+                                    icon = Icons.Outlined.Restore,
+                                    onClick = {
+                                        if (!restoreBusy) {
+                                            restoreLauncher.launch(
+                                                arrayOf("application/zip", "application/octet-stream"),
+                                            )
+                                        }
+                                    },
+                                    trailing = { TailChevron() },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "自动备份频率",
+                                    subtitle = "默认每周 · 最多保留 5 份，超额删最旧",
+                                    icon = Icons.Outlined.Timer,
+                                )
+                                ChipRow(
+                                    items = BackupFrequency.values().map { it.label },
+                                    selectedIndex = BackupFrequency.values()
+                                        .indexOf(backupFrequency).coerceAtLeast(0),
+                                    onSelect = { index ->
+                                        val frequency = BackupFrequency.values()[index]
+                                        backupFrequency = frequency
+                                        BackupConfig(context).setFrequency(frequency)
+                                        BackupScheduler.apply(context, frequency)
+                                        view.performConfirmHaptic()
+                                        toast.show(
+                                            if (frequency == BackupFrequency.OFF) {
+                                                "已关闭自动备份"
+                                            } else {
+                                                "自动备份：" + frequency.label + "备份一次"
+                                            },
+                                        )
+                                    },
+                                    modifier = Modifier.padding(
+                                        horizontal = t.space4,
+                                        vertical = t.space2,
+                                    ),
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "最近一次备份",
+                                    subtitle = lastBackup?.let {
+                                        formatBackupTime(it.at) + " · 共 " + backupCount + " 份"
+                                    } ?: "还没有备份",
+                                    icon = Icons.Outlined.History,
+                                    onClick = {
+                                        toast.show(lastBackup?.publicPath ?: "还没有备份包")
+                                    },
+                                    trailing = { TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                            ConfirmDialog(
+                                visible = pendingRestoreUri != null,
+                                title = "从备份还原",
+                                message = "将用所选备份覆盖当前的账目、记录与设置。还原前会自动把当前数据" +
+                                    "备份成一份 pre-restore 包；还原完成后 App 会自动重启。",
+                                confirmLabel = "还原",
+                                dismissLabel = "取消",
+                                onDismiss = { pendingRestoreUri = null },
+                                onConfirm = {
+                                    val uri = pendingRestoreUri
+                                    pendingRestoreUri = null
+                                    if (uri != null && !restoreBusy) {
+                                        restoreBusy = true
+                                        toast.show("正在校验备份包…")
+                                        scope.launch {
+                                            val outcome = withContext(Dispatchers.IO) {
+                                                BackupManager(context).prepareRestore(uri)
+                                            }
+                                            when (outcome) {
+                                                is RestoreOutcome.Rejected -> {
+                                                    restoreBusy = false
+                                                    toast.show(outcome.reason)
+                                                }
+                                                is RestoreOutcome.Ready -> {
+                                                    withContext(Dispatchers.IO) {
+                                                        BackupManager(context).applyRestore(outcome.plan)
+                                                    }
+                                                    toast.show("还原完成，App 即将重启")
+                                                    delay(900)
+                                                    BackupManager(context).restartProcess()
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            )
+                        }
+
+                        // ⑨ 调试模式（默认不显示：仅 debug 构建 + 关于页长按版本解锁后出现）
                         if (debugUi) {
                             Column(Modifier.fillMaxWidth()) {
                                 GroupLabel("调试模式")
@@ -834,7 +997,7 @@ fun SettingsScreen(
                             }
                         }
 
-                        // ⑨ 关于
+                        // ⑩ 关于
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("关于")
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
@@ -983,6 +1146,9 @@ private fun View.performConfirmHaptic() {
         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
 }
+
+private fun formatBackupTime(at: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(at))
 
 private fun formatUptime(ms: Long): String {
     val totalMinutes = ms / 60_000L

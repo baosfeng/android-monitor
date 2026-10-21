@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.bsfeng.monitor.backup.BackupScheduler
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.util.AppUtils
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,8 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // 系统重启后 AlarmManager 闹钟丢失,重新调度(重复调用会更新同一 PendingIntent,不会叠加)
         scheduleAlarmCheck(context)
+        // 定期备份的闹钟同理：Restart 后补排一次（已在跑时是空操作，不会把触发时间往后推）
+        BackupScheduler.ensureScheduled(context)
 
         HealthChecker.checkAndRestore(context)
 
