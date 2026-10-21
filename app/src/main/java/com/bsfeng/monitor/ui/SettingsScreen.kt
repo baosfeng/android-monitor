@@ -3,6 +3,7 @@ package com.bsfeng.monitor.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.app.NotificationManager
 import android.os.PowerManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,6 +44,9 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Save
 import com.bsfeng.monitor.autobook.AutoBookConfig
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureCatalog
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.backup.BackupConfig
 import com.bsfeng.monitor.backup.BackupFrequency
 import com.bsfeng.monitor.backup.BackupManager
@@ -53,6 +57,8 @@ import com.bsfeng.monitor.backup.RestoreApplyOutcome
 import com.bsfeng.monitor.backup.RestoreOutcome
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Widgets
@@ -69,6 +75,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -96,6 +103,7 @@ import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.SectionHeader
 import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.Chip
 import com.bsfeng.monitor.ui.components.ChipRow
@@ -104,6 +112,7 @@ import com.bsfeng.monitor.ui.components.SkeletonBlock
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.rememberDebugUiAvailable
 import com.bsfeng.monitor.ui.components.rememberDemoVisible
+import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.util.DebugConfig
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -163,7 +172,14 @@ fun SettingsScreen(
     val view = LocalView.current
     val toast = rememberToastHostState()
     val scope = rememberCoroutineScope()
-    val transferViewModel: TransferViewModel = viewModel()
+    // 功能开关：一处读，四个功能卡与折叠逻辑都按它判定；关闭的功能不创建对应 ViewModel
+    val featureFlags = FeatureFlags.get()
+    val enabledFeatures by featureFlags.enabled.collectAsState()
+    val liveOn = enabledFeatures[Feature.LIVE] == true
+    val adSkipOn = enabledFeatures[Feature.AD_SKIP] == true
+    val financeOn = enabledFeatures[Feature.FINANCE] == true
+    val transportOn = enabledFeatures[Feature.TRANSPORT] == true
+    val transferViewModel: TransferViewModel? = if (transportOn) viewModel() else null
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val debugEnabled by viewModel.debugEnabled.collectAsState()
@@ -186,6 +202,8 @@ fun SettingsScreen(
     var subscriptionCount by remember { mutableStateOf(0) }
     var whitelistCount by remember { mutableStateOf(0) }
     var batteryIgnored by remember { mutableStateOf(false) }
+    // 通知权限（系统级）：进设置页与从系统设置返回时刷新
+    var notificationsOn by remember { mutableStateOf(notificationsEnabled(context)) }
     // 数据与备份：频率 / 最近一次 / 已存份数（进设置页即刷新，见 reloadCounters）
     var backupFrequency by remember { mutableStateOf(BackupConfig(context).frequency()) }
     var lastBackup by remember { mutableStateOf(BackupConfig(context).lastBackup()) }
@@ -214,9 +232,17 @@ fun SettingsScreen(
     }
 
     // 从系统设置页返回时立即刷新（不看轮询的运气）
+    /** 切换功能开关：落盘 + 立即生效（Tab 与设置项同一帧变化），并给一次触觉与提示。 */
+    fun setFeature(feature: Feature, enabled: Boolean) {
+        if (!featureFlags.setEnabled(feature, enabled)) return
+        view.performConfirmHaptic()
+        toast.show(if (enabled) "已开启「" + feature.title + "」" else "已关闭「" + feature.title + "」")
+    }
+
     LifecycleResumeEffect(Unit) {
         viewModel.refreshAccessibilityStatus()
         reloadCounters()
+        notificationsOn = notificationsEnabled(context)
         onPauseOrDispose { }
     }
     LaunchedEffect(Unit) { reloadCounters() }
@@ -291,34 +317,174 @@ fun SettingsScreen(
                             Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(t.space4),
                         ) {
-                        // ① 监控时长窗口（chip 组）
-                        //
-                        // 已确认保留 5/10/15 **秒**，不采用原型 s09 的「15 分钟 / 30 分钟 / 1 小时 / 永久」
-                        // 档位：本 chip 绑定的值（SkipConfig.watchWindowMs）优先服务**开屏跳过引擎的匹配窗口**
-                        // 语义 —— 自 App 切换起算，同时是内置规则的 matchTime 时间闸门
-                        // （SkipRuleManager.load → BuiltInRules.getRules），放宽到分钟 / 永久会改变引擎行为
-                        // （防误触闸门失效；matchTime=0 在 GKD 语义里 = 不限）。
-                        // 语义依据：docs/开屏跳过/设计.md §1「匹配窗口模型」、§4.3、§7。
-                        Column(Modifier.fillMaxWidth()) {
-                            GroupLabel("监控时长窗口")
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = t.space4),
-                                horizontalArrangement = Arrangement.spacedBy(t.space2),
-                            ) {
-                                SkipConfig.WINDOW_OPTIONS_MS.forEach { option ->
-                                    Chip(
-                                        label = (option / 1000).toString() + " 秒",
-                                        selected = option == watchWindowMs,
-                                        onClick = {
-                                            viewModel.setWatchWindowMs(option)
-                                            view.performConfirmHaptic()
-                                            toast.show("监控时长窗口：" + (option / 1000) + " 秒")
-                                        },
-                                    )
-                                }
+                        // ===== 功能（置顶）：一项功能一张卡 = 开关 + 该功能专属设置 =====
+                        // 关闭后专属设置折叠成一句「开启后可用」：不消失、不换位置，重启后也找得到
+                        SectionHeader("功能")
+
+                        // 实时监控（Tab：实时）
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "实时监控",
+                                subtitle = if (liveOn) {
+                                    "实时事件流与前台 App 记录"
+                                } else {
+                                    "已关闭：不生成「实时」Tab"
+                                },
+                                icon = Icons.Outlined.Speed,
+                                trailing = { AppSwitch(liveOn, { setFeature(Feature.LIVE, it) }) },
+                            )
+                            TokenDivider(first = false)
+                            if (liveOn) {
+                                TokenRow(
+                                    title = "今日记录",
+                                    subtitle = "实时页按事件类型分组展示，概览实时入口照常可进",
+                                    icon = Icons.Outlined.BarChart,
+                                    trailing = { TailNum(state.todayEventCount.toString() + " 条") },
+                                )
+                            } else {
+                                TokenRow(
+                                    title = "实时事件流",
+                                    subtitle = FeatureCatalog.offHint(Feature.LIVE),
+                                    icon = Icons.Outlined.BarChart,
+                                )
                             }
                         }
 
+                        // 广告跳过：关的是「跳过引擎」，不是「广告」记录 Tab（记录页照常可看）
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "广告跳过",
+                                subtitle = if (adSkipOn) {
+                                    "规则 " + ruleCount + " 条 · 白名单 " + whitelistCount + " 个"
+                                } else {
+                                    "已关闭：切 App 后不扫描页面、不执行跳过规则"
+                                },
+                                icon = Icons.Outlined.PlayArrow,
+                                trailing = { AppSwitch(adSkipOn, { setFeature(Feature.AD_SKIP, it) }) },
+                            )
+                            if (adSkipOn) {
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "监控时长窗口",
+                                    subtitle = "切换 App 后 " + (watchWindowMs / 1000) + " 秒内匹配跳过按钮",
+                                    icon = Icons.Outlined.Timer,
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
+                                    horizontalArrangement = Arrangement.spacedBy(t.space2),
+                                ) {
+                                    SkipConfig.WINDOW_OPTIONS_MS.forEach { option ->
+                                        Chip(
+                                            label = (option / 1000).toString() + " 秒",
+                                            selected = option == watchWindowMs,
+                                            onClick = {
+                                                viewModel.setWatchWindowMs(option)
+                                                view.performConfirmHaptic()
+                                                toast.show("监控时长窗口：" + (option / 1000) + " 秒")
+                                            },
+                                        )
+                                    }
+                                }
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "开屏跳过规则",
+                                    subtitle = "订阅源 " + subscriptionCount + " 个 · 本地合并后按顺序匹配",
+                                    icon = Icons.Outlined.PlayArrow,
+                                    onClick = onNavigateToSkipRules,
+                                    trailing = { TailNum(ruleCount.toString() + " 条"); TailChevron() },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "应用白名单",
+                                    subtitle = "白名单内应用不参与跳过",
+                                    icon = Icons.Outlined.Shield,
+                                    onClick = onNavigateToWhitelist,
+                                    trailing = { TailNum(whitelistCount.toString() + " 个"); TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            } else {
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "跳过规则 / 应用白名单",
+                                    subtitle = FeatureCatalog.offHint(Feature.AD_SKIP),
+                                    icon = Icons.Outlined.Shield,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // 记账（Tab：记账）
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "记账",
+                                subtitle = if (financeOn) {
+                                    "手动记账、统计与自动记账"
+                                } else {
+                                    "已关闭：不生成「记账」Tab"
+                                },
+                                icon = Icons.Outlined.Payments,
+                                trailing = { AppSwitch(financeOn, { setFeature(Feature.FINANCE, it) }) },
+                            )
+                            TokenDivider(first = false)
+                            if (financeOn) {
+                                val autoBookEnabled by AutoBookConfig.enabledFlow.collectAsState()
+                                TokenRow(
+                                    title = "支付后弹窗确认",
+                                    subtitle = if (autoBookEnabled) {
+                                        "识别支付页，确认后入账"
+                                    } else {
+                                        "已关闭：不识别、不弹窗"
+                                    },
+                                    icon = Icons.Outlined.Payments,
+                                    trailing = {
+                                        AppSwitch(autoBookEnabled, { enabled ->
+                                            AutoBookConfig.setEnabled(context, enabled)
+                                            view.performConfirmHaptic()
+                                            toast.show(
+                                                if (enabled) "已开启支付后弹窗记账" else "已关闭支付后弹窗记账"
+                                            )
+                                        })
+                                    },
+                                )
+                            } else {
+                                TokenRow(
+                                    title = "自动记账",
+                                    subtitle = FeatureCatalog.offHint(Feature.FINANCE),
+                                    icon = Icons.Outlined.Payments,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // 传送（Tab：传送；默认关闭）
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "传送",
+                                subtitle = if (transportOn) {
+                                    "局域网互发文件 · 设置在本卡内，传送页只留收发"
+                                } else {
+                                    "已关闭：不启动传送服务、不占端口、不做设备发现"
+                                },
+                                icon = Icons.Outlined.SwapHoriz,
+                                trailing = { AppSwitch(transportOn, { setFeature(Feature.TRANSPORT, it) }) },
+                            )
+                            val transferVm = transferViewModel
+                            if (transportOn && transferVm != null) {
+                                TokenDivider(first = false)
+                                TransferFeatureSettings(transferVm, toast, context, scope, view)
+                            } else {
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "传送设置",
+                                    subtitle = FeatureCatalog.offHint(Feature.TRANSPORT) + "：后台接收、提示音、接收目录",
+                                    icon = Icons.Outlined.Settings,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // ===== 通用：服务与权限 / 监控 / 耗电 / 外观 / 通知 =====
+                        SectionHeader("通用")
                         // ② 无障碍服务
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("无障碍服务")
@@ -342,34 +508,6 @@ fun SettingsScreen(
                                             onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                                             variant = AppButtonVariant.Ghost,
                                         )
-                                    },
-                                )
-                                Spacer(Modifier.height(t.space1))
-                            }
-                        }
-
-                        // 自动记账：跟随无障碍服务；开关落盘 monitor_prefs，无障碍服务侧读取即时生效
-                        Column(Modifier.fillMaxWidth()) {
-                            GroupLabel("自动记账")
-                            val autoBookEnabled by AutoBookConfig.enabledFlow.collectAsState()
-                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
-                                TokenRow(
-                                    title = "支付后弹窗确认",
-                                    // 副标题按 TokenRow 单行容量写短（16 字位上限），过长会被省略号截断
-                                    subtitle = if (autoBookEnabled) {
-                                        "识别支付页，确认后入账"
-                                    } else {
-                                        "已关闭：不识别、不弹窗"
-                                    },
-                                    icon = Icons.Outlined.Payments,
-                                    trailing = {
-                                        AppSwitch(autoBookEnabled, { enabled ->
-                                            AutoBookConfig.setEnabled(context, enabled)
-                                            view.performConfirmHaptic()
-                                            toast.show(
-                                                if (enabled) "已开启支付后弹窗记账" else "已关闭支付后弹窗记账"
-                                            )
-                                        })
                                     },
                                 )
                                 Spacer(Modifier.height(t.space1))
@@ -447,29 +585,6 @@ fun SettingsScreen(
                             }
                         }
 
-                        // ⑤ 开屏广告跳过
-                        Column(Modifier.fillMaxWidth()) {
-                            GroupLabel("开屏广告跳过")
-                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
-                                TokenRow(
-                                    title = "开屏跳过规则",
-                                    subtitle = "订阅源 " + subscriptionCount + " 个 · 本地合并后按顺序匹配",
-                                    icon = Icons.Outlined.PlayArrow,
-                                    onClick = onNavigateToSkipRules,
-                                    trailing = { TailNum(ruleCount.toString() + " 条"); TailChevron() },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "应用白名单",
-                                    subtitle = "白名单内应用不参与跳过",
-                                    icon = Icons.Outlined.Shield,
-                                    onClick = onNavigateToWhitelist,
-                                    trailing = { TailNum(whitelistCount.toString() + " 个"); TailChevron() },
-                                )
-                                Spacer(Modifier.height(t.space1))
-                            }
-                        }
-
                         // ⑥ 外观（入口显示当前主题名）
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("外观")
@@ -488,275 +603,27 @@ fun SettingsScreen(
                             }
                         }
 
-                        // ⑦ 局域网互传（提示音 / 免配对窗口 / 体积阈值 / 接收目录）
-                        // 传送页只留「可被发现 / 附近设备 / 进行中 / 最近完成」，所有设置收敛到这里。
+
+                        // 通知（系统通知开关；本 App 不发营销推送，只有事件提醒与传送通知）
                         Column(Modifier.fillMaxWidth()) {
-                            GroupLabel("局域网互传")
-                            val sound by transferViewModel.soundSettings.collectAsState()
-                            val windowState by transferViewModel.openPairing.collectAsState()
-                            val thresholdMb by transferViewModel.autoApproveThresholdMb.collectAsState()
-                            val stats by transferViewModel.receivedStats.collectAsState()
-                            var confirmClear by remember { mutableStateOf(false) }
-                            var windowLeftMs by remember { mutableStateOf(windowState.remainingMs()) }
-                            var editingName by remember { mutableStateOf(false) }
-                            var nameDraft by remember { mutableStateOf("") }
-
-                            LaunchedEffect(windowState) {
-                                while (true) {
-                                    windowLeftMs = windowState.remainingMs()
-                                    if (windowLeftMs <= 0L) break
-                                    delay(1_000L)
-                                }
-                            }
-                            // 进设置页即刷新接收目录占用（MediaStore 查询放 IO）
-                            LifecycleResumeEffect(Unit) {
-                                scope.launch { withContext(Dispatchers.IO) { transferViewModel.refreshReceivedStats() } }
-                                onPauseOrDispose { }
-                            }
-
-                            // 加入磁贴：API 33+ 一键请求，低版本给文案引导（系统不允许静默添加）
-                            fun requestTile() {
-                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                    toast.show("下拉通知栏 → 编辑 → 添加「局域网互传」")
-                                    return
-                                }
-                                runCatching {
-                                    val sbm = context.getSystemService(StatusBarManager::class.java)
-                                    sbm?.requestAddTileService(
-                                        ComponentName(context, TransferTileService::class.java),
-                                        TransferTileState.LABEL,
-                                        Icon.createWithResource(context, R.drawable.ic_transfer_tile),
-                                        context.mainExecutor,
-                                    ) { result ->
-                                        toast.show(
-                                            when (result) {
-                                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "已添加到快捷设置"
-                                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "磁贴已在快捷设置里"
-                                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "已取消添加"
-                                                else -> "添加失败（$result），可手动从「编辑」里添加"
-                                            },
-                                        )
-                                    }
-                                }.onFailure { toast.show("添加失败，请到通知栏「编辑」里手动添加") }
-                            }
-
-                            val backgroundReceive by transferViewModel.backgroundReceive.collectAsState()
-                            val autoCloseMinutes by transferViewModel.autoCloseMinutes.collectAsState()
-                            val myAlias by transferViewModel.aliasFlow.collectAsState()
+                            GroupLabel("通知")
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
                                 TokenRow(
-                                    title = "本机名称",
-                                    subtitle = myAlias + " · 对端设备列表里显示的名字",
-                                    icon = Icons.Outlined.Smartphone,
-                                    onClick = {
-                                        nameDraft = myAlias
-                                        editingName = true
-                                    },
-                                    trailing = { TailChevron() },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "后台接收",
-                                    subtitle = if (backgroundReceive) {
-                                        "常驻前台服务 · 通知显示在线设备"
+                                    title = "系统通知",
+                                    subtitle = if (notificationsOn) {
+                                        "已允许：事件提醒与传送通知可送达"
                                     } else {
-                                        "仅 App 可见时运行 · 默认关闭"
+                                        "已关闭：通知被系统拦截"
                                     },
                                     icon = Icons.Outlined.NotificationsActive,
                                     trailing = {
-                                        AppSwitch(backgroundReceive, { enabled ->
-                                            transferViewModel.setBackgroundReceive(enabled)
-                                            view.performConfirmHaptic()
-                                            toast.show(
-                                                if (enabled) "已开启后台接收（常驻通知）" else "已关闭后台接收（仅 App 内可见）"
-                                            )
-                                        })
-                                    },
-                                )
-                                TokenDivider(first = false)
-                                // 「自动关闭接收」：到点自动停服务，避免不用时白白耗电。
-                                // 只持久化时长，不持久化计时起点（进程重启后重新计时）。
-                                TokenRow(
-                                    title = "自动关闭接收",
-                                    subtitle = if (autoCloseMinutes == ReceivingAutoClose.OFF) {
-                                        "关闭：一直保持接收，直到手动关闭（默认）"
-                                    } else {
-                                        "开启接收后 " + ReceivingAutoClose.label(autoCloseMinutes) + "自动停止 · 省电"
-                                    },
-                                    icon = Icons.Outlined.Timer,
-                                )
-                                ChipRow(
-                                    items = ReceivingAutoClose.MINUTES_OPTIONS.map {
-                                        ReceivingAutoClose.label(it)
-                                    },
-                                    selectedIndex = ReceivingAutoClose.MINUTES_OPTIONS
-                                        .indexOf(autoCloseMinutes).coerceAtLeast(0),
-                                    onSelect = { index ->
-                                        val minutes = ReceivingAutoClose.MINUTES_OPTIONS[index]
-                                        transferViewModel.setAutoCloseMinutes(minutes)
-                                        view.performConfirmHaptic()
-                                        toast.show(
-                                            if (minutes == ReceivingAutoClose.OFF) {
-                                                "已关闭「自动关闭接收」"
-                                            } else {
-                                                "接收将在 " + ReceivingAutoClose.label(minutes) + "后自动关闭"
-                                            },
-                                        )
-                                    },
-                                    modifier = Modifier.padding(
-                                        horizontal = t.space4,
-                                        vertical = t.space2,
-                                    ),
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "通知栏磁贴",
-                                    subtitle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        "一键添加到快捷设置，下拉即开关"
-                                    } else {
-                                        "下拉通知栏 → 编辑 → 添加「局域网互传」"
-                                    },
-                                    icon = Icons.Outlined.Widgets,
-                                    trailing = {
                                         AppButton(
-                                            text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
+                                            text = "设置",
                                             onClick = {
-                                                view.performConfirmHaptic()
-                                                requestTile()
-                                            },
-                                            variant = AppButtonVariant.Ghost,
-                                        )
-                                    },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "传输完成提示",
-                                    subtitle = "系统通知音 + 震动",
-                                    icon = Icons.Outlined.VolumeUp,
-                                    trailing = {
-                                        AppSwitch(sound.complete, { enabled ->
-                                            transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
-                                            view.performConfirmHaptic()
-                                            toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
-                                        })
-                                    },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "传输失败提示",
-                                    subtitle = "提示音 + 震动（默认关）",
-                                    icon = Icons.Outlined.VolumeOff,
-                                    trailing = {
-                                        AppSwitch(sound.failure, { enabled ->
-                                            transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
-                                            view.performConfirmHaptic()
-                                        })
-                                    },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "新设备出现提示",
-                                    subtitle = "仅震动（默认关）",
-                                    icon = Icons.Outlined.Vibration,
-                                    trailing = {
-                                        AppSwitch(sound.newDevice, { enabled ->
-                                            transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
-                                            view.performConfirmHaptic()
-                                        })
-                                    },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "免配对码窗口",
-                                    subtitle = if (windowState.enabled) {
-                                        "剩余 " + TransferFormat.windowRemaining(windowLeftMs) + " · 到期自动回到需配对"
-                                    } else {
-                                        "未开启：未配对设备需输入 4 位 PIN"
-                                    },
-                                    subtitleColor = if (windowLeftMs > 0L) t.successText else t.muted,
-                                    icon = Icons.Outlined.LockOpen,
-                                    trailing = {
-                                        AppSwitch(windowState.enabled, { enabled ->
-                                            transferViewModel.setOpenPairingWindow(enabled)
-                                            view.performConfirmHaptic()
-                                            toast.show(
-                                                if (enabled) {
-                                                    "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
-                                                } else {
-                                                    "已关闭免配对窗口"
-                                                }
-                                            )
-                                        })
-                                    },
-                                )
-                                // 窗口时长：开启时切换会以新时长重新计时；
-                                // 未开启时整行降透明度，避免「未开启」与高亮的「10 分钟」并排读成自相矛盾
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .graphicsLayer { alpha = if (windowState.enabled) 1f else 0.55f }
-                                        .padding(horizontal = t.space4, vertical = t.space2),
-                                    horizontalArrangement = Arrangement.spacedBy(t.space2),
-                                ) {
-                                    PairingPolicy.WINDOW_MINUTES.forEach { minutes ->
-                                        Chip(
-                                            label = minutes.toString() + " 分钟",
-                                            selected = windowState.minutes == minutes,
-                                            onClick = {
-                                                transferViewModel.setOpenPairingMinutes(minutes)
-                                                view.performConfirmHaptic()
-                                            },
-                                        )
-                                    }
-                                }
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "小于 N MB 免配对码",
-                                    subtitle = if (thresholdMb > 0) {
-                                        "≤ " + TransferFormat.threshold(thresholdMb) + " 的文件直接接收"
-                                    } else {
-                                        "关闭：一律需要 PIN（默认）"
-                                    },
-                                    icon = Icons.Outlined.DataUsage,
-                                )
-                                Row(
-                                    Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
-                                    horizontalArrangement = Arrangement.spacedBy(t.space2),
-                                ) {
-                                    PairingPolicy.THRESHOLD_OPTIONS_MB.forEach { mb ->
-                                        Chip(
-                                            label = TransferFormat.threshold(mb),
-                                            selected = thresholdMb == mb,
-                                            onClick = {
-                                                transferViewModel.setAutoApproveThresholdMb(mb)
-                                                view.performConfirmHaptic()
-                                                toast.show(
-                                                    if (mb == 0) "已关闭体积阈值" else "≤ ${TransferFormat.threshold(mb)} 的文件免配对"
+                                                context.startActivity(
+                                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                                                 )
-                                            },
-                                        )
-                                    }
-                                }
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "接收目录",
-                                    subtitle = if (stats.isEmpty) {
-                                        "暂无已接收文件"
-                                    } else {
-                                        "占用 " + TransferFormat.fileSize(stats.totalBytes) + " · 共 " + stats.count + " 个"
-                                    },
-                                    icon = Icons.Outlined.Folder,
-                                    trailing = {
-                                        AppButton(
-                                            text = "清理",
-                                            onClick = {
-                                                view.performConfirmHaptic()
-                                                // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
-                                                if (stats.isEmpty) {
-                                                    toast.show("暂无可清理的接收文件")
-                                                } else {
-                                                    confirmClear = true
-                                                }
                                             },
                                             variant = AppButtonVariant.Ghost,
                                         )
@@ -764,56 +631,10 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.height(t.space1))
                             }
-
-                            ConfirmDialog(
-                                visible = editingName,
-                                title = "本机名称",
-                                message = "对端设备列表里显示的名字，最多 $ALIAS_MAX_LENGTH 个字符",
-                                confirmLabel = "保存",
-                                dismissLabel = "取消",
-                                onDismiss = { editingName = false },
-                                onConfirm = {
-                                    val name = nameDraft.trim().take(ALIAS_MAX_LENGTH)
-                                    if (name.isNotBlank()) {
-                                        transferViewModel.setAlias(name)
-                                        toast.show("本机名称已改为「" + name + "」")
-                                    }
-                                    editingName = false
-                                },
-                                extraContent = {
-                                    BasicTextField(
-                                        value = nameDraft,
-                                        onValueChange = { if (it.length <= ALIAS_MAX_LENGTH) nameDraft = it },
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = t.fg),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(t.radiusMd))
-                                            .background(t.fgFade(6))
-                                            .padding(t.space3),
-                                    )
-                                },
-                            )
-                            ConfirmDialog(
-                                visible = confirmClear,
-                                title = "清理接收目录",
-                                message = "将删除「Downloads/局域网互传/」下的 " + stats.count +
-                                    " 个文件，并移除对应的接收记录。此操作不可撤销。",
-                                confirmLabel = "删除",
-                                dismissLabel = "取消",
-                                onDismiss = { confirmClear = false },
-                                onConfirm = {
-                                    confirmClear = false
-                                    scope.launch {
-                                        val removed = withContext(Dispatchers.IO) {
-                                            transferViewModel.clearReceivedHistory()
-                                        }
-                                        toast.show("已清理 $removed 个文件")
-                                    }
-                                },
-                            )
                         }
 
+                        // ===== 数据：数据与备份 =====
+                        SectionHeader("数据")
                         // ⑧ 数据与备份（立即备份 / 从备份还原 / 自动频率 / 最近一次）
                         // 备份包只含本机数据文件（两张库 + shared_prefs + 规则快照），不含任何账号凭据；
                         // 公共 Downloads 一份给用户自己拷走，换机 / 重装后靠它还原。
@@ -956,6 +777,58 @@ fun SettingsScreen(
                             )
                         }
 
+
+                        // ===== 关于：版本 / 更新 / 调试入口（调试入口受 DebugConfig 两层闸控制）=====
+                        SectionHeader("关于")
+                        // ⑩ 关于（分组标题已由上面的 SectionHeader 承担，卡内不再重复）
+                        Column(Modifier.fillMaxWidth()) {
+                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                TokenRow(
+                                    title = "版本",
+                                    subtitle = "行为记录 · 本地优先，数据不出设备",
+                                    icon = Icons.Outlined.Info,
+                                    // 长按版本行解锁调试入口（release 构建里解锁后也不显示任何调试面）
+                                    onLongClick = {
+                                        DebugConfig.unlock()
+                                        toast.show("调试入口已解锁：设置里出现「调试模式」")
+                                    },
+                                    trailing = { TailNum(BuildConfig.VERSION_NAME) },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "检查更新",
+                                    icon = Icons.Outlined.Refresh,
+                                    onClick = {
+                                        if (updateState.value !is UpdateUiState.Checking) {
+                                            updateState.value = UpdateUiState.Checking
+                                            scope.launch {
+                                                when (val result = withContext(Dispatchers.IO) { UpdateChecker().check() }) {
+                                                    is UpdateCheckResult.Available ->
+                                                        updateState.value = UpdateUiState.Available(result.manifest)
+                                                    is UpdateCheckResult.UpToDate -> {
+                                                        toast.show("已是最新版本 ${result.currentVersionName}")
+                                                        updateState.value = UpdateUiState.Idle
+                                                    }
+                                                    is UpdateCheckResult.Failed -> {
+                                                        toast.show("检查更新失败：${result.message}")
+                                                        updateState.value = UpdateUiState.Idle
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    trailing = { TailChevron() },
+                                )
+                                TokenDivider(first = false)
+                                // 开源许可（原型 s09 缺行）：与原型一致，行本身不带图标、点击出许可文案。
+                                TokenRow(
+                                    title = "开源许可",
+                                    onClick = { toast.show("开源许可：MIT") },
+                                    trailing = { TailChevron() },
+                                )
+                                Spacer(Modifier.height(t.space1))
+                            }
+                        }
                         // ⑨ 调试模式（默认不显示：仅 debug 构建 + 关于页长按版本解锁后出现）
                         if (debugUi) {
                             Column(Modifier.fillMaxWidth()) {
@@ -1009,56 +882,6 @@ fun SettingsScreen(
                             }
                         }
 
-                        // ⑩ 关于
-                        Column(Modifier.fillMaxWidth()) {
-                            GroupLabel("关于")
-                            AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
-                                TokenRow(
-                                    title = "版本",
-                                    subtitle = "行为记录 · 本地优先，数据不出设备",
-                                    icon = Icons.Outlined.Info,
-                                    // 长按版本行解锁调试入口（release 构建里解锁后也不显示任何调试面）
-                                    onLongClick = {
-                                        DebugConfig.unlock()
-                                        toast.show("调试入口已解锁：设置里出现「调试模式」")
-                                    },
-                                    trailing = { TailNum(BuildConfig.VERSION_NAME) },
-                                )
-                                TokenDivider(first = false)
-                                TokenRow(
-                                    title = "检查更新",
-                                    icon = Icons.Outlined.Refresh,
-                                    onClick = {
-                                        if (updateState.value !is UpdateUiState.Checking) {
-                                            updateState.value = UpdateUiState.Checking
-                                            scope.launch {
-                                                when (val result = withContext(Dispatchers.IO) { UpdateChecker().check() }) {
-                                                    is UpdateCheckResult.Available ->
-                                                        updateState.value = UpdateUiState.Available(result.manifest)
-                                                    is UpdateCheckResult.UpToDate -> {
-                                                        toast.show("已是最新版本 ${result.currentVersionName}")
-                                                        updateState.value = UpdateUiState.Idle
-                                                    }
-                                                    is UpdateCheckResult.Failed -> {
-                                                        toast.show("检查更新失败：${result.message}")
-                                                        updateState.value = UpdateUiState.Idle
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    },
-                                    trailing = { TailChevron() },
-                                )
-                                TokenDivider(first = false)
-                                // 开源许可（原型 s09 缺行）：与原型一致，行本身不带图标、点击出许可文案。
-                                TokenRow(
-                                    title = "开源许可",
-                                    onClick = { toast.show("开源许可：MIT") },
-                                    trailing = { TailChevron() },
-                                )
-                                Spacer(Modifier.height(t.space1))
-                            }
-                        }
                         Spacer(Modifier.height(t.space6))
                         }
                 }
@@ -1131,6 +954,353 @@ fun SettingsScreen(
         }
     }
 }
+
+/**
+ * 「传送」功能卡内的专属设置（后台接收 / 提示音 / 免配对窗口 / 体积阈值 / 接收目录）。
+ *
+ * 只在功能开启且 ViewModel 已创建时渲染；关闭时整块折叠成一句「开启后可用」，
+ * 因此传送关闭时这里连 Flow 都不订阅，更不会去拉起引擎。
+ */
+@Composable
+private fun TransferFeatureSettings(
+    transferViewModel: TransferViewModel,
+    toast: ToastHostState,
+    context: Context,
+    scope: CoroutineScope,
+    view: View,
+) {
+    val t = LocalDesignTokens.current
+    Column(Modifier.fillMaxWidth()) {
+        val sound by transferViewModel.soundSettings.collectAsState()
+        val windowState by transferViewModel.openPairing.collectAsState()
+        val thresholdMb by transferViewModel.autoApproveThresholdMb.collectAsState()
+        val stats by transferViewModel.receivedStats.collectAsState()
+        var confirmClear by remember { mutableStateOf(false) }
+        var windowLeftMs by remember { mutableStateOf(windowState.remainingMs()) }
+        var editingName by remember { mutableStateOf(false) }
+        var nameDraft by remember { mutableStateOf("") }
+
+        LaunchedEffect(windowState) {
+            while (true) {
+                windowLeftMs = windowState.remainingMs()
+                if (windowLeftMs <= 0L) break
+                delay(1_000L)
+            }
+        }
+        // 进设置页即刷新接收目录占用（MediaStore 查询放 IO）
+        LifecycleResumeEffect(Unit) {
+            scope.launch { withContext(Dispatchers.IO) { transferViewModel.refreshReceivedStats() } }
+            onPauseOrDispose { }
+        }
+
+        // 加入磁贴：API 33+ 一键请求，低版本给文案引导（系统不允许静默添加）
+        fun requestTile() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                toast.show("下拉通知栏 → 编辑 → 添加「局域网互传」")
+                return
+            }
+            runCatching {
+                val sbm = context.getSystemService(StatusBarManager::class.java)
+                sbm?.requestAddTileService(
+                    ComponentName(context, TransferTileService::class.java),
+                    TransferTileState.LABEL,
+                    Icon.createWithResource(context, R.drawable.ic_transfer_tile),
+                    context.mainExecutor,
+                ) { result ->
+                    toast.show(
+                        when (result) {
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "已添加到快捷设置"
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "磁贴已在快捷设置里"
+                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "已取消添加"
+                            else -> "添加失败（$result），可手动从「编辑」里添加"
+                        },
+                    )
+                }
+            }.onFailure { toast.show("添加失败，请到通知栏「编辑」里手动添加") }
+        }
+
+        val backgroundReceive by transferViewModel.backgroundReceive.collectAsState()
+        val autoCloseMinutes by transferViewModel.autoCloseMinutes.collectAsState()
+        val myAlias by transferViewModel.aliasFlow.collectAsState()
+
+            TokenRow(
+                title = "本机名称",
+                subtitle = myAlias + " · 对端设备列表里显示的名字",
+                icon = Icons.Outlined.Smartphone,
+                onClick = {
+                    nameDraft = myAlias
+                    editingName = true
+                },
+                trailing = { TailChevron() },
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "后台接收",
+                subtitle = if (backgroundReceive) {
+                    "常驻前台服务 · 通知显示在线设备"
+                } else {
+                    "仅 App 可见时运行 · 默认关闭"
+                },
+                icon = Icons.Outlined.NotificationsActive,
+                trailing = {
+                    AppSwitch(backgroundReceive, { enabled ->
+                        transferViewModel.setBackgroundReceive(enabled)
+                        view.performConfirmHaptic()
+                        toast.show(
+                            if (enabled) "已开启后台接收（常驻通知）" else "已关闭后台接收（仅 App 内可见）"
+                        )
+                    })
+                },
+            )
+            TokenDivider(first = false)
+            // 「自动关闭接收」：到点自动停服务，避免不用时白白耗电。
+            // 只持久化时长，不持久化计时起点（进程重启后重新计时）。
+            TokenRow(
+                title = "自动关闭接收",
+                subtitle = if (autoCloseMinutes == ReceivingAutoClose.OFF) {
+                    "关闭：一直保持接收，直到手动关闭（默认）"
+                } else {
+                    "开启接收后 " + ReceivingAutoClose.label(autoCloseMinutes) + "自动停止 · 省电"
+                },
+                icon = Icons.Outlined.Timer,
+            )
+            ChipRow(
+                items = ReceivingAutoClose.MINUTES_OPTIONS.map {
+                    ReceivingAutoClose.label(it)
+                },
+                selectedIndex = ReceivingAutoClose.MINUTES_OPTIONS
+                    .indexOf(autoCloseMinutes).coerceAtLeast(0),
+                onSelect = { index ->
+                    val minutes = ReceivingAutoClose.MINUTES_OPTIONS[index]
+                    transferViewModel.setAutoCloseMinutes(minutes)
+                    view.performConfirmHaptic()
+                    toast.show(
+                        if (minutes == ReceivingAutoClose.OFF) {
+                            "已关闭「自动关闭接收」"
+                        } else {
+                            "接收将在 " + ReceivingAutoClose.label(minutes) + "后自动关闭"
+                        },
+                    )
+                },
+                modifier = Modifier.padding(
+                    horizontal = t.space4,
+                    vertical = t.space2,
+                ),
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "通知栏磁贴",
+                subtitle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    "一键添加到快捷设置，下拉即开关"
+                } else {
+                    "下拉通知栏 → 编辑 → 添加「局域网互传」"
+                },
+                icon = Icons.Outlined.Widgets,
+                trailing = {
+                    AppButton(
+                        text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
+                        onClick = {
+                            view.performConfirmHaptic()
+                            requestTile()
+                        },
+                        variant = AppButtonVariant.Ghost,
+                    )
+                },
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "传输完成提示",
+                subtitle = "系统通知音 + 震动",
+                icon = Icons.Outlined.VolumeUp,
+                trailing = {
+                    AppSwitch(sound.complete, { enabled ->
+                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
+                        view.performConfirmHaptic()
+                        toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
+                    })
+                },
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "传输失败提示",
+                subtitle = "提示音 + 震动（默认关）",
+                icon = Icons.Outlined.VolumeOff,
+                trailing = {
+                    AppSwitch(sound.failure, { enabled ->
+                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
+                        view.performConfirmHaptic()
+                    })
+                },
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "新设备出现提示",
+                subtitle = "仅震动（默认关）",
+                icon = Icons.Outlined.Vibration,
+                trailing = {
+                    AppSwitch(sound.newDevice, { enabled ->
+                        transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
+                        view.performConfirmHaptic()
+                    })
+                },
+            )
+            TokenDivider(first = false)
+            TokenRow(
+                title = "免配对码窗口",
+                subtitle = if (windowState.enabled) {
+                    "剩余 " + TransferFormat.windowRemaining(windowLeftMs) + " · 到期自动回到需配对"
+                } else {
+                    "未开启：未配对设备需输入 4 位 PIN"
+                },
+                subtitleColor = if (windowLeftMs > 0L) t.successText else t.muted,
+                icon = Icons.Outlined.LockOpen,
+                trailing = {
+                    AppSwitch(windowState.enabled, { enabled ->
+                        transferViewModel.setOpenPairingWindow(enabled)
+                        view.performConfirmHaptic()
+                        toast.show(
+                            if (enabled) {
+                                "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
+                            } else {
+                                "已关闭免配对窗口"
+                            }
+                        )
+                    })
+                },
+            )
+            // 窗口时长：开启时切换会以新时长重新计时；
+            // 未开启时整行降透明度，避免「未开启」与高亮的「10 分钟」并排读成自相矛盾
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { alpha = if (windowState.enabled) 1f else 0.55f }
+                    .padding(horizontal = t.space4, vertical = t.space2),
+                horizontalArrangement = Arrangement.spacedBy(t.space2),
+            ) {
+                PairingPolicy.WINDOW_MINUTES.forEach { minutes ->
+                    Chip(
+                        label = minutes.toString() + " 分钟",
+                        selected = windowState.minutes == minutes,
+                        onClick = {
+                            transferViewModel.setOpenPairingMinutes(minutes)
+                            view.performConfirmHaptic()
+                        },
+                    )
+                }
+            }
+            TokenDivider(first = false)
+            TokenRow(
+                title = "小于 N MB 免配对码",
+                subtitle = if (thresholdMb > 0) {
+                    "≤ " + TransferFormat.threshold(thresholdMb) + " 的文件直接接收"
+                } else {
+                    "关闭：一律需要 PIN（默认）"
+                },
+                icon = Icons.Outlined.DataUsage,
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
+                horizontalArrangement = Arrangement.spacedBy(t.space2),
+            ) {
+                PairingPolicy.THRESHOLD_OPTIONS_MB.forEach { mb ->
+                    Chip(
+                        label = TransferFormat.threshold(mb),
+                        selected = thresholdMb == mb,
+                        onClick = {
+                            transferViewModel.setAutoApproveThresholdMb(mb)
+                            view.performConfirmHaptic()
+                            toast.show(
+                                if (mb == 0) "已关闭体积阈值" else "≤ ${TransferFormat.threshold(mb)} 的文件免配对"
+                            )
+                        },
+                    )
+                }
+            }
+            TokenDivider(first = false)
+            TokenRow(
+                title = "接收目录",
+                subtitle = if (stats.isEmpty) {
+                    "暂无已接收文件"
+                } else {
+                    "占用 " + TransferFormat.fileSize(stats.totalBytes) + " · 共 " + stats.count + " 个"
+                },
+                icon = Icons.Outlined.Folder,
+                trailing = {
+                    AppButton(
+                        text = "清理",
+                        onClick = {
+                            view.performConfirmHaptic()
+                            // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
+                            if (stats.isEmpty) {
+                                toast.show("暂无可清理的接收文件")
+                            } else {
+                                confirmClear = true
+                            }
+                        },
+                        variant = AppButtonVariant.Ghost,
+                    )
+                },
+            )
+            Spacer(Modifier.height(t.space1))
+
+        ConfirmDialog(
+            visible = editingName,
+            title = "本机名称",
+            message = "对端设备列表里显示的名字，最多 $ALIAS_MAX_LENGTH 个字符",
+            confirmLabel = "保存",
+            dismissLabel = "取消",
+            onDismiss = { editingName = false },
+            onConfirm = {
+                val name = nameDraft.trim().take(ALIAS_MAX_LENGTH)
+                if (name.isNotBlank()) {
+                    transferViewModel.setAlias(name)
+                    toast.show("本机名称已改为「" + name + "」")
+                }
+                editingName = false
+            },
+            extraContent = {
+                BasicTextField(
+                    value = nameDraft,
+                    onValueChange = { if (it.length <= ALIAS_MAX_LENGTH) nameDraft = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = t.fg),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(t.radiusMd))
+                        .background(t.fgFade(6))
+                        .padding(t.space3),
+                )
+            },
+        )
+        ConfirmDialog(
+            visible = confirmClear,
+            title = "清理接收目录",
+            message = "将删除「Downloads/局域网互传/」下的 " + stats.count +
+                " 个文件，并移除对应的接收记录。此操作不可撤销。",
+            confirmLabel = "删除",
+            dismissLabel = "取消",
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                confirmClear = false
+                scope.launch {
+                    val removed = withContext(Dispatchers.IO) {
+                        transferViewModel.clearReceivedHistory()
+                    }
+                    toast.show("已清理 $removed 个文件")
+                }
+            },
+        )
+    }
+}
+
+/**
+ * 系统通知开关状态（本 App 只有事件提醒与传送通知，不做营销推送）。
+ */
+private fun notificationsEnabled(context: Context): Boolean =
+    runCatching {
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .areNotificationsEnabled()
+    }.getOrDefault(false)
 
 // 无障碍状态文案已收敛到 ui/AccessibilityCopy.kt：状态行用 s09AccessibilityStatusText(...)
 // （两段式，带运行时长）、仅状态场景用 accessibilityStatusText(...)、空态用 noEventEmptyText(...)。

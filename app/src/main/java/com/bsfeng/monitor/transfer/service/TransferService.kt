@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.bsfeng.monitor.MainActivity
 import com.bsfeng.monitor.domain.transfer.TransferFormat
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,12 @@ class TransferService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // 功能关闭 = 真停活：连通道都不建、引擎不实例化、通知不出现
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) {
+            Log.i(TAG, "传送功能已关闭：服务不启动")
+            stopSelf()
+            return
+        }
         createChannel()
         engine = TransferEngine.getInstance(applicationContext).also { it.start() }
         scope.launch {
@@ -74,6 +82,12 @@ class TransferService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 关闭期间被磁贴 / 旧 PendingIntent 拉起：直接收摊，不绑定端口、不登发现
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) {
+            Log.i(TAG, "传送功能已关闭：忽略启动请求")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 shutdown()

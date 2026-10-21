@@ -6,6 +6,8 @@ import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.bsfeng.monitor.R
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,6 +52,11 @@ class TransferTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+        // 功能关闭时磁贴是「不可用」态，点了也不该偷偷把服务拉起来
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) {
+            updateTile()
+            return
+        }
         val engine = TransferEngine.getInstance(this)
         val settings = TransferSettings(this)
         if (engine.running.value) {
@@ -70,6 +77,17 @@ class TransferTileService : TileService() {
 
     /** 刷新磁贴（标签 / 副标题 / 激活态）。 */
     private fun updateTile() {
+        // 功能关闭：磁贴显示「不可用」，不进 ACTIVE
+        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) {
+            qsTile?.apply {
+                state = Tile.STATE_UNAVAILABLE
+                label = "传送"
+                subtitle = "已在设置中关闭"
+                icon = Icon.createWithResource(this@TransferTileService, R.drawable.ic_transfer_tile)
+                updateTile()
+            }
+            return
+        }
         val engine = TransferEngine.getInstance(this)
         val snapshot = TransferTileState.of(
             running = engine.running.value,
