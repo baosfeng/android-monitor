@@ -7,7 +7,10 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.bsfeng.monitor.autobook.AutoBookConfig
+import com.bsfeng.monitor.backup.BackupManager
+import com.bsfeng.monitor.backup.HealOutcome
 import com.bsfeng.monitor.core.di.ServiceContainer
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
@@ -34,6 +37,8 @@ class MonitorApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 上次还原若中断（restore.marker 还在），先回滚到 pre-restore 包再打开任何数据库句柄
+        healInterruptedRestore()
         // 跳过配置需在规则管理器创建（读取内置规则时间闸门）之前装载
         SkipConfig.init(this)
         // 自动记账开关（默认开启）：无障碍服务会在支付结果页上读取它
@@ -44,6 +49,22 @@ class MonitorApp : Application() {
         // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
         scheduleAlarmCheck(this)
         checkSubscriptionUpdate()
+    }
+
+    /**
+     * 启动自愈：还原文件被中途打断时，用 pre-restore 包把数据回滚，避免带着半新半旧的库启动。
+     *
+     * 无 marker 时只做一次文件存在性检查；回滚失败只记日志，不阻塞启动（用户仍可手动还原）。
+     */
+    private fun healInterruptedRestore() {
+        runCatching {
+            when (val outcome = BackupManager(this).healIfNeeded()) {
+                is HealOutcome.RolledBack -> Log.w(TAG, "还原中断，已回滚到 pre-restore：" + outcome.preRestoreName)
+                is HealOutcome.NoBackup -> Log.w(TAG, "还原中断但无可用回滚包：" + outcome.reason)
+                is HealOutcome.Failed -> Log.w(TAG, "还原中断且回滚失败：" + outcome.reason)
+                HealOutcome.NothingToDo -> Unit
+            }
+        }.onFailure { Log.w(TAG, "还原自愈检查失败", it) }
     }
 
     /** 启动时后台检查一次规则订阅更新（未订阅或未到周期时立即返回，不发请求） */
@@ -60,8 +81,9 @@ class MonitorApp : Application() {
     private fun registerRecordReceiver() {
         recordReceiver = RecordReceiver()
         val filters = RecordReceiver.createFilters()
-        registerReceiver(recordReceiver, filters[0], Context.RECEIVER_EXPORTED)
-        registerReceiver(recordReceiver, filters[1], Context.RECEIVER_EXPORTED)
+        // ContextCompat 内部按版本分支：API 33+ 用 RECEIVER_EXPORTED，旧版本忽略该标志
+        ContextCompat.registerReceiver(this, recordReceiver, filters[0], ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(this, recordReceiver, filters[1], ContextCompat.RECEIVER_EXPORTED)
     }
 
     /**

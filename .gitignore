@@ -29,6 +29,8 @@ captures/
 *.keystore
 lint/
 lint-baseline.xml
+# 例外：app 模块基线已纳入仓库（只过滤已确认可接受的 OldTargetApi，见文件内注释）
+!app/lint-baseline.xml
 proguard/
 *.mapping.txt
 *.seeds.txt

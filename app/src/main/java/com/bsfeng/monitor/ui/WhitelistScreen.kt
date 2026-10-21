@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.ui
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
@@ -177,7 +177,7 @@ fun WhitelistScreen(
                                             label = keyword,
                                             selected = keyword != "重置" && searchQuery.trim() == keyword,
                                             onClick = {
-                                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                                view.performConfirmHaptic()
                                                 if (keyword == "重置") {
                                                     viewModel.clearSearch()
                                                     toast.show("已重置筛选")
@@ -222,7 +222,7 @@ fun WhitelistScreen(
                                         )
                                         Spacer(Modifier.height(t.space3))
                                         AppButton("清空搜索", onClick = {
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                             viewModel.clearSearch()
                                         }, variant = AppButtonVariant.Ghost, block = true)
                                     }
@@ -255,7 +255,7 @@ fun WhitelistScreen(
                                         AppRow(
                                             app = app,
                                             onToggle = {
-                                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                                view.performConfirmHaptic()
                                                 viewModel.toggleWhitelist(app.packageName)
                                                 toast.show(app.appName + if (app.isInWhitelist) " 已移出白名单" else " 已加入白名单")
                                             },

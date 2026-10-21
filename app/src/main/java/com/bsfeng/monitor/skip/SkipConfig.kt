@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.skip
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.SharedPreferences
 
 /**
@@ -90,7 +91,7 @@ object SkipConfig {
     fun setWatchWindowMs(ms: Long) {
         val value = normalize(ms)
         watchWindowMs = value
-        prefs?.edit()?.putLong(KEY_WATCH_WINDOW_MS, value)?.apply()
+        prefs?.edit { putLong(KEY_WATCH_WINDOW_MS, value) }
     }
 
     /** 归一化：只接受 [WINDOW_OPTIONS_MS] 里的取值，其余一律回落默认（防止手改 prefs 造成 0/超长窗口） */

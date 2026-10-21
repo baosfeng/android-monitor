@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.ui
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -50,6 +49,7 @@ import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.model.RuleGroup
 import com.bsfeng.monitor.domain.model.SkipRule
 import com.bsfeng.monitor.record.RecordStore
+import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppIcon
@@ -225,7 +225,7 @@ fun SkipRuleScreen(
                                         }, modifier = Modifier.weight(1f), variant = AppButtonVariant.Ghost, enabled = !updating)
                                         AppButton("页面快照", onClick = {
                                             viewModel.requestSnapshot()
-                                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                            view.performConfirmHaptic()
                                         }, modifier = Modifier.weight(1f), variant = AppButtonVariant.Ghost)
                                     }
                                     Spacer(Modifier.height(t.space3))
@@ -344,11 +344,11 @@ fun SkipRuleScreen(
                                     expanded = expandedRuleIds[rule.id] == true,
                                     onToggleExpand = {
                                         expandedRuleIds[rule.id] = expandedRuleIds[rule.id] != true
-                                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                        view.performConfirmHaptic()
                                     },
                                     onToggleEnabled = {
                                         viewModel.toggleRule(rule.id)
-                                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                        view.performConfirmHaptic()
                                         toast.show((if (rule.enabled) "已停用 " else "已启用 ") + rule.name + " 跳过规则")
                                     },
                                 )
@@ -390,7 +390,7 @@ fun SkipRuleScreen(
             dismissLabel = "取消",
             onConfirm = {
                 showConfirm = false
-                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                view.performConfirmHaptic()
                 viewModel.updateSubscription(urlInput)
             },
             onDismiss = { showConfirm = false },
