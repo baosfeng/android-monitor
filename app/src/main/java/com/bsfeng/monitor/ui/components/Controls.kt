@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.gpuSlideX
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
@@ -216,7 +216,9 @@ fun AppSwitch(
         animationSpec = tween(t.durState),
         label = "swTrack",
     )
-    val knobOffset by animateDpAsState(
+    // 滑块位移走绘制期（gpuSlideX 读 layer 内 lambda）：offset(x = 动画值) 会让每帧
+    // measure/layout，开关切换与列表滚动时都白占主线程。
+    val knobOffset = animateDpAsState(
         targetValue = if (checked) t.switchTrackW - t.knobSize - 4.dp else 4.dp,
         animationSpec = tween(t.durState),
         label = "swKnob",
@@ -231,7 +233,7 @@ fun AppSwitch(
     ) {
         Box(
             Modifier
-                .offset(x = knobOffset)
+                .gpuSlideX { knobOffset.value }
                 .size(t.knobSize)
                 .clip(CircleShape)
                 .background(t.accentOn)
