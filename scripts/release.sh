@@ -42,7 +42,7 @@ print(code)
 PY
 )"
 
-echo "版本号：$VERSION（versionCode=$NEW_CODE）"
+echo "版本号：${VERSION}（versionCode=${NEW_CODE}）"
 git add version.properties
 git commit -m "chore: 发布 v$VERSION"
 git tag "v$VERSION"
@@ -50,4 +50,4 @@ git tag "v$VERSION"
 git push github main
 git push github "v$VERSION"
 
-echo "已推送 v$VERSION，GitHub Actions 将构建签名 APK 并创建 Release。"
+echo "已推送 v${VERSION}，GitHub Actions 将构建签名 APK 并创建 Release。"
