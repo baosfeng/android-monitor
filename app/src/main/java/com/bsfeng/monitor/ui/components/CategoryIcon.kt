@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -432,13 +433,14 @@ fun CategoryIcon(
 ) {
     val t = LocalDesignTokens.current
     val glyph = size * CATEGORY_GLYPH_RATIO
-    // 原型定稿 .cat-icon：无底色，图标直接走 currentColor（调用方传文字色 / 选中 accent 色）
-    val ink = color
+    // 旧版口径：分类色 12% 淡底 + 分类色线描（色混 22% 前景），与 s05/s14a 的彩色分类格一致
+    val ink = lerp(color, t.fg, 0.22f)
 
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(t.radiusMd)),
+            .clip(RoundedCornerShape(t.radiusMd))
+            .background(color.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
     ) {
         val res = CategoryIcons.keyOf(name)?.let { CategoryIcons.drawableOf(it) } ?: 0

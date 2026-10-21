@@ -307,8 +307,8 @@ private fun TopLevelCell(
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
-    // 原型定稿口径：图标是单色线描（未选中 fg2、选中 accent），不再用分类色底纹
-    val color = if (selected) t.accentText else t.fg2
+    // 旧版口径：分类格用各自分类色（12% 淡底 + 分类色线描），选中只加 2dp accent 描边
+    val color = categoryColorOf(name)
     Column(
         modifier = modifier
             .clip(shape)
@@ -481,8 +481,8 @@ private fun PickerCell(
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
-    // 与一级格同一套视觉：图标单色线描（未选中 fg2、选中 accent），无分类色底纹
-    val color = if (selected) t.accentText else t.fg2
+    // 与一级格同一套视觉：分类色 12% 淡底 + 分类色线描
+    val color = categoryColorOf(iconName)
     Column(
         modifier = modifier
             .clip(shape)
