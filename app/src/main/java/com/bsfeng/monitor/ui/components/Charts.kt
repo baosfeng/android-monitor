@@ -33,6 +33,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.rememberDrawCache
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.heatRamp
@@ -110,6 +111,12 @@ private val BAR_PAD_TOP = 22.dp
 
 /** 面积图顶部留白：原型 area 的 padT 由 14 加到 24，给峰值标注让位。 */
 private val AREA_PAD_TOP = 24.dp
+
+/** 面积 Path 在 [rememberDrawCache] 里的 key（同图例只持有一个实例）。 */
+private const val AREA_PATH_KEY = "area"
+
+/** sparkline 折线 Path 的缓存 key（每帧重写同一实例，避免每帧 new Path）。 */
+private const val SPARK_PATH_KEY = "sparkline"
 
 /** 柱顶数值距柱顶 6px（原型 bars：y = h - padB - bh - 6）。 */
 private val BAR_VALUE_OFFSET = 6.dp
@@ -203,8 +210,11 @@ fun AreaChart(
     val peakStyle = monitorMonoBadge.copy(color = t.muted)
     val measurer = rememberTextMeasurer()
     val anim = chartAnim(values, animated, t.durChart)
+    // 面积 Path / 渐变 Brush 跨帧复用：尺寸不变时只重写坐标，不再每帧 new。
+    val cache = rememberDrawCache()
     Spacer(
         modifier.drawWithCache {
+            cache.onSize(size)
             val pts = normalize(values)
             val padT = AREA_PAD_TOP.toPx()
             val plot = (size.height - padT).coerceAtLeast(1f)
@@ -221,6 +231,14 @@ fun AreaChart(
                     if (i == 0) moveTo(x, y) else lineTo(x, y)
                 }
             }
+            val areaPath = if (linePath == null) null else cache.path(AREA_PATH_KEY) {
+                addPath(linePath)
+                lineTo(size.width, size.height)
+                lineTo(0f, size.height)
+                close()
+            }
+            // 渐变只建一次：进度动画交给 drawPath 的 alpha 参数，不再每帧重建 Brush + listOf。
+            val areaBrush = cache.brush(line) { Brush.verticalGradient(listOf(areaTop, areaBottom)) }
             // 峰值索引取第一个最大值；文本布局与落点只在 build 块算一次，
             // 绘制期只 drawText（不逐帧 measure / layout，避免滚动掉帧）。
             val peak = if (markPeak && pts.size >= 2) {
@@ -242,19 +260,10 @@ fun AreaChart(
             }
             onDrawBehind {
                 gridLines(border, 4)
-                val path = linePath ?: return@onDrawBehind
+                if (areaPath == null || linePath == null) return@onDrawBehind
                 val p = anim.value
-                val areaPath = Path().apply {
-                    addPath(path)
-                    lineTo(size.width, size.height)
-                    lineTo(0f, size.height)
-                    close()
-                }
-                drawPath(
-                    areaPath,
-                    Brush.verticalGradient(listOf(areaTop.copy(alpha = areaTop.alpha * p), areaBottom)),
-                )
-                drawPath(path, line, style = Stroke(width = stroke, cap = StrokeCap.Round))
+                drawPath(areaPath, areaBrush, alpha = p)
+                drawPath(linePath, line, style = Stroke(width = stroke, cap = StrokeCap.Round))
                 drawCircle(line, radius = dot, center = Offset(size.width, yOf(pts.last())))
                 if (peak != null) drawText(peak.layout, topLeft = peak.offset)
             }
@@ -530,20 +539,25 @@ fun Sparkline(
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
     val line = color ?: t.chartSeq
     val anim = chartAnim(values, animated, t.durChartFast)
+    val cache = rememberDrawCache()
     Spacer(
         modifier.drawWithCache {
+            cache.onSize(size)
             val pts = normalize(values)
             val stroke = 2.dp.toPx()
             val step = if (pts.size > 1) size.width / (pts.size - 1) else 0f
             onDrawBehind {
                 if (pts.size < 2) return@onDrawBehind
                 val p = anim.value
-                val path = Path()
                 val shown = (pts.size * p).toInt().coerceAtLeast(2).coerceAtMost(pts.size)
-                for (i in 0 until shown) {
-                    val x = step * i
-                    val y = size.height * (1f - pts[i])
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                // 进度每帧变，折线前缀也变：只重写同一 Path 实例（reset + 前缀折线），
+                // 不再每帧 new Path()；对象由 rememberDrawCache 跨帧持有。
+                val path = cache.path(SPARK_PATH_KEY) {
+                    for (i in 0 until shown) {
+                        val x = step * i
+                        val y = size.height * (1f - pts[i])
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
                 }
                 drawPath(path, line, style = Stroke(width = stroke, cap = StrokeCap.Round))
             }

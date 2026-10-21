@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -143,6 +144,8 @@ fun SkeletonRow(
     val t = LocalDesignTokens.current
     val base = t.fgFade(6).let { if (alpha == 1f) it else it.copy(alpha = it.alpha * alpha) }
     val peak = t.fgFade(13).let { if (alpha == 1f) it else it.copy(alpha = it.alpha * alpha) }
+    // 三色表只在颜色变化时重建：shimmer 每帧重跑的是 drawRect，不该顺带 new listOf。
+    val colors = remember(base, peak) { listOf(base, peak, base) }
     Box(
         modifier
             .fillMaxWidth(widthFraction.coerceIn(0.05f, 1f))
@@ -151,7 +154,7 @@ fun SkeletonRow(
             .drawBehind {
                 val span = size.width * 2.2f
                 val start = size.width * 1.2f - span * phase.coerceIn(0f, 1f)
-                drawRect(Brush.horizontalGradient(listOf(base, peak, base), startX = start, endX = start + span))
+                drawRect(Brush.horizontalGradient(colors, startX = start, endX = start + span))
             }
     )
 }
