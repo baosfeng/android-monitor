@@ -28,10 +28,10 @@ Kotlin + Jetpack Compose，遵循「零第三方业务依赖」——数据库�
 
 ## 构建
 
-需要 JDK 21 与 Android SDK Platform 36。
+需要 JDK 25 与 Android SDK Platform 37。
 
 ```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export JAVA_HOME=/opt/homebrew/opt/openjdk@25
 # 可选：local.properties 指定后端地址（不入库） serverBaseUrl=http://<your-server>:<port>
 ./gradlew test assembleDebug      # 产物 app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease         # 需签名配置，见 docs/开发指南/发布指南.md

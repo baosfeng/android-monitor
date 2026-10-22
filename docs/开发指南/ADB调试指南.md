@@ -9,7 +9,7 @@
 | 开发机 | macOS (arm64) |
 | 调试手机 | 小米 14（23127PN0CC / houji），HyperOS |
 | ADB | `~/android-platform-tools/adb`（37.0.0，无 sudo 权限，解压到用户目录） |
-| JDK | 21：`export JAVA_HOME=/opt/homebrew/opt/openjdk@21` |
+| JDK | 25：`export JAVA_HOME=/opt/homebrew/opt/openjdk@25` |
 
 安装（已装可跳）：
 

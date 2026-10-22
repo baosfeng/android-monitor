@@ -9,7 +9,7 @@
 ## 项目速览
 
 - Kotlin + Jetpack Compose，6 个 Tab：概览 / 实时 / 广告 / 记账 / 传送 / 设置。模块见[代码快速定位](docs/开发指南/代码快速定位.md)，分层见[架构总览](docs/概览/架构总览.md)。
-- 零第三方业务依赖（Compose UI 除外）：数据库 / 网络 / 序列化用系统 API；JDK 21：`export JAVA_HOME=/opt/homebrew/opt/openjdk@21`。
+- 零第三方业务依赖（Compose UI 除外）：数据库 / 网络 / 序列化用系统 API；JDK 25：`export JAVA_HOME=/opt/homebrew/opt/openjdk@25`。
 
 ## 构建与安装（每次改动都要出 APK）
 
