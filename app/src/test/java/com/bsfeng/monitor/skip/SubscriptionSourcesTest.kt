@@ -161,12 +161,14 @@ class SubscriptionSourcesTest {
     fun `单订阅数据迁移为多订阅且不丢规则`() {
         val legacyUrl = "https://legacy.example.com/gkd.json5"
         // 旧版布局：prefs 里的单订阅元信息 + files/skip_subscription.json
+        // 用 commit 而非 apply：apply 是异步落盘，紧接着 new SkipRuleManager 可能读到空值，
+        // 迁移被跳过（CI 上偶发 expected:<1> but was:<0>）。
         context.getSharedPreferences("skip_rule_prefs", Context.MODE_PRIVATE).edit()
             .putString(
                 "subscription_meta",
                 JSONObject().put("url", legacyUrl).put("version", 9).put("ruleCount", 1).put("updatedAt", 1L).toString()
             )
-            .apply()
+            .commit()
         val array = JSONArray().apply { put(rule("com.legacy.app").toJson()) }
         File(context.filesDir, "skip_subscription.json").writeText(array.toString())
 

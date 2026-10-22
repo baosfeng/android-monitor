@@ -17,7 +17,7 @@ jobs:
   test:
     name: Unit tests
     runs-on: ubuntu-latest
-    # Robolectric 首跑要下载 ~228MB 的 API 37 android-all-instrumented，20 分钟会压线
+    # Robolectric 首跑要把 android-all-instrumented 拉进 ~/.m2，20 分钟会压线
     timeout-minutes: 35
 
     steps:
@@ -27,23 +27,49 @@ jobs:
       - name: UI rules gate
         run: bash scripts/check-ui-rules.sh
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      # compileSdk 37 依赖 runner 上有对应平台包；官方镜像未必预装
+      # Robolectric 跑测试时才把 android-all-instrumented 下载进 ~/.m2（Maven 本地库），
+      # 而 setup-gradle 只持久化 Gradle User Home 下的 caches/，覆盖不到这块：
+      # 不缓存就等于每个 run 重下 API 34 沙箱 144MB + targetSdk 37 沙箱 228MB。
+      # key 只跟构建脚本走、不跟测试源码走：改测试不该把几百 MB 的 jar 丢掉；
+      # 真换了 Robolectric 版本时由 restore-keys 恢复旧 jar，缺的版本再按需下载，不会失败。
+      - name: Cache Robolectric android-all jars
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository/org/robolectric/android-all-instrumented
+          key: ${{ runner.os }}-robolectric-${{ hashFiles('**/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-robolectric-
+
+      # 152MB 平台包：命中缓存恢复约 2-4s，实测重新下载安装 8-16s，缓存划算。
+      - name: Cache Android SDK platform 37
+        uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          key: ${{ runner.os }}-android-platform-37.0
+          restore-keys: |
+            ${{ runner.os }}-android-platform-
+
+      # compileSdk 37 依赖 runner 上有对应平台包；官方镜像未必预装。
+      # 已由缓存恢复时跳过下载安装，只保留 license 接受（幂等、约 1s）。
       - name: Install Android SDK platform 37
         run: |
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$SDKMGR" ] || SDKMGR="$(command -v sdkmanager)"
           yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
-          "$SDKMGR" "platforms;android-37.0"
+          if ! compgen -G "$ANDROID_HOME/platforms/android-37*" > /dev/null; then
+            "$SDKMGR" "platforms;android-37.0"
+          fi
 
+      # 全量门禁：不裁剪测试子集、不加 --offline 掩盖依赖问题
       - name: Unit tests
         run: ./gradlew test --stacktrace
 
@@ -56,21 +82,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+
+      # 与 test job 同一把 key：两个 job 都要 compileSdk 37 的平台包。
+      # 并发保存同 key 时后到的那个会被跳过（只打 warning，不失败）。
+      - name: Cache Android SDK platform 37
+        uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          key: ${{ runner.os }}-android-platform-37.0
+          restore-keys: |
+            ${{ runner.os }}-android-platform-
 
       - name: Install Android SDK platform 37
         run: |
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$SDKMGR" ] || SDKMGR="$(command -v sdkmanager)"
           yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
-          "$SDKMGR" "platforms;android-37.0"
+          if ! compgen -G "$ANDROID_HOME/platforms/android-37*" > /dev/null; then
+            "$SDKMGR" "platforms;android-37.0"
+          fi
 
       - name: Decode release keystore
         run: |
