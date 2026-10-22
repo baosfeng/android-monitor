@@ -102,4 +102,42 @@ class BuiltInRulesTest {
         assertTrue(BuiltInRules.GLOBAL_EXCLUDED_PACKAGES.contains("com.bsfeng.monitor"))
         assertFalse(rules.filter { !it.isGlobal }.any { it.app in BuiltInRules.GLOBAL_EXCLUDED_PACKAGES })
     }
+
+    @Test
+    fun `微信小程序规则限定小程序宿主 Activity`() {
+        val rule = rules.firstOrNull { it.id == "wechat_wxa_splash" }
+        assertNotNull("微信小程序开屏规则应存在", rule)
+        assertEquals("com.tencent.mm", rule!!.app)
+        assertFalse("微信不能进全局排除名单，否则小程序规则一起失效",
+            rule.app in BuiltInRules.GLOBAL_EXCLUDED_PACKAGES)
+        val activityIds = rule.groups.flatMap { it.activityIds }
+        assertTrue("必须用 Activity 圈定小程序宿主：$activityIds",
+            activityIds.any { it.endsWith("AppBrandUI") })
+        assertTrue("必须覆盖冷启动代理页：$activityIds",
+            activityIds.any { it.contains("AppBrandLaunchProxyUI") })
+    }
+
+    @Test
+    fun `微信小程序规则对齐 GKD 的 actionDelay 与 actionCd`() {
+        val rule = rules.first { it.id == "wechat_wxa_splash" }
+        val matchRules = rule.groups.flatMap { it.rules }
+        val ordered = matchRules.firstOrNull { it.matches.size == 2 }
+        assertNotNull("应有「广告标识 + 跳过按钮」的顺序匹配规则", ordered)
+        assertEquals("顺序匹配需等广告标识渲染完再点", 800L, ordered!!.actionDelay)
+        assertTrue("第一个选择器应匹配广告标识：${ordered.matches}",
+            ordered.matches.first().contains("广告"))
+        assertTrue("第二个选择器应匹配跳过按钮：${ordered.matches}",
+            ordered.matches.last().contains("跳过"))
+
+        val fallback = matchRules.firstOrNull { it.key == 1 }
+        assertNotNull("应有兜底短文本跳过规则", fallback)
+        assertEquals("兜底规则需要更短的冷却", 500L, fallback!!.actionCd)
+        assertTrue("兜底规则应限制文本长度与高度：${fallback.matches}",
+            fallback.matches.single().let { it.contains("text.length<") && it.contains("height<") })
+    }
+
+    @Test
+    fun `内置规则版本号随规则变更递增`() {
+        assertEquals("规则内容有变更必须递增版本号，触发本地规则合并", 10, BuiltInRules.BUILT_IN_VERSION)
+    }
 }
