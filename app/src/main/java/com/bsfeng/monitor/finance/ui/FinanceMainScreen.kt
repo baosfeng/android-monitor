@@ -50,7 +50,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -58,22 +57,23 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.model.Transaction
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
-import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.AppFab
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
+import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.MotionToken
+import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.animatedAmount
-import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
-import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.components.springOf
+import com.bsfeng.monitor.ui.components.staggerEnterAt
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import java.time.LocalDate
@@ -98,7 +98,8 @@ fun FinanceMainScreen(
     entryKey: Int = 0,
 ) {
     val t = LocalDesignTokens.current
-    val view = LocalView.current
+    // 触觉统一走 foundation/Haptics.kt 的 rememberHaptic（三重闸门 + 强度档换算）
+    val haptic = rememberHaptic()
     val toast = rememberToastHostState()
     val currentMonth by viewModel.currentMonth.collectAsState()
     val transactions by viewModel.monthlyTransactions.collectAsState()
@@ -261,7 +262,7 @@ fun FinanceMainScreen(
                         subtitle = "分类占比 · 近 7 天",
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            view.performConfirmHaptic()
+                            haptic(HapticTone.LIGHT)
                             onStatsClick()
                         },
                         icon = {
@@ -283,7 +284,7 @@ fun FinanceMainScreen(
                         },
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            view.performConfirmHaptic()
+                            haptic(HapticTone.LIGHT)
                             onBudgetClick()
                         },
                         icon = {
@@ -362,7 +363,7 @@ fun FinanceMainScreen(
                                     highlighted = tx.id == highlightId,
                                     enterIndex = if (rowIndex < STAGGER_MAX_STEPS) rowIndex++ else -1,
                                     onClick = {
-                                        view.performConfirmHaptic()
+                                        haptic(HapticTone.LIGHT)
                                         onEditClick(tx)
                                     },
                                 )
@@ -405,32 +406,16 @@ fun FinanceMainScreen(
 
         }
 
-        // FAB：直接 align(BottomEnd)，禁止外包 inset 高度容器
-        var fabPressed by remember { mutableStateOf(false) }
-        val fabScale by animateFloatAsState(
-            targetValue = if (fabPressed) 0.88f else 1f,
-            animationSpec = t.springOf(MotionToken.Press),
-            label = "fabScale",
-        )
+        // FAB：直接 align(BottomEnd)，禁止外包 inset 高度容器。
+        // 按压缩放与触觉由 AppFab 内部统一提供（foundation/PressFeedback.kt + foundation/Haptics.kt），
+        // 调用点不要再叠 graphicsLayer 缩放：外层 0.88 × 组件内 0.96 实际压到 0.845，
+        // 视觉比设计值重，且绕过 rememberMotionTier() 让精简档仍然缩放。
         AppFab(
             onClick = onAddClick,
             contentDescription = "添加",
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(t.space4)
-                .graphicsLayer {
-                    scaleX = fabScale
-                    scaleY = fabScale
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = {
-                            fabPressed = true
-                            tryAwaitRelease()
-                            fabPressed = false
-                        }
-                    )
-                },
+                .padding(t.space4),
         )
 
         FinanceStateBar(

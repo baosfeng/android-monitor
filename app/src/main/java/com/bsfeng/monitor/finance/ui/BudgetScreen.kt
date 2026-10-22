@@ -32,12 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
@@ -46,8 +44,10 @@ import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.animatedAmount
 import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.components.tweenOf
-import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
  * s06 预算设置。
@@ -62,7 +62,8 @@ fun BudgetScreen(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
-    val view = LocalView.current
+    // 触觉统一走 foundation/Haptics.kt 的 rememberHaptic（三重闸门 + 强度档换算）
+    val haptic = rememberHaptic()
     val currentMonth by viewModel.currentMonth.collectAsState()
     val budgets by viewModel.budgets.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -157,7 +158,7 @@ fun BudgetScreen(
                                     icon = Icons.Filled.Savings,
                                     actionText = "设置总预算",
                                     onAction = {
-                                        view.performConfirmHaptic()
+                                        haptic(HapticTone.LIGHT)
                                         editingTarget = BudgetEditorTarget(
                                             categoryName = "",
                                             title = "总预算",
@@ -182,7 +183,7 @@ fun BudgetScreen(
                                             value = yen(animatedAmount(totalBudget.toFloat()).toDouble(), 0),
                                             color = t.fg,
                                             onClick = {
-                                                view.performConfirmHaptic()
+                                                haptic(HapticTone.LIGHT)
                                                 editingTarget = BudgetEditorTarget(
                                                     categoryName = "",
                                                     title = "总预算",
@@ -246,7 +247,7 @@ fun BudgetScreen(
                                         spentAmount = budget?.spentAmount ?: 0.0,
                                         enterIndex = index,
                                         onClick = {
-                                            view.performConfirmHaptic()
+                                            haptic(HapticTone.LIGHT)
                                             editingTarget = BudgetEditorTarget(
                                                 categoryName = category.name,
                                                 title = category.name,
@@ -303,7 +304,7 @@ fun BudgetScreen(
                 } else {
                     viewModel.setCategoryBudget(target.categoryName, amount)
                 }
-                view.performConfirmHaptic()
+                haptic(HapticTone.SUCCESS)
                 editingTarget = null
             },
             onDismiss = { editingTarget = null },
