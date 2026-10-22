@@ -22,7 +22,7 @@
 
 ## 动手前必看的坑
 
-> 改记账首页布局→[FAB 被底部导航栏遮挡](docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md)｜取证顺序「先截图、再 dump」→[uiautomator 踢掉无障碍服务](docs/踩坑/uiautomator踢掉无障碍服务.md)｜`rootInActiveWindow` 未必是目标窗口→[第三方悬浮窗](docs/踩坑/第三方悬浮窗顶掉无障碍根窗口.md)｜完整清单→[踩坑记录](docs/踩坑/README.md)
+> 广告跳过与记账**同时**失效、且 `MonitorDebug` 日志一条都没有→先查进程是否被冻结→[进程被系统冻结](docs/踩坑/进程被系统冻结导致无障碍全部失效.md)｜改记账首页布局→[FAB 被底部导航栏遮挡](docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md)｜取证顺序「先截图、再 dump」→[uiautomator 踢掉无障碍服务](docs/踩坑/uiautomator踢掉无障碍服务.md)｜`rootInActiveWindow` 未必是目标窗口→[第三方悬浮窗](docs/踩坑/第三方悬浮窗顶掉无障碍根窗口.md)｜完整清单→[踩坑记录](docs/踩坑/README.md)
 
 ## 文档规则
 
