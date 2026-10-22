@@ -1,6 +1,6 @@
 # Android 多版本适配指南（API 29~36）
 
-> 覆盖 Android 10 (API 29) ~ Android 16 (API 36)。**实际配置：`compileSdk = 36`、`targetSdk = 34`、`minSdk = 29`**（以 `app/build.gradle.kts` 为准）。
+> 覆盖 Android 10 (API 29) ~ Android 16 (API 36)。**实际配置：`compileSdk = 37`、`targetSdk = 37`、`minSdk = 29`**（以 `app/build.gradle.kts` 为准）。
 > 只列对本项目有影响或已处理的变更；其余变更查官方 behavior-changes 页面。
 
 ## Android 16（API 36）
@@ -81,7 +81,7 @@ target 34 相关：
 | `NEARBY_WIFI_DEVICES` / `BLUETOOTH_CONNECT` | ✅ | 已声明 |
 | 媒体权限 | ✅ | 不用外部存储 |
 
-> ⚠️ **minSdk=29 仍需要 `Build.VERSION.SDK_INT` 守卫**（现存 8 处）：target 34 意味着 Android 10~13 设备仍会安装，API 30+ 能力（如无障碍截图）必须做版本判断。
+> ⚠️ **minSdk=29 仍需要 `Build.VERSION.SDK_INT` 守卫**（现存 8 处）：minSdk 29 意味着 Android 10~15 设备仍会安装，API 30+ 能力（如无障碍截图）必须做版本判断。
 
 ## 参考
 
