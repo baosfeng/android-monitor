@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
@@ -49,6 +50,7 @@ import com.bsfeng.monitor.backup.BackupOutcome
 import com.bsfeng.monitor.backup.BackupScheduler
 import com.bsfeng.monitor.backup.RestoreApplyOutcome
 import com.bsfeng.monitor.backup.RestoreOutcome
+import com.bsfeng.monitor.service.HeartbeatWatchdog
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Settings
@@ -213,6 +215,8 @@ fun SettingsScreen(
     var subscriptionCount by remember { mutableStateOf(0) }
     var whitelistCount by remember { mutableStateOf(0) }
     var batteryIgnored by remember { mutableStateOf(false) }
+    // 进程冻结提示（null = 心跳正常）：勾选态正常但进程没在跑时才有值
+    var heartbeatNotice by remember { mutableStateOf<String?>(null) }
     // 通知权限（系统级）：进设置页与从系统设置返回时刷新
     var notificationsOn by remember { mutableStateOf(notificationsEnabled(context)) }
     // 数据与备份：频率 / 最近一次 / 已存份数（进设置页即刷新，见 reloadCounters）
@@ -236,6 +240,9 @@ fun SettingsScreen(
             ?.size ?: 0
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         batteryIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        // 进程冻结提示：读心跳中断记录。冻结只能事后发现（用户打开 App 即解冻），
+        // 所以这里展示「上次中断了多久」，而不是「此刻是否停更」。
+        heartbeatNotice = HeartbeatWatchdog.gapNotice(context)
         val backupConfig = BackupConfig(context)
         backupFrequency = backupConfig.frequency()
         lastBackup = backupConfig.lastBackup()
@@ -577,6 +584,46 @@ fun SettingsScreen(
                         // ④ 电池优化
                         Column(Modifier.fillMaxWidth()) {
                             GroupLabel("电池优化")
+                            // 进程冻结提示：勾选态与绑定关系都正常、但心跳停了 —— MIUI/HyperOS 把进程
+                            // 冻进 cgroup 的典型表现（广告跳过与自动记账会一起静默失效）。
+                            // 判定在 service/HeartbeatWatchdog.kt，踩坑见 docs/踩坑/进程被系统冻结导致无障碍全部失效.md
+                            heartbeatNotice?.let { notice ->
+                                AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                                    TokenRow(
+                                        title = "进程疑似被冻结",
+                                        subtitle = notice,
+                                        icon = Icons.Outlined.ErrorOutline,
+                                        trailing = {
+                                            AppButton(
+                                                text = "去关闭",
+                                                onClick = {
+                                                    heartbeatNotice = null
+                                                    HeartbeatWatchdog.clearGap(context)
+                                                    // 优先直达本应用的「应用信息」页：省电策略/自启动都在那一页，
+                                                    // 比落到电池优化总列表少三次点击
+                                                    val opened = runCatching {
+                                                        context.startActivity(
+                                                            Intent(
+                                                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                                Uri.fromParts("package", context.packageName, null),
+                                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        )
+                                                        true
+                                                    }.getOrDefault(false)
+                                                    if (!opened) {
+                                                        context.startActivity(
+                                                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                                        )
+                                                    }
+                                                },
+                                                variant = AppButtonVariant.Ghost,
+                                            )
+                                        },
+                                    )
+                                    Spacer(Modifier.height(t.space1))
+                                }
+                                Spacer(Modifier.height(t.space2))
+                            }
                             AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
                                 TokenRow(
                                     title = "忽略电池优化",
