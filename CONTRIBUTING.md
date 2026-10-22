@@ -4,12 +4,12 @@
 
 ## 开发环境
 
-- JDK 21
-- Android SDK Platform 36、Build-Tools
+- JDK 25（JDK 21 仍可回退）
+- Android SDK Platform 37、Build-Tools
 - 建议使用 Android Studio 最新稳定版
 
 ```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export JAVA_HOME=/opt/homebrew/opt/openjdk@25
 ./gradlew test assembleDebug
 ```
 

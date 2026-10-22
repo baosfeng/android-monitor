@@ -150,15 +150,24 @@ android {
 }
 
 tasks.withType<Test> {
+    // 测试 JVM 取 25：:domain 用 25 toolchain 编译出 major 69 字节码，
+    // 低于 25 的 JVM 加载它会抛 UnsupportedClassVersionError，与启动构建的 JDK 无关
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         // Robolectric 4.17 在 API 37 沙箱里建 ApplicationSharedMemory 时会反射 SharedSecrets
-        // 改写 FileDescriptor，JDK 21 默认不导出该包（报 "Failed to interact with raw
+        // 改写 FileDescriptor，而该包默认未导出（报 "Failed to interact with raw
         // FileDescriptor internals; perhaps JRE has changed?"）
         "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED"
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        // conscrypt 用 System.load 加载 native 库；JDK 24 起这属于受限方法，
+        // 显式放行以免默认告警在后续 JDK 版本里升级成硬失败
+        "--enable-native-access=ALL-UNNAMED"
     )
 
     // 测试并行执行以加快反馈（质量基线要求）。
@@ -275,10 +284,10 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.animation:animation")
     debugImplementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.navigation:navigation-compose:2.10.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.compose.material:material-icons-extended")
 
     // Core
