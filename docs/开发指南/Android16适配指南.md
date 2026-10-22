@@ -1,18 +1,12 @@
 # Android 16 (API 36) 适配指南
 
-> 最后更新：2025-07-03
-> 当前项目配置：`compileSdk = 36`, `targetSdk = 36`, `minSdk = 36`
+> 最后更新：2026-10-23
 
 ---
 
 ## 一、项目当前版本栈
 
-| 组件 | 当前版本 | 备注 |
-|------|---------|------|
-| AGP | 9.2.1 | 与 Android 16 SDK 兼容 |
-| Kotlin | 2.4.0 | 已启用 `kotlin.plugin.compose` |
-| Compose BOM | 2024.12.01 | Material3 |
-| compileSdk / targetSdk / minSdk | 36 | 已全部对齐 API 36 |
+版本清单以 [构建与测试](构建与测试.md) 为唯一事实源，本文只记 Android 16 行为变更。
 
 ---
 
@@ -53,7 +47,7 @@ Android 16 限制 `android:priority` 和 `IntentFilter.setPriority()` 仅在同�
 
 Android 16 默认启用预测性返回动画，`onBackPressed()` 不再调用，`KEYCODE_BACK` 不再分发。
 
-本项目使用 **Navigation Compose**（`2.8.5`），已经内置支持预测性返回。无需额外处理。
+本项目使用 **Navigation Compose**（`2.10.2`），已经内置支持预测性返回。无需额外处理。
 
 ✅ 当前代码兼容，无需修改。
 
@@ -112,9 +106,9 @@ Android 16 自动给应用图标应用主题色。本项目已有 adaptive icon�
 
 ## 三、Kotlin / Compose 语法注意事项
 
-### 3.1 Kotlin 2.4.0 特性与兼容性
+### 3.1 Kotlin 2.4.21 特性与兼容性
 
-当前使用 Kotlin 2.4.0，支持以下现代语法（已在项目中使用的标记 ✅）：
+当前使用 Kotlin 2.4.21，支持以下现代语法（已在项目中使用的标记 ✅）：
 
 | 特性 | 状态 | 说明 |
 |------|------|------|
