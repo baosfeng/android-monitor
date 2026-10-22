@@ -69,7 +69,7 @@ settings get secure enabled_accessibility_services
 
 ```bash
 # 正确的开发流程：一行完成测试、编译、安装
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export JAVA_HOME=/opt/homebrew/opt/openjdk@25
 ./gradlew test && ./gradlew assembleDebug \
   && ~/Downloads/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 # ↑ 不需要 force-stop！adb install -r 会自动处理进程切换

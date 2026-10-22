@@ -4,7 +4,9 @@ plugins {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        // domain 是纯 Kotlin/JVM 模块，不经 Android desugar，可直接吃 JDK 25 字节码（major 69）；
+        // app 侧由 AGP 内置 D8/R8 消化，无需同步抬高 app 的 jvmTarget
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
