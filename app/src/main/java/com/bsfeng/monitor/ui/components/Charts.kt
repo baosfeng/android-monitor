@@ -33,7 +33,9 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.MotionTier
 import com.bsfeng.monitor.ui.foundation.rememberDrawCache
+import com.bsfeng.monitor.ui.foundation.scaleDuration
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.heatRamp
@@ -79,14 +81,19 @@ private fun normalizeByMax(values: List<Float>): List<Float> {
 /**
  * 图表动画进度：返回 [Animatable] 而不是当帧 Float —— 调用点在 drawWithCache 的
  * build 块里读 progress.value，读取落在绘制作用域，动画期间不再逐帧重组（J4）。
+ *
+ * 时长按动效档位缩放（`ui/foundation/MotionTier.kt` 的 [MotionTier.scaleDuration]）：
+ * FULL 全长、NORMAL ×0.75、REDUCED 由 [animated] = false 走「直接落终态」分支。
  */
 @Composable
 private fun chartAnim(key: Any, animated: Boolean, durMs: Int): Animatable<Float, *> {
     val anim = remember(key) { Animatable(if (animated) 0f else 1f) }
-    LaunchedEffect(key, animated) {
+    val tier = rememberMotionTier()
+    val scaledDur = tier.scaleDuration(durMs)
+    LaunchedEffect(key, animated, scaledDur) {
         if (animated) {
             anim.snapTo(0f)
-            anim.animateTo(1f, tween(durMs))
+            anim.animateTo(1f, tween(scaledDur))
         } else {
             anim.snapTo(1f)
         }
@@ -152,7 +159,7 @@ fun LineChart(
     values: List<Float>,
     modifier: Modifier = Modifier,
     color: Color? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
     showGrid: Boolean = true,
 ) {
     val t = LocalDesignTokens.current
@@ -199,7 +206,7 @@ fun AreaChart(
     values: List<Float>,
     modifier: Modifier = Modifier,
     color: Color? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
     /** 峰值点上方 9px 标「峰值 N」；关掉可省一次文本测量（原型 d.peak !== false）。 */
     markPeak: Boolean = true,
 ) {
@@ -281,7 +288,7 @@ fun RingChart(
     /** 环直径；默认 128.dp = token ring-size（128px→128dp），默认行为与改动前一致。 */
     size: Dp = 128.dp,
     centerLabel: String? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
 ) {
     val t = LocalDesignTokens.current
     val ramp = colors ?: t.chartRamp
@@ -343,7 +350,7 @@ fun PieChart(
     colors: List<Color>? = null,
     /** 扇形直径；默认 128.dp = token ring-size，与 [RingChart] 一致。 */
     size: Dp = 128.dp,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
 ) {
     val t = LocalDesignTokens.current
     val ramp = colors ?: t.chartRamp
@@ -402,7 +409,7 @@ fun RingProgress(
     modifier: Modifier = Modifier,
     color: Color? = null,
     centerLabel: String? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
 ) {
     RingChart(
         segments = listOf(fraction.coerceIn(0f, 1f), (1f - fraction).coerceIn(0f, 1f)),
@@ -425,7 +432,7 @@ fun BarChart(
     modifier: Modifier = Modifier,
     /** 传多色会破坏「柱状图单色」约束，仅在特殊对照场景使用；默认 null = 序列色单色。 */
     colors: List<Color>? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
     /** 柱顶直标数值（原型 d.vlabels !== false）。 */
     showValues: Boolean = true,
 ) {
@@ -487,7 +494,7 @@ fun HeatBar(
     values: List<Float>,
     modifier: Modifier = Modifier,
     levels: Int = 6,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
 ) {
     val t = LocalDesignTokens.current
     val ramp = t.heatRamp
@@ -533,7 +540,7 @@ fun Sparkline(
     values: List<Float>,
     modifier: Modifier = Modifier,
     color: Color? = null,
-    animated: Boolean = true,
+    animated: Boolean = rememberMotionEnabled(),
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.bsfeng.monitor.MainActivity
@@ -20,6 +21,19 @@ object HealthChecker {
         // 检查 AccessibilityService 是否存活
         if (!isAccessibilityServiceRunning(context)) {
             notifyUser(context, "监控服务已停止", "请前往 设置 → 无障碍 → 行为记录 重新开启")
+        } else if (HeartbeatWatchdog.isSuspended(
+                context,
+                MonitorAccessibilityService.isRunning,
+                SystemClock.elapsedRealtime(),
+            )
+        ) {
+            // 勾选态与绑定关系都正常、但进程没在跑 —— MIUI/HyperOS 冻结的特征。
+            // 详见 docs/踩坑/进程被系统冻结导致无障碍全部失效.md
+            notifyUser(
+                context,
+                "监控进程疑似被冻结",
+                "无障碍显示已开启但没有心跳。请关闭针对本应用的「省电策略」，或把应用加入电池白名单",
+            )
         }
 
         // 检查事件积压（二期实现后接入 RecordStore 统计）

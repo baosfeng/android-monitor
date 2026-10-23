@@ -79,6 +79,9 @@ open class MonitorAccessibilityService : AccessibilityService() {
     private val foregroundHandler: android.os.Handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val foregroundPoller = object : Runnable {
         override fun run() {
+            // 活性心跳：进程真在跑才会跳到这里，被冻结后自动停更。
+            // 放在 pollForegroundApp() 之外 —— 那条路径在 rootInActiveWindow == null 时会提前 return。
+            HeartbeatWatchdog.beat(this@MonitorAccessibilityService, android.os.SystemClock.elapsedRealtime())
             try {
                 pollForegroundApp()
             } catch (e: Exception) {
@@ -536,6 +539,8 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
+        // 服务是「被正常销毁」而不是「被冻结」：清掉心跳，否则下次进设置页会误报进程被冻结
+        HeartbeatWatchdog.onServiceStopped(this)
         removeCurrentDanmaku()
         // 清理自动记账浮窗与协程，避免服务重建后残留窗口
         runCatching { autoBookEngine.release() }
