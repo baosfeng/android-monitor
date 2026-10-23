@@ -1,0 +1,828 @@
+<!-- ============================================================
+     s16 · 每日行程
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     本屏是 push 屏（不在底部 Tab 内）：appbar 由外壳按 data-title 生成。
+     行程段模型 = Stay（停留）/ Move（移动）/ Gap（未记录，不猜内容）。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s16">
+/* ── s16 每日行程 ───────────────────────────────────────────────── */
+#s16 .od-ctl{display:none}
+#s16 .s16-in{opacity:0}
+#s16.is-active .s16-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s16.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+#s16.is-active .od-d2{animation-delay:calc(var(--stagger) * 3)}
+#s16.is-active .od-d3{animation-delay:calc(var(--stagger) * 5)}
+.device-screen:has(#odSplash:not([hidden])) #s16 *{animation:none}
+
+/* 日期步进 */
+#s16 .s16-nav{display:flex;gap:var(--space-2);flex:0 0 auto}
+
+/* 结论卡 */
+#s16 .badge{white-space:nowrap}
+#s16 .s16-sum{font-size:var(--text-lg);font-weight:700;letter-spacing:-0.012em;margin:0;line-height:1.2}
+#s16 .s16-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}
+#s16 .s16-metric{
+  display:flex;flex-direction:column;gap:2px;padding:var(--space-2) var(--space-3);
+  background:color-mix(in srgb,var(--fg) 4%,transparent);border-radius:var(--radius-md);
+}
+#s16 .s16-metric-k{font-size:var(--text-sm);color:var(--muted)}
+#s16 .s16-metric-v{font-size:var(--text-base);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* 页面轨迹条目：按「该 App 的档位」（.s16-pg[data-level]）渲染，
+   屏内控件只做「临时预览」覆盖，不改 App 设置。 */
+#s16 .pv-b,#s16 .pv-c{display:none}
+#s16 .s16-pg[data-level="b"] .pv-a{display:none}
+#s16 .s16-pg[data-level="b"] .pv-b{display:inline}
+#s16 .s16-pg[data-level="c"] .pv-a,
+#s16 .s16-pg[data-level="d"] .pv-a{display:none}
+#s16 .s16-pg[data-level="c"] .pv-c,
+#s16 .s16-pg[data-level="d"] .pv-c{display:inline}
+#s16 .s16-pg[data-level="c"] .s16-texts,
+#s16 .s16-pg[data-level="d"] .s16-texts{display:flex}
+#s16 .s16-pg[data-level="c"] .s16-fold,
+#s16 .s16-pg[data-level="d"] .s16-fold{display:block}
+#s16 .s16-pg[data-level="d"] .s16-ctrl{display:block}
+
+/* 临时预览：选中任一档位后，全部条目先按该档位显示 */
+#s16[data-preview="a"] .s16-pg .pv-a,
+#s16[data-preview="b"] .s16-pg .pv-b,
+#s16[data-preview="c"] .s16-pg .pv-c,
+#s16[data-preview="d"] .s16-pg .pv-c{display:inline}
+#s16[data-preview="b"] .s16-pg .pv-a,
+#s16[data-preview="b"] .s16-pg .pv-c,
+#s16[data-preview="c"] .s16-pg .pv-a,
+#s16[data-preview="d"] .s16-pg .pv-a{display:none}
+#s16[data-preview="a"] .s16-texts,
+#s16[data-preview="a"] .s16-fold,
+#s16[data-preview="b"] .s16-texts,
+#s16[data-preview="b"] .s16-fold{display:none}
+#s16[data-preview="c"] .s16-texts,
+#s16[data-preview="d"] .s16-texts{display:flex}
+#s16[data-preview="c"] .s16-fold,
+#s16[data-preview="d"] .s16-fold{display:block}
+#s16[data-preview="a"] .s16-ctrl,
+#s16[data-preview="b"] .s16-ctrl,
+#s16[data-preview="c"] .s16-ctrl{display:none}
+#s16[data-preview="d"] .s16-ctrl{display:block}
+#s16 .s16-cap{font-size:var(--text-sm);color:var(--muted);line-height:1.45}
+#s16 .s16-cap > span{display:none}
+#s16[data-preview="keep"] .s16-cap .cap-keep,
+#s16[data-preview="a"] .s16-cap .cap-a,
+#s16[data-preview="b"] .s16-cap .cap-b,
+#s16[data-preview="c"] .s16-cap .cap-c,
+#s16[data-preview="d"] .s16-cap .cap-d,
+#s16[data-preview="keep"] .s16-cap .cap-note{display:inline}
+#s16 .s16-cap-note{display:none}
+#s16[data-preview="keep"] .s16-cap-note{display:block;margin-top:var(--space-1)}
+
+/* 时间轴：每段一行，停留段可点开详情 */
+#s16 .s16-tl{padding:0}
+#s16 .s16-seg{
+  display:grid;grid-template-columns:46px 30px minmax(0,1fr) 18px;
+  gap:var(--space-2) var(--space-3);align-items:start;
+  width:100%;min-height:var(--row-min-h);padding:var(--space-3) 0;
+  border:0;border-top:1px solid var(--border-soft);background:transparent;
+  color:var(--fg);font:inherit;text-align:left;
+}
+#s16 .s16-seg:first-child{border-top:0}
+#s16 button.s16-seg{cursor:pointer;transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+#s16 button.s16-seg:active{transform:scale(.99);opacity:.92}
+#s16 .s16-seg-time{
+  display:flex;flex-direction:column;gap:2px;padding-top:2px;
+  font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted);font-variant-numeric:tabular-nums;
+}
+#s16 .s16-seg-icon{
+  width:30px;height:30px;display:grid;place-items:center;border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--k,var(--fg)) 12%,transparent);
+  color:color-mix(in srgb,var(--k,var(--fg-2)) 78%,var(--fg));
+}
+#s16 .s16-seg-icon.is-stay{--k:var(--chart-2)}
+#s16 .s16-seg-icon.is-move{--k:var(--chart-1)}
+#s16 .s16-seg-icon.is-gap{--k:var(--fg-2)}
+#s16 .s16-seg-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#s16 .s16-seg-body{min-width:0;display:flex;flex-direction:column;gap:2px}
+#s16 .s16-seg-title{
+  font-size:var(--text-base);font-weight:600;line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#s16 .s16-seg-sub{font-size:var(--text-sm);color:var(--muted);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#s16 .s16-seg-track{font-size:var(--text-sm);color:var(--fg-2);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#s16 .s16-seg.is-gap .s16-seg-title{color:var(--muted);font-weight:500}
+#s16 .s16-seg .chev{margin-top:4px}
+
+/* 详情抽屉（停留段）：App 时长条 + 页面轨迹条目 */
+#s16 .s16-sheet{display:none}
+#s16 .od-ctl:checked + .s16-sheet{display:grid}
+#s16 .s16-veil{position:absolute;inset:0}
+#s16 .s16-sheet .sheet{position:relative;z-index:1;max-height:100%;overflow-y:auto}
+/* 分段控件的选中态：本屏用 role=radio + aria-checked（与 s01 同口径） */
+#s16 .segmented > [aria-checked="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:var(--elev-1)}
+#s16 .s16-sheet-title{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+#s16 .s16-apps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
+#s16 .s16-app{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);min-height:var(--tap-min)}
+#s16 .s16-app-body{min-width:0;display:block}
+#s16 .s16-app-name{font-size:var(--text-sm);line-height:1.3;display:block;margin-bottom:4px}
+#s16 .s16-bar{display:block;height:6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 8%,transparent);overflow:hidden}
+#s16 .s16-bar > span{display:block;height:100%;width:var(--w);border-radius:inherit;background:color-mix(in srgb,var(--fg) 42%,transparent)}
+#s16 .s16-app-val{font-size:var(--text-sm);color:var(--fg-2);font-variant-numeric:tabular-nums}
+#s16 .s16-pages{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2)}
+#s16 .s16-pg{display:grid;grid-template-columns:30px minmax(0,1fr);align-items:start;gap:var(--space-3);min-height:var(--tap-min);padding-top:var(--space-2);border-top:1px solid var(--border-soft)}
+#s16 .s16-pg:first-child{border-top:0}
+#s16 .s16-pg-body{min-width:0;display:flex;flex-direction:column;gap:4px}
+#s16 .s16-pg-line{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+#s16 .s16-pg-name{font-size:var(--text-sm);line-height:1.35;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#s16 .s16-pg-num{flex:0 0 auto;font-size:var(--text-sm);color:var(--muted);font-variant-numeric:tabular-nums}
+#s16 .s16-texts{display:none;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+
+
+/* 展开全文：默认显示前 3 行，展开后滚阅整页占位文本 */
+#s16 .s16-fold{display:none;margin-top:var(--space-1)}
+
+#s16 .s16-fold > summary{
+  display:flex;align-items:center;gap:6px;min-height:var(--tap-min);padding:0 var(--space-2);
+  list-style:none;cursor:pointer;border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--fg) 5%,transparent);color:var(--fg-2);font-size:var(--text-sm);
+}
+#s16 .s16-fold > summary::-webkit-details-marker{display:none}
+#s16 .s16-fold > summary:focus-visible{outline:0;box-shadow:var(--focus-ring)}
+#s16 .s16-full{
+  list-style:none;margin:var(--space-2) 0 0;padding:0;display:flex;flex-direction:column;gap:2px;
+  max-height:200px;overflow-y:auto;
+}
+#s16 .s16-full li{
+  flex:0 0 auto;
+  font-size:var(--text-xs);color:var(--muted);line-height:1.4;padding:3px var(--space-2);
+  border-radius:var(--radius-sm);background:color-mix(in srgb,var(--fg) 4%,transparent);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* 控件级：本页可操作项清单 */
+#s16 .s16-ctrl{display:none;margin-top:var(--space-2)}
+#s16 .s16-pg[data-level="d"] .s16-ctrl{display:block}
+#s16 .s16-ctrl-k{font-size:var(--text-sm);color:var(--muted);margin:0 0 var(--space-2)}
+#s16 .s16-chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+#s16 .s16-chips .chip{flex:0 0 auto;pointer-events:none}
+
+/* 记录点击与输入：开关 + 卡头隐私提示 + 抽屉操作记录 */
+#s16 .s16-switchrow{border-top:1px solid var(--border-soft);margin-top:var(--space-3);padding-top:var(--space-2)}
+#s16 .s16-privacy-hint{
+  display:none;align-items:flex-start;gap:6px;margin:var(--space-2) 0 0;padding:var(--space-2) var(--space-3);
+  border-radius:var(--radius-sm);background:color-mix(in srgb,var(--warn) 14%,transparent);
+  color:var(--warn-text);font-size:var(--text-sm);line-height:1.4;
+}
+#s16 #s16-clicklog:checked ~ .content .s16-privacy-hint{display:flex}
+#s16 .s16-ops{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft)}
+#s16 #s16-clicklog:checked ~ .s16-sheet .s16-ops{display:block}
+#s16 .s16-ops li{display:flex;align-items:baseline;gap:var(--space-2);min-height:var(--tap-min);padding:var(--space-2) 0;border-top:1px solid var(--border-soft);font-size:var(--text-sm)}
+#s16 .s16-ops li:first-child{border-top:0}
+#s16 .s16-ops .num{color:var(--muted);flex:0 0 auto}
+#s16 .s16-texts li{
+  flex:0 0 auto;
+  font-size:var(--text-xs);color:var(--muted);line-height:1.4;
+  padding:2px var(--space-2);border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--fg) 5%,transparent);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* 口径说明 */
+#s16 .s16-rules .row:first-child{border-top:0}
+#s16 .s16-hint{
+  display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:var(--tap-min);
+  padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:pointer;
+}
+#s16 .s16-hint .row-body{min-width:0}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s16" data-title="每日行程" id="s16" data-od-id="screen-s16" data-preview="keep">
+  <input class="od-ctl" type="checkbox" id="s16-clicklog" />
+  <div class="content" data-od-id="s16-content">
+
+    <header class="screen-head" data-od-id="s16-head">
+      <div>
+        <p class="meta">2025 年 10 月 14 日 · 星期二</p>
+        <h1 class="h1 mt-2">每日行程</h1>
+      </div>
+      <div class="s16-nav">
+        <button class="icon-btn" type="button" aria-label="前一天" data-od-id="s16-prev"
+                onclick="App.toast('前一天 · 10 月 13 日的行程')">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+        </button>
+        <button class="icon-btn" type="button" aria-label="后一天" data-od-id="s16-next"
+                onclick="App.toast('后一天 · 暂无记录')">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="st-empty" data-state-when="empty" data-od-id="s16-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><path d="M8.5 10.5h7"/></svg></span>
+      <p class="st-title">这一天还没有行程</p>
+      <p class="st-desc">停留与移动由设备活动推算；采集中断的时间标成「未记录」，不做推断。</p>
+      <button class="btn btn-ghost" type="button" data-goto="s09" data-od-id="s16-empty-cta">去开启定位权限</button>
+    </div>
+
+    <div class="s16-main" data-state-hide="empty">
+
+    <div class="pad s16-in od-d1" data-od-id="s16-summary">
+      <div class="card glass">
+        <div class="row-between">
+          <span class="meta">今日结论</span>
+          <span class="badge" data-od-min-fs data-od-id="s16-source">按设备活动推算</span>
+        </div>
+        <p class="s16-sum mt-2">在外 2 小时 10 分</p>
+        <p class="meta mt-2">最长停留 45 分 · 3 处停留 · 3 段移动</p>
+        <div class="s16-metrics mt-3">
+          <div class="s16-metric"><span class="s16-metric-k">在家</span><span class="s16-metric-v num">21h10</span></div>
+          <div class="s16-metric"><span class="s16-metric-k">在外</span><span class="s16-metric-v num">2h10</span></div>
+          <div class="s16-metric"><span class="s16-metric-k">未记录</span><span class="s16-metric-v num">40m</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s16-in od-d2" data-od-id="privacy-card">
+      <div class="card">
+        <div class="sec-head">
+          <h2 class="h3">页面轨迹口径</h2>
+          <span class="badge" data-od-min-fs data-od-id="privacy-badge">跟随 App</span>
+        </div>
+        <p class="meta" data-od-id="privacy-label">临时预览档位</p>
+        <div class="segmented mt-2" role="radiogroup" aria-label="临时预览档位" data-od-id="privacy-switch">
+          <button type="button" role="radio" aria-checked="true" data-preview-set="keep">跟随</button>
+          <button type="button" role="radio" aria-checked="false" data-preview-set="a">标题</button>
+          <button type="button" role="radio" aria-checked="false" data-preview-set="b">指纹</button>
+          <button type="button" role="radio" aria-checked="false" data-preview-set="c">全文</button>
+          <button type="button" role="radio" aria-checked="false" data-preview-set="d">控件级</button>
+        </div>
+        <p class="s16-cap mt-3" data-od-id="privacy-cap">
+          <span class="cap-keep">跟随 App 设置：微信 标题 · 小红书 全文 · 抖音 指纹。</span>
+          <span class="cap-a">临时预览 · 标题：仅影响本次预览，不改 App 设置。</span>
+          <span class="cap-b">临时预览 · 指纹：仅影响本次预览，不改 App 设置。</span>
+          <span class="cap-c">临时预览 · 全文：仅影响本次预览，不改 App 设置。</span>
+          <span class="cap-d">临时预览 · 控件级：仅影响本次预览，不改 App 设置。</span>
+        </p>
+        <p class="fine s16-cap-note">按 App 的档位在「页面记录粒度」里改；这里只做临时预览。</p>
+        <div class="row s16-switchrow" data-od-id="clicklog-row">
+          <span class="row-body">
+            <span class="row-title">记录点击与输入</span>
+            <span class="row-sub">默认关闭 · 记录按钮点击与输入</span>
+          </span>
+          <button class="switch" type="button" role="switch" aria-checked="false" aria-label="记录点击与输入" data-clicklog-toggle data-od-id="clicklog-switch"></button>
+        </div>
+        <p class="s16-privacy-hint" data-od-id="clicklog-hint">
+          <span aria-hidden>·</span>
+          <span>点击与输入只留在本机 7 天，可随时关掉；上报默认不带文本。</span>
+        </p>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s16-in od-d3" data-od-id="s16-timeline">
+      <div class="card" style="padding:0 var(--space-4)" data-od-id="s16-timeline-list">
+        <div class="s16-tl" data-od-min-fs>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-am">
+            <span class="s16-seg-time"><span class="num">00:00</span><span class="num">09:10</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">家</span>
+              <span class="s16-seg-sub">停留 9 小时 10 分</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span><span class="pv-b">微信 › 页面 a3f2 · 12 次 · 抖音 › 页面 c81d · 8 次</span><span class="pv-c">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg" data-od-id="s16-seg-move-1">
+            <span class="s16-seg-time"><span class="num">09:10</span><span class="num">09:30</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">家 → 某某咖啡</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 1.2 公里</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s2" data-od-id="s16-seg-cafe">
+            <span class="s16-seg-time"><span class="num">09:30</span><span class="num">10:15</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 8.5h11v5.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5z"/><path d="M15.5 10h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M4 21h13"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">某某咖啡</span>
+              <span class="s16-seg-sub">停留 45 分 · 最长停留</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span><span class="pv-b">微信 › 页面 a3f2 · 6 次 · 小红书 › 页面 7e05 · 4 次</span><span class="pv-c">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg" data-od-id="s16-seg-move-2">
+            <span class="s16-seg-time"><span class="num">10:15</span><span class="num">10:35</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">某某咖啡 → 公司</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 1.6 公里</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s3" data-od-id="s16-seg-office">
+            <span class="s16-seg-time"><span class="num">10:35</span><span class="num">11:00</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M9 7.5h2M13 7.5h2M9 11.5h2M13 11.5h2M9 15.5h2M13 15.5h2"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">公司</span>
+              <span class="s16-seg-sub">停留 25 分</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span><span class="pv-b">微信 › 页面 b1c4 · 5 次 · 钉钉 › 页面 5d92 · 3 次</span><span class="pv-c">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg" data-od-id="s16-seg-move-3">
+            <span class="s16-seg-time"><span class="num">11:00</span><span class="num">11:20</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">公司 → 家</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 2.0 公里</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-noon">
+            <span class="s16-seg-time"><span class="num">11:20</span><span class="num">14:20</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">家</span>
+              <span class="s16-seg-sub">停留 3 小时</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 4 次 · 哔哩哔哩 › 推荐 · 3 次</span><span class="pv-b">微信 › 页面 a3f2 · 4 次 · 哔哩哔哩 › 页面 2ef7 · 3 次</span><span class="pv-c">微信 › 朋友圈 · 4 次 · 哔哩哔哩 › 推荐 · 3 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg is-gap" data-od-id="s16-seg-gap-1">
+            <span class="s16-seg-time"><span class="num">14:20</span><span class="num">15:00</span></span>
+            <span class="s16-seg-icon is-gap" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 12h4l2 4h3l2-4h4"/><path d="M8 5.5 4.5 9v2"/><path d="M16 18.5 19.5 15v-2"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">未记录</span>
+              <span class="s16-seg-sub">采集暂停 40 分 · 不做推断</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-pm">
+            <span class="s16-seg-time"><span class="num">15:00</span><span class="num">24:00</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">家</span>
+              <span class="s16-seg-sub">停留 9 小时</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span><span class="pv-b">微信 › 页面 a3f2 · 7 次 · 抖音 › 页面 c81d · 5 次</span><span class="pv-c">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s16-in" data-od-id="s16-rules">
+      <div class="card">
+        <div class="sec-head">
+          <h2 class="h3">口径说明</h2>
+          <span class="meta">按设备活动推算</span>
+        </div>
+        <div class="row s16-rule">
+          <span class="row-body"><span class="row-title">停留</span><span class="row-sub">连续 10 分钟以上停在同一地点</span></span>
+        </div>
+        <div class="row s16-rule">
+          <span class="row-body"><span class="row-title">移动</span><span class="row-sub">两点间净位移超过 300 米</span></span>
+        </div>
+        <div class="row s16-rule">
+          <span class="row-body"><span class="row-title">未记录</span><span class="row-sub">采集有中断 · 不猜测期间内容</span></span>
+        </div>
+        <button class="s16-hint" type="button" data-goto="s09" data-od-id="s16-goto-location">
+          <span class="row-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+          <span class="row-body">
+            <span class="row-title">开启定位后可显示距离与地址</span>
+            <span class="row-sub">现在按设备活动推算，地点名来自网络名与使用簇</span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    </div>
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s16-s1" />
+  <div class="scrim is-bottom s16-sheet" data-od-id="trip-detail-sheet">
+    <label class="s16-veil" for="s16-s1" aria-label="关闭停留详情"></label>
+    <div class="sheet" data-od-min-fs>
+      <span class="sheet-grip" aria-hidden></span>
+      <div class="s16-sheet-title">
+        <h3 class="h3">家</h3>
+        <span class="badge">停留 9 小时 10 分</span>
+      </div>
+      <p class="meta">00:00 – 09:10 · 地点来自网络名</p>
+      <p class="group-label mt-3">期间应用 · Top 3</p>
+      <ul class="s16-apps">
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:36%"></span></span></span>
+          <span class="s16-app-val">3 小时 20 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="s16-app-body"><span class="s16-app-name">抖音</span><span class="s16-bar"><span style="--w:12%"></span></span></span>
+          <span class="s16-app-val">1 小时 5 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>哔</span>
+          <span class="s16-app-body"><span class="s16-app-name">哔哩哔哩</span><span class="s16-bar"><span style="--w:8%"></span></span></span>
+          <span class="s16-app-val">42 分</span>
+        </li>
+      </ul>
+      <div class="sec-head mt-3">
+        <h3 class="h3">页面轨迹</h3>
+        <span class="badge">12 条</span>
+      </div>
+      <ul class="s16-pages">
+        <li class="s16-pg" data-level="a">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 朋友圈</span><span class="s16-pg-name pv-b">微信 › 页面 a3f2</span><span class="s16-pg-name pv-c">微信 › 朋友圈</span><span class="s16-pg-num">12 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+            <details class="s16-fold" data-od-id="s16-fold-1">
+              <summary>展开全文 · 20 行</summary>
+              <ul class="s16-full">
+                <li>示例文本 01 · 仅占位</li>
+                <li>示例文本 02 · 仅占位</li>
+                <li>示例文本 03 · 仅占位</li>
+                <li>示例文本 04 · 仅占位</li>
+                <li>示例文本 05 · 仅占位</li>
+                <li>示例文本 06 · 仅占位</li>
+                <li>示例文本 07 · 仅占位</li>
+                <li>示例文本 08 · 仅占位</li>
+                <li>示例文本 09 · 仅占位</li>
+                <li>示例文本 10 · 仅占位</li>
+                <li>示例文本 11 · 仅占位</li>
+                <li>示例文本 12 · 仅占位</li>
+                <li>示例文本 13 · 仅占位</li>
+                <li>示例文本 14 · 仅占位</li>
+                <li>示例文本 15 · 仅占位</li>
+                <li>示例文本 16 · 仅占位</li>
+                <li>示例文本 17 · 仅占位</li>
+                <li>示例文本 18 · 仅占位</li>
+                <li>示例文本 19 · 仅占位</li>
+                <li>示例文本 20 · 仅占位</li>
+              </ul>
+            </details>
+            <div class="s16-ctrl" data-od-id="s16-ctrl-1">
+              <p class="s16-ctrl-k">本页 12 个可操作项</p>
+              <div class="s16-chips">
+                <span class="chip">发消息</span>
+                <span class="chip">朋友圈</span>
+                <span class="chip">扫一扫</span>
+                <span class="chip">收付款</span>
+                <span class="chip">设置</span>
+              </div>
+            </div>
+          </span>
+        </li>
+        <li class="s16-pg" data-level="a">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 公众号文章</span><span class="s16-pg-name pv-b">微信 › 页面 f40b</span><span class="s16-pg-name pv-c">微信 › 公众号文章</span><span class="s16-pg-num">6 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+          </span>
+        </li>
+        <li class="s16-pg" data-level="b">
+          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">抖音 › 推荐页</span><span class="s16-pg-name pv-b">抖音 › 页面 c81d</span><span class="s16-pg-name pv-c">抖音 › 推荐页</span><span class="s16-pg-num">8 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+          </span>
+        </li>
+      </ul>
+      <div class="s16-ops" data-od-id="s16-ops-1">
+        <p class="group-label">操作记录</p>
+        <ul class="s16-ops-list">
+          <li><span class="num">09:42</span><span>点了「发送」</span></li>
+          <li><span class="num">09:43</span><span>输入了「今晚吃什么」</span></li>
+        </ul>
+      </div>
+      <button class="btn btn-ghost btn-block mt-3" type="button" data-ctl-off="s16-s1">关闭</button>
+    </div>
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s16-s2" />
+  <div class="scrim is-bottom s16-sheet" data-od-id="trip-detail-sheet-2">
+    <label class="s16-veil" for="s16-s2" aria-label="关闭停留详情"></label>
+    <div class="sheet" data-od-min-fs>
+      <span class="sheet-grip" aria-hidden></span>
+      <div class="s16-sheet-title">
+        <h3 class="h3">某某咖啡</h3>
+        <span class="badge">停留 45 分</span>
+      </div>
+      <p class="meta">09:30 – 10:15 · 地点来自网络名</p>
+      <p class="group-label mt-3">期间应用 · Top 3</p>
+      <ul class="s16-apps">
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:40%"></span></span></span>
+          <span class="s16-app-val">18 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="s16-app-body"><span class="s16-app-name">小红书</span><span class="s16-bar"><span style="--w:27%"></span></span></span>
+          <span class="s16-app-val">12 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="s16-app-body"><span class="s16-app-name">抖音</span><span class="s16-bar"><span style="--w:20%"></span></span></span>
+          <span class="s16-app-val">9 分</span>
+        </li>
+      </ul>
+      <div class="sec-head mt-3">
+        <h3 class="h3">页面轨迹</h3>
+        <span class="badge">8 条</span>
+      </div>
+      <ul class="s16-pages">
+        <li class="s16-pg" data-level="a">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 朋友圈</span><span class="s16-pg-name pv-b">微信 › 页面 a3f2</span><span class="s16-pg-name pv-c">微信 › 朋友圈</span><span class="s16-pg-num">6 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+            <details class="s16-fold" data-od-id="s16-fold-2">
+              <summary>展开全文 · 20 行</summary>
+              <ul class="s16-full">
+                <li>示例文本 01 · 仅占位</li>
+                <li>示例文本 02 · 仅占位</li>
+                <li>示例文本 03 · 仅占位</li>
+                <li>示例文本 04 · 仅占位</li>
+                <li>示例文本 05 · 仅占位</li>
+                <li>示例文本 06 · 仅占位</li>
+                <li>示例文本 07 · 仅占位</li>
+                <li>示例文本 08 · 仅占位</li>
+                <li>示例文本 09 · 仅占位</li>
+                <li>示例文本 10 · 仅占位</li>
+                <li>示例文本 11 · 仅占位</li>
+                <li>示例文本 12 · 仅占位</li>
+                <li>示例文本 13 · 仅占位</li>
+                <li>示例文本 14 · 仅占位</li>
+                <li>示例文本 15 · 仅占位</li>
+                <li>示例文本 16 · 仅占位</li>
+                <li>示例文本 17 · 仅占位</li>
+                <li>示例文本 18 · 仅占位</li>
+                <li>示例文本 19 · 仅占位</li>
+                <li>示例文本 20 · 仅占位</li>
+              </ul>
+            </details>
+            <div class="s16-ctrl" data-od-id="s16-ctrl-2">
+              <p class="s16-ctrl-k">本页 12 个可操作项</p>
+              <div class="s16-chips">
+                <span class="chip">发消息</span>
+                <span class="chip">朋友圈</span>
+                <span class="chip">扫一扫</span>
+                <span class="chip">收付款</span>
+                <span class="chip">设置</span>
+              </div>
+            </div>
+          </span>
+        </li>
+        <li class="s16-pg" data-level="c">
+          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">小红书 › 笔记详情</span><span class="s16-pg-name pv-b">小红书 › 页面 7e05</span><span class="s16-pg-name pv-c">小红书 › 笔记详情</span><span class="s16-pg-num">4 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+            <details class="s16-fold" data-od-id="s16-fold-4">
+              <summary>展开全文 · 20 行</summary>
+              <ul class="s16-full">
+                <li>示例文本 01 · 仅占位</li>
+                <li>示例文本 02 · 仅占位</li>
+                <li>示例文本 03 · 仅占位</li>
+                <li>示例文本 04 · 仅占位</li>
+                <li>示例文本 05 · 仅占位</li>
+                <li>示例文本 06 · 仅占位</li>
+                <li>示例文本 07 · 仅占位</li>
+                <li>示例文本 08 · 仅占位</li>
+                <li>示例文本 09 · 仅占位</li>
+                <li>示例文本 10 · 仅占位</li>
+                <li>示例文本 11 · 仅占位</li>
+                <li>示例文本 12 · 仅占位</li>
+                <li>示例文本 13 · 仅占位</li>
+                <li>示例文本 14 · 仅占位</li>
+                <li>示例文本 15 · 仅占位</li>
+                <li>示例文本 16 · 仅占位</li>
+                <li>示例文本 17 · 仅占位</li>
+                <li>示例文本 18 · 仅占位</li>
+                <li>示例文本 19 · 仅占位</li>
+                <li>示例文本 20 · 仅占位</li>
+              </ul>
+            </details>
+          </span>
+        </li>
+        <li class="s16-pg" data-level="b" data-od-id="s16-pg-douyin">
+          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">抖音 › 推荐页</span><span class="s16-pg-name pv-b">抖音 › 页面 c81d</span><span class="s16-pg-name pv-c">抖音 › 推荐页</span><span class="s16-pg-num">8 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+          </span>
+        </li>
+      </ul>
+      <div class="s16-ops" data-od-id="s16-ops-2">
+        <p class="group-label">操作记录</p>
+        <ul class="s16-ops-list">
+          <li><span class="num">09:42</span><span>点了「发送」</span></li>
+          <li><span class="num">09:43</span><span>输入了「今晚吃什么」</span></li>
+        </ul>
+      </div>
+      <button class="btn btn-ghost btn-block mt-3" type="button" data-ctl-off="s16-s2">关闭</button>
+    </div>
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s16-s3" />
+  <div class="scrim is-bottom s16-sheet" data-od-id="trip-detail-sheet-3">
+    <label class="s16-veil" for="s16-s3" aria-label="关闭停留详情"></label>
+    <div class="sheet" data-od-min-fs>
+      <span class="sheet-grip" aria-hidden></span>
+      <div class="s16-sheet-title">
+        <h3 class="h3">公司</h3>
+        <span class="badge">停留 25 分</span>
+      </div>
+      <p class="meta">10:35 – 11:00 · 地点来自网络名</p>
+      <p class="group-label mt-3">期间应用 · Top 3</p>
+      <ul class="s16-apps">
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:44%"></span></span></span>
+          <span class="s16-app-val">11 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>钉</span>
+          <span class="s16-app-body"><span class="s16-app-name">钉钉</span><span class="s16-bar"><span style="--w:32%"></span></span></span>
+          <span class="s16-app-val">8 分</span>
+        </li>
+        <li class="s16-app">
+          <span class="app-icon" style="--app:var(--chart-6)" aria-hidden>浏</span>
+          <span class="s16-app-body"><span class="s16-app-name">浏览器</span><span class="s16-bar"><span style="--w:16%"></span></span></span>
+          <span class="s16-app-val">4 分</span>
+        </li>
+      </ul>
+      <div class="sec-head mt-3">
+        <h3 class="h3">页面轨迹</h3>
+        <span class="badge">5 条</span>
+      </div>
+      <ul class="s16-pages">
+        <li class="s16-pg" data-level="a">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 会话列表</span><span class="s16-pg-name pv-b">微信 › 页面 b1c4</span><span class="s16-pg-name pv-c">微信 › 会话列表</span><span class="s16-pg-num">5 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+            <details class="s16-fold" data-od-id="s16-fold-3">
+              <summary>展开全文 · 20 行</summary>
+              <ul class="s16-full">
+                <li>示例文本 01 · 仅占位</li>
+                <li>示例文本 02 · 仅占位</li>
+                <li>示例文本 03 · 仅占位</li>
+                <li>示例文本 04 · 仅占位</li>
+                <li>示例文本 05 · 仅占位</li>
+                <li>示例文本 06 · 仅占位</li>
+                <li>示例文本 07 · 仅占位</li>
+                <li>示例文本 08 · 仅占位</li>
+                <li>示例文本 09 · 仅占位</li>
+                <li>示例文本 10 · 仅占位</li>
+                <li>示例文本 11 · 仅占位</li>
+                <li>示例文本 12 · 仅占位</li>
+                <li>示例文本 13 · 仅占位</li>
+                <li>示例文本 14 · 仅占位</li>
+                <li>示例文本 15 · 仅占位</li>
+                <li>示例文本 16 · 仅占位</li>
+                <li>示例文本 17 · 仅占位</li>
+                <li>示例文本 18 · 仅占位</li>
+                <li>示例文本 19 · 仅占位</li>
+                <li>示例文本 20 · 仅占位</li>
+              </ul>
+            </details>
+            <div class="s16-ctrl" data-od-id="s16-ctrl-3">
+              <p class="s16-ctrl-k">本页 12 个可操作项</p>
+              <div class="s16-chips">
+                <span class="chip">发消息</span>
+                <span class="chip">朋友圈</span>
+                <span class="chip">扫一扫</span>
+                <span class="chip">收付款</span>
+                <span class="chip">设置</span>
+              </div>
+            </div>
+          </span>
+        </li>
+        <li class="s16-pg" data-level="a">
+          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>钉</span>
+          <span class="s16-pg-body">
+            <span class="s16-pg-line"><span class="s16-pg-name pv-a">钉钉 › 工作台</span><span class="s16-pg-name pv-b">钉钉 › 页面 5d92</span><span class="s16-pg-name pv-c">钉钉 › 工作台</span><span class="s16-pg-num">3 次</span></span>
+            <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
+          </span>
+        </li>
+      </ul>
+      <div class="s16-ops" data-od-id="s16-ops-3">
+        <p class="group-label">操作记录</p>
+        <ul class="s16-ops-list">
+          <li><span class="num">09:42</span><span>点了「发送」</span></li>
+          <li><span class="num">09:43</span><span>输入了「今晚吃什么」</span></li>
+        </ul>
+      </div>
+      <button class="btn btn-ghost btn-block mt-3" type="button" data-ctl-off="s16-s3">关闭</button>
+    </div>
+  </div>
+
+  <script>
+  /* s16：口径切换（A/B/C）+ 停留详情抽屉。
+     抽屉沿用外壳的 input + scrim 配对：checkbox 只作纯 CSS 状态钩子，
+     可点元素都是真实 button，键盘可达。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var CAP = {
+      keep: '已跟随 App 设置',
+      a: '临时预览 · 标题（不改 App 设置）',
+      b: '临时预览 · 指纹（不改 App 设置）',
+      c: '临时预览 · 全文（不改 App 设置）',
+      d: '临时预览 · 控件级（不改 App 设置）'
+    };
+    var LABEL = { keep: '跟随 App', a: '预览 A', b: '预览 B', c: '预览 C', d: '预览 D' };
+    function syncSheets() {
+      var opens = sec.querySelectorAll('[data-ctl-open],[data-ctl-off]');
+      for (var i = 0; i < opens.length; i++) {
+        var b = opens[i];
+        var key = b.hasAttribute('data-ctl-open') ? 'data-ctl-open' : 'data-ctl-off';
+        var t = document.getElementById(b.getAttribute(key));
+        if (b.hasAttribute('aria-expanded')) b.setAttribute('aria-expanded', t && t.checked ? 'true' : 'false');
+      }
+    }
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+
+      var priv = n.closest('[data-preview-set]');
+      if (priv) {
+        var v = priv.getAttribute('data-preview-set');
+        sec.setAttribute('data-preview', v);
+        var all = sec.querySelectorAll('[data-preview-set]');
+        for (var i = 0; i < all.length; i++) {
+          all[i].setAttribute('aria-checked', all[i] === priv ? 'true' : 'false');
+        }
+        var badge = sec.querySelector('[data-od-id="privacy-badge"]');
+        if (badge) badge.textContent = LABEL[v] || '跟随 App';
+        if (window.App && App.toast) App.toast(CAP[v] || '');
+        return;
+      }
+
+      var logSw = n.closest('[data-clicklog-toggle]');
+      if (logSw) {
+        var logBox = document.getElementById('s16-clicklog');
+        if (!logBox) return;
+        logBox.checked = !logBox.checked;
+        logSw.setAttribute('aria-checked', logBox.checked ? 'true' : 'false');
+        if (window.App && App.toast) {
+          App.toast(logBox.checked ? '已开启点击与输入记录 · 仅本机 7 天' : '已关闭点击与输入记录');
+        }
+        return;
+      }
+
+      var openBtn = n.closest('[data-ctl-open]');
+      if (openBtn) {
+        var inp = document.getElementById(openBtn.getAttribute('data-ctl-open'));
+        if (!inp) return;
+        inp.checked = true;
+        syncSheets();
+        var sheet = inp.nextElementSibling;
+        var into = sheet && sheet.querySelector('button');
+        if (into) into.focus();
+        return;
+      }
+
+      var offBtn = n.closest('[data-ctl-off]');
+      if (offBtn) {
+        var box = document.getElementById(offBtn.getAttribute('data-ctl-off'));
+        if (!box) return;
+        box.checked = false;
+        syncSheets();
+        var opener = sec.querySelector('[data-ctl-open="' + box.id + '"]');
+        if (opener) opener.focus();
+      }
+    });
+    /* 进屏复位：从 s01 再进 s16 时，上一次打开的抽屉不应留着 */
+    function resetSheets() {
+      var cbs = sec.querySelectorAll('input[id^="s16-s"]');
+      for (var i = 0; i < cbs.length; i++) cbs[i].checked = false;
+      syncSheets();
+    }
+    if (window.MutationObserver) {
+      new MutationObserver(function () {
+        if (sec.classList.contains('is-active')) resetSheets();
+      }).observe(sec, { attributes: true, attributeFilter: ['class'] });
+    }
+    syncSheets();
+  })();
+  </script>
+</section>
+<!--@od:end-->
