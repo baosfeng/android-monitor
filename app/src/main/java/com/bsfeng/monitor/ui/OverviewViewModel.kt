@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.domain.trip.DayTimeline
+import com.bsfeng.monitor.domain.trip.TripAggregator
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.service.MonitorAccessibilityService
@@ -64,6 +66,9 @@ data class OverviewState(
     val monthIncome: Double = 0.0,
     val dailyActiveMinutes30: List<Float> = List(30) { 0f },
     val typeSlices30: List<TypeSlice> = emptyList(),
+    /** 今日行程时间轴（概览「今日行程」卡用）；零点整点等窗口为 0 的情况下为 null。 */
+    val trip: DayTimeline? = null,
+    val tripDayStart: Long = 0L,
     val lastUpdatedAt: Long = 0L,
 )
 
@@ -133,6 +138,14 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
 
         val weekSkips = week.filter { it.action == ACTION_AD_SKIPPED }
 
+        // 今日行程：复用本轮已查到的今日记录现算（不额外查库、不建表）；
+        // 窗口为 0（零点整点那一瞬）时聚合器会拒绝非法区间，这里按「暂无行程」处理。
+        val trip = if (now > todayStart) {
+            runCatching { TripAggregator(todayStart, now).aggregate(today) }.getOrNull()
+        } else {
+            null
+        }
+
         return OverviewState(
             isLoading = false,
             loadError = null,
@@ -167,6 +180,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             monthIncome = sumBy(transactions, monthStr, todayStr, false),
             dailyActiveMinutes30 = dailyUsageMinutes(month, monthStart, 30),
             typeSlices30 = slices(month),
+            trip = trip,
+            tripDayStart = todayStart,
             lastUpdatedAt = now,
         )
     }

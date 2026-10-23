@@ -76,6 +76,7 @@ import com.bsfeng.monitor.transfer.service.TransferService
 import com.bsfeng.monitor.transfer.ui.TransferScreen
 import com.bsfeng.monitor.transfer.ui.TransferViewModel
 import com.bsfeng.monitor.ui.OverviewScreen
+import com.bsfeng.monitor.ui.trip.TripScreen
 import com.bsfeng.monitor.ui.foundation.MonitorEdgeToEdge
 import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
@@ -186,9 +187,12 @@ class MainActivity : ComponentActivity() {
                 var showWhitelistScreen by remember { mutableStateOf(false) }
                 var showGallery by remember { mutableStateOf(false) }
                 var showAppearance by remember { mutableStateOf(false) }
+                // s16 每日行程（从概览「今日行程」卡 push）
+                var showTripScreen by remember { mutableStateOf(false) }
                 var showSplash by remember { mutableStateOf(true) }
                 val view = LocalView.current
-                val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery || showAppearance
+                val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery ||
+                    showAppearance || showTripScreen
                 // 原型二级页（记账子页 / 设置子页）无 Tab 栏
                 val financeSubPage = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main
                 val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
@@ -333,6 +337,7 @@ class MainActivity : ComponentActivity() {
                                     // 功能关闭时点概览上的「实时 / 记账」快捷入口：原地不动，不回退、不崩溃
                                     onOpenLive = { selectedTab = FeatureCatalog.resolveTab(AppTab.LIVE, ::featureOn) },
                                     onOpenFinance = { selectedTab = FeatureCatalog.resolveTab(AppTab.FINANCE, ::featureOn) },
+                                    onOpenTrip = { showTripScreen = true },
                                     modifier = Modifier.fillMaxSize()
                                 )
                                 AppTab.LIVE -> MainScreen(
@@ -479,6 +484,14 @@ class MainActivity : ComponentActivity() {
                         onBack = { showAppearance = false },
                     ) {
                         AppearanceScreen(onBack = { showAppearance = false })
+                    }
+
+                    // s16 每日行程：整屏覆盖 + 返回（底部 Tab 栏由 overlayOpen 一并收起）
+                    AnimatedScreenOverlay(
+                        visible = showTripScreen,
+                        onBack = { showTripScreen = false },
+                    ) {
+                        TripScreen(onBack = { showTripScreen = false })
                     }
 
                     // 开屏：品牌 C2 动效，时序同原型 §8 —— 1600ms 起 240ms ease-in 淡出、1900ms 结束；
