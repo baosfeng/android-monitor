@@ -1,0 +1,271 @@
+<!-- ============================================================
+     s17 · 页面记录粒度（按 App 分档）
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     push 屏（不在底部 Tab 内）：appbar 由外壳按 data-title 生成。
+     四档 = a 标题 / b 指纹 / c 全文 / d 控件级，与 s16 的口径卡同一套命名。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s17">
+/* ── s17 页面记录粒度 ───────────────────────────────────────────── */
+#s17 .od-ctl{display:none}
+#s17 .s17-in{opacity:0}
+#s17.is-active .s17-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+#s17.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+#s17.is-active .od-d2{animation-delay:calc(var(--stagger) * 3)}
+#s17.is-active .od-d3{animation-delay:calc(var(--stagger) * 5)}
+.device-screen:has(#odSplash:not([hidden])) #s17 *{animation:none}
+
+#s17 .badge{white-space:nowrap}
+#s17 .s17-global-v{font-size:var(--text-lg);font-weight:700;letter-spacing:-0.012em;margin:var(--space-2) 0 0}
+
+/* App 行：右侧当前档位 + 进入选择 */
+#s17 .s17-app{width:100%;cursor:pointer;border-left:0;border-right:0;border-bottom:0}
+#s17 .s17-app:active{opacity:.9}
+#s17 .s17-app .s17-level{min-width:52px;justify-content:center}
+#s17 .s17-app .row-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 敏感页黑名单 */
+#s17 .s17-black-row{
+  display:flex;align-items:center;gap:var(--space-3);
+  min-height:var(--row-min-h);padding:var(--space-2) 0;
+  border-top:1px solid var(--border-soft);
+}
+#s17 .s17-black-row:first-child{border-top:0}
+#s17 .s17-black-row .icon-btn{width:var(--icon-size);height:var(--icon-size);min-height:var(--icon-size)}
+
+/* 粒度选择抽屉 */
+#s17 .s17-sheet{display:none}
+#s17 .od-ctl:checked + .s17-sheet{display:grid}
+#s17 .s17-veil{position:absolute;inset:0}
+#s17 .s17-sheet .sheet{position:relative;z-index:1;max-height:100%;overflow-y:auto}
+#s17 .s17-sheet-title{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+#s17 .s17-opts{display:flex;flex-direction:column;gap:var(--space-2)}
+#s17 .s17-opt{
+  width:100%;cursor:pointer;padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-top:1px solid var(--border-soft);
+  border-radius:var(--radius-md);background:transparent;
+}
+#s17 .s17-opt[aria-checked="true"]{
+  background:color-mix(in srgb,var(--fg) 5%,transparent);
+  border-color:color-mix(in srgb,var(--fg) 22%,transparent);
+}
+#s17 .s17-opt:active{transform:scale(.99)}
+#s17 .s17-check{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+#s17 .s17-opt[aria-checked="true"] .s17-check{opacity:1}
+</style>
+<!--@od:section-->
+<section class="screen" data-screen="s17" data-title="页面记录粒度" id="s17" data-od-id="screen-s17">
+  <div class="content" data-od-id="s17-content">
+
+    <header class="screen-head" data-od-id="s17-head">
+      <div>
+        <p class="meta">按 App 覆盖全局默认</p>
+        <h1 class="h1 mt-2">页面记录粒度</h1>
+      </div>
+    </header>
+
+    <div class="pad s17-in od-d1" data-od-id="s17-global">
+      <div class="card">
+        <div class="row-between">
+          <span class="meta">全局默认</span>
+          <span class="badge" data-od-min-fs data-od-id="s17-global-badge">档 A · 默认</span>
+        </div>
+        <p class="s17-global-v">标题</p>
+        <p class="meta mt-2">页面记到「应用 › 页面标题」这一层；单个 App 可单独调高或调低。</p>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s17-in od-d2" data-od-id="s17-apps">
+      <p class="group-label">按 App 设置</p>
+      <div class="group">
+        <button class="row s17-app" type="button" data-app="微信" data-level="a" data-od-id="s17-app-wechat">
+          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="row-body">
+            <span class="row-title">微信</span>
+            <span class="row-sub">页面 42 条 / 日 · 覆盖 6 个页面</span>
+          </span>
+          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+        </button>
+        <button class="row s17-app" type="button" data-app="小红书" data-level="c" data-od-id="s17-app-xhs">
+          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="row-body">
+            <span class="row-title">小红书</span>
+            <span class="row-sub">页面 18 条 / 日 · 覆盖 4 个页面</span>
+          </span>
+          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>全文</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+        </button>
+        <button class="row s17-app" type="button" data-app="抖音" data-level="b" data-od-id="s17-app-douyin">
+          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="row-body">
+            <span class="row-title">抖音</span>
+            <span class="row-sub">页面 31 条 / 日 · 覆盖 3 个页面</span>
+          </span>
+          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>指纹</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+        </button>
+        <button class="row s17-app" type="button" data-app="支付宝" data-level="a" data-od-id="s17-app-alipay">
+          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>支</span>
+          <span class="row-body">
+            <span class="row-title">支付宝</span>
+            <span class="row-sub">敏感页只留包名 · 其余按档位</span>
+          </span>
+          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+        </button>
+        <button class="row s17-app" type="button" data-app="浏览器" data-level="b" data-od-id="s17-app-browser">
+          <span class="app-icon" style="--app:var(--chart-6)" aria-hidden>浏</span>
+          <span class="row-body">
+            <span class="row-title">浏览器</span>
+            <span class="row-sub">页面 9 条 / 日 · 覆盖 5 个页面</span>
+          </span>
+          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>指纹</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s17-in od-d3" data-od-id="s17-blacklist">
+      <div class="card">
+        <div class="sec-head">
+          <h2 class="h3">敏感页黑名单</h2>
+          <span class="badge" data-od-min-fs>3 条</span>
+        </div>
+        <div class="s17-black-row" data-od-id="s17-black-pay">
+          <span class="row-icon s5" aria-hidden><svg viewBox="0 0 24 24"><rect x="2.8" y="5.5" width="18.4" height="13" rx="2.5"/><path d="M2.8 10h18.4"/><path d="M6.5 14.5h3"/></svg></span>
+          <span class="row-body"><span class="row-title">支付页</span><span class="row-sub">收银台 / 付款码 · 只留包名</span></span>
+          <button class="icon-btn" type="button" aria-label="从黑名单移除支付页" data-s17-remove data-od-id="s17-black-pay-remove">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div class="s17-black-row" data-od-id="s17-black-code">
+          <span class="row-icon s6" aria-hidden><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v2.5"/></svg></span>
+          <span class="row-body"><span class="row-title">验证码页</span><span class="row-sub">短信验证 / 动态口令 · 只留包名</span></span>
+          <button class="icon-btn" type="button" aria-label="从黑名单移除验证码页" data-s17-remove data-od-id="s17-black-code-remove">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div class="s17-black-row" data-od-id="s17-black-pwd">
+          <span class="row-icon s7" aria-hidden><svg viewBox="0 0 24 24"><circle cx="8.5" cy="12" r="3.5"/><path d="M12 12h9M18 12v3"/></svg></span>
+          <span class="row-body"><span class="row-title">密码页</span><span class="row-sub">登录 / 改密 · 只留包名</span></span>
+          <button class="icon-btn" type="button" aria-label="从黑名单移除密码页" data-s17-remove data-od-id="s17-black-pwd-remove">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <button class="btn btn-ghost btn-block mt-3" type="button" data-s17-add data-od-id="s17-black-add">添加敏感页</button>
+        <p class="fine mt-2">敏感页无论档位如何，只保留包名，不记录标题与文本。</p>
+      </div>
+    </div>
+
+  </div>
+
+  <input class="od-ctl" type="checkbox" id="s17-sheet-cb" />
+  <div class="scrim is-bottom s17-sheet" data-od-id="s17-sheet">
+    <label class="s17-veil" for="s17-sheet-cb" aria-label="关闭粒度选择"></label>
+    <div class="sheet" data-od-min-fs>
+      <span class="sheet-grip" aria-hidden></span>
+      <div class="s17-sheet-title">
+        <h3 class="h3" data-od-id="s17-sheet-title">记录粒度</h3>
+        <span class="badge" data-od-id="s17-sheet-badge">当前 标题</span>
+      </div>
+      <p class="meta">单 App 设置覆盖全局默认</p>
+      <div class="s17-opts mt-3">
+        <button class="row s17-opt" type="button" role="radio" aria-checked="true" data-level="a" data-od-id="s17-opt-a">
+          <span class="row-body"><span class="row-title">标题</span><span class="row-sub">应用 › 页面标题 · 默认档</span></span>
+          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
+        </button>
+        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="b" data-od-id="s17-opt-b">
+          <span class="row-body"><span class="row-title">指纹</span><span class="row-sub">只留页面指纹，标题不落库</span></span>
+          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
+        </button>
+        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="c" data-od-id="s17-opt-c">
+          <span class="row-body"><span class="row-title">全文</span><span class="row-sub">标题之外再存整页文本，可展开</span></span>
+          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
+        </button>
+        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="d" data-od-id="s17-opt-d">
+          <span class="row-body"><span class="row-title">控件级</span><span class="row-sub">全文 + 本页可操作项清单</span></span>
+          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
+        </button>
+      </div>
+      <button class="btn btn-ghost btn-block mt-3" type="button" data-s17-close data-od-id="s17-sheet-close">关闭</button>
+    </div>
+  </div>
+
+  <script>
+  /* s17：点 App 行 → 抽屉选四档 → 写回该行「当前档位」。
+     抽屉沿用外壳的 input + scrim 配对，选项是真实 button（role=radio + aria-checked）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var cb = document.getElementById('s17-sheet-cb');
+    var titleEl = sec.querySelector('[data-od-id="s17-sheet-title"]');
+    var badgeEl = sec.querySelector('[data-od-id="s17-sheet-badge"]');
+    var LABEL = { a: '标题', b: '指纹', c: '全文', d: '控件级' };
+    var currentRow = null;
+
+    function syncOpts(level) {
+      var opts = sec.querySelectorAll('.s17-opt');
+      for (var i = 0; i < opts.length; i++) {
+        opts[i].setAttribute('aria-checked', opts[i].getAttribute('data-level') === level ? 'true' : 'false');
+      }
+    }
+    function openSheet(row) {
+      currentRow = row;
+      var level = row.getAttribute('data-level');
+      var name = row.getAttribute('data-app');
+      if (titleEl) titleEl.textContent = name + ' · 记录粒度';
+      if (badgeEl) badgeEl.textContent = '当前 ' + (LABEL[level] || '');
+      syncOpts(level);
+      if (cb) cb.checked = true;
+      var on = sec.querySelector('.s17-opt[aria-checked="true"]');
+      if (on) on.focus();
+    }
+
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+
+      var row = n.closest('.s17-app');
+      if (row) { openSheet(row); return; }
+
+      var opt = n.closest('.s17-opt');
+      if (opt) {
+        if (!currentRow) return;
+        var level = opt.getAttribute('data-level');
+        currentRow.setAttribute('data-level', level);
+        var tail = currentRow.querySelector('.s17-level');
+        if (tail) tail.textContent = LABEL[level] || '';
+        syncOpts(level);
+        if (cb) cb.checked = false;
+        if (window.App && App.toast) {
+          App.toast(currentRow.getAttribute('data-app') + ' · 记录粒度：' + (LABEL[level] || ''));
+        }
+        currentRow.focus();
+        return;
+      }
+
+      if (n.closest('[data-s17-close]')) {
+        if (cb) cb.checked = false;
+        if (currentRow) currentRow.focus();
+        return;
+      }
+      if (n.closest('[data-s17-remove]')) {
+        var blackRow = n.closest('.s17-black-row');
+        if (blackRow) {
+          var list = blackRow.parentNode;
+          list.removeChild(blackRow);
+          var cnt = list.querySelectorAll('.s17-black-row').length;
+          var cntBadge = sec.querySelector('[data-od-id="s17-blacklist"] .badge');
+          if (cntBadge) cntBadge.textContent = cnt + ' 条';
+          if (window.App && App.toast) App.toast('已从敏感页黑名单移除');
+        }
+        return;
+      }
+      if (n.closest('[data-s17-add]')) {
+        if (window.App && App.toast) App.toast('添加敏感页 · 演示态');
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

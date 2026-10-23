@@ -53,6 +53,37 @@
 #s01 .s01-ev .row-icon{width:30px;height:30px}
 #s01 .s01-ev .row-icon svg{width:17px;height:17px}
 
+/* ── 今日行程：24h 时间带（点整块进每日行程） ───────────────────── */
+#s01 .s01-trip-btn{
+  display:block;width:100%;padding:var(--space-2) 0 0;border:0;background:transparent;
+  color:var(--fg);font:inherit;text-align:left;cursor:pointer;
+  transition:transform var(--dur-press) var(--ease-out);
+}
+#s01 .s01-trip-btn:active{transform:scale(.99)}
+#s01 .s01-band{
+  position:relative;display:block;height:36px;margin-top:var(--space-2);
+  overflow:hidden;border:1px solid var(--border-soft);border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--fg) 4%,transparent);
+}
+#s01 .s01-band-seg{position:absolute;top:0;bottom:0;left:var(--l);width:var(--w)}
+#s01 .s01-band-seg.is-stay{background:color-mix(in srgb,var(--chart-2) 62%,var(--surface))}
+#s01 .s01-band-seg.is-move{background:color-mix(in srgb,var(--chart-1) 60%,var(--surface))}
+#s01 .s01-band-seg.is-gap{
+  background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--fg) 16%,transparent) 0 3px,transparent 3px 7px);
+}
+#s01 .s01-band-axis{
+  display:flex;justify-content:space-between;margin-top:var(--space-1);
+  font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted);
+}
+#s01 .s01-band-legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);margin-top:var(--space-2)}
+#s01 .s01-band-legend > span{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--muted)}
+#s01 .s01-band-dot{flex:0 0 auto;width:10px;height:10px;border-radius:3px}
+#s01 .s01-band-dot.is-stay{background:color-mix(in srgb,var(--chart-2) 62%,var(--surface))}
+#s01 .s01-band-dot.is-move{background:color-mix(in srgb,var(--chart-1) 60%,var(--surface))}
+#s01 .s01-band-dot.is-gap{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--fg) 30%,transparent) 0 2px,transparent 2px 5px);border:1px solid var(--border)}
+#s01 .s01-trip-sum{font-size:var(--text-base);font-weight:600;margin:var(--space-3) 0 0}
+#s01 .s01-trip-note{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-1)}
+
 /* 状态块被外壳置为 display:grid：网格项需可收缩，否则 nowrap 长标题会把卡片撑出屏外 */
 #s01 [data-state-when="edge"]{width:100%;align-self:start}
 #s01 [data-state-when="edge"] > .card{width:100%;min-width:0}
@@ -218,7 +249,38 @@
                data-chart-label="最近 24 小时活跃热力"></div>
         </div>
 
-        <div class="card stg od-d3 mt-3" data-od-id="s01-ring">
+        <div class="card stg od-d3 mt-3" data-od-id="s01-trip">
+          <div class="sec-head">
+            <h2 class="h3">今日行程</h2>
+            <span class="badge" data-od-min-fs data-od-id="s01-trip-source">按设备活动推算</span>
+          </div>
+          <button class="s01-trip-btn" type="button" data-goto="s16" data-od-id="trip-band" aria-label="查看今日行程时间轴">
+            <span class="s01-band" aria-hidden>
+              <span class="s01-band-seg is-stay" style="--l:0%;--w:38.194%"></span>
+              <span class="s01-band-seg is-move" style="--l:38.194%;--w:1.389%"></span>
+              <span class="s01-band-seg is-stay" style="--l:39.583%;--w:3.125%"></span>
+              <span class="s01-band-seg is-move" style="--l:42.708%;--w:1.389%"></span>
+              <span class="s01-band-seg is-stay" style="--l:44.097%;--w:1.736%"></span>
+              <span class="s01-band-seg is-move" style="--l:45.833%;--w:1.389%"></span>
+              <span class="s01-band-seg is-stay" style="--l:47.222%;--w:12.5%"></span>
+              <span class="s01-band-seg is-gap" style="--l:59.722%;--w:2.778%"></span>
+              <span class="s01-band-seg is-stay" style="--l:62.5%;--w:37.5%"></span>
+            </span>
+            <span class="s01-band-axis" data-od-min-fs aria-hidden><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></span>
+            <span class="s01-band-legend">
+              <span><span class="s01-band-dot is-stay"></span>停留 3 处</span>
+              <span><span class="s01-band-dot is-move"></span>移动 3 段</span>
+              <span><span class="s01-band-dot is-gap"></span>未记录 40 分</span>
+            </span>
+            <span class="s01-trip-sum">在外 2 小时 10 分 · 最长停留 45 分</span>
+            <span class="s01-trip-note">
+              <span class="meta">00:00 起 · 家 21 小时 10 分</span>
+              <span class="meta">查看时间轴 ›</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="card stg od-d4 mt-3" data-od-id="s01-ring">
           <div class="sec-head">
             <h2 class="h3">事件类型分布</h2>
             <span class="meta">共 128 条</span>
@@ -237,7 +299,7 @@
           </div>
         </div>
 
-        <div class="card stg od-d4 mt-3" data-od-id="s01-recent">
+        <div class="card stg od-d5 mt-3" data-od-id="s01-recent">
           <div class="sec-head">
             <h2 class="h3">最近事件</h2>
             <button class="icon-btn" type="button" aria-label="查看全部事件" data-goto="s02" data-od-id="s01-recent-all">
@@ -264,7 +326,7 @@
           </button>
         </div>
 
-        <div class="stack stg od-d5 mt-3" data-od-id="s01-quick">
+        <div class="stack stg od-d6 mt-3" data-od-id="s01-quick">
           <button class="btn btn-block" type="button" data-goto="s02" data-od-id="s01-quick-live">
             <svg viewBox="0 0 24 24" aria-hidden><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg>
             <span>去实时事件流</span>

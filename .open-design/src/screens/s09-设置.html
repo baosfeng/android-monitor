@@ -25,6 +25,38 @@
 .screen.s09 .edge-row:first-child{border-top:0}
 .screen.s09 .edge-name{flex:1 1 auto;min-width:0;font-size:var(--text-base);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .screen.s09 .edge-count{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--fg-2);flex:0 0 auto}
+
+/* ── 定位权限引导卡（可折叠：关闭态只剩「开启后可用」一行） ──────── */
+.screen.s09 .s09-loc{padding:0;overflow:hidden}
+.screen.s09 .s09-loc > summary{
+  display:flex;align-items:center;gap:var(--space-3);
+  min-height:var(--row-min-h);padding:var(--space-3) var(--space-4);
+  list-style:none;cursor:pointer;
+}
+.screen.s09 .s09-loc > summary::-webkit-details-marker{display:none}
+.screen.s09 .s09-loc > summary:focus-visible{outline:0;box-shadow:var(--focus-ring)}
+.screen.s09 .s09-loc > summary .row-body{gap:2px;min-width:0}
+.screen.s09 .s09-loc-chev{flex:0 0 auto;transition:transform var(--dur-state) var(--ease-standard)}
+.screen.s09 .s09-loc[open] .s09-loc-chev{transform:rotate(90deg)}
+.screen.s09 .s09-loc-body{
+  padding:var(--space-3) var(--space-4) var(--space-4);
+  border-top:1px solid var(--border-soft);
+}
+.screen.s09 .s09-steps{list-style:none;margin:var(--space-2) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.screen.s09 .s09-step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:var(--space-2);align-items:start}
+.screen.s09 .s09-step-no{
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:var(--text-xs);font-weight:600;
+}
+.screen.s09 .s09-step.is-done .s09-step-no{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+.screen.s09 .s09-step-t{display:block;font-size:var(--text-base);font-weight:500;line-height:1.3}
+.screen.s09 .s09-step-s{display:block;font-size:var(--text-sm);color:var(--muted);line-height:1.35;margin-top:2px}
+.screen.s09 .s09-loc-check{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--border-soft)}
+.screen.s09 .s09-loc-check:first-child{border-top:0}
+.screen.s09 .s09-loc .badge{white-space:nowrap;flex:0 0 auto}
+.screen.s09 .s09-loc .badge.is-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+.screen.s09 .s09-loc .badge.is-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
 </style>
 <!--@od:section-->
 <section class="screen s09" data-screen="s09" data-title="设置" data-od-id="screen-s09">
@@ -114,6 +146,80 @@
             </span>
             <button class="switch" type="button" role="switch" aria-checked="true" aria-label="忽略电池优化" data-toggle data-on-msg="已加入电池优化白名单" data-off-msg="已移出白名单，息屏后可能被冻结"></button>
           </div>
+        </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-location">
+        <p class="group-label">定位与每日行程</p>
+        <details class="card s09-loc" data-od-id="location-guide" open>
+          <summary class="s09-loc-sum" data-od-id="s09-loc-summary">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">定位权限</span>
+              <span class="row-sub" data-od-id="s09-loc-summary-sub">开启后可用 · 显示地址与距离</span>
+            </span>
+            <span class="badge" data-od-min-fs data-od-id="s09-loc-badge">未授权</span>
+            <svg class="chev s09-loc-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </summary>
+
+          <div class="s09-loc-body">
+            <p class="meta">三步就绪：开启定位 → 选「始终允许」→ 关掉省电限制</p>
+            <ol class="s09-steps" data-od-min-fs data-od-id="s09-loc-steps">
+              <li class="s09-step">
+                <span class="s09-step-no">1</span>
+                <span>
+                  <span class="s09-step-t">开启定位服务</span>
+                  <span class="s09-step-s">系统设置 › 位置信息 › 打开定位开关</span>
+                </span>
+              </li>
+              <li class="s09-step">
+                <span class="s09-step-no">2</span>
+                <span>
+                  <span class="s09-step-t">选「始终允许」</span>
+                  <span class="s09-step-s">应用权限 › 位置信息 › 始终允许</span>
+                </span>
+              </li>
+              <li class="s09-step">
+                <span class="s09-step-no">3</span>
+                <span>
+                  <span class="s09-step-t">关掉省电限制</span>
+                  <span class="s09-step-s">电池 › 应用省电策略 › 不限制</span>
+                </span>
+              </li>
+            </ol>
+
+            <div class="row s09-loc-check" data-od-id="s09-loc-check">
+              <span class="row-body">
+                <span class="row-title">自检状态</span>
+                <span class="row-sub" data-od-id="s09-loc-check-sub">未授权 · 后台定位未开启</span>
+              </span>
+              <span class="badge" data-od-min-fs data-od-id="s09-loc-check-badge">未授权</span>
+            </div>
+
+            <div class="grid-2 mt-2">
+              <button class="btn btn-ghost" type="button" data-loc-check data-od-id="s09-loc-recheck">重新检测</button>
+              <button class="btn" type="button" data-loc-open data-od-id="s09-loc-open">去系统设置</button>
+            </div>
+            <p class="fine mt-2">自检只看三件事：定位已开、后台位置可用、省电策略未限制。默认关闭，开启后行程才有地址与距离。</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="set-group" data-od-id="s09-granularity">
+        <p class="group-label">页面记录</p>
+        <div class="group">
+          <button class="row" type="button" data-goto="s17" data-od-id="s09-goto-granularity">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">页面记录粒度</span>
+              <span class="row-sub">按 App 单独设置 · 敏感页只留包名</span>
+            </span>
+            <span class="row-tail"><span class="num set-count" data-od-id="s09-granularity-level">标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
         </div>
       </div>
 
@@ -300,6 +406,50 @@
       }
       syncThemeName();
     });
+  })();
+  </script>
+
+  <script>
+  /* s09 定位权限引导卡：自检三态演示（未授权 → 缺后台定位 → 已就绪）。
+     「重新检测」按顺序循环三态，方便评审一次看完三种表现；点击区均为真实 button。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var box = sec.querySelector('[data-od-id="location-guide"]');
+    if (!box) return;
+    var badge = box.querySelector('[data-od-id="s09-loc-badge"]');
+    var summarySub = box.querySelector('[data-od-id="s09-loc-summary-sub"]');
+    var checkSub = box.querySelector('[data-od-id="s09-loc-check-sub"]');
+    var checkBadge = box.querySelector('[data-od-id="s09-loc-check-badge"]');
+    var steps = box.querySelectorAll('.s09-step');
+    var STATES = [
+      { label: '未授权', cls: '', done: 0, sum: '开启后可用 · 显示地址与距离', check: '未授权 · 后台定位未开启' },
+      { label: '缺后台定位', cls: 'is-warn', done: 1, sum: '已授权前台定位 · 后台仍被限制', check: '缺后台定位 · 息屏后无法采样' },
+      { label: '已就绪', cls: 'is-ok', done: 3, sum: '定位已就绪 · 行程按 10 分钟采样', check: '已就绪 · 后台定位可用' }
+    ];
+    var i = 0;
+    function apply() {
+      var s = STATES[i];
+      if (badge) { badge.textContent = s.label; badge.className = 'badge' + (s.cls ? ' ' + s.cls : ''); }
+      if (checkBadge) { checkBadge.textContent = s.label; checkBadge.className = 'badge' + (s.cls ? ' ' + s.cls : ''); }
+      if (summarySub) summarySub.textContent = s.sum;
+      if (checkSub) checkSub.textContent = s.check;
+      for (var k = 0; k < steps.length; k++) steps[k].classList.toggle('is-done', k < s.done);
+    }
+    sec.addEventListener('click', function (e) {
+      var n = e.target;
+      if (!n || !n.closest) return;
+      if (n.closest('[data-loc-check]')) {
+        i = (i + 1) % STATES.length;
+        apply();
+        if (window.App && App.toast) App.toast('自检：' + STATES[i].label);
+        return;
+      }
+      if (n.closest('[data-loc-open]')) {
+        if (window.App && App.toast) App.toast('已跳转系统 › 应用 › 位置信息');
+      }
+    });
+    apply();
   })();
   </script>
 </section>

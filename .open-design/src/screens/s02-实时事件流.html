@@ -10,6 +10,10 @@
 /* ── s02 实时事件流 ─────────────────────────────────────────────── */
 #s02 .od-ctl{display:none}
 
+/* 新增类型 PAGE / NOTIFICATION：沿用既有事件行卡片，层级用「›」表达 */
+#s02 .s02-ev[data-type="PAGE"] .row-title,
+#s02 .s02-ev[data-type="NOTIFICATION"] .row-title{font-weight:600}
+
 /* 类型筛选 chips（横滑，选中态走中性色） */
 #s02 .s02-chips{
   display:flex;gap:var(--space-2);align-items:center;
@@ -31,14 +35,14 @@
 
 /* 按类型筛选：整组剔除 + 组内异类行剔除 */
 #s02-f-screen:checked ~ .content .od-grp:not([data-has~="SCREEN"]),
-#s02-f-app:checked ~ .content .od-grp:not([data-has~="APP_USAGE"]),
+#s02-f-app:checked ~ .content .od-grp:not([data-has~="APP_USAGE"]):not([data-has~="PAGE"]),
 #s02-f-charging:checked ~ .content .od-grp:not([data-has~="CHARGING"]),
-#s02-f-wifi:checked ~ .content .od-grp:not([data-has~="WIFI"]),
+#s02-f-wifi:checked ~ .content .od-grp:not([data-has~="WIFI"]):not([data-has~="NOTIFICATION"]),
 #s02-f-audio:checked ~ .content .od-grp:not([data-has~="AUDIO"]),
 #s02-f-screen:checked ~ .content .od-grp .s02-ev:not([data-type="SCREEN"]),
-#s02-f-app:checked ~ .content .od-grp .s02-ev:not([data-type="APP_USAGE"]),
+#s02-f-app:checked ~ .content .od-grp .s02-ev:not([data-type="APP_USAGE"]):not([data-type="PAGE"]),
 #s02-f-charging:checked ~ .content .od-grp .s02-ev:not([data-type="CHARGING"]),
-#s02-f-wifi:checked ~ .content .od-grp .s02-ev:not([data-type="WIFI"]),
+#s02-f-wifi:checked ~ .content .od-grp .s02-ev:not([data-type="WIFI"]):not([data-type="NOTIFICATION"]),
 #s02-f-audio:checked ~ .content .od-grp .s02-ev:not([data-type="AUDIO"]),
 #s02-f-screen:checked ~ .content .grp-cnt,
 #s02-f-app:checked ~ .content .grp-cnt,
@@ -197,12 +201,18 @@
       </div>
 
       <div class="pad stack mt-3" data-od-id="s02-timeline">
-      <div class="od-grp stg od-d1" data-has="APP_USAGE SCREEN WIFI AUDIO" data-od-id="s02-g09">
-        <div class="grp-head"><span class="grp-time num">09:00</span><span class="badge grp-cnt" data-od-min-fs>4 条事件</span></div>
+      <div class="od-grp stg od-d1" data-has="APP_USAGE PAGE SCREEN WIFI AUDIO" data-od-id="s02-g09">
+        <div class="grp-head"><span class="grp-time num">09:00</span><span class="badge grp-cnt" data-od-min-fs>5 条事件</span></div>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x1" data-type="APP_USAGE">
             <span class="s02-t num">09:41</span>
             <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
         <span class="row-body"><span class="row-title">微信 · 前台 12 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x14" data-type="PAGE" data-od-id="s02-ev-page">
+            <span class="s02-t num">09:38</span>
+            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="row-body"><span class="row-title">微信 › 朋友圈</span><span class="row-sub">页面轨迹 · 无障碍服务</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x2" data-type="SCREEN">
@@ -224,8 +234,8 @@
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
       </div>
-      <div class="od-grp stg od-d2" data-has="CHARGING PACKAGE APP_USAGE LOCATION" data-od-id="s02-g08">
-        <div class="grp-head"><span class="grp-time num">08:00</span><span class="badge grp-cnt" data-od-min-fs>4 条事件</span></div>
+      <div class="od-grp stg od-d2" data-has="CHARGING PACKAGE APP_USAGE LOCATION NOTIFICATION" data-od-id="s02-g08">
+        <div class="grp-head"><span class="grp-time num">08:00</span><span class="badge grp-cnt" data-od-min-fs>5 条事件</span></div>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x5" data-type="CHARGING">
             <span class="s02-t num">08:52</span>
             <span class="row-icon s4" aria-hidden><svg viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/></svg></span>
@@ -236,6 +246,12 @@
             <span class="s02-t num">08:34</span>
             <span class="row-icon s6" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 2.8 20.5 7v10L12 21.2 3.5 17V7z"/><path d="M3.5 7 12 11.2 20.5 7"/><path d="M12 11.2v10"/></svg></span>
             <span class="row-body"><span class="row-title">安装完成 · 高德地图 13.2.1</span><span class="row-sub">应用事件 · 广播接收</span></span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+          <button class="list-row s02-ev" type="button" data-ctl-open="s02-x15" data-type="NOTIFICATION" data-od-id="s02-ev-notification">
+            <span class="s02-t num">08:44</span>
+            <span class="row-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg></span>
+            <span class="row-body"><span class="row-title">通知摘要 · 即时通讯</span><span class="row-sub">通知事件 · 正文不记录</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x7" data-type="APP_USAGE">
@@ -302,6 +318,10 @@
     </div>
   </div>
 
+  <input class="od-ctl" type="checkbox" id="s02-x14" />
+  <div class="scrim is-bottom s02-drawer" data-od-id="s02-drawer-page"><label class="s02-veil" for="s02-x14" aria-label="关闭事件详情"></label><div class="sheet" data-od-min-fs><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 › 朋友圈</h3><span class="badge">PAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:38</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面标题</span></span><span class="row-tail"><span class="num">朋友圈</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面指纹</span></span><span class="row-tail"><span class="num">a3f2</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">4 分 12 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">页内点击 / 滑动</span></span><span class="row-tail"><span class="num">7 / 3</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">窗口状态 + 标题 + 文本指纹</span></span></div></div><p class="fine mt-2">同一页面按指纹去重；标题按当前隐私口径落库。</p><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x14">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <input class="od-ctl" type="checkbox" id="s02-x15" />
+  <div class="scrim is-bottom s02-drawer" data-od-id="s02-drawer-notification"><label class="s02-veil" for="s02-x15" aria-label="关闭事件详情"></label><div class="sheet" data-od-min-fs><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">通知摘要</h3><span class="badge">NOTIFICATION</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:44</span></span></div><div class="row"><span class="row-body"><span class="row-title">渠道</span></span><span class="row-tail"><span class="num">即时通讯频道</span></span></div><div class="row"><span class="row-body"><span class="row-title">分类</span></span><span class="row-tail"><span class="num">MSG</span></span></div><div class="row"><span class="row-body"><span class="row-title">标题 / 正文长度</span></span><span class="row-tail"><span class="num">24 字 / 86 字</span></span></div><div class="row"><span class="row-body"><span class="row-title">常驻通知</span></span><span class="row-tail"><span class="num">否</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">通知使用权</span></span></div></div><p class="fine mt-2">正文与标题文本不入库，只留渠道、分类与长度。</p><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x15">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
   <input class="od-ctl" type="checkbox" id="s02-x1" />
   <div class="scrim is-bottom s02-drawer"><label class="s02-veil" for="s02-x1" aria-label="关闭事件详情"></label><div class="sheet"><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 · 前台使用</h3><span class="badge">APP_USAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:41</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">12 分 04 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">包名</span></span><span class="row-tail"><span class="num">com.tencent.mm</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">无障碍服务 · 前台</span></span></div></div><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x1">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
   <input class="od-ctl" type="checkbox" id="s02-x2" />
