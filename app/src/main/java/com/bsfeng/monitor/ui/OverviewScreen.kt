@@ -69,6 +69,7 @@ import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.ui.live.weekdayLabel
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.categoryDot
+import com.bsfeng.monitor.ui.trip.TodayTripCard
 import java.util.Locale
 
 /**
@@ -83,6 +84,7 @@ import java.util.Locale
 fun OverviewScreen(
     onOpenLive: () -> Unit,
     onOpenFinance: () -> Unit,
+    onOpenTrip: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: OverviewViewModel = viewModel(),
 ) {
@@ -137,7 +139,12 @@ fun OverviewScreen(
                     verticalArrangement = Arrangement.spacedBy(t.space3),
                 ) {
                     when (rangeIndex) {
-                        0 -> todayPanel(state = state, onOpenLive = onOpenLive, onOpenFinance = onOpenFinance)
+                        0 -> todayPanel(
+                            state = state,
+                            onOpenLive = onOpenLive,
+                            onOpenFinance = onOpenFinance,
+                            onOpenTrip = onOpenTrip,
+                        )
                         1 -> weekPanel(state = state)
                         else -> monthPanel(state = state)
                     }
@@ -159,6 +166,7 @@ private fun LazyListScope.todayPanel(
     state: OverviewState,
     onOpenLive: () -> Unit,
     onOpenFinance: () -> Unit,
+    onOpenTrip: () -> Unit,
 ) {
     val eventDelta = state.todayEventCount - state.yesterdayEventCount
     val activeDelta = state.todayActiveMinutes - state.yesterdayActiveMinutes
@@ -240,9 +248,21 @@ private fun LazyListScope.todayPanel(
         }
     }
 
+    // s01-trip：24h 活跃图之后、类型分布之前；整卡可点进行程页。
+    // 空态/无定位态由卡片自己表达（不画假时间带），这里只负责位置与入场序号。
+    item(key = "card-trip") {
+        TodayTripCard(
+            timeline = state.trip,
+            dayStart = state.tripDayStart,
+            dayEnd = state.lastUpdatedAt,
+            onClick = onOpenTrip,
+            modifier = Modifier.staggerEnterAt(5),
+        )
+    }
+
     item(key = "card-ring-today") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.staggerEnterAt(5)) {
+        AppCard(modifier = Modifier.staggerEnterAt(6)) {
             CardHead("事件类型分布", "共 " + state.todayEventCount + " 条")
             Spacer(Modifier.height(t.space3))
             if (state.typeSlicesToday.isEmpty()) {
@@ -276,7 +296,7 @@ private fun LazyListScope.todayPanel(
 
     item(key = "card-recent") {
         val t = LocalDesignTokens.current
-        AppCard(modifier = Modifier.staggerEnterAt(6)) {
+        AppCard(modifier = Modifier.staggerEnterAt(7)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "最近事件",
