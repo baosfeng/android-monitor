@@ -19,6 +19,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!--
+        定位采集（Feature.LOCATION，默认关闭）：只在设置页开启后、由 1 分钟心跳每 10 分钟读一次
+        系统缓存位置（getLastKnownLocation），不常驻监听。
+        ACCESS_BACKGROUND_LOCATION 是 Android 10+ 后台读位置的前提，缺它时后台采不到点 ——
+        设置页把它作为「缺后台定位」的独立状态提示，不伪造已授权。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!--
         enableOnBackInvokedCallback：显式打开预测式返回体系（targetSdk 33+ 默认已进入，这里写死口径便于审阅）。
         Compose 的 BackHandler 在该体系下自动经 OnBackInvokedDispatcher 分发（后注册者优先），
         现有各屏 BackHandler 的触发条件与顺序不变；整屏覆盖层的转场与返回键统一收口在

@@ -5,15 +5,27 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.bsfeng.monitor.backup.BackupScheduler
+import com.bsfeng.monitor.core.di.serviceContainer
+import com.bsfeng.monitor.feature.Feature
+import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.network.EventReporter
+import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.util.AppUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AlarmReceiver : BroadcastReceiver() {
+
+    private companion object {
+        /** 定位采样日志标签：`adb logcat -v time | grep LocationCollector` 可看到采集器侧，
+         *  这里补心跳侧的落库结果与失败原因。 */
+        const val TAG = "AlarmReceiver"
+    }
     override fun onReceive(context: Context, intent: Intent) {
         // 本接收器有两个入口：系统 BOOT_COMPLETED（action 有值）与 AlarmManager 心跳（显式组件、action 为空）。
         // 其他 action 一律忽略，防止外部伪造广播触发上报与进程唤醒。
@@ -36,7 +48,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         // 每 1 分钟也触发一次数据上报
         // goAsync():广播回调返回后进程可能被系统回收,异步任务必须持有 pendingResult
-        val pendingResult = goAsync()
+        val uploadResult = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             try {
                 val reporter = EventReporter(context)
@@ -47,8 +59,70 @@ class AlarmReceiver : BroadcastReceiver() {
                     reporter.uploadBatch()
                 }
             } finally {
-                pendingResult.finish()
+                uploadResult.finish()
             }
+        }
+
+        // 定位采样寄生在这条心跳里（不新开前台服务、不常驻监听），自己持有一个 PendingResult：
+        // 主动定位可能耗时到 5 秒，与上报的完成时机互不牵连，任何一条路径都必须 finish
+        sampleLocationIfEnabled(context)
+    }
+
+    /**
+     * 采一次位置并落库（COORDINATE）。
+     *
+     * 缓存命中时同步回调、需要主动定位时 5 秒内异步回调；**回调恰好一次**，
+     * 因此这里用一个独立的 `PendingResult` + `finishOnce` 守卫：
+     * 成功 / 超时 / 未授权 / 节流 / 异常五条路径都会 `finish()`，不会让系统报广播超时。
+     *
+     * 三重闸：功能开关关闭 / 未授权 / 过滤后无可用点 → 静默返回；任何异常都不上抛，
+     * 定位失败不能影响上报与保活。
+     */
+    private fun sampleLocationIfEnabled(context: Context) {
+        val enabled = try {
+            FeatureFlags.get(context).isEnabled(Feature.LOCATION)
+        } catch (e: Exception) {
+            Log.w(TAG, "读取位置采集开关失败", e)
+            false
+        }
+        // 开关关闭时不申请 PendingResult，避免无谓地延长广播生命周期
+        if (!enabled) return
+
+        val pendingResult = goAsync()
+        val finished = AtomicBoolean(false)
+        fun finishOnce() {
+            if (finished.compareAndSet(false, true)) {
+                runCatching { pendingResult.finish() }
+            }
+        }
+
+        try {
+            LocationCollector.get(context).collectThrottledAsync { sample ->
+                try {
+                    if (sample == null) {
+                        Log.w(TAG, "定位采样无可用点（节流中 / 未授权 / 缓存空且主动定位失败）")
+                    } else {
+                        // 落库在主线程回调里执行：SQLite 单条 insert 是毫秒级，但放 IO 更稳妥
+                        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                            try {
+                                context.serviceContainer.recordCollector.onLocation(sample)
+                                Log.d(TAG, "定位采样成功 provider=${sample.provider} accuracy=${sample.accuracyMeters}")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "定位落库失败", e)
+                            } finally {
+                                finishOnce()
+                            }
+                        }
+                        return@collectThrottledAsync
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "定位采样失败", e)
+                }
+                finishOnce()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "定位采样异常", e)
+            finishOnce()
         }
     }
 

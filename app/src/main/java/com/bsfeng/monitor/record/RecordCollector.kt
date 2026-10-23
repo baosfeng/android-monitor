@@ -144,4 +144,36 @@ class RecordCollector(
         confirmed?.let { detail["confirmed"] = it.toString() }
         emit(RecordType.SCREEN, "AD_SKIPPED", System.currentTimeMillis(), detail = detail)
     }
+
+    /**
+     * 写入一条页面轨迹。
+     *
+     * ⚠️ detail 白名单：`package_name` / `app_name` / `page_key` / `source` / `duration_ms`。
+     * 页面文本只在 [PageTracker.fingerprint] 里参与哈希，**任何情况下都不进 detail**。
+     */
+    fun onPageChanged(event: PageEvent) {
+        val detail = mutableMapOf(
+            "package_name" to event.packageName,
+            "page_key" to event.pageKey,
+            "source" to event.source
+        )
+        event.appName?.let { detail["app_name"] = it }
+        event.durationMs?.let { detail["duration_ms"] = it.toString() }
+        emit(RecordType.PAGE, event.action, event.timestamp, event.durationMs, detail)
+    }
+
+    /**
+     * 写入一次定位采样（COORDINATE）。
+     *
+     * 坐标为量化后的 3 位小数（≈110m），不含地址与任何可识别个人的字段。
+     */
+    fun onLocation(sample: LocationSample) {
+        val detail = mutableMapOf(
+            "lat" to LocationPolicy.quantize(sample.latitude),
+            "lng" to LocationPolicy.quantize(sample.longitude),
+            "provider" to sample.provider,
+            "accuracy_m" to sample.accuracyMeters.toInt().toString()
+        )
+        emit(RecordType.LOCATION, "COORDINATE", sample.timeMs, detail = detail)
+    }
 }

@@ -13,10 +13,13 @@
     不可见，而是根本不给节点。实验前提已确认真实生效（服务重连日志打印 isAccessibilityTool=true），
     不是假阴性。它还会把「本服务是残障用户无障碍工具」这一不实声明带进 APK。
     详见 docs/记账/微信支付页识别调研.md 的「实验 2」。
+
+    ⚠️ typeWindowsChanged 只用于页面轨迹修正「第三方悬浮窗顶掉根窗口」的误判：
+    窗口列表变化时重读一次根窗口包名，见 MonitorAccessibilityService.handleWindowsChanged。
 -->
 <accessibility-service
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"

@@ -22,6 +22,12 @@ enum class Feature(
     AD_SKIP("广告跳过", "开屏广告自动识别并点击跳过", "ad_skip"),
     FINANCE("记账", "手动记账、统计与自动记账", "finance"),
     TRANSPORT("传送", "局域网互发文件与后台接收", "transport"),
+
+    /** App 内页面切换（仅存包名 + 页面指纹，不存任何页面文字）。零新权限，默认开启。 */
+    PAGE_TRACE("页面轨迹", "记录 App 内页面切换（仅指纹）", "page_trace"),
+
+    /** 定位采集（3 位小数的粗略坐标）。需要定位权限，默认关闭。 */
+    LOCATION("位置采集", "每 10 分钟记录一次粗略位置", "location"),
 }
 
 /**
@@ -44,8 +50,11 @@ enum class AppTab(val title: String, val feature: Feature?) {
  */
 object FeatureCatalog {
 
-    /** 默认值（产品拍板）：传送默认关闭，其余功能默认开启。 */
-    val DEFAULTS: Map<Feature, Boolean> = Feature.entries.associateWith { it != Feature.TRANSPORT }
+    /** 默认关闭的功能（涉及新权限或持续功耗，需要用户显式开启）。 */
+    private val DEFAULT_OFF: Set<Feature> = setOf(Feature.TRANSPORT, Feature.LOCATION)
+
+    /** 默认值（产品拍板）：传送、位置采集默认关闭，其余功能默认开启。 */
+    val DEFAULTS: Map<Feature, Boolean> = Feature.entries.associateWith { it !in DEFAULT_OFF }
 
     /** 深链目标不可用时回退到的 Tab。 */
     val FALLBACK_TAB: AppTab = AppTab.OVERVIEW
