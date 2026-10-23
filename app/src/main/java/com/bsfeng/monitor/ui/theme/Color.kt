@@ -76,6 +76,7 @@ private val EVENT_TOKEN: Map<RecordType, String> = mapOf(
     RecordType.AIRPLANE to "chart-5",
     RecordType.PHONE_STATE to "chart-6",
     RecordType.LOCATION to "success",
+    RecordType.PAGE to "chart-8",
 )
 
 /** 获取事件类型对应的事件带颜色。改用 [DesignTokens.eventColor]（会跟随当前主题）。 */

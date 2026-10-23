@@ -14,11 +14,12 @@ import java.util.Locale
  * 数据源与 token 均来自 W0 冻结接口，本文件不含任何色值 / 字号 / 间距字面量。
  */
 
-/** 类型筛选：与原型 s02 的 6 个 chip 一一对应。 */
+/** 类型筛选：与原型 s02 的 chip 一一对应（PAGE 为页面轨迹，位于「应用」之后）。 */
 enum class LiveFilter(val label: String, val types: Set<RecordType>) {
     ALL("全部", emptySet()),
     SCREEN("屏幕", setOf(RecordType.SCREEN)),
     APP_USAGE("应用", setOf(RecordType.APP_USAGE)),
+    PAGE("页面", setOf(RecordType.PAGE)),
     CHARGING("充电", setOf(RecordType.CHARGING, RecordType.BATTERY)),
     WIFI("网络", setOf(RecordType.WIFI, RecordType.PHONE_STATE, RecordType.AIRPLANE)),
     AUDIO("音频", setOf(RecordType.AUDIO));
@@ -68,8 +69,9 @@ fun peakOf(values: List<Float>): Pair<Int, Float> {
     return idx to max
 }
 
-/** 当天 00:00 的毫秒时间戳（沿用既有口径：now - now % 86400000）。 */
-fun startOfDay(now: Long): Long = now - (now % DAY_MS)
+/** 当天本地 00:00 的毫秒时间戳（按系统时区取日界，不用 UTC 偏移）。 */
+fun startOfDay(now: Long): Long =
+    Instant.ofEpochMilli(now).atZone(ZONE).toLocalDate().atStartOfDay(ZONE).toInstant().toEpochMilli()
 
 const val DAY_MS: Long = 86_400_000L
 const val HOURS_PER_DAY: Int = 24

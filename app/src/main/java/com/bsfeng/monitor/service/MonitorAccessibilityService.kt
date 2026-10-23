@@ -11,6 +11,8 @@ import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.autobook.AutoBookEngine
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
+import com.bsfeng.monitor.record.PageEvent
+import com.bsfeng.monitor.record.PageTracker
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
@@ -23,6 +25,13 @@ import com.bsfeng.monitor.util.DiagnosticCounters
 
 /** 时间线日志标签 — grep 此标签即可看到干净的用户操作时间线 */
 private const val TL = "MonitorTimeline"
+
+/** 页面指纹的轻量遍历上限：每秒轮询跑一次，限深 8 / 节点 200（快照导出是另一个全属性全深度通道） */
+private const val PAGE_MAX_DEPTH = 8
+private const val PAGE_MAX_NODES = 200
+
+/** WINDOWS_CHANGED 的合并窗口：窗口列表变化可能一秒多次，1 秒内只重读一次根窗口 */
+private const val WINDOWS_CHANGED_THROTTLE_MS = 1_000L
 
 /**
  * 无障碍服务 — 仅追踪导航/页面跳转。
@@ -39,6 +48,17 @@ open class MonitorAccessibilityService : AccessibilityService() {
 
     private val recordCollector: RecordCollector
         get() = (application as MonitorApp).container.recordCollector
+
+    /**
+     * 页面轨迹状态机：当前页面指纹 + 进入时间（指纹口径见 [PageTracker]）。
+     *
+     * 懒加载是为了拿到 attach 之后的 `packageName` 作为自身包名 —— 本 App 内的 Tab 切换
+     * 不产生 PAGE 记录（真机表现为每秒刷 4 条），过滤收口在 PageTracker 内部。
+     */
+    private val pageTracker: PageTracker by lazy { PageTracker(selfPackage = packageName) }
+
+    /** WINDOWS_CHANGED 上次处理时刻（1 秒合并窗口） */
+    private var lastWindowsChangedMs: Long = 0L
 
     private var lastPackageName: String? = null
     private var lastActivityClass: String? = null
@@ -99,10 +119,24 @@ open class MonitorAccessibilityService : AccessibilityService() {
 
     private fun pollForegroundApp() {
         val now = System.currentTimeMillis()
-        val root = rootInActiveWindow ?: return
+        val root = rootInActiveWindow ?: run {
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_POLL)
+            return
+        }
         val pkg = root.packageName?.toString()
+        // 页面文本必须在 recycle 之前取；桌面/系统 UI/本 App 不参与页面轨迹，跳过遍历（省掉每秒一次全树扫描）
+        val pageTexts = if (pkg != null && pageTracingEnabled() &&
+            !isHomeApp(pkg) && !isSystemUi(pkg) && pkg != packageName
+        ) {
+            collectVisibleTexts(root)
+        } else {
+            emptyList()
+        }
         root.recycle()
-        if (pkg == null) return
+        if (pkg == null) {
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_POLL)
+            return
+        }
 
         // ===== 页面快照导出（UI 请求 → 切到目标 App 后延迟导出"当时的前台页面"）=====
         SnapshotRequest.onForegroundPackage(pkg, now)
@@ -123,6 +157,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
             }
             // flush 当前 session（桌面不计时）
             recordCollector.onTick(null, null, now)
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_POLL)
             lastPackageName = pkg
             return
         }
@@ -131,6 +166,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 系统 UI → flush 当前 session（不计时）
         if (isSystemUi(pkg)) {
             recordCollector.onTick(null, null, now)
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_POLL)
             return
         }
 
@@ -145,6 +181,78 @@ open class MonitorAccessibilityService : AccessibilityService() {
 
         // 通知 UsageTracker 累加时长（状态驱动，每秒调用一次）
         recordCollector.onTick(pkg, appName, now)
+        // 页面轨迹：轮询路径用「Activity（窗口事件给的）+ 可见文本」算指纹
+        observePage(pkg, lastActivityClass, pageTexts, appName, now, PageEvent.SOURCE_POLL)
+    }
+
+    // ========== 页面轨迹（指纹档） ==========
+
+    private fun pageTracingEnabled(): Boolean = FeatureFlags.get().isEnabled(Feature.PAGE_TRACE)
+
+    /**
+     * 喂一次页面观测；任何异常都不外抛（页面轨迹异常不能影响监控与跳广告主链路）。
+     *
+     * 关闭「页面轨迹」时只做一次结算：已开始的页面先落一条带时长的记录，之后不再采集。
+     */
+    private fun observePage(
+        packageName: String?,
+        activityClass: String?,
+        visibleTexts: List<String>,
+        appName: String?,
+        timestamp: Long,
+        source: String,
+    ) {
+        try {
+            if (!pageTracingEnabled()) {
+                emitPageEvents(pageTracker.flush(timestamp))
+                return
+            }
+            emitPageEvents(
+                pageTracker.observe(packageName, activityClass, visibleTexts, appName, source, timestamp)
+            )
+        } catch (e: Exception) {
+            Log.w("MonitorService", "页面轨迹采集异常", e)
+        }
+    }
+
+    private fun emitPageEvents(events: List<PageEvent>) {
+        for (event in events) recordCollector.onPageChanged(event)
+    }
+
+    /**
+     * 轻量可见文本抽取（指纹输入，**只留在内存**）。
+     *
+     * 限深 [PAGE_MAX_DEPTH]、节点 [PAGE_MAX_NODES]、最多 [PageTracker.MAX_TEXTS] 条，
+     * 只取 `visibleToUser` 的 text；不复用 SnapshotExporter（那边是 60 深全属性，量级差两个数量级）。
+     */
+    private fun collectVisibleTexts(root: android.view.accessibility.AccessibilityNodeInfo?): List<String> {
+        val target = root ?: return emptyList()
+        val result = ArrayList<String>(PageTracker.MAX_TEXTS)
+        val pending = ArrayDeque<Pair<android.view.accessibility.AccessibilityNodeInfo, Int>>()
+        val borrowed = ArrayList<android.view.accessibility.AccessibilityNodeInfo>(64)
+        pending.addLast(target to 0)
+        var visited = 0
+        try {
+            while (pending.isNotEmpty() && visited < PAGE_MAX_NODES && result.size < PageTracker.MAX_TEXTS) {
+                val (node, depth) = pending.removeFirst()
+                visited++
+                if (node.isVisibleToUser) {
+                    val label = node.text?.toString()?.trim()
+                    if (!label.isNullOrEmpty()) result.add(label)
+                }
+                if (depth < PAGE_MAX_DEPTH) {
+                    for (index in 0 until node.childCount) {
+                        val child = runCatching { node.getChild(index) }.getOrNull() ?: continue
+                        borrowed.add(child)
+                        pending.addLast(child to depth + 1)
+                    }
+                }
+            }
+        } finally {
+            // getChild 返回的是新实例：不回收会让每秒一次的轮询堆积节点句柄
+            for (node in borrowed) runCatching { node.recycle() }
+        }
+        return result
     }
 
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
@@ -164,6 +272,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleContentChanged(event)
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> handleWindowsChanged()
             // 其余事件类型（通知、焦点、手势等）故意不处理：显式兜底，避免漏 case 的静默差异
             else -> Unit
         }
@@ -196,8 +305,37 @@ open class MonitorAccessibilityService : AccessibilityService() {
         skipEngine.onContentChanged(pkg)
     }
 
-    // ========== Window Change ==========
+    // ========== Windows Changed（修正悬浮窗顶掉根窗口的误判） ==========
 
+    /**
+     * 处理窗口列表变化事件。
+     *
+     * 第三方悬浮窗（来电、录屏、歌词）出现/消失时，`rootInActiveWindow` 会短暂指向悬浮窗自身的
+     * 窗口，只看 WINDOW_STATE_CHANGED 会把那一瞬间当成一次页面切换。这里在窗口列表变化时
+     * **重新读一次根窗口的包名**，只有真的换了包名/Activity 才结算页面。
+     *
+     * 只参与页面轨迹（不写文本、不扫描跳过规则），关闭页面轨迹时直接返回。
+     */
+    private fun handleWindowsChanged() {
+        if (!pageTracingEnabled()) return
+        val now = System.currentTimeMillis()
+        // 窗口列表变化可能一秒多次（输入法、悬浮窗动画）：1 秒内只重读一次根窗口
+        if (now - lastWindowsChangedMs < WINDOWS_CHANGED_THROTTLE_MS) return
+        val root = rootInActiveWindow ?: return
+        lastWindowsChangedMs = now
+        val pkg = root.packageName?.toString()
+        // 本 App（设置/实时页切 Tab）与桌面/系统 UI 一样不参与页面轨迹，也不做文本遍历
+        val trackable = pkg != null && !isHomeApp(pkg) && !isSystemUi(pkg) && pkg != packageName
+        val texts = if (trackable) collectVisibleTexts(root) else emptyList()
+        root.recycle()
+        if (pkg == null || !trackable) {
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
+            return
+        }
+        observePage(pkg, lastActivityClass, texts, AppUtils.getAppName(pkg), now, PageEvent.SOURCE_WINDOW_EVENT)
+    }
+
+    // ========== Window Change ==========
     private fun handleWindowChange(event: AccessibilityEvent) {
         val packageName = event.packageName?.toString() ?: run {
             Log.w("MonitorService", "handleWindowChange: packageName is null")
@@ -209,11 +347,13 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 过滤桌面和系统界面（纯日志，不处理 App 切换——由轮询负责）
         if (isHomeApp(packageName)) {
             Log.d("MonitorService", "handleWindowChange: home screen")
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
             return
         }
         if (isSystemUi(packageName)) {
             DiagnosticCounters.accessibilityFilteredCount++
             Log.d("MonitorService", "handleWindowChange: filtered as system UI: $packageName")
+            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
             return
         }
 
@@ -224,8 +364,10 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 只跳过这一段：前台 App 追踪、自动记账、页面快照等本文件其余逻辑照常运行。
         val skipEnabled = FeatureFlags.get().isEnabled(Feature.AD_SKIP)
         try {
-            if (packageName == "com.bsfeng.monitor") {
-                // 进入本 App：停止监控并重置状态
+            if (packageName == this.packageName) {
+                // 进入本 App：停止开屏跳过监控并重置状态。
+                // 页面轨迹同样不记录本 App —— PageTracker 收到自身包名会结算上一个外部页面并清空，
+                // 不产生新页（见 PageTracker.observe 的 selfPackage 分支），这里不需要额外开关。
                 if (skipEnabled) skipEngine.resetAppState(packageName)
             } else {
                 if (packageName != lastPackageName) removeCurrentDanmaku()
@@ -241,6 +383,18 @@ open class MonitorAccessibilityService : AccessibilityService() {
         val appSwitched = packageName != lastActivityPackage
         lastActivityClass = ActivityNames.resolveActivityClass(lastActivityClass ?: "", className, appSwitched)
         lastActivityPackage = packageName
+
+        // ===== 页面轨迹（指纹档）：窗口事件的 Activity 变化是权威信号，不等轮询确认 =====
+        // 事件里没有页面文本，指纹先用「包名 + Activity」；轮询读到文本后会补上（PageTracker 内部
+        // 视为同一页的就绪度变化，不会多记一条）。
+        observePage(
+            packageName,
+            lastActivityClass,
+            emptyList(),
+            AppUtils.getAppName(packageName),
+            now,
+            PageEvent.SOURCE_WINDOW_EVENT,
+        )
 
         // 保留 updateKillDetectorTargets 为空调用（保持兼容）
         updateKillDetectorTargets(packageName)
@@ -539,6 +693,8 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
+        // 结算当前页面（服务销毁 = 页面观测中断），时长不丢
+        runCatching { emitPageEvents(pageTracker.flush(System.currentTimeMillis())) }
         // 服务是「被正常销毁」而不是「被冻结」：清掉心跳，否则下次进设置页会误报进程被冻结
         HeartbeatWatchdog.onServiceStopped(this)
         removeCurrentDanmaku()

@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -26,11 +27,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -52,6 +55,8 @@ import com.bsfeng.monitor.backup.RestoreApplyOutcome
 import com.bsfeng.monitor.backup.RestoreOutcome
 import com.bsfeng.monitor.service.HeartbeatWatchdog
 import com.bsfeng.monitor.service.MonitorAccessibilityService
+import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.LocationPermissionStatus
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -184,6 +189,8 @@ fun SettingsScreen(
     val adSkipOn = enabledFeatures[Feature.AD_SKIP] == true
     val financeOn = enabledFeatures[Feature.FINANCE] == true
     val transportOn = enabledFeatures[Feature.TRANSPORT] == true
+    val pageTraceOn = enabledFeatures[Feature.PAGE_TRACE] == true
+    val locationOn = enabledFeatures[Feature.LOCATION] == true
     val transferViewModel: TransferViewModel? = if (transportOn) viewModel() else null
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -219,6 +226,8 @@ fun SettingsScreen(
     var heartbeatNotice by remember { mutableStateOf<String?>(null) }
     // 通知权限（系统级）：进设置页与从系统设置返回时刷新
     var notificationsOn by remember { mutableStateOf(notificationsEnabled(context)) }
+    // 定位权限三态：进设置页与从系统设置返回时刷新（不缓存、不伪造授权状态）
+    var locationPermission by remember { mutableStateOf(LocationCollector.get(context).status()) }
     // 数据与备份：频率 / 最近一次 / 已存份数（进设置页即刷新，见 reloadCounters）
     var backupFrequency by remember { mutableStateOf(BackupConfig(context).frequency()) }
     var lastBackup by remember { mutableStateOf(BackupConfig(context).lastBackup()) }
@@ -257,10 +266,82 @@ fun SettingsScreen(
         toast.show(if (enabled) "已开启「" + feature.title + "」" else "已关闭「" + feature.title + "」")
     }
 
+    /**
+     * 跳「应用信息 → 权限」页。
+     *
+     * 只在「前台已授权、缺始终允许」这一态使用：Android 11+ 的后台定位不允许在弹窗里授予，
+     * 必须由用户在系统设置里手动选「始终允许」。其余两态走 [locationLauncher] 的运行时申请。
+     */
+    fun openLocationAppSettings() {
+        val opened = runCatching {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        }.getOrDefault(false)
+        if (!opened) toast.show("请在系统设置 → 应用 → 权限里把位置设为「始终允许」")
+    }
+
+    /**
+     * 定位权限申请（运行时授权）。
+     *
+     * 为什么必须先申请：Android 上**从未 requestPermissions 过**的权限不会出现在
+     * 「应用信息 → 权限」列表里，只跳系统设置用户根本找不到该权限项 —— 真机缺陷的根因。
+     *
+     * FINE 与 COARSE 必须同批申请：Android 12+ 只申请 FINE 会被系统直接忽略。
+     * 后台定位（ACCESS_BACKGROUND_LOCATION）不进这一批：Android 11+ 要求单独引导，
+     * 只能由用户在系统设置里选「始终允许」，所以回调后按三态决定是否露出那条引导行。
+     */
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        // 先回读真实授权状态，再决定开关：不按「点了同意」假设已授权
+        val status = LocationCollector.get(context).status()
+        locationPermission = status
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            status != LocationPermissionStatus.NOT_GRANTED
+        if (!granted) {
+            // 分支①：都拒绝（含「不再询问」）→ 开关保持/回到关闭，如实说明未授权。
+            // 这里不用 setFeature：开关此刻在 UI 上仍是关，setFeature 会因「值没变」提前 return，
+            // 提示就弹不出来（用户会以为点了没反应）。
+            if (featureFlags.setEnabled(Feature.LOCATION, false)) view.performConfirmHaptic()
+            toast.show("未授权，无法记录位置 · 可在系统设置开启")
+        } else {
+            // 分支②③：只给「仅使用期间」或已满足 → 开关打开；缺后台定位时引导行自动出现
+            setFeature(Feature.LOCATION, true)
+        }
+    }
+
+    /**
+     * 后台定位单独申请（只有这一条路能让系统弹出「始终允许」）。
+     *
+     * `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` 落到的是应用信息**主页**，位置项里只有
+     * 「仅在使用中允许」；Android 11+ 必须**单独一次** requestPermissions(ACCESS_BACKGROUND_LOCATION)，
+     * 系统才会打开「允许在后台访问位置」那个专门页面（始终 / 仅使用中 / 拒绝三选项）。
+     *
+     * ⚠️ 不能和 FINE/COARSE 同批：混在一起时系统会直接忽略后台这一项。
+     */
+    val backgroundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // 不按回调布尔值下结论：部分 ROM 对「仅本次允许」也回 true。回读系统真实状态。
+        val status = LocationCollector.get(context).status()
+        locationPermission = status
+        if (status != LocationPermissionStatus.GRANTED) {
+            toast.show("仍缺「始终允许」：设置 → 应用 → 权限 → 位置 → 始终允许")
+        }
+        // 已授予时不做额外动作：状态刷新后该行自然变成「已授权」，无需再提示
+    }
+
     LifecycleResumeEffect(Unit) {
         viewModel.refreshAccessibilityStatus()
         reloadCounters()
         notificationsOn = notificationsEnabled(context)
+        locationPermission = LocationCollector.get(context).status()
         onPauseOrDispose { }
     }
     LaunchedEffect(Unit) { reloadCounters() }
@@ -496,6 +577,130 @@ fun SettingsScreen(
                                     title = "传送设置",
                                     subtitle = FeatureCatalog.offHint(Feature.TRANSPORT) + "：后台接收、提示音、接收目录",
                                     icon = Icons.Outlined.Settings,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // 页面轨迹（指纹档）：零新权限，detail 只存包名/应用名/指纹，不存页面文字
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "页面轨迹",
+                                subtitle = if (pageTraceOn) {
+                                    "记录 App 内页面切换，只存指纹"
+                                } else {
+                                    "已关闭：不记录页面切换"
+                                },
+                                icon = Icons.Outlined.Article,
+                                trailing = { AppSwitch(pageTraceOn, { setFeature(Feature.PAGE_TRACE, it) }) },
+                            )
+                            TokenDivider(first = false)
+                            if (pageTraceOn) {
+                                TokenRow(
+                                    title = "记录内容",
+                                    subtitle = "包名 / 应用名 / 页面指纹 / 停留时长",
+                                    icon = Icons.Outlined.Visibility,
+                                )
+                            } else {
+                                TokenRow(
+                                    title = "页面轨迹明细",
+                                    subtitle = FeatureCatalog.offHint(Feature.PAGE_TRACE),
+                                    icon = Icons.Outlined.Visibility,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // 位置采集（默认关闭）：打开必须先走系统运行时权限申请，
+                        // 系统设置只承担「始终允许」这一步（Android 11+ 后台定位无法在弹窗里给）
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "位置采集",
+                                subtitle = if (locationOn) {
+                                    "每 10 分钟记录一次粗略位置（3 位小数）"
+                                } else {
+                                    "已关闭：不读位置、不落坐标"
+                                },
+                                icon = Icons.Outlined.LocationOn,
+                                trailing = {
+                                    AppSwitch(locationOn, { enabled ->
+                                        if (!enabled) {
+                                            setFeature(Feature.LOCATION, false)
+                                        } else {
+                                            when (LocationCollector.get(context).status()) {
+                                                // 从未申请过 → 先弹系统权限申请，回调里再决定开关
+                                                LocationPermissionStatus.NOT_GRANTED ->
+                                                    locationLauncher.launch(
+                                                        arrayOf(
+                                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                                        )
+                                                    )
+                                                // 前台已授权：直接开；缺「始终允许」由下面那行引导
+                                                else -> setFeature(Feature.LOCATION, true)
+                                            }
+                                        }
+                                    })
+                                },
+                            )
+                            TokenDivider(first = false)
+                            if (locationOn) {
+                                TokenRow(
+                                    title = "定位权限",
+                                    subtitle = when (locationPermission) {
+                                        LocationPermissionStatus.GRANTED -> "已授权：后台也能取到位置"
+                                        LocationPermissionStatus.MISSING_BACKGROUND -> "缺「始终允许」：切后台读不到位置"
+                                        LocationPermissionStatus.NOT_GRANTED -> "未授权：暂不记录位置"
+                                    },
+                                    icon = Icons.Outlined.Shield,
+                                    trailing = {
+                                        when (locationPermission) {
+                                            // 已齐全：不再给按钮，避免多余的一次跳转
+                                            LocationPermissionStatus.GRANTED -> Unit
+                                            // 缺后台定位：单独申请 ACCESS_BACKGROUND_LOCATION，
+                                            // 系统会直接打开「允许在后台访问位置」页（才有「始终允许」）
+                                            LocationPermissionStatus.MISSING_BACKGROUND -> AppButton(
+                                                text = "去开启始终允许",
+                                                onClick = {
+                                                    backgroundLauncher.launch(
+                                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                                    )
+                                                },
+                                                variant = AppButtonVariant.Ghost,
+                                            )
+                                            // 前台权限被拒/被撤：重新走运行时申请（系统弹窗或「不再询问」）
+                                            LocationPermissionStatus.NOT_GRANTED -> AppButton(
+                                                text = "申请权限",
+                                                onClick = {
+                                                    locationLauncher.launch(
+                                                        arrayOf(
+                                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                                        )
+                                                    )
+                                                },
+                                                variant = AppButtonVariant.Ghost,
+                                            )
+                                        }
+                                    },
+                                )
+                                // 兜底入口：少数 ROM 的 launcher 不跳转（或跳了仍无「始终允许」），
+                                // 这里保留手动到「应用信息 → 权限」的路径，不作为主入口
+                                if (locationPermission == LocationPermissionStatus.MISSING_BACKGROUND) {
+                                    TokenDivider(first = false)
+                                    TokenRow(
+                                        title = "仍看不到「始终允许」？",
+                                        subtitle = "打开应用信息，手动进 权限 → 位置",
+                                        icon = Icons.Outlined.Settings,
+                                        onClick = { openLocationAppSettings() },
+                                        trailing = { TailChevron() },
+                                    )
+                                }
+                            } else {
+                                TokenRow(
+                                    title = "定位权限",
+                                    subtitle = FeatureCatalog.offHint(Feature.LOCATION),
+                                    icon = Icons.Outlined.Shield,
                                 )
                             }
                             Spacer(Modifier.height(t.space1))

@@ -134,6 +134,32 @@ class AirplaneHandler : RecordHandler {
     override fun needsDuration(action: String) = false
 }
 
+// PAGE 页面轨迹（指纹档）：label 只拼应用名 + 指纹短串，detail 里没有任何页面文本
+class PageHandler : RecordHandler {
+    override val type = RecordType.PAGE
+    override fun validate(action: String, detail: Map<String, String>?): Boolean =
+        action in setOf("ENTER", "CHANGED")
+    override fun createLabel(action: String, detail: Map<String, String>?): String {
+        val app = detail?.get("app_name") ?: detail?.get("package_name") ?: ""
+        // 只用前 4 位做「页面编号」：8 位裸 hash 用户读不出信息。
+        // detail 里的 page_key 保持完整 8 位（去重与聚合仍需要全量指纹）。
+        val short = detail?.get("page_key")?.take(SHORT_KEY_LENGTH) ?: ""
+        val page = if (short.isEmpty()) "" else "页面 #$short"
+        return when {
+            app.isEmpty() && page.isEmpty() -> "页面"
+            app.isEmpty() -> page
+            page.isEmpty() -> app
+            else -> "$app · $page"
+        }
+    }
+    override fun needsDuration(action: String) = false
+
+    companion object {
+        /** label 里展示的指纹短码长度（4 位 hex，碰撞率 1/65536，可接受）。 */
+        const val SHORT_KEY_LENGTH = 4
+    }
+}
+
 class PhoneStateHandler : RecordHandler {
     override val type = RecordType.PHONE_STATE
     override fun validate(action: String, detail: Map<String, String>?): Boolean =
