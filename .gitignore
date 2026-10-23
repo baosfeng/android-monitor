@@ -99,3 +99,7 @@ tools/
 .open-design/*.preview.png
 # 只读审计/取证报告：结论已提炼进 docs/，原文按取证产物处理
 .open-design/perf-audit.md
+# 原型审查取证目录与逐轮截图（结论已提炼进 05-checklist.md，原文按取证产物处理）
+.open-design/reviews/
+.open-design/shots/r2-*.jpg
+.open-design/shots/trips-*.jpg

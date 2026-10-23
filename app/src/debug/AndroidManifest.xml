@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    debug 变体专属清单：只在 app/src/debug/ 存在，release / perf 变体不合并、也不编译对应类。
+
+    安全口径：receiver 是 exported，但内部仍守 DebugConfig 的解锁语义（除 unlock 外未解锁一律
+    ok=false reason=locked）；且它只在 debug 包里存在，release 包连类都没有。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!--
+            调试命令入口，调用形态见 scripts/debug-cli.sh。
+            刻意不声明 intent-filter：调用方一律用「显式组件名」(-n)，既避免隐式广播被第三方伪造，
+            也不用申请自定义权限（adb shell 拿不到应用私有权限）。
+        -->
+        <receiver
+            android:name=".debug.DebugCommandReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver" />
+
+        <!-- 行程页（s16）直达宿页：open trip 用 -->
+        <activity
+            android:name=".debug.DebugTripActivity"
+            android:exported="false"
+            android:label="行程（debug）"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Monitor" />
+    </application>
+</manifest>

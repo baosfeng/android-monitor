@@ -86,16 +86,30 @@ PATH 已写入 `~/.zshrc`（`export PATH="$HOME/android-platform-tools:$PATH"`�
 ~/android-platform-tools/adb logcat -v time -d > ~/Downloads/debug_log_$(date +%Y%m%d_%H%M%S).txt
 ```
 
+## 调试 CLI（debug 包专用）
+
+debug 包内置 `DebugCommandReceiver`，用广播代替「点坐标」，release 构建里不存在这个类。
+
+```bash
+export ANDROID_SERIAL=<serial>
+scripts/debug-cli.sh unlock        # 首次：解锁调试层
+scripts/debug-cli.sh state         # 开关 / 定位权限 / 各类型当日计数
+scripts/debug-cli.sh seed day      # 造数：day | stay | move | gap
+scripts/debug-cli.sh open trip     # 直达行程页（不点 Tab）
+scripts/debug-cli.sh reset all     # 全表清空；单类型写 reset PAGE
+scripts/debug-cli.sh dump 20 PAGE  # 倒最近 20 条
+```
+
+结果在 logcat tag `DebugCmd`：`RESULT cmd=<n> ok=<bool> data=<json>`，脚本退出码 = `ok`；`Broadcast completed: result=0` 只代表投递成功。
+
 ## 常用命令
 
 ```bash
 adb devices -l
 adb uninstall com.bsfeng.monitor
 adb kill-server && adb start-server
-adb reboot
 adb shell dumpsys package com.bsfeng.monitor | head -30
 adb shell dumpsys package com.bsfeng.monitor | grep -A 100 "runtime permissions"
-adb shell input tap x y ; adb shell input text "hello" ; adb shell input swipe x1 y1 x2 y2  # 需「USB 调试（安全设置）」
 ```
 
 ## FAQ
