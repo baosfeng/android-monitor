@@ -445,7 +445,6 @@ private fun SecondaryGrid(
                         cell = cell,
                         selected = cell.name == state.selectedChildName,
                         recognized = cell.name == recognizedName,
-                        iconName = state.activeTopName,
                         iconSize = iconSize,
                         onClick = {
                             val picked = state.chooseChild(cell.name)
@@ -463,18 +462,25 @@ private fun SecondaryGrid(
     }
 }
 
-/** 网格项：二级名字，或当前一级的「不细分」 */
-private data class PickerCellModel(
+/** 网格项：二级分类名（图标与分类色都按它自己取，不继承父级） */
+internal data class PickerCellModel(
     val name: String,
     val label: String,
 )
+
+/**
+ * 格子取图标/分类色用的名字：**就是格子自己的分类名**。
+ *
+ * 曾经这里传父级名（`state.activeTopName`），导致同一父级下 10 个二级格子全画成父级
+ * 那一个图标。单测 [PickerCellModel] 与 [pickerIconName] 保证「不再继承父级」不被改回去。
+ */
+internal fun pickerIconName(cell: PickerCellModel): String = cell.name
 
 @Composable
 private fun PickerCell(
     cell: PickerCellModel,
     selected: Boolean,
     recognized: Boolean,
-    iconName: String,
     iconSize: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -482,7 +488,7 @@ private fun PickerCell(
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
     // 与一级格同一套视觉：分类色 12% 淡底 + 分类色线描
-    val color = categoryColorOf(iconName)
+    val color = categoryColorOf(cell.name)
     Column(
         modifier = modifier
             .clip(shape)
@@ -500,9 +506,8 @@ private fun PickerCell(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
-            // 「不细分」用一级分类的图标；二级多数还没有专属线描图标，CategoryIcon 会回落彩点
-            // 二级多数还没有专属线描图标：统一用父级图标，避免一堆同色圆点
-            CategoryIcon(name = iconName, color = color, size = iconSize)
+            // 二级分类各用**自己的**图标与分类色：曾经传父级名，导致同一父级下 10 个格子全一样
+            CategoryIcon(name = pickerIconName(cell), color = color, size = iconSize)
             if (recognized) {
                 // 识别标记（沿用自动记账浮窗）：右上角小圆点，用户改选后仍能对照系统猜的是哪个
                 Box(

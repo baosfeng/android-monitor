@@ -4,6 +4,7 @@ import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.CategorySeed
+import com.bsfeng.monitor.ui.components.CategoryIcons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -176,5 +177,44 @@ class CategoryPickerTest {
         assertTrue(state.children.isEmpty())
         assertEquals("", state.chooseTopOnly())
         assertEquals("", state.chooseChild("电商"))
+    }
+
+    // ===== 二级图标不继承父级 =====
+
+    @Test
+    fun `同一父级下的二级分类各自取到不同图标`() {
+        // 回归：二级格子曾经把父级名传给 CategoryIcon，导致「餐饮」下 10 个格子全画同一个碗
+        CategoryCatalog.expense.forEach { seed ->
+            val keys = seed.children.map { CategoryIcons.keyOf(pickerIconName(PickerCellModel(it, it))) }
+            assertTrue("二级分类 [${seed.name}] 有分类取不到图标 key：$keys", keys.none { it == null })
+            assertEquals(
+                "[${seed.name}] 下 ${seed.children.size} 个二级分类应各有不同图标 key，实际 $keys",
+                seed.children.size,
+                keys.distinct().size,
+            )
+            val parentKey = CategoryIcons.keyOf(seed.name)
+            assertTrue(
+                "[${seed.name}] 的二级不应复用父级图标 key [$parentKey]",
+                keys.none { it == parentKey },
+            )
+        }
+    }
+
+    @Test
+    fun `格子取图标用的名字是格子自己的分类名`() {
+        // 渲染层唯一入口：pickerIconName 必须返回格子自己的 name，不能改成父级名
+        CategoryCatalog.expense.forEach { seed ->
+            seed.children.forEach { child ->
+                assertEquals("[${seed.name}] 下 [$child] 的图标名应是自己", child, pickerIconName(PickerCellModel(child, child)))
+            }
+        }
+    }
+
+    @Test
+    fun `一级分类与全部二级分类的图标 key 全局唯一`() {
+        val names = CategoryCatalog.allNames()
+        val keys = names.map { CategoryIcons.keyOf(it) }
+        assertTrue("存在取不到图标 key 的分类：$names", keys.none { it == null })
+        assertEquals("${names.size} 个分类应各有不同图标 key，实际不同 ${keys.distinct().size} 个", names.size, keys.distinct().size)
     }
 }
