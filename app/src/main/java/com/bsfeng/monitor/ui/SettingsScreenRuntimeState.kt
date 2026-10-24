@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 从 ui/SettingsScreen.kt 拆出：设置页运行时状态的持有者。字段一一对应屏内用到的状态，
-// 可写项以 MutableState 传递，让分组正文（SettingsSections）能按引用改写。
+// 可写项以 MutableState 传递，让二级页正文（SettingsSubPageScreen）能按引用改写。
 
 import android.content.Context
 import android.net.Uri
@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 /**
  * 设置页运行时状态集合。
  *
- * 可写状态一律以 [MutableState] 持有：分组正文（[SettingsSections]）要按引用传递，
+ * 可写状态一律以 [MutableState] 持有：二级页正文（[SettingsSubPageScreen]）要按引用传递，
  * 才能在子组件里改写；只读值直接存快照。
  */
 internal class SettingsScreenRuntime(

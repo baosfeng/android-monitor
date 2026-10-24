@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui
 
 // 从 ui/SettingsScreen.kt 拆出：设置页的「取数与状态」——功能开关快照、权限/备份/更新等运行时状态、
 // 三个 launcher 与三个动作函数（reloadCounters / setFeature / openLocationAppSettings）。
-// 本文件只负责状态，渲染与分组正文见 ui/SettingsScreen.kt 与 ui/SettingsSections.kt。
+// 本文件只负责状态，渲染（一级页）见 ui/SettingsScreen.kt，二级页正文见 ui/SettingsSections.kt。
 
 import android.Manifest
 import android.content.Context
