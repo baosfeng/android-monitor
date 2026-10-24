@@ -5,8 +5,7 @@ package com.bsfeng.monitor.domain.trip
  *
  * 三条边界（改动前先读）：
  * 1. **不猜内容**：无法判定的区间只产出 [Gap]，绝不补编地点或活动；
- * 2. **无定位不编坐标**：DEVICE 基准下 [Place.lat] / [Place.lng] 恒为 null；
- * 3. **指纹档**：页面轨迹只保留「App + 切换次数」（[PageTally]），不携带任何页面文本 / 标题。
+ * 2. **无定位不编坐标**：DEVICE 基准下 [Place.lat] / [Place.lng] 恒为 null。
  */
 
 /** 一天的毫秒数。domain 不依赖 app 侧的 ui/live，口径与之相同（固定 86400000）。 */
@@ -38,9 +37,6 @@ data class UsageSlice(
     val ms: Long,
 )
 
-/** 页面轨迹条目：只带 App 与切换次数，**不含任何页面文本**（指纹档）。 */
-data class PageTally(val app: String, val switches: Int)
-
 /**
  * 一天中的一个行程段。三段之外没有第四种：判定不了就是 [Gap]。
  *
@@ -61,8 +57,6 @@ data class Stay(
     val place: Place,
     /** 期间全部 App 使用（按时长降序，已裁剪到本段区间；抽屉列前 8 条 + 其他汇总）。 */
     val topApps: List<UsageSlice> = emptyList(),
-    /** 期间每个 App 的页面切换次数（全部，按次数降序；只含 App 与次数，不含任何页面文本）。 */
-    val pages: List<PageTally> = emptyList(),
 ) : DaySegment
 
 /** 移动：相邻停留之间净位移 >300m 且定位覆盖 ≥60%。 */

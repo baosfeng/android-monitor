@@ -6,7 +6,6 @@ package com.bsfeng.monitor.domain.trip
 /** 行程聚合的阈值常量与二分辅助（TripAggregator 与其内部结构的共用定义）。 */
 internal object TripAggregatorRules {
     const val NAME_LOCATION = "LOCATION"
-    const val NAME_PAGE = "PAGE"
     const val NAME_APP_USAGE = "APP_USAGE"
     const val NAME_WIFI = "WIFI"
 
@@ -40,13 +39,4 @@ internal object TripAggregatorRules {
         return lo
     }
 
-    fun lowerBoundByTs(list: List<PageSample>, ts: Long): Int {
-        var lo = 0
-        var hi = list.size
-        while (lo < hi) {
-            val mid = (lo + hi) ushr 1
-            if (list[mid].ts < ts) lo = mid + 1 else hi = mid
-        }
-        return lo
-    }
 }
