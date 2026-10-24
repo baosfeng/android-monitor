@@ -257,6 +257,19 @@ class PageTrackerTest {
     }
 
     @Test
+    fun `窗口标题等于应用名时改看可见文本 文本也取不到才回落到应用名`() {
+        // 窗口标题 = 应用名（多数 App 的常态）：跳过它，取页面内的具体标题
+        assertEquals(
+            "网络和互联网",
+            PageTitle.resolve("设置", listOf("设置", "网络和互联网", "已连接的设备"), "设置"),
+        )
+        // 自绘界面（抖音 / 微信主界面）：没有任何可见文本 → 把应用名当标题（只显示应用名，不拼重复）
+        assertEquals("抖音", PageTitle.resolve("抖音", emptyList(), "抖音"))
+        // 没有窗口标题、文本也只有应用名本身 → null（不编造标题，调用方回落指纹文案）
+        assertNull(PageTitle.resolve(null, listOf("微信"), "微信"))
+    }
+
+    @Test
     fun `标题截断到 30 字`() {
         val long = "一".repeat(40)
         val title = PageTitle.resolve(long, emptyList())

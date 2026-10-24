@@ -129,7 +129,7 @@ class PageTracker(
         val pageKey = fingerprint(packageName, activity, normalized)
         val resolvedAppName = appName
             ?: previous?.takeIf { it.packageName == packageName }?.appName
-        val title = if (collectTitle) PageTitle.resolve(windowTitle, visibleTexts) else null
+        val title = if (collectTitle) PageTitle.resolve(windowTitle, visibleTexts, resolvedAppName) else null
         val next = PageState(
             packageName = packageName,
             activityClass = activity,
@@ -284,20 +284,29 @@ object PageTitle {
     /** 状态栏样式文本：时间 / 百分比 / 纯数字，均不是标题。 */
     private fun isStatusLike(text: String): Boolean = text.all { ch -> ch.isDigit() || ch in " :%.-+" }
 
-    /** 提取标题；[windowTitle] 优先，拿不到再看可见文本。 */
-    fun resolve(windowTitle: String?, visibleTexts: List<String>): String? {
-        clean(windowTitle)?.let { return it }
-        val titles = visibleTexts.mapNotNull { raw ->
+    /**
+     * 提取标题：**窗口标题有信息时优先，否则看顶部可见文本**，最后回落到窗口标题（通常是应用名）。
+     *
+     * 窗口标题在多数 App 里就等于应用名（「微信」「抖音」），直接用它会把页面名吞掉；
+     * 因此 [appName] 与窗口标题相同就跳过它，改看可见文本，只有文本也取不到时才把应用名当标题
+     * （由 PageHandler 决定只显示应用名，不拼「抖音 · 抖音」）。
+     */
+    fun resolve(windowTitle: String?, visibleTexts: List<String>, appName: String? = null): String? {
+        val win = clean(windowTitle)
+        val texts = visibleTexts.mapNotNull { raw ->
             collapseWhitespace(raw).takeIf { it.isNotEmpty() }
         }
+        // 应用名本身不是页面标题
+        val titles = if (appName.isNullOrBlank()) texts else texts.filter { it != appName }
+        if (win != null && win != appName) return win
         // 顶部可见标题：遍历顺序靠前、长度合适、不是操作词 / 状态栏文本
         titles.firstOrNull { text ->
             text.length in 2..MAX_LENGTH && text !in NOISE && !isStatusLike(text)
         }?.let { return it }
         // 兜底：首个非空短文本（可能是 1 字标题）
         titles.firstOrNull { it.length <= MAX_LENGTH }?.let { return it }
-        // 再兜底：首个文本截断到上限
-        return titles.firstOrNull()?.take(MAX_LENGTH)?.trim()
+        // 再兜底：窗口标题（通常是应用名），否则首个文本截断到上限
+        return win ?: titles.firstOrNull()?.take(MAX_LENGTH)?.trim()
     }
 
     private fun clean(raw: String?): String? {
