@@ -70,6 +70,7 @@ import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.OverviewScreen
 import com.bsfeng.monitor.ui.SettingsScreen
+import com.bsfeng.monitor.ui.SettingsSubPage
 import com.bsfeng.monitor.ui.SkipRuleScreen
 import com.bsfeng.monitor.ui.SkipRuleViewModel
 import com.bsfeng.monitor.ui.WhitelistScreen
@@ -142,12 +143,17 @@ internal fun MainContent(
             var showAppearance by remember { mutableStateOf(false) }
             // 额度设置（从额度页齿轮 / 设置页分组 push）
             var showQuotaSettings by remember { mutableStateOf(false) }
+            // 设置二级页：存枚举名（String 进 Bundle），旋转 / 进程重建后能回到同一页；
+            // 空串 = 停留在一级页。Tab 切换时重置（见 onSelectTab 与深链兜底）。
+            var settingsSubPageName by rememberSaveable { mutableStateOf("") }
+            val settingsSubPage = SettingsSubPage.entries.firstOrNull { it.name == settingsSubPageName }
             // s16 每日行程（从概览「今日行程」卡 push）
             var showTripScreen by remember { mutableStateOf(false) }
             var showSplash by remember { mutableStateOf(true) }
             val view = LocalView.current
             val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery ||
-                showAppearance || showTripScreen || showQuotaSettings
+                showAppearance || showTripScreen || showQuotaSettings ||
+                (selectedTab == AppTab.SETTINGS && settingsSubPage != null)
             // 原型二级页（记账子页 / 设置子页）无 Tab 栏
             val financeSubPage = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main
             val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
@@ -206,6 +212,7 @@ internal fun MainContent(
                 // 首次冷启动没有深链（下标 0）时不覆盖 rememberSaveable 恢复的 Tab；
                 // 从通知再次进入时一律按深链落点走（同一 Tab 连点也生效，靠序号而非下标比较）
                 if (startTabRequest > 0 || startTab != 0) {
+                    settingsSubPageName = ""
                     selectedTab = FeatureCatalog.resolveTab(
                         FeatureCatalog.tabOfIndex(startTab),
                     ) { feature -> enabledFeatures[feature] == true }
@@ -225,6 +232,8 @@ internal fun MainContent(
                                 featureOn = ::featureOn,
                                 onSelectTab = { tab ->
                                     selectedTab = tab
+                                    // 切 Tab 一律回一级页，不留半屏二级页
+                                    settingsSubPageName = ""
                                     if (tab == AppTab.FINANCE) {
                                         financeRoute = FinanceRoute.Main
                                         financeEntryKey++
@@ -249,7 +258,10 @@ internal fun MainContent(
                             financeRoute = financeRoute,
                             financeEntryKey = financeEntryKey,
                             featureOn = ::featureOn,
-                            onSelectTab = { selectedTab = it },
+                            onSelectTab = {
+                                selectedTab = it
+                                settingsSubPageName = ""
+                            },
                             onFinanceRoute = { financeRoute = it },
                             onBackToFinanceMain = {
                                 financeRoute = FinanceRoute.Main
@@ -261,6 +273,9 @@ internal fun MainContent(
                             onOpenAppearance = { showAppearance = true },
                             onOpenGallery = { showGallery = true },
                             onOpenQuotaSettings = { showQuotaSettings = true },
+                            settingsSubPage = settingsSubPage,
+                            onOpenSettingsSubPage = { settingsSubPageName = it.name },
+                            onCloseSettingsSubPage = { settingsSubPageName = "" },
                         )
                     }
                 }

@@ -22,6 +22,7 @@ import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.OverviewScreen
 import com.bsfeng.monitor.ui.SettingsScreen
+import com.bsfeng.monitor.ui.SettingsSubPage
 import com.bsfeng.monitor.ui.quota.QuotaScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel
 
@@ -48,6 +49,9 @@ internal fun MainTabContent(
     onOpenAppearance: () -> Unit,
     onOpenGallery: () -> Unit,
     onOpenQuotaSettings: () -> Unit,
+    settingsSubPage: SettingsSubPage?,
+    onOpenSettingsSubPage: (SettingsSubPage) -> Unit,
+    onCloseSettingsSubPage: () -> Unit,
 ) {
     when (selectedTab) {
         AppTab.OVERVIEW -> OverviewScreen(
@@ -144,6 +148,9 @@ internal fun MainTabContent(
         )
         AppTab.SETTINGS -> SettingsScreen(
             viewModel = mainViewModel,
+            subPage = settingsSubPage,
+            onOpenSubPage = onOpenSettingsSubPage,
+            onCloseSubPage = onCloseSettingsSubPage,
             onNavigateToSkipRules = onOpenSkipRules,
             onNavigateToWhitelist = onOpenWhitelist,
             onNavigateToAppearance = onOpenAppearance,
