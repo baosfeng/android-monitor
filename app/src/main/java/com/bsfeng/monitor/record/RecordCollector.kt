@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.record
 
+import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
 import java.util.UUID
@@ -22,7 +23,14 @@ import java.util.UUID
 class RecordCollector(
     private val store: RecordStore,
     private val usageTracker: UsageTracker,
-    private val handlerRegistry: RecordHandlerRegistry
+    private val handlerRegistry: RecordHandlerRegistry,
+    /**
+     * 逆地理编码（定位地址）：默认走进程单例；单测 / 不需要地址时传 null。
+     *
+     * 调用发生在本类已有的后台协程里（心跳的 IO 协程），自身带硬超时与 LRU 缓存，
+     * 因此不阻塞主线程、不阻塞无障碍采集，失败也不影响记录落库。
+     */
+    private val geocoder: LocationReverseGeocoder? = defaultGeocoder(),
 ) {
     /** WiFi 状态缓存 — 避免 WIFI_STATE_CHANGED_ACTION 重复触发 */
     private var lastWifiAction: String? = null
@@ -30,6 +38,10 @@ class RecordCollector(
     private var lastWifiTimestamp: Long = 0L
     private companion object {
         private const val WIFI_DEBOUNCE_MS = 30_000L
+
+        /** 进程单例；构造过早（单测 / 无 Application）时降级为「不解析地址」。 */
+        fun defaultGeocoder(): LocationReverseGeocoder? =
+            runCatching { LocationReverseGeocoder.get(MonitorApp.instance) }.getOrNull()
     }
 
     /** 当前最新电量（持续更新，供充电开始/结束使用） */
@@ -148,7 +160,8 @@ class RecordCollector(
     /**
      * 写入一条页面轨迹。
      *
-     * ⚠️ detail 白名单：`package_name` / `app_name` / `page_key` / `source` / `duration_ms`。
+     * ⚠️ detail 白名单：`package_name` / `app_name` / `page_key` / `source` / `duration_ms`
+     * / `page_title`（仅本地，用户确认后新增；上报链路不得携带）。
      * 页面文本只在 [PageTracker.fingerprint] 里参与哈希，**任何情况下都不进 detail**。
      */
     fun onPageChanged(event: PageEvent) {
@@ -159,13 +172,19 @@ class RecordCollector(
         )
         event.appName?.let { detail["app_name"] = it }
         event.durationMs?.let { detail["duration_ms"] = it.toString() }
+        // 页面标题：开关关闭时 PageTracker 不会产出 title，这里也就不会写入
+        event.title?.takeIf { it.isNotBlank() }?.let { detail["page_title"] = it }
         emit(RecordType.PAGE, event.action, event.timestamp, event.durationMs, detail)
     }
 
     /**
      * 写入一次定位采样（COORDINATE）。
      *
-     * 坐标为量化后的 3 位小数（≈110m），不含地址与任何可识别个人的字段。
+     * 坐标为量化后的 3 位小数（≈110m）；有逆地理编码结果时额外写一个中文地址（仅地址文本）。
+     *
+     * 地址查询在落库前完成，但**有界且失败静默**：命中缓存瞬时返回，未命中最多
+     * [LocationReverseGeocoder.GEOCODE_TIMEOUT_MS]（3 秒，≤5 秒口径），失败 / 无网 / 限频
+     * 一律不写 address，记录照常落库 —— 坐标记录不会因网络问题丢失。
      */
     fun onLocation(sample: LocationSample) {
         val detail = mutableMapOf(
@@ -174,6 +193,9 @@ class RecordCollector(
             "provider" to sample.provider,
             "accuracy_m" to sample.accuracyMeters.toInt().toString()
         )
+        geocoder?.resolve(sample.latitude, sample.longitude)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { detail["address"] = it }
         emit(RecordType.LOCATION, "COORDINATE", sample.timeMs, detail = detail)
     }
 }
