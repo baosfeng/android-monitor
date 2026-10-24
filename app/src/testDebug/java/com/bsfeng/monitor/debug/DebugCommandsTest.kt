@@ -100,6 +100,28 @@ class DebugCommandsTest {
         )
     }
 
+    @Test
+    fun `合法 - open ad（广告页验收截图入口）`() {
+        assertEquals(
+            ParseResult.Ok(DebugCommand.Open(DebugScreen.AD)),
+            DebugCommands.parse(mapOf("cmd" to "open", "screen" to "ad")),
+        )
+        // 大小写 / 空白都要能落到同一个屏（CLI 手敲容易带空格）
+        assertEquals(
+            ParseResult.Ok(DebugCommand.Open(DebugScreen.AD)),
+            DebugCommands.parse(mapOf("cmd" to "open", "screen" to " AD ")),
+        )
+    }
+
+    @Test
+    fun `open 屏表 - 广告页是 Tab 2，且 Tab 下标不重复`() {
+        assertEquals("广告页必须是第 3 个 Tab（概览 0 / 实时 1 / 广告 2）", 2, DebugScreen.AD.appTabIndex)
+        val tabIndexes = DebugScreen.entries.mapNotNull { it.appTabIndex }
+        assertEquals("每个 App Tab 只能被一个调试屏占用：$tabIndexes", tabIndexes.size, tabIndexes.toSet().size)
+        assertTrue("screenList 要能列出 ad：${DebugCommands.screenList()}", "ad" in DebugCommands.screenList())
+        assertEquals("KNOWN_TYPES 与落库契约同源", RecordType.CANONICAL_NAMES, DebugCommands.KNOWN_TYPES)
+    }
+
     // ─────────────────────────────── 缺参 ───────────────────────────────
 
     @Test

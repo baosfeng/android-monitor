@@ -183,7 +183,7 @@ class TransferTaskStoreTest {
 
         val migrated = DatabaseHelper(context)
         val db = migrated.writableDatabase
-        assertEquals(4, db.version)
+        assertEquals(DatabaseHelper.DATABASE_VERSION, db.version)
         migrated.readableDatabase.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
             arrayOf(TransferTaskStore.TABLE),
