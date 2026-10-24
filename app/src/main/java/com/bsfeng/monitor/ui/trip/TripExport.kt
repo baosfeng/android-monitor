@@ -2,10 +2,10 @@ package com.bsfeng.monitor.ui.trip
 
 // 轨迹图导出：把某一天的轨迹渲染成 1080px 宽的 PNG，写进系统相册「Pictures/行为记录」。
 //
-// - 命名与相册落点是纯逻辑（[TripExportNaming]），可在 JVM 单测里验证；
-// - 渲染用 android.graphics（Bitmap + Canvas + Paint），不依赖 Compose 组合，可在 IO 线程跑；
+// - 命名与相册落点是纯逻辑（TripExportNaming），可在 JVM 单测里验证；
+// - 渲染用 android.graphics（Bitmap + Canvas + Paint），不依赖 Compose 组合，可在后台线程跑；
 // - 相册写入走 MediaStore（Android 10+ 无需存储权限，不申请 WRITE_EXTERNAL_STORAGE）；
-// - 只导出轨迹本身（标题 + 画布 + 水印），不导整屏。
+// - 底图开时，导出前先把这块区域的瓦片取齐（带总超时），取不到的块留白，不拖住导出。
 
 import android.content.ContentValues
 import android.content.Context
@@ -18,10 +18,17 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.withClip
 import androidx.core.graphics.withTranslation
 import com.bsfeng.monitor.domain.trip.Stay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,24 +69,45 @@ data class TripExportStyle(
     val danger: Int,
 )
 
+/** 导出用的一张底图瓦片（dp 落点）。 */
+data class BitmapTile(val bitmap: Bitmap, val left: Float, val top: Float, val size: Float)
+
+/** 导出图里的一层底图：投影 + 已取到的瓦片 + 署名。 */
+data class TripMapLayer(
+    val view: TileView,
+    val tiles: List<BitmapTile>,
+    val attribution: String,
+)
+
 /** 轨迹图渲染（纯 android.graphics，可在后台线程调用）。 */
 object TripExportRenderer {
 
     /** 导出图片固定 1080px 宽（上限要求；不跟随设备密度）。 */
     const val WIDTH_PX = 1080
 
-    private const val MAP_HEIGHT_PX = 540
+    /** 与屏内 360dp 逻辑宽对齐：停留圆半径、标签字号口径一致。 */
+    const val DENSITY = 3f
+
+    const val MAP_HEIGHT_PX = 540
+
+    /** 画布在逻辑坐标里的大小与留白，底图选级与屏内用同一套。 */
+    const val MAP_WIDTH_DP = (WIDTH_PX - 80f) / DENSITY
+    const val MAP_HEIGHT_DP = MAP_HEIGHT_PX / DENSITY
+    const val MAP_PADDING_DP = 12f
+
     private const val HEADER_HEIGHT_PX = 140
     private const val FOOTER_HEIGHT_PX = 110
     private const val MARGIN_PX = 40f
     private const val LABEL_TEXT_PX = 28f
     private const val LABEL_HEIGHT_PX = 38f
+    private const val TRACE_PADDING_PX = 36f
 
     /**
      * 渲染一张导出图。
      *
      * @param title 标题（形如「2026年10月24日 今日轨迹」）
      * @param subtitle 副标题（样本数与时间段）
+     * @param map 底图层；null = 纯自绘（与轨迹卡关闭底图时同款）
      */
     fun render(
         title: String,
@@ -87,6 +115,7 @@ object TripExportRenderer {
         samples: List<TraceSample>,
         stays: List<Stay>,
         style: TripExportStyle,
+        map: TripMapLayer? = null,
     ): Bitmap {
         val width = WIDTH_PX
         val height = HEADER_HEIGHT_PX + MAP_HEIGHT_PX + FOOTER_HEIGHT_PX
@@ -119,13 +148,14 @@ object TripExportRenderer {
                 emptyPaint,
             )
         } else {
-            drawTrace(canvas, mapRect, samples, stays, style)
+            if (map != null) drawTiles(canvas, mapRect, map.tiles)
+            drawTrace(canvas, mapRect, samples, stays, style, map?.view)
         }
 
-        // 水印：右下角，说明是自绘、没有底图
+        // 水印：右下角，说明底图来源或「自绘无底图」
         val markPaint = paint(style.muted, 26f, align = Paint.Align.RIGHT)
         canvas.drawText(
-            "自绘轨迹 · 无底图",
+            map?.attribution ?: "自绘轨迹 · 无底图",
             width - MARGIN_PX,
             (height - 34f),
             markPaint,
@@ -135,27 +165,55 @@ object TripExportRenderer {
         return bitmap
     }
 
+    /** 底图瓦片：裁到画布圆角内，相邻块按同一像素边界对齐避免细缝。 */
+    private fun drawTiles(canvas: Canvas, mapRect: RectF, tiles: List<BitmapTile>) {
+        val clip = Path().apply { addRoundRect(mapRect, 24f, 24f, Path.Direction.CW) }
+        val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.withClip(clip) {
+            withTranslation(mapRect.left, mapRect.top) {
+                tiles.forEach { tile ->
+                    val left = tile.left * DENSITY
+                    val top = tile.top * DENSITY
+                    val dst = RectF(left, top, left + tile.size * DENSITY, top + tile.size * DENSITY)
+                    drawBitmap(tile.bitmap, null, dst, tilePaint)
+                }
+            }
+        }
+    }
+
     private fun drawTrace(
         canvas: Canvas,
         mapRect: RectF,
         samples: List<TraceSample>,
         stays: List<Stay>,
         colors: TripExportStyle,
+        mapView: TileView?,
     ) {
-        // 导出图按「屏幕逻辑宽 360dp」折算密度：6..14dp 的停留圆在 1080px 图上约 18..42px
-        val densityScale = WIDTH_PX / 360f
         val mapWidth = mapRect.width()
         val mapHeight = mapRect.height()
-        val projection = TripTrace.project(
-            samples = samples,
-            stays = stays,
-            widthPx = mapWidth,
-            heightPx = mapHeight,
-            paddingPx = 36f,
-            charPx = LABEL_TEXT_PX,
-            labelHeightPx = LABEL_HEIGHT_PX,
-            density = densityScale,
-        )
+        val projection = if (mapView != null) {
+            TripTrace.projectOnMap(
+                samples = samples,
+                stays = stays,
+                view = mapView,
+                widthPx = mapWidth,
+                heightPx = mapHeight,
+                density = DENSITY,
+                charPx = LABEL_TEXT_PX,
+                labelHeightPx = LABEL_HEIGHT_PX,
+            )
+        } else {
+            TripTrace.project(
+                samples = samples,
+                stays = stays,
+                widthPx = mapWidth,
+                heightPx = mapHeight,
+                paddingPx = TRACE_PADDING_PX,
+                charPx = LABEL_TEXT_PX,
+                labelHeightPx = LABEL_HEIGHT_PX,
+                density = DENSITY,
+            )
+        }
         if (!projection.hasTrace) return
 
         val fill = paint(colors.accent, 0f).apply { alpha = 41 } // 16% 透明
@@ -174,7 +232,7 @@ object TripExportRenderer {
 
         canvas.withTranslation(mapRect.left, mapRect.top) {
             projection.stays.forEach { stay ->
-                val radius = stay.radiusDp * densityScale
+                val radius = stay.radiusDp * DENSITY
                 drawCircle(stay.x, stay.y, radius, fill)
                 drawCircle(stay.x, stay.y, radius, ring)
             }
@@ -196,7 +254,7 @@ object TripExportRenderer {
 
             projection.stays.forEach { stay ->
                 if (!stay.labelVisible) return@forEach
-                val radius = stay.radiusDp * densityScale
+                val radius = stay.radiusDp * DENSITY
                 val textWidth = labelPaint.measureText(stay.label)
                 val left = (stay.x - textWidth / 2f).coerceIn(0f, (mapWidth - textWidth).coerceAtLeast(0f))
                 val top = (stay.y - radius - LABEL_HEIGHT_PX).coerceAtLeast(0f)
@@ -228,11 +286,15 @@ internal fun exportSubtitle(samples: List<TraceSample>, dayStart: Long): String 
 }
 
 /**
- * 导出流程编排：渲染在 Default 线程、写盘在 IO 线程，失败原因原样带回给 Toast。
+ * 导出流程编排：取瓦片与渲染在后台线程，写盘在 IO 线程，失败原因原样带回给 Toast。
  *
  * 放在这里而不是屏内：渲染 + 命名的口径只有这一个入口，屏只负责提示结果。
  */
 object TripExporter {
+
+    /** 取底图的总预算：超时就不等了，缺的块留白，导出照常完成。 */
+    private const val TILE_BUDGET_MS = 12_000L
+
     suspend fun export(
         context: Context,
         dayStart: Long,
@@ -241,7 +303,14 @@ object TripExporter {
         samples: List<TraceSample>,
         stays: List<Stay>,
         style: TripExportStyle,
+        basemap: Boolean = false,
+        source: TileSource = TileSources.DEFAULT,
     ): Result<Uri> = runCatching {
+        val layer = if (basemap && samples.isNotEmpty()) {
+            withContext(Dispatchers.IO) { loadLayer(context, samples, source) }
+        } else {
+            null
+        }
         val bitmap = withContext(Dispatchers.Default) {
             TripExportRenderer.render(
                 title = title,
@@ -249,12 +318,54 @@ object TripExporter {
                 samples = samples,
                 stays = stays,
                 style = style,
+                map = layer,
             )
         }
         withContext(Dispatchers.IO) {
             val name = TripExportNaming.fileName(dayStart = dayStart, exportAt = System.currentTimeMillis())
             TripExportStore.saveToGallery(context, bitmap, name).getOrThrow()
         }
+    }
+
+    /**
+     * 取导出用的底图：选级与屏内一致，瓦片并发受限，整体带 [TILE_BUDGET_MS] 超时。
+     * 一块都没取到就返回 null（等于关底图，不留一张空底色图）。
+     */
+    private suspend fun loadLayer(
+        context: Context,
+        samples: List<TraceSample>,
+        source: TileSource,
+    ): TripMapLayer? {
+        val view = TileMath.view(
+            samples = samples,
+            widthDp = TripExportRenderer.MAP_WIDTH_DP.toDouble(),
+            heightDp = TripExportRenderer.MAP_HEIGHT_DP.toDouble(),
+            paddingDp = TripExportRenderer.MAP_PADDING_DP.toDouble(),
+            maxZoom = source.maxZoom,
+        ) ?: return null
+        val refs = TileMath.visibleTiles(
+            view,
+            TripExportRenderer.MAP_WIDTH_DP.toDouble(),
+            TripExportRenderer.MAP_HEIGHT_DP.toDouble(),
+        )
+        if (refs.isEmpty()) return null
+        val fetcher = TileFetcher.get(context)
+        val gate = Semaphore(TileFetcher.MAX_PARALLEL)
+        val tiles = withTimeoutOrNull(TILE_BUDGET_MS) {
+            coroutineScope {
+                refs.map { ref ->
+                    async {
+                        gate.withPermit {
+                            fetcher.load(source, ref)?.let { bitmap ->
+                                BitmapTile(bitmap, ref.leftDp, ref.topDp, ref.sizeDp)
+                            }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+        } ?: return null
+        if (tiles.isEmpty()) return null
+        return TripMapLayer(view, tiles, source.attribution)
     }
 }
 
