@@ -270,6 +270,22 @@ class PageTrackerTest {
     }
 
     @Test
+    fun `窗口事件自带文本优先于可见文本 并过滤应用名`() {
+        // 窗口标题=应用名，event.text 给出真正的页面名
+        assertEquals(
+            "朋友圈",
+            PageTitle.resolve("微信", listOf("微信", "聊天"), "微信", listOf("朋友圈")),
+        )
+        // event.text 只有应用名 → 跳过它，落到可见文本
+        assertEquals(
+            "聊天",
+            PageTitle.resolve("微信", listOf("聊天"), "微信", listOf("微信")),
+        )
+        // 都没有 → 窗口标题兜底（应用名）
+        assertEquals("微信", PageTitle.resolve("微信", emptyList(), "微信"))
+    }
+
+    @Test
     fun `标题截断到 30 字`() {
         val long = "一".repeat(40)
         val title = PageTitle.resolve(long, emptyList())

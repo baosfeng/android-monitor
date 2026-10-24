@@ -198,6 +198,10 @@ open class MonitorAccessibilityService : AccessibilityService() {
         val pageTexts = collectVisibleTexts(pageRoot)
         val windowTitle = pageRoot?.window?.title?.toString()
         pageRoot?.recycle()
+        // 窗口事件自带的文本：TYPE_WINDOW_STATE_CHANGED 的 event.text 第一个通常就是标题栏文字，
+        // 比「窗口标题（=应用名）」和「遍历节点找文本」都更接近用户看到的页面名，且不用对照表。
+        val eventTexts = event.text?.mapNotNull { it?.toString()?.takeIf { t -> t.isNotBlank() } }
+            ?: emptyList()
         observePage(
             packageName,
             lastActivityClass,
@@ -206,6 +210,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
             now,
             PageEvent.SOURCE_WINDOW_EVENT,
             windowTitle,
+            eventTexts,
         )
 
     }

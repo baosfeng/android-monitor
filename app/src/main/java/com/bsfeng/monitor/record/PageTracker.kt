@@ -102,6 +102,7 @@ class PageTracker(
      * @param appName 应用显示名；null 时沿用同包名旧状态的缓存
      * @param source 来源标识，见 [PageEvent.SOURCE_WINDOW_EVENT] 等
      * @param windowTitle 无障碍窗口标题（优先级最高；拿不到传 null）
+     * @param eventTexts 窗口事件自带的文本（TYPE_WINDOW_STATE_CHANGED 的 event.text，通常就是标题栏文字）
      * @param collectTitle 是否采集页面标题（对应「记录页面标题」开关，关闭时既不采集也不落库）
      * @return 需要落库的事件（0~2 条），调用方按顺序写入
      */
@@ -113,6 +114,7 @@ class PageTracker(
         source: String,
         timestamp: Long,
         windowTitle: String? = null,
+        eventTexts: List<String> = emptyList(),
         collectTitle: Boolean = true,
     ): List<PageEvent> {
         val previous = current
@@ -129,7 +131,11 @@ class PageTracker(
         val pageKey = fingerprint(packageName, activity, normalized)
         val resolvedAppName = appName
             ?: previous?.takeIf { it.packageName == packageName }?.appName
-        val title = if (collectTitle) PageTitle.resolve(windowTitle, visibleTexts, resolvedAppName) else null
+        val title = if (collectTitle) {
+            PageTitle.resolve(windowTitle, visibleTexts, resolvedAppName, eventTexts)
+        } else {
+            null
+        }
         val next = PageState(
             packageName = packageName,
             activityClass = activity,
@@ -285,28 +291,38 @@ object PageTitle {
     private fun isStatusLike(text: String): Boolean = text.all { ch -> ch.isDigit() || ch in " :%.-+" }
 
     /**
-     * 提取标题：**窗口标题有信息时优先，否则看顶部可见文本**，最后回落到窗口标题（通常是应用名）。
+     * 提取标题，优先级：
+     * 1. 窗口标题（有信息时，即不等于应用名）；
+     * 2. **窗口事件自带的文本** event.text（TYPE_WINDOW_STATE_CHANGED 的第一个文本通常就是标题栏文字，
+     *    这是系统给的语义，不用维护任何 App 对照表）；
+     * 3. 顶部可见文本（有文本节点的页面，如设置 / 浏览器）；
+     * 4. 窗口标题兜底（通常等于应用名，由 PageHandler 决定只显示应用名，不拼「抖音 · 抖音」）。
      *
-     * 窗口标题在多数 App 里就等于应用名（「微信」「抖音」），直接用它会把页面名吞掉；
-     * 因此 [appName] 与窗口标题相同就跳过它，改看可见文本，只有文本也取不到时才把应用名当标题
-     * （由 PageHandler 决定只显示应用名，不拼「抖音 · 抖音」）。
+     * 应用名本身不是页面标题，每一级都要把它过滤掉。
      */
-    fun resolve(windowTitle: String?, visibleTexts: List<String>, appName: String? = null): String? {
+    fun resolve(
+        windowTitle: String?,
+        visibleTexts: List<String>,
+        appName: String? = null,
+        eventTexts: List<String> = emptyList(),
+    ): String? {
         val win = clean(windowTitle)
-        val texts = visibleTexts.mapNotNull { raw ->
-            collapseWhitespace(raw).takeIf { it.isNotEmpty() }
-        }
-        // 应用名本身不是页面标题
-        val titles = if (appName.isNullOrBlank()) texts else texts.filter { it != appName }
         if (win != null && win != appName) return win
-        // 顶部可见标题：遍历顺序靠前、长度合适、不是操作词 / 状态栏文本
-        titles.firstOrNull { text ->
+        pickTitle(eventTexts, appName)?.let { return it }
+        pickTitle(visibleTexts, appName)?.let { return it }
+        return win
+    }
+
+    /** 从一组文本里挑标题：跳过应用名 / 操作词 / 状态栏样式文本；取不到再逐级放宽。 */
+    private fun pickTitle(raw: List<String>, appName: String?): String? {
+        val texts = raw.mapNotNull { text ->
+            collapseWhitespace(text).takeIf { it.isNotEmpty() }
+        }.filter { appName.isNullOrBlank() || it != appName }
+        texts.firstOrNull { text ->
             text.length in 2..MAX_LENGTH && text !in NOISE && !isStatusLike(text)
         }?.let { return it }
-        // 兜底：首个非空短文本（可能是 1 字标题）
-        titles.firstOrNull { it.length <= MAX_LENGTH }?.let { return it }
-        // 再兜底：窗口标题（通常是应用名），否则首个文本截断到上限
-        return win ?: titles.firstOrNull()?.take(MAX_LENGTH)?.trim()
+        texts.firstOrNull { it.length <= MAX_LENGTH }?.let { return it }
+        return texts.firstOrNull()?.take(MAX_LENGTH)?.trim()
     }
 
     private fun clean(raw: String?): String? {
