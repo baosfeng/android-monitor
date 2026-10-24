@@ -9,7 +9,7 @@ import org.json.JSONObject
 // 只负责「长什么样」与「怎么序列化」，不含任何网络动作。
 
 /** 只允许留在本地、任何情况下都不随事件上传的 detail 键。 */
-internal val LOCAL_ONLY_DETAIL_KEYS: Set<String> = setOf("page_title", "address")
+internal val LOCAL_ONLY_DETAIL_KEYS: Set<String> = setOf("address")
 
 /** 上报事件批次（`POST api/monitor/events` 的请求体）。 */
 data class EventsBatch(
@@ -28,7 +28,7 @@ data class EventsBatch(
                 put("timestamp", record.timestamp)
                 record.duration?.let { put("duration", it) }
                 put("label", record.label)
-                // 隐私红线：页面标题 / 地址只存本地，上报前剔除（见 SECURITY.md / docs/事件采集）
+                // 隐私红线：定位地址只存本地，上报前剔除（见 SECURITY.md / docs/事件采集）
                 record.detail?.let { detail ->
                     val reportable = JSONObject()
                     for (key in detail.keys) {

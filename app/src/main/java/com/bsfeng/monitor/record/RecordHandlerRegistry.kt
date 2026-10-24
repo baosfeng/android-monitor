@@ -7,7 +7,6 @@ import com.bsfeng.monitor.domain.model.BatteryHandler
 import com.bsfeng.monitor.domain.model.ChargingHandler
 import com.bsfeng.monitor.domain.model.LocationHandler
 import com.bsfeng.monitor.domain.model.PackageHandler
-import com.bsfeng.monitor.domain.model.PageHandler
 import com.bsfeng.monitor.domain.model.PhoneStateHandler
 import com.bsfeng.monitor.domain.model.PowerSaveHandler
 import com.bsfeng.monitor.domain.model.RecordHandler
@@ -43,7 +42,6 @@ class RecordHandlerRegistry {
             register(AirplaneHandler())
             register(PhoneStateHandler())
             register(LocationHandler())
-            register(PageHandler())
         }
     }
 }

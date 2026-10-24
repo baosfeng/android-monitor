@@ -24,8 +24,7 @@ import kotlin.math.sqrt
  * - `dayEnd <= dayStart` → 抛 [IllegalArgumentException]（调用方 bug，不静默返回空）；
  * - 落在 `[dayStart, dayEnd)` 之外的记录整条丢弃（跨界记录不做半截推断）；
  * - 空输入 → 空 [DayTimeline]（segments 为空，UI 走空态）；
- * - 定位点时间断档 >1 小时 → 断开同一停留段（不让「盲区」被算成同一地点连续停留）；
- * - 页面记录只在能识别出 App 时计数；无法识别的直接忽略，不产生占位条目。
+ * - 定位点时间断档 >1 小时 → 断开同一停留段（不让「盲区」被算成同一地点连续停留）。
  */
 class TripAggregator(
     internal val dayStart: Long,
@@ -43,7 +42,6 @@ class TripAggregator(
 
         val points = ArrayList<LocationPoint>()
         val usage = ArrayList<UsageSlice>()
-        val pages = ArrayList<PageSample>()
         val wifis = ArrayList<WifiSample>()
 
         // 单遍分类：记录已按时间升序，后续三个分支都不再重新排序
@@ -53,16 +51,15 @@ class TripAggregator(
             val name = typeNameOf(record.type)
             when {
                 isLocation(record, name) -> record.toPoint()?.let { points.add(it) }
-                isPage(record, name) -> record.toPageSample()?.let { pages.add(it) }
                 name == TripAggregatorRules.NAME_APP_USAGE -> record.toUsage(dayStart)?.let { usage.add(it) }
                 name == TripAggregatorRules.NAME_WIFI -> record.toWifi()?.let { wifis.add(it) }
             }
         }
 
         return if (points.size >= TripAggregatorRules.MIN_POINTS_FOR_GPS) {
-            fromGps(points, usage, pages)
+            fromGps(points, usage)
         } else {
-            fromDevice(usage, pages, wifis)
+            fromDevice(usage, wifis)
         }
     }
 
@@ -71,7 +68,6 @@ class TripAggregator(
     private fun fromGps(
         points: List<LocationPoint>,
         usage: List<UsageSlice>,
-        pages: List<PageSample>,
     ): DayTimeline {
         val runs = buildRuns(points)
         val stayRunIndexes = runs.indices.filter { runs[it].isStay() }
@@ -101,7 +97,6 @@ class TripAggregator(
                         end = stayEnd,
                         place = place,
                         topApps = topApps(usage, stayStart, stayEnd),
-                        pages = tallyPages(pages, stayStart, stayEnd),
                     ),
                 )
                 activeMs += stayEnd - stayStart

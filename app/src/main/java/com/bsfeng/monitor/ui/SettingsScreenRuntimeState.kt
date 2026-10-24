@@ -42,7 +42,6 @@ internal class SettingsScreenRuntime(
     val adSkipOn: Boolean,
     val financeOn: Boolean,
     val transportOn: Boolean,
-    val pageTraceOn: Boolean,
     val locationOn: Boolean,
     val quotaOn: Boolean,
     val quotaSettings: QuotaSettings,

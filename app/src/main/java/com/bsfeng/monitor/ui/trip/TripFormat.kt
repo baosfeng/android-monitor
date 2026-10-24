@@ -5,7 +5,6 @@ import com.bsfeng.monitor.domain.trip.DaySegment
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.Gap
 import com.bsfeng.monitor.domain.trip.Move
-import com.bsfeng.monitor.domain.trip.PageTally
 import com.bsfeng.monitor.domain.trip.Place
 import com.bsfeng.monitor.domain.trip.Stay
 import com.bsfeng.monitor.domain.trip.TRIP_DAY_MS
@@ -16,8 +15,8 @@ import java.util.Locale
 /**
  * 行程页 / 概览行程卡共用的**纯文案**函数（无 Compose、无 IO、可单测）。
  *
- * 口径与原型 s16 对齐：时长「X 小时 Y 分」、移动「约 1.2 公里」、未记录「不做推断」；
- * 页面轨迹只输出「App · 页面切换 N 次」，不出现任何页面名称或文本（指纹档）。
+ * 口径与原型 s16 对齐：时长「X 小时 Y 分」、移动「约 1.2 公里」、未记录「不做推断」。
+ * 页面轨迹已下线：不再输出任何页面切换次数或页面名称。
  */
 
 /** 时间轴两端：窗口终点显示 24:00，而不是次日的 00:00。 */
@@ -149,21 +148,6 @@ fun otherAppsNote(apps: List<UsageSlice>): String {
     val rest = apps.drop(APPS_IN_SHEET)
     if (rest.isEmpty()) return ""
     return "其他 " + rest.size + " 个应用 · 合计 " + formatSpanText(rest.sumOf { it.ms })
-}
-
-/** 停留段内的一行页面轨迹：只给 App 与切换次数。 */
-fun pageTrackLine(tally: PageTally): String = tally.app + " · 页面切换 " + tally.switches + " 次"
-
-/**
- * 时间轴行里的轨迹摘要：**只给 Top1**，其余折叠成「等 N 个应用」。
- *
- * 拼两条会被行内的省略号吞掉第二个 App 的次数（语义被截断），所以宁可不拼：
- * 完整列表在停留详情抽屉里。
- */
-fun pageTrackText(stay: Stay): String {
-    val top = stay.pages.firstOrNull() ?: return ""
-    val total = stay.pages.size
-    return if (total > 1) pageTrackLine(top) + " · 等 " + total + " 个应用" else pageTrackLine(top)
 }
 
 /**

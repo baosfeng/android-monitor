@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.domain.trip
 
 // 从 domain/trip/TripAggregator.kt 拆出：Record → 内部结构的解析辅助
-// （定位点 / 使用段 / 页面采样 / WiFi 采样）以及类型判定。
+// （定位点 / 使用段 / WiFi 采样）以及类型判定。
 // 纯函数：解析失败一律返回 null，由聚合层跳过该条记录。
 
 import com.bsfeng.monitor.domain.model.Record
@@ -37,13 +37,6 @@ internal fun Record.toUsage(dayStart: Long): UsageSlice? {
     )
 }
 
-internal fun Record.toPageSample(): PageSample? {
-    val app = detail?.get("app_name")?.takeIf { it.isNotBlank() }
-        ?: label.substringBefore('›').trim().ifBlank { null }
-        ?: return null
-    return PageSample(app, timestamp)
-}
-
 internal fun Record.toWifi(): WifiSample? {
     val ssid = detail?.get("ssid")?.takeIf { it.isNotBlank() }
         ?: label.substringAfter("WiFi", "").trim().trimStart('：', ':').ifBlank { null }
@@ -57,13 +50,8 @@ internal fun isLocation(record: Record, name: String): Boolean {
     return d["lat"] != null && d["lng"] != null
 }
 
-internal fun isPage(record: Record, name: String): Boolean {
-    if (name == TripAggregatorRules.NAME_PAGE) return true
-    return record.detail?.containsKey("page_key") == true
-}
-
 /**
- * 类型名走 `::class.simpleName`：PAGE 由并行任务在 `RecordType` 里新增，
- * 这里按名字识别，聚合层不依赖它的编译期符号（避免与另一路的改动互相锁死）。
+ * 类型名走 `::class.simpleName`：聚合层按名字识别记录类型，不依赖编译期符号，
+ * 与 app 侧 `RecordType` 的增删解耦。
  */
 internal fun typeNameOf(type: RecordType): String = type::class.simpleName ?: ""

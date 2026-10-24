@@ -75,7 +75,6 @@ fun DesignTokens.eventColor(type: RecordType): Color = when (type) {
     RecordType.AIRPLANE -> chart5
     RecordType.PHONE_STATE -> chart6
     RecordType.LOCATION -> success
-    RecordType.PAGE -> chart8
 }
 
 /** 强色填充上的文字色（替代散落的 Color.White）。 */

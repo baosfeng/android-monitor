@@ -13,9 +13,6 @@ sealed interface RecordType {
     data object PHONE_STATE : RecordType
     data object LOCATION : RecordType
 
-    /** App 内页面切换（指纹档：detail 只存包名/应用名/指纹，不含任何页面文本）。 */
-    data object PAGE : RecordType
-
     companion object {
 
         /**
@@ -29,14 +26,14 @@ sealed interface RecordType {
          */
         val CANONICAL_NAMES: List<String> = listOf(
             "SCREEN", "CHARGING", "APP_USAGE", "WIFI", "AUDIO", "BATTERY",
-            "PACKAGE", "POWER_SAVE", "AIRPLANE", "PHONE_STATE", "LOCATION", "PAGE",
+            "PACKAGE", "POWER_SAVE", "AIRPLANE", "PHONE_STATE", "LOCATION",
         )
 
         private val BY_NAME: Map<String, RecordType> = mapOf(
             "SCREEN" to SCREEN, "CHARGING" to CHARGING, "APP_USAGE" to APP_USAGE,
             "WIFI" to WIFI, "AUDIO" to AUDIO, "BATTERY" to BATTERY,
             "PACKAGE" to PACKAGE, "POWER_SAVE" to POWER_SAVE, "AIRPLANE" to AIRPLANE,
-            "PHONE_STATE" to PHONE_STATE, "LOCATION" to LOCATION, "PAGE" to PAGE,
+            "PHONE_STATE" to PHONE_STATE, "LOCATION" to LOCATION,
         )
 
         /**
@@ -65,7 +62,7 @@ sealed interface RecordType {
          * action 的唯一归属反推表（仅收「一个 action 只可能属于一个类型」的取值）。
          *
          * 刻意排除有歧义的 action：`OFF`（SCREEN / POWER_SAVE / AIRPLANE 都在用）、
-         * `ON`（POWER_SAVE / AIRPLANE）、`CHANGED`（BATTERY / PAGE）—— 猜错比不猜更糟。
+         * `ON`（POWER_SAVE / AIRPLANE）—— 猜错比不猜更糟。
          */
         private val BY_ACTION: Map<String, RecordType> = mapOf(
             "UNLOCKED" to SCREEN, "AD_SKIPPED" to SCREEN,
@@ -77,7 +74,6 @@ sealed interface RecordType {
             "ADDED" to PACKAGE, "REMOVED" to PACKAGE, "REPLACED" to PACKAGE,
             "RINGING" to PHONE_STATE, "OFFHOOK" to PHONE_STATE, "IDLE" to PHONE_STATE,
             "COORDINATE" to LOCATION,
-            "ENTER" to PAGE,
         )
 
         /** 规范名（写库用）。未知入参不应出现；真出现时返回空串而不是类名。 */
@@ -93,7 +89,6 @@ sealed interface RecordType {
             AIRPLANE -> "AIRPLANE"
             PHONE_STATE -> "PHONE_STATE"
             LOCATION -> "LOCATION"
-            PAGE -> "PAGE"
         }
 
         /**

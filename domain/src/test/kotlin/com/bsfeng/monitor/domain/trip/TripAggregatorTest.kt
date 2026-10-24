@@ -457,30 +457,6 @@ class TripAggregatorTest {
         TripAggregator(DAY_START, DAY_START)
     }
 
-    // ─────────────────────── 页面轨迹（指纹档）计数 ───────────────────────
-
-    @Test
-    fun `页面切换只按 App 计数不带页面文本`() {
-        val records = buildList {
-            for (m in 0..60 step 5) add(loc(at(m), 30.0000, 120.0000))
-            // PAGE 类型由并行任务新增：这里用 detail 里的 page_key 识别，验证聚合层的识别兜底
-            add(page(at(10), "微信", "a3f2"))
-            add(page(at(20), "微信", "b1c4"))
-            add(page(at(30), "抖音", "c81d"))
-            add(page(at(35), "小红书", "7e05"))
-        }
-
-        val timeline = aggregator.aggregate(records)
-
-        val pages = timeline.stays.single().pages
-        // 抽屉要完整列表：不因为摘要只取 Top1 就把后面的 App 丢掉
-        assertEquals(3, pages.size)
-        assertEquals("微信", pages[0].app)
-        assertEquals(2, pages[0].switches)
-        assertEquals("抖音", pages[1].app)
-        assertEquals(1, pages[1].switches)
-    }
-
     // ────────────────────────────── 构造辅助 ──────────────────────────────
 
     private fun at(minutes: Int): Long = DAY_START + minutes * MIN_MS
@@ -522,15 +498,6 @@ class TripAggregatorTest {
         timestamp = ts,
         label = "连接 WiFi：$ssid",
         detail = mapOf("ssid" to ssid),
-    )
-
-    private fun page(ts: Long, app: String, key: String): Record = Record(
-        id = "page-$ts-$key",
-        type = RecordType.SCREEN,
-        action = "CHANGED",
-        timestamp = ts,
-        label = "$app › 页面 $key",
-        detail = mapOf("app_name" to app, "page_key" to key),
     )
 
     private companion object {

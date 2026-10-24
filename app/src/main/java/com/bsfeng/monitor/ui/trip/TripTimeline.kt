@@ -79,8 +79,6 @@ private fun SegmentRow(
         is Move -> Icons.Outlined.SwapHoriz
         is Gap -> Icons.Outlined.History
     }
-    val trackText = (segment as? Stay)?.let { pageTrackText(it) }.orEmpty()
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -137,16 +135,6 @@ private fun SegmentRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (trackText.isNotEmpty()) {
-                Spacer(Modifier.height(t.space1))
-                Text(
-                    text = trackText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.fg2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
         if (onSelect != null) {
             Icon(

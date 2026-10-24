@@ -142,7 +142,6 @@ private fun SettingsFeatureGroup(rt: SettingsScreenRuntime) {
         adSkipOn = rt.adSkipOn,
         financeOn = rt.financeOn,
         transportOn = rt.transportOn,
-        pageTraceOn = rt.pageTraceOn,
         locationOn = rt.locationOn,
         quotaOn = rt.quotaOn,
         quotaSettings = rt.quotaSettings,

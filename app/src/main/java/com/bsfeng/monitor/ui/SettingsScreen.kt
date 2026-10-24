@@ -286,9 +286,9 @@ private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRunti
         SettingsSubPage.FEATURE -> {
             val on = listOf(
                 rt.liveOn, rt.adSkipOn, rt.financeOn, rt.transportOn,
-                rt.quotaOn, rt.pageTraceOn, rt.locationOn,
+                rt.quotaOn, rt.locationOn,
             ).count { it }
-            TailNum("开 $on / 7")
+            TailNum("开 $on / 6")
         }
         SettingsSubPage.GENERAL -> Badge(
             text = if (rt.isPaused) "已暂停" else "运行中",

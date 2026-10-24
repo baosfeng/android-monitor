@@ -68,10 +68,7 @@ fun EventDetailSheet(
             DetailRow("发生时间", formatClockSec(record.timestamp), first = true)
             DetailRow("事件类型", recordTypeLabel(record.type) + " · " + record.action)
             DetailRow("持续时长", formatDurationMs(record.duration))
-            // 页面标题 / 地址都是仅本地字段：有才显示，没有就整行省略（不写占位符）
-            record.detail?.get("page_title")?.takeIf { it.isNotBlank() }?.let {
-                DetailRow("页面标题", it)
-            }
+            // 地址是仅本地字段：有才显示，没有就整行省略（不写占位符）
             record.detail?.get("address")?.takeIf { it.isNotBlank() }?.let {
                 DetailRow("地址", it)
             }
