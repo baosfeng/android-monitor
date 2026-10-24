@@ -210,10 +210,10 @@ class PageTrackerTest {
     // ===== label 可读性（P1：8 位裸 hash → 页面 #短码） =====
 
     @Test
-    fun `label 用页面短码 且短码取自完整指纹前 4 位`() {
+    fun `label 不再拼页面指纹 只显示应用与页面`() {
         val handler = PageHandler()
         val detail = mapOf("app_name" to "微信", "page_key" to "c74c11eb")
-        assertEquals("微信 · 页面 #c74c", handler.createLabel("ENTER", detail))
+        assertEquals("微信 · 页面", handler.createLabel("ENTER", detail))
         assertEquals("c74c", detail.getValue("page_key").take(PageHandler.SHORT_KEY_LENGTH))
         // label 不改 detail：完整 8 位指纹原样保留给去重与聚合
         assertEquals("c74c11eb", detail["page_key"])
@@ -224,11 +224,11 @@ class PageTrackerTest {
         val handler = PageHandler()
         // 缺 app_name → 回落包名
         assertEquals(
-            "com.tencent.mm · 页面 #c74c",
+            "com.tencent.mm · 页面",
             handler.createLabel("CHANGED", mapOf("package_name" to "com.tencent.mm", "page_key" to "c74c11eb"))
         )
-        // 无 page_key → 只剩应用名（不编造编号）
-        assertEquals("微信", handler.createLabel("CHANGED", mapOf("app_name" to "微信")))
+        // 无 page_key → 仍然是「应用 · 页面」
+        assertEquals("微信 · 页面", handler.createLabel("CHANGED", mapOf("app_name" to "微信")))
         // 两者都缺 → 兜底文案
         assertEquals("页面", handler.createLabel("CHANGED", null))
     }
@@ -315,15 +315,15 @@ class PageTrackerTest {
     }
 
     @Test
-    fun `label 使用页面标题 缺失时回落指纹短码`() {
+    fun `label 使用页面标题 缺失时只显示应用与页面`() {
         val handler = PageHandler()
         assertEquals(
             "微信 · 朋友圈",
             handler.createLabel("CHANGED", mapOf("app_name" to "微信", "page_title" to "朋友圈", "page_key" to "c74c11eb")),
         )
-        // 标题为空串 = 没采到：回落页面编号
+        // 标题为空串 = 没采到：不拼指纹，只显示「应用 · 页面」
         assertEquals(
-            "微信 · 页面 #c74c",
+            "微信 · 页面",
             handler.createLabel("CHANGED", mapOf("app_name" to "微信", "page_title" to " ", "page_key" to "c74c11eb")),
         )
         // 只有标题没有应用名：只显示标题
