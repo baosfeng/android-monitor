@@ -4,7 +4,6 @@ import com.bsfeng.monitor.domain.trip.Basis
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.Gap
 import com.bsfeng.monitor.domain.trip.Move
-import com.bsfeng.monitor.domain.trip.PageTally
 import com.bsfeng.monitor.domain.trip.Place
 import com.bsfeng.monitor.domain.trip.Stay
 import com.bsfeng.monitor.domain.trip.TRIP_DAY_MS
@@ -14,7 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 行程页文案口径（纯函数）：时长 / 端点 24:00 / 结论句 / 段标题 / 指纹档轨迹行。 */
+/** 行程页文案口径（纯函数）：时长 / 端点 24:00 / 结论句 / 段标题。 */
 class TripFormatTest {
 
     private val dayStart = START
@@ -29,7 +28,6 @@ class TripFormatTest {
                 end = dayStart + 9 * HOUR,
                 place = home,
                 topApps = listOf(UsageSlice("微信", "com.tencent.mm", dayStart, dayStart + HOUR, HOUR)),
-                pages = listOf(PageTally("微信", 12), PageTally("抖音", 8)),
             ),
             Move(
                 start = dayStart + 9 * HOUR,
@@ -203,18 +201,6 @@ class TripFormatTest {
         val move = Move(dayStart, dayStart + HOUR, null, null, 0.0)
         assertEquals("移动", segmentTitle(move))
         assertEquals("移动 1 小时", segmentSubtitle(move))
-    }
-
-    @Test
-    fun `页面轨迹只给 App 与切换次数`() {
-        assertEquals("微信 · 页面切换 12 次", pageTrackLine(PageTally("微信", 12)))
-        val stay = day.stays.first()
-        // P2：只给 Top1，其余折叠成计数，避免省略号把第二个 App 的次数吞掉
-        assertEquals("微信 · 页面切换 12 次 · 等 2 个应用", pageTrackText(stay))
-        assertTrue("不得出现页面名称", pageTrackText(stay).none { it == '›' })
-        assertEquals("只有一条时不加「等 N 个」", pageTrackLine(PageTally("微信", 3)), pageTrackText(
-            stay.copy(pages = listOf(PageTally("微信", 3))),
-        ))
     }
 
     @Test

@@ -86,32 +86,6 @@ internal fun TripStaySheet(
             }
         }
 
-        if (stay.pages.isNotEmpty()) {
-            Spacer(Modifier.height(t.space4))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "页面轨迹",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = t.muted,
-                    modifier = Modifier.weight(1f),
-                )
-                Badge("切换 " + stay.pages.sumOf { it.switches } + " 次")
-            }
-            Spacer(Modifier.height(t.space2))
-            stay.pages.forEach { tally ->
-                Text(
-                    text = pageTrackLine(tally),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = t.fg2,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = t.tapMin)
-                        .padding(vertical = t.space2),
-                )
-            }
-            MetaText("只记录 App 与切换次数，不记录页面名称与内容。")
-        }
-
         Spacer(Modifier.height(t.space4))
         OutlinedButton(
             onClick = onDismiss,
