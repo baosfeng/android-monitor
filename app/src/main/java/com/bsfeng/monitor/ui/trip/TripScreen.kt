@@ -129,6 +129,10 @@ fun TripScreen(
                         item(key = "trip-summary") {
                             TripSummaryCard(timeline = current)
                         }
+                        item(key = "trip-map") {
+                            // 同一批 records 算出的轨迹采样；坐标投影在卡的 drawScope 里按画布尺寸做
+                            TripMapCard(timeline = current, samples = state.trace)
+                        }
                         item(key = "trip-timeline") {
                             TripTimelineCard(
                                 timeline = current,
