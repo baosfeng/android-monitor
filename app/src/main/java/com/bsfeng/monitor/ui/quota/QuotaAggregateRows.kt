@@ -28,21 +28,105 @@ data class QuotaExcludedProvider(
 )
 
 /**
+ * 聚合视图的状态，与单家视图 `QuotaBody` 的四态对应，外加一格「配了但没有可排序项」。
+ *
+ * 「没有可排序的行」必须拆开，因为三种情况下用户要做的事完全不同：
+ * - 正在查（[Loading]）：等结果，别动配置；
+ * - 一家都没配（[NotConfigured]）：去配置；
+ * - 配了但全失败（[AllFailed]）：看原因、重试。
+ *
+ * 早期只判断 `!hasRanked` 就一律画「去配置 provider」的空态，于是首次进页面（请求在跑）
+ * 和接口全失败时都在喊「去配置」——用户会去重填一遍本来正确的 Key。
+ *
+ * [NoRankable] 单独占一格：凭据是对的、请求也成功了，只是返回的额度算不出百分比
+ * （纯余额型），喊「去配置」同样是错的，这里只能引导去看 provider 设置。
+ */
+enum class QuotaAggregateStatus {
+    /** 首次数据还没回来（请求在跑，或还没下发）：骨架。 */
+    Loading,
+
+    /** 一家都没配凭据：空态 + 去配置。 */
+    NotConfigured,
+
+    /** 已配置但没有一条能算出百分比：解释口径，不给「去配置」。 */
+    NoRankable,
+
+    /** 配了但全部查询失败：错误态 + 原因 + 重试。 */
+    AllFailed,
+
+    /** 有可排序的行（部分失败家带 stale 照常上榜，属正常内容）。 */
+    Content,
+}
+
+/**
  * 聚合视图的一屏数据。
  *
  * @param latestFetchedAtEpochSecond 各家里最近一次成功拉取的时刻，用于「更新于 HH:mm」；
  *   取 max 而不是当前选中家，否则切家时这行会往回跳
+ * @param configuredCount 已配置凭据（余额或用量任一）的家数：区分「一个都没配」与「配了但没数据」
+ * @param awaitingDataCount 已配置但一条数据都还没取回的家数：>0 说明该等，不该喊去配置
+ * @param failureMessage 全部已配置家都失败时的原因；部分失败为 null（那走榜单 + stale）
  */
 data class QuotaAggregateSnapshot(
     val rows: List<QuotaAggregateRow> = emptyList(),
     val excluded: List<QuotaExcludedProvider> = emptyList(),
     val latestFetchedAtEpochSecond: Long = 0L,
+    val configuredCount: Int = 0,
+    val awaitingDataCount: Int = 0,
+    val failureMessage: String? = null,
 ) {
-    /** 一家都没进榜 = 空态（灰行不算榜单内容）。 */
+    /** 一家都没进榜 = 没有可排序内容（灰行不算榜单内容）。 */
     val hasRanked: Boolean get() = rows.isNotEmpty()
 
     /** 结论条取第 1 名。 */
     val leader: QuotaAggregateRow? get() = rows.firstOrNull()
+
+    /** 界面只消费这个，判定逻辑本身在 [aggregateStatusOf] 里由单测钉住。 */
+    val status: QuotaAggregateStatus get() = aggregateStatusOf(this)
+}
+
+/**
+ * 状态判定（纯函数）。
+ *
+ * 顺序即优先级：**先「有数据」再「在等数据」最后才「失败 / 没配 / 无可排序项」**。
+ * 先看榜单是因为部分失败时行还在，这时换骨架或错误页会把已经查到的数据抹掉；
+ * 等数据排在失败前面，是因为「一家失败、另一家还在查」时结论未定，提前报错会误导重试。
+ */
+fun aggregateStatusOf(snapshot: QuotaAggregateSnapshot): QuotaAggregateStatus = when {
+    snapshot.hasRanked -> QuotaAggregateStatus.Content
+    snapshot.awaitingDataCount > 0 -> QuotaAggregateStatus.Loading
+    snapshot.failureMessage != null -> QuotaAggregateStatus.AllFailed
+    // 走到这里：没报错、也没在等，却排不出行 → 凭据配了，只是额度算不出百分比
+    snapshot.configuredCount > 0 -> QuotaAggregateStatus.NoRankable
+    else -> QuotaAggregateStatus.NotConfigured
+}
+
+/** 有凭据（余额或用量任一）：聚合只认这种家，没凭据的连请求都不会发。 */
+private fun QuotaRepository.ProviderState.isConfigured(): Boolean =
+    balanceConfigured || usageConfigured
+
+/**
+ * 这家是不是「数据还没影」。
+ *
+ * `loading` 之外还要认「已配置、从未取回、也没报错、且当前不在加载」：
+ * 进页面到请求真正下发之间有一个空窗（`LaunchedEffect` 在首次组合之后才跑），
+ * 只认 `loading` 的话这一帧会闪一下空态——正是要修的那个误报。
+ */
+private fun QuotaRepository.ProviderState.isAwaitingData(): Boolean =
+    items.isEmpty() && usage == null && errorMessage == null &&
+        (loading || fetchedAtEpochSecond == 0L)
+
+/**
+ * 全部失败时的提示文案；只要有一家没报错就返回 null（那是部分失败，走榜单 + 旧数据标签）。
+ *
+ * 各家原因相同时只显示一条：真实的失败原因通常同源（断网、令牌过期），
+ * 拼成「A；B；C」反而让用户以为是三件不同的事。
+ */
+fun aggregateFailureMessage(messages: List<String?>): String? {
+    if (messages.isEmpty()) return null
+    val present = messages.map { it?.trim()?.takeIf(String::isNotEmpty) }
+    if (present.any { it == null }) return null
+    return present.filterNotNull().distinct().joinToString("；")
 }
 
 /** 单家映射：纯函数，测试直接构造 [QuotaRepository.ProviderState] 断言。 */
@@ -84,17 +168,29 @@ fun excludedOf(
 fun excludedNote(items: List<QuotaItem>): String =
     if (items.all { it.isPlainBalance }) "余额型 · 无总量，算不出百分比" else "无总量 · 算不出百分比"
 
-/** 聚合入口：进榜的行交给 domain 聚合器，灰行在 app 层另算（聚合器只返回进榜行）。 */
+/**
+ * 聚合入口：进榜的行交给 domain 聚合器，灰行在 app 层另算（聚合器只返回进榜行）。
+ *
+ * 四态所需的三个计数也在这里算出：界面上只该有一处知道「哪些家算已配置」，
+ * 散到 Composable 里就会出现「空态和错误态的判据不一致」。
+ */
 fun buildAggregateSnapshot(
     providers: List<QuotaProvider>,
     states: Map<String, QuotaRepository.ProviderState>,
-): QuotaAggregateSnapshot = QuotaAggregateSnapshot(
-    rows = QuotaAggregator.aggregate(providers.map { aggregateInputOf(it, states[it.id]) }),
-    excluded = providers.mapNotNull { excludedOf(it, states[it.id]) },
-    latestFetchedAtEpochSecond = providers.maxOfOrNull {
-        states[it.id]?.fetchedAtEpochSecond ?: 0L
-    } ?: 0L,
-)
+): QuotaAggregateSnapshot {
+    val configured = providers.mapNotNull { states[it.id] }.filter { it.isConfigured() }
+    return QuotaAggregateSnapshot(
+        rows = QuotaAggregator.aggregate(providers.map { aggregateInputOf(it, states[it.id]) }),
+        excluded = providers.mapNotNull { excludedOf(it, states[it.id]) },
+        latestFetchedAtEpochSecond = providers.maxOfOrNull {
+            states[it.id]?.fetchedAtEpochSecond ?: 0L
+        } ?: 0L,
+        configuredCount = configured.size,
+        awaitingDataCount = configured.count { it.isAwaitingData() },
+        // 只有已配置的家都报错才算「全部失败」：没配置的家本来就不发请求
+        failureMessage = aggregateFailureMessage(configured.map { it.errorMessage }),
+    )
+}
 
 /** 统计行：`3 家参与排序 · 更新于 9:41`。 */
 fun aggregateMetaText(

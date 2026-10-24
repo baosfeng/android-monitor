@@ -113,6 +113,8 @@ fun QuotaScreen(
                             snapshot = snapshot,
                             onOpenProvider = viewModel::onOpenProviderFromAggregate,
                             onConfigure = onOpenSettings,
+                            // 聚合视图没有「当前选中家」，重试就是刷全部（节流在数据层）
+                            onRetry = viewModel::onRefresh,
                         )
                     }
                 } else {
