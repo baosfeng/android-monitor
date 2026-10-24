@@ -161,74 +161,29 @@ fun AdScreen(
                     verticalArrangement = Arrangement.spacedBy(t.space3),
                 ) {
                     item(key = "stat") {
-                        AppCard(modifier = Modifier.staggerEnterAt(0)) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                MetaText("近 7 天累计跳过")
-                                MetaText(
-                                    "日均 " + String.format(Locale.US, "%.1f", totalCount / 7.0) + " 次",
-                                )
-                            }
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                AnimatedNumber(
-                                    value = totalCount,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = t.fg,
-                                )
-                                Spacer(Modifier.width(t.space1))
-                                Text("次", style = MaterialTheme.typography.labelMedium, color = t.muted)
-                            }
-                            if (confirmedCount > 0) {
-                                Spacer(Modifier.height(t.space1))
-                                MetaText("其中已确认 " + confirmedCount + " 次")
-                            }
-                            Spacer(Modifier.height(t.space3))
-                            Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                                StatBox(
-                                    label = "平均耗时",
-                                    value = if (avgCost != null) avgCost.toString() + " ms" else PLACEHOLDER,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                StatBox(
-                                    label = "规则命中",
-                                    value = ruleHit.toString() + " / " + totalCount,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                StatBox(
-                                    label = "累计节省",
-                                    value = if (savedTotal != null) formatSaved(savedTotal) else PLACEHOLDER,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                            Spacer(Modifier.height(t.space3))
-                            Button(
-                                onClick = {
-                                    if (onOpenRules != null) onOpenRules() else toast.show("跳过规则入口：设置 → 跳过规则")
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(t.radiusPill),
-                            ) {
-                                Text("查看跳过规则", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
+                        AdStatsCard(
+                            totalCount = totalCount,
+                            confirmedCount = confirmedCount,
+                            avgCost = avgCost,
+                            ruleHit = ruleHit,
+                            savedTotal = savedTotal,
+                            onOpenRules = {
+                                if (onOpenRules != null) {
+                                    onOpenRules()
+                                } else {
+                                    toast.show("跳过规则入口：设置 → 跳过规则")
+                                }
+                            },
+                            modifier = Modifier.staggerEnterAt(0),
+                        )
                     }
 
                     item(key = "trend") {
-                        AppCard(modifier = Modifier.staggerEnterAt(1)) {
-                            CardHead("近 7 天跳过趋势", labels.first() + " – " + labels.last())
-                            Spacer(Modifier.height(t.space3))
-                            BarChart(
-                                values = dailyCounts7,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(t.chartH),
-                            )
-                            ChartAxisLabels(labels)
-                            Spacer(Modifier.height(t.space2))
-                            MetaText(peakNote(dailyCounts7))
-                        }
+                        AdTrendCard(
+                            dailyCounts7 = dailyCounts7,
+                            labels = labels,
+                            modifier = Modifier.staggerEnterAt(1),
+                        )
                     }
 
                     item(key = "records-head") {
@@ -317,46 +272,14 @@ fun AdScreen(
                     onDismiss = { selected = null },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = record.displayName + " · 跳过成功",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = t.fg,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Badge(record.method.label + "匹配")
-                    }
-                    Spacer(Modifier.height(t.space3))
-                    DetailRow("发生时间", formatClockSec(record.timestampMs), first = true)
-                    DetailRow("命中规则", record.selector.ifBlank { PLACEHOLDER })
-                    DetailRow("响应耗时", record.costMs?.let { it.toString() + " ms" } ?: PLACEHOLDER)
-                    DetailRow(
-                        "结果",
-                        when (record.confirmed) {
-                            true -> "已进入正片 · 未误触"
-                            false -> "点击后广告仍在（未确认）"
-                            null -> "未复核"
+                    AdRecordDetailContent(
+                        record = record,
+                        onClose = { selected = null },
+                        onCopySelector = {
+                            clipboard.setText(AnnotatedString(record.selector))
+                            toast.show("已复制选择器")
                         },
                     )
-                    DetailRow("包名", record.packageName.ifBlank { PLACEHOLDER })
-                    Spacer(Modifier.height(t.space4))
-                    Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
-                        OutlinedButton(
-                            onClick = { selected = null },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(t.radiusPill),
-                        ) { Text("关闭", style = MaterialTheme.typography.labelLarge) }
-                        Button(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(record.selector))
-                                toast.show("已复制选择器")
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(t.radiusPill),
-                        ) { Text("复制选择器", style = MaterialTheme.typography.labelLarge) }
-                    }
                 }
             }
         }
@@ -369,70 +292,3 @@ fun AdScreen(
     }
 }
 
-private fun methodSubtitle(method: SkipMethod, costMs: Long?): String {
-    val head = when (method) {
-        SkipMethod.COORD -> "坐标点击兜底"
-        SkipMethod.A11Y -> "无障碍事件兜底"
-        else -> "规则匹配"
-    }
-    return head + " · " + (costMs?.let { it.toString() + " ms" } ?: PLACEHOLDER)
-}
-
-private fun formatSaved(ms: Long): String {
-    val totalSec = ms / 1000
-    return (totalSec / 60).toString() + "m" + String.format(Locale.US, "%02d", totalSec % 60) + "s"
-}
-
-private fun peakNote(values: List<Float>): String {
-    var idx = 0
-    var max = 0f
-    values.forEachIndexed { i, v ->
-        if (v > max) {
-            max = v
-            idx = i
-        }
-    }
-    if (max <= 0f) return "近 7 天暂无跳过记录"
-    return "峰值 " + (idx + 1) + " 日 · " + max.toInt() + " 次"
-}
-
-@Composable
-private fun SkipRecordRow(record: SkipRecord, onClick: () -> Unit) {
-    val t = LocalDesignTokens.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = t.rowMinH)
-            .clickable { onClick() }
-            .padding(horizontal = t.space4, vertical = t.space2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = formatClockSec(record.timestampMs),
-            style = MaterialTheme.typography.labelMedium,
-            color = t.muted,
-            modifier = Modifier.width(t.space12),
-        )
-        Spacer(Modifier.width(t.space1))
-        // s03 跳过记录行以应用为主体（原型 .s03 列表每行都是 .app-icon）→ 用应用自身图标，
-        // 取不到真实图标时 AppIcon 内部回落「品牌色底 + 应用首字」。旧记录缺 package_name 时同样走兜底。
-        AppIcon(packageName = record.packageName.takeIf { it.isNotBlank() }, appName = record.displayName)
-        Spacer(Modifier.width(t.space3))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = record.displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = t.fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = methodSubtitle(record.method, record.costMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = t.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}

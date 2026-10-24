@@ -78,32 +78,6 @@ private val EMPTY_TRACK_RADIUS = 2.dp
 private const val EMPTY_HEAT_TEXT = "暂无数据"
 
 /**
- * 进屏后的入场窗口（ms）：进屏 / 切筛选后这段时间内首次挂载的行才播入场动画。
- * `dur-page(340) + stagger(24) × STAGGER_MAX_STEPS(12) = 628ms` 是首屏整段的动画时长，
- * 窗口取 600ms 保证「进屏那一屏」能播完整套错峰，又不让后续滚动继续起动画。
- */
-private const val ENTER_WINDOW_MS = 600L
-
-/**
- * 入场窗口开关：进屏 / 切筛选后重新打开，窗口内首次挂载的组头与行才播入场动画。
- *
- * 有意**不用** Compose 状态：只有「之后挂载」的行需要读它，屏上已挂载的行不该因为
- * 窗口关闭而多重组一次（窗口开关与 UI 无关，只是组合期的瞬时判定）。
- */
-private class EnterWindow {
-    var open: Boolean = true
-        private set
-
-    fun reopen() {
-        open = true
-    }
-
-    fun close() {
-        open = false
-    }
-}
-
-/**
  * s02 实时事件流（原型 .open-design/08-prototype.html → parts/s02-live.html）。
  *
  * 结构：页头 → 类型 chip 筛选 → 24 格热力条 → 按小时分组的时间线（组头吸顶）→ 事件详情底部抽屉。
@@ -176,30 +150,8 @@ fun MainScreen(
                 onSelect = { filterIndex = it },
             )
 
-            Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    MetaText("今日活跃强度")
-                    MetaText(peakText)
-                }
-                Spacer(Modifier.height(t.space2))
-                if (hasIntensity) {
-                    HeatBar(
-                        values = state.hourlyIntensity,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(t.heatHeight),
-                    )
-                } else {
-                    // 无数据空轨：HeatBar 在 values 全 0 时 max 兜底为 1f → level=0 → chart-1
-                    // 最深的满高柱（设备实证的 P0 假象），这里改为 2dp 浅色空轨（圆角与热力格一致）
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(EMPTY_TRACK_HEIGHT)
-                            .background(t.borderSoft, RoundedCornerShape(EMPTY_TRACK_RADIUS)),
-                    )
-                }
-            }
+            LiveIntensityPanel(state.hourlyIntensity)
+
             Spacer(Modifier.height(t.space2))
 
             StateContainer(
@@ -286,39 +238,14 @@ fun MainScreen(
                     onDismiss = { selected = null },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = record.label.ifBlank { PLACEHOLDER },
-                            style = MaterialTheme.typography.titleSmall,
-                            color = t.fg,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Badge(recordTypeLabel(record.type))
-                    }
-                    Spacer(Modifier.height(t.space3))
-                    DetailRow("发生时间", formatClockSec(record.timestamp), first = true)
-                    DetailRow("事件类型", recordTypeLabel(record.type) + " · " + record.action)
-                    DetailRow("持续时长", formatDurationMs(record.duration))
-                    DetailRow("包名", record.detailOr("package_name"))
-                    DetailRow("来源", recordSubtitle(record))
-                    Spacer(Modifier.height(t.space4))
-                    Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
-                        OutlinedButton(
-                            onClick = { selected = null },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(t.radiusPill),
-                        ) { Text("关闭", style = MaterialTheme.typography.labelLarge) }
-                        Button(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(record.toString()))
-                                toast.show("已复制事件 JSON")
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(t.radiusPill),
-                        ) { Text("复制 JSON", style = MaterialTheme.typography.labelLarge) }
-                    }
+                    LiveEventDetailContent(
+                        record = record,
+                        onClose = { selected = null },
+                        onCopyJson = {
+                            clipboard.setText(AnnotatedString(record.toString()))
+                            toast.show("已复制事件 JSON")
+                        },
+                    )
                 }
             }
         }

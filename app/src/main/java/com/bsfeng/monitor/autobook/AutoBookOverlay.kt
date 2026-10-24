@@ -1,45 +1,31 @@
 package com.bsfeng.monitor.autobook
 
 import android.accessibilityservice.AccessibilityService
-import android.graphics.PixelFormat
-import android.os.Build
 import android.util.Log
-import android.view.Gravity
-import android.view.WindowInsets
 import android.view.WindowManager
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.ViewCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
 import com.bsfeng.monitor.ui.components.performConfirmHaptic
+
+// 从 autobook/AutoBookOverlay.kt 拆出：浮窗的展示 / 隐藏与 Compose 内容。
+// 窗口参数在 OverlayWindowConfig，宿主生命周期在 OverlayLifecycleOwner。
 
 /**
  * 自动记账确认浮窗。
@@ -130,36 +116,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
             }
         }
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            // 可点击但默认不拿输入焦点；不铺满就会退回「只包住底部卡片」，遮罩无法覆盖状态栏。
-            // 编辑「说明」时由 setImeFocusable(true) 临时去掉 NOT_FOCUSABLE，否则输入法不会弹。
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            // 无障碍叠加窗口默认可能走软件渲染（真机实测 isHardwareAccelerated=false）：
-            // 全屏遮罩 + 分类网格滚动每帧都要 CPU 重绘，必然卡。显式请求硬件加速；
-            // 部分 ROM 会忽略这个 flag，所以下面 attach 后仍会打印实际值。
-            @Suppress("DEPRECATION")
-            flags = flags or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
-            // 键盘弹出时把窗口顶小，确认卡跟着上移；未编辑时窗口不可聚焦，键盘不会弹
-            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // 声明「不吃系统栏 inset」：否则窗口会被状态栏 / 手势条挤小，遮罩铺不满
-                fitInsetsTypes = 0
-                layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-            } else {
-                @Suppress("DEPRECATION")
-                layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
+        val params = OverlayWindowConfig.build()
 
         val mountedAt = System.currentTimeMillis()
         try {
@@ -214,38 +171,13 @@ class AutoBookOverlay(private val service: AccessibilityService) {
         val params = windowParams ?: return
         if (imeFocusable == focusable) return
         imeFocusable = focusable
-        params.flags = if (focusable) {
-            // 编辑态：去掉 NOT_FOCUSABLE 才能拿输入焦点；同时去掉 NO_LIMITS，
-            // 否则窗口不受显示边界约束，ADJUST_RESIZE 不一定让位给键盘
-            params.flags and
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv() and
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS.inv()
-        } else {
-            // 退出编辑：恢复「不可聚焦 + 铺满无边」的展示态
-            params.flags or
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            applyImeInsets(params, focusable)
-        }
+        OverlayWindowConfig.applyFocusable(params, focusable)
         try {
             windowManager.updateViewLayout(view, params)
             Log.d(TAG, "窗口输入焦点切换: focusable=$focusable")
         } catch (e: Exception) {
             Log.w(TAG, "切换窗口输入焦点失败: ${e.message}")
         }
-    }
-
-    /**
-     * 只 fit IME（不 fit 状态栏 / 手势条）：键盘弹出时窗口被顶小，遮罩仍铺满除键盘外的屏幕。
-     *
-     * 单独封装 + [RequiresApi]：`WindowInsets.Type` 是 API 30 才有的类型，直接在通用代码里
-     * 引用会在 API 29 上冒类解析风险。
-     */
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun applyImeInsets(params: WindowManager.LayoutParams, focusable: Boolean) {
-        params.fitInsetsTypes = if (focusable) WindowInsets.Type.ime() else 0
     }
 
     /** 移除浮窗（幂等）。只有服务销毁等系统级生命周期会直接走这里，用户操作只能通过两个按钮。 */
@@ -309,34 +241,6 @@ class AutoBookOverlay(private val service: AccessibilityService) {
                     onImeFocusRequest = onImeFocusRequest,
                 )
             }
-        }
-    }
-
-    /**
-     * 浮窗的宿主生命周期。
-     *
-     * Compose 在 Activity 之外渲染（WindowManager 直挂 View）时不会有人替它推进
-     * Lifecycle / SavedState，必须自己提供一个最小实现，否则 ComposeView 会直接崩在
-     * 「ViewTreeLifecycleOwner not found」。
-     */
-    private class OverlayLifecycleOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
-
-        private val registry = LifecycleRegistry(this)
-        private val savedStateController = SavedStateRegistryController.create(this)
-        private val store = ViewModelStore()
-
-        override val lifecycle: Lifecycle get() = registry
-        override val viewModelStore: ViewModelStore get() = store
-        override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
-
-        fun attach() {
-            savedStateController.performRestore(null)
-            registry.currentState = Lifecycle.State.RESUMED
-        }
-
-        fun destroy() {
-            registry.currentState = Lifecycle.State.DESTROYED
-            store.clear()
         }
     }
 

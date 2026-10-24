@@ -1,11 +1,14 @@
 package com.bsfeng.monitor.finance
 
+// 来源：原 finance/FinanceManager.kt；职责：记账业务统一入口（协程 API + 单例 + 变更信号）。
+// 余额副作用见 FinanceAccountBalance，统计见 FinanceStatsService，种子/迁移见 FinanceCategorySeeder，
+// 预算见 FinanceBudgetService，旧版说明清理见 FinanceLegacyCleanup。
+
 import android.content.Context
 import androidx.core.content.edit
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
-import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,12 @@ class FinanceManager internal constructor(context: Context) {
 
     private val mutationSignal = FinanceMutationSignal()
 
+    private val accountBalance = FinanceAccountBalance(dao)
+    private val statsService = FinanceStatsService(dao)
+    private val categorySeeder = FinanceCategorySeeder(dao)
+    private val budgetService = FinanceBudgetService(dao)
+    private val legacyCleanup = FinanceLegacyCleanup(dao)
+
     /**
      * 进程内数据变更信号（[FinanceMutationSignal.version]）。
      *
@@ -46,7 +55,7 @@ class FinanceManager internal constructor(context: Context) {
 
     suspend fun addTransaction(tx: Transaction): Long = withContext(Dispatchers.IO) {
         val id = dao.insertTransaction(tx)
-        applyTransactionEffect(tx, sign = 1.0)
+        accountBalance.applyTransactionEffect(tx, sign = 1.0)
         notifyChanged()
         id
     }
@@ -54,7 +63,7 @@ class FinanceManager internal constructor(context: Context) {
     suspend fun deleteTransaction(id: Long): Unit = withContext(Dispatchers.IO) {
         val existing = dao.getTransactionById(id)
         dao.deleteTransaction(id)
-        if (existing != null) applyTransactionEffect(existing, sign = -1.0)
+        if (existing != null) accountBalance.applyTransactionEffect(existing, sign = -1.0)
         notifyChanged()
     }
 
@@ -62,39 +71,9 @@ class FinanceManager internal constructor(context: Context) {
         val old = dao.getTransactionById(tx.id)
         dao.updateTransaction(tx)
         // 先按旧值回冲、再按新值计入：换账户 / 改金额 / 支出↔转账互转都由这一条路径覆盖
-        if (old != null) applyTransactionEffect(old, sign = -1.0)
-        applyTransactionEffect(tx, sign = 1.0)
+        if (old != null) accountBalance.applyTransactionEffect(old, sign = -1.0)
+        accountBalance.applyTransactionEffect(tx, sign = 1.0)
         notifyChanged()
-    }
-
-    /** 交易对账户余额的影响（收入为正、支出为负；退款交易 amount 本身为负，故回冲为正）。 */
-    private fun balanceEffectOf(tx: Transaction): Double = if (tx.isIncome) tx.amount else -tx.amount
-
-    /**
-     * 把一笔交易对余额的影响作用于账户（[sign] = 1 计入、-1 回冲）。
-     *
-     * 转账（[Transaction.isTransfer]）是**两个账户的一进一出**：转出账户扣、转入账户加。
-     * 转入账户缺失（老记录 / 用户未选）时只动转出侧，不让差额凭空落到别的账户。
-     */
-    private suspend fun applyTransactionEffect(tx: Transaction, sign: Double) {
-        if (tx.isTransfer) {
-            applyBalanceDelta(tx.accountName, -tx.amount * sign)
-            applyBalanceDelta(tx.toAccountName, tx.amount * sign)
-            return
-        }
-        applyBalanceDelta(tx.accountName, balanceEffectOf(tx) * sign)
-    }
-
-    /**
-     * 账户余额随交易增减（接上原先零调用的 [FinanceDao.updateAccountBalance]）。
-     *
-     * 口径：种子账户从 0 起算，导入账户以熊猫记账 t_card.money 为快照起点，
-     * 之后由本 App 记录的交易按签名金额增减；账户名对不上（空串 / 账户已删）时跳过。
-     */
-    private suspend fun applyBalanceDelta(accountName: String, delta: Double) {
-        if (accountName.isBlank() || delta == 0.0) return
-        val account = dao.getAccountByName(accountName) ?: return
-        dao.updateAccountBalance(account.id, account.balance + delta)
     }
 
     suspend fun getTransactionById(id: Long): Transaction? = withContext(Dispatchers.IO) {
@@ -121,35 +100,11 @@ class FinanceManager internal constructor(context: Context) {
     // ========== 统计 ==========
 
     suspend fun getMonthlyStats(yearMonth: String): FinanceStats = withContext(Dispatchers.IO) {
-        val totalExpense = dao.getMonthlyExpenseTotal(yearMonth)
-        val totalIncome = dao.getMonthlyIncomeTotal(yearMonth)
-        val transactions = dao.getTransactionsByMonth(yearMonth)
-        val budgets = dao.getBudgetsByMonth(yearMonth)
-
-        // 找 Top 分类：按一级汇总（二级归到父级），与统计页/预算口径一致
-        val breakdown = CategoryTree(dao.getAllCategories())
-            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, 0))
-        val topCategory = if (breakdown.isEmpty()) "" else breakdown.entries.first().key
-
-        // 预算进度
-        val overallBudget = budgets.find { it.isOverall }
-        val budgetProgress = if (overallBudget != null && overallBudget.budgetAmount > 0) {
-            (totalExpense / overallBudget.budgetAmount).toFloat().coerceIn(0f, 1f)
-        } else 0f
-
-        FinanceStats(
-            totalIncome = totalIncome,
-            totalExpense = totalExpense,
-            transactionCount = transactions.size,
-            budgetProgress = budgetProgress,
-            topCategory = topCategory
-        )
+        statsService.monthlyStats(yearMonth)
     }
 
     suspend fun getCategoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> = withContext(Dispatchers.IO) {
-        // 交易可能存二级名（电商）或一级名（购物）：统一归到一级，环形图/图例只出现一级
-        CategoryTree(dao.getAllCategories())
-            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, type))
+        statsService.categoryBreakdown(yearMonth, type)
     }
 
     suspend fun getAvailableMonths(): List<String> = withContext(Dispatchers.IO) {
@@ -167,37 +122,12 @@ class FinanceManager internal constructor(context: Context) {
     }
 
     suspend fun seedDefaultCategories() = withContext(Dispatchers.IO) {
-        if (dao.getAllCategories().isNotEmpty()) return@withContext
-        insertCatalog()
-    }
-
-    /** 插入一级 + 二级分类（调用方负责事务；一级先插拿到 id，二级挂 parentId） */
-    private fun insertCatalog() {
-        for ((type, seeds) in listOf(0 to CategoryCatalog.expense, 1 to CategoryCatalog.income)) {
-            seeds.forEachIndexed { index, seed ->
-                val topId = dao.insertCategory(
-                    Category(name = seed.name, type = type, parentId = -1, sortOrder = index)
-                )
-                if (topId > 0) {
-                    seed.children.forEachIndexed { childIndex, child ->
-                        dao.insertCategory(
-                            Category(
-                                name = child,
-                                type = type,
-                                parentId = topId,
-                                sortOrder = childIndex,
-                            )
-                        )
-                    }
-                }
-            }
-        }
+        categorySeeder.seedDefaultCategories()
     }
 
     /**
      * 分类体系一次性迁移（旧扁平 → 新一级/二级）。
      *
-     * 事务内：清空分类表 → 插入新体系 → 交易/预算按 [CategoryMigration] 归到一级。
      * 用落盘标记保证只跑一次；失败整体回滚，旧分类与账目保持原样，下次启动重试。
      */
     suspend fun migrateCategoryTreeOnce() {
@@ -212,31 +142,13 @@ class FinanceManager internal constructor(context: Context) {
      * @return 改写的交易/预算行数
      */
     internal suspend fun migrateCategoryTree(): Int = withContext(Dispatchers.IO) {
-        val updated = dao.runInTransaction {
-            dao.clearCategories()
-            insertCatalog()
-            var count = 0
-            for ((name, type) in dao.getDistinctTransactionCategoryTypes()) {
-                val target = CategoryMigration.mapLegacy(name, type)
-                count += dao.updateTransactionCategory(name, target)
-            }
-            // 预算只有支出分类（总预算 category_name 为空，查询已跳过）
-            for (name in dao.getDistinctBudgetCategoryNames()) {
-                count += dao.updateBudgetCategory(name, CategoryMigration.mapLegacy(name, 0))
-            }
-            count
-        }
+        val updated = categorySeeder.migrateCategoryTree()
         if (updated > 0) notifyChanged()
         updated
     }
 
     suspend fun seedDefaultAccounts() = withContext(Dispatchers.IO) {
-        val existing = dao.getAllAccounts()
-        if (existing.isNotEmpty()) return@withContext
-
-        for ((index, acc) in Account.defaultAccounts.withIndex()) {
-            dao.insertAccount(acc.copy(sortOrder = index))
-        }
+        categorySeeder.seedDefaultAccounts()
     }
 
     // ========== 账户 ==========
@@ -258,24 +170,11 @@ class FinanceManager internal constructor(context: Context) {
      * 若直接使用，预算进度条会长期停在陈旧值上。
      */
     suspend fun getMonthlyBudget(yearMonth: String): List<Budget> = withContext(Dispatchers.IO) {
-        val budgets = dao.getBudgetsByMonth(yearMonth)
-        if (budgets.isEmpty()) return@withContext emptyList()
-
-        val expenseTotal = dao.getMonthlyExpenseTotal(yearMonth)
-        // 预算按一级：二级支出（电商）要先归到父级（购物）才能对上分类预算行
-        val breakdown = CategoryTree(dao.getAllCategories())
-            .aggregateByTopLevel(dao.getMonthlyCategoryBreakdown(yearMonth, TYPE_EXPENSE))
-        budgets.map { budget ->
-            val spent = if (budget.isOverall) expenseTotal
-            else breakdown[budget.categoryName] ?: 0.0
-            budget.copy(spentAmount = spent)
-        }
+        budgetService.monthlyBudget(yearMonth, TYPE_EXPENSE)
     }
 
     suspend fun setBudget(month: String, categoryName: String, amount: Double): Unit = withContext(Dispatchers.IO) {
-        val existing = dao.getBudgetsByMonth(month)
-        val spent = existing.find { it.categoryName == categoryName }?.spentAmount ?: 0.0
-        dao.upsertBudget(Budget(month = month, categoryName = categoryName, budgetAmount = amount, spentAmount = spent))
+        budgetService.setBudget(month, categoryName, amount)
         notifyChanged()
     }
 
@@ -316,20 +215,7 @@ class FinanceManager internal constructor(context: Context) {
      * @return 实际清空的条数
      */
     internal suspend fun cleanLegacyAggregatedRemarks(): Int = withContext(Dispatchers.IO) {
-        val rows = dao.getAutoTransactionsWithRemark()
-        if (rows.isEmpty()) return@withContext 0
-        var cleaned = 0
-        dao.runInTransaction {
-            for (tx in rows) {
-                val channelLabel = LegacyRemarkCleaner.channelLabelOf(tx.source)
-                if (LegacyRemarkCleaner.isLegacyAggregate(
-                        tx.remark, tx.merchant, tx.productDesc, tx.payMethod, channelLabel
-                    )
-                ) {
-                    cleaned += dao.clearTransactionRemark(tx.id)
-                }
-            }
-        }
+        val cleaned = legacyCleanup.cleanLegacyAggregatedRemarks()
         if (cleaned > 0) notifyChanged()
         cleaned
     }
