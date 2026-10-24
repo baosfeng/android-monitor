@@ -159,10 +159,14 @@ class RecordStore(private val db: DatabaseHelper) {
             val list = mutableListOf<Record>()
             while (cursor.moveToNext()) {
                 val detailStr = cursor.getString(cursor.getColumnIndexOrThrow("detail"))
+                val action = cursor.getString(cursor.getColumnIndexOrThrow("action"))
+                val rawType = cursor.getString(cursor.getColumnIndexOrThrow("type"))
                 list.add(Record(
                     id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    type = RecordType.fromString(cursor.getString(cursor.getColumnIndexOrThrow("type"))) ?: RecordType.SCREEN,
-                    action = cursor.getString(cursor.getColumnIndexOrThrow("action")),
+                    // 规范名 → 历史混淆名 → 按 action 推断；全不认识才走兜底并记一次日志
+                    type = RecordType.fromStored(rawType, action)
+                        ?: UnknownStoredType.fallback(rawType, action),
+                    action = action,
                     timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
                     duration = if (cursor.isNull(cursor.getColumnIndexOrThrow("duration"))) null
                         else cursor.getLong(cursor.getColumnIndexOrThrow("duration")),
@@ -177,6 +181,28 @@ class RecordStore(private val db: DatabaseHelper) {
             }
             list
         }
+    }
+}
+
+/**
+ * 库里的 `type` 既不规范、也推不出类型时的最后兜底。
+ *
+ * 为什么不直接抛：`Record.type` 是非空 [RecordType]，而 UI 侧对 [RecordType] 的 `when`
+ * 是穷尽的（图标/文案/配色），新增 `UNKNOWN` 子类型会让那些表漏项。所以这里记日志 + 记计数，
+ * 再落到 SCREEN —— **不静默**：每个不同的 (type, action) 组合只报一次，避免高频轮询刷屏。
+ */
+private object UnknownStoredType {
+    private val seen = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    fun fallback(raw: String?, action: String): RecordType {
+        val key = "${raw.orEmpty()}|$action"
+        if (seen.putIfAbsent(key, true) == null) {
+            android.util.Log.w(
+                "RecordStore",
+                "无法识别的记录类型：type=$raw action=$action → 按 SCREEN 兜底（此组合只报一次）",
+            )
+        }
+        return RecordType.SCREEN
     }
 }
 

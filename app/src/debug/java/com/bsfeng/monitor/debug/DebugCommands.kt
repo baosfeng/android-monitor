@@ -68,6 +68,9 @@ sealed interface DebugCommand {
 enum class DebugScreen(val value: String, val appTabIndex: Int?) {
     OVERVIEW("overview", 0),
     LIVE("live", 1),
+
+    /** 跳过广告页（Tab 下标 2）——验收截图直接落到 s03，不用手动点 Tab。 */
+    AD("ad", 2),
     SETTINGS("settings", 5),
 
     /** 没有 Tab 下标：走独立的 debug 宿页（见 `DebugTripActivity`）。 */
@@ -149,13 +152,10 @@ object DebugCommands {
     /**
      * `RecordType` 的全部类型名（`state` 的计数要列出 0 值，不能只列「有记录的」）。
      *
-     * 与 `RecordType.fromString` 是同一份口径；新增类型时两边一起改（没有可反射枚举的入口，
-     * 用 `sealedSubclasses` 会引入 kotlin-reflect，项目零第三方依赖）。
+     * 直接用 [RecordType.CANONICAL_NAMES]：落库契约只有一份，新增类型时不会再出现
+     * 「fromString 认识、CLI 提示里没有」的两份口径。
      */
-    val KNOWN_TYPES: List<String> = listOf(
-        "SCREEN", "CHARGING", "APP_USAGE", "WIFI", "AUDIO", "BATTERY",
-        "PACKAGE", "POWER_SAVE", "AIRPLANE", "PHONE_STATE", "LOCATION", "PAGE",
-    )
+    val KNOWN_TYPES: List<String> = RecordType.CANONICAL_NAMES
 
     fun parse(extras: Map<String, Any?>): ParseResult {
         val rawCmd = extras[EXTRA_CMD]
