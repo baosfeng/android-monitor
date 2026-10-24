@@ -38,17 +38,22 @@ enum class LocationPermissionStatus {
  *
  * 两级取点，都不常驻：
  * 1. 先读系统缓存（`getLastKnownLocation`，零功耗）；有可用点直接用；
- * 2. 缓存为空时发起**一次**主动定位（network → gps，总预算 5 秒），拿到首个可用点后立即释放。
+ * 2. 缓存为空 / 移动模式下缓存不够新时发起**一次**主动定位（network → gps，总预算 5 秒），
+ *    拿到首个可用点后立即释放。
  *
- * 由已有的 1 分钟 [com.bsfeng.monitor.service.AlarmReceiver] 心跳驱动，不新开前台服务、
- * 不注册常驻 Listener。
+ * 采样节奏按模式自适应（[LocationPace]）：移动 10 秒、静止 3 分钟。由两条链路驱动：
+ * - 无障碍前台服务里的 10 秒轻量定时器：只在 [SampleMode.MOVING] 时补采；
+ * - 已有 1 分钟 [com.bsfeng.monitor.service.AlarmReceiver] 心跳：兜底（服务被杀后仍按静止节奏补点）。
+ *
+ * 不新开前台服务、不注册常驻 Listener。
  *
  * 异常契约：未授权 / 无 LocationManager / provider 不可用 / 系统抛 SecurityException
- * 一律回调 null，不向调用方抛异常（心跳链路不能被定位拖垮）。
+ * 一律回调 null，不向调用方抛异常（心跳与轮询链路不能被定位拖垮）。
  */
 class LocationCollector internal constructor(
     private val env: Env,
     private val throttle: LocationThrottle = LocationThrottle(),
+    private val modeTracker: LocationModeTracker = LocationModeTracker(),
 ) {
 
     /** 采集依赖：可替换以便单测（生产实现见 [AndroidEnv]）。 */
@@ -83,8 +88,25 @@ class LocationCollector internal constructor(
         return LocationPolicy.pick(env.readCached(), nowMs)
     }
 
+    /** 当前采样模式（进程内状态；重启回静止）。 */
+    val mode: SampleMode get() = modeTracker.mode
+
+    /** 当前模式对应的采样间隔（毫秒），供定时器与日志使用。 */
+    fun samplingIntervalMs(): Long = LocationPace.intervalOf(mode)
+
     /**
-     * 节流采集（异步）：10 分钟内最多交付一次非空结果。
+     * 「现在该不该采」的纯判断：只读节流与模式状态，**不读定位、不发起请求**。
+     *
+     * 10 秒定时器在静止时只用它判断（然后什么都不做），移动时才真的去采。
+     */
+    fun shouldSampleNow(nowMs: Long = System.currentTimeMillis()): Boolean =
+        throttle.canAcquire(nowMs, samplingIntervalMs())
+
+    /**
+     * 按模式间隔采集（异步）：移动 10 秒 / 静止 3 分钟。
+     *
+     * 移动时优先用系统缓存，但缓存必须「新鲜」（≤ [LocationPace.CACHE_FRESH_MS]）——
+     * 10 秒节奏靠 30 分钟内的旧缓存会画出原地打转的假轨迹，这时宁愿主动定位一次。
      *
      * @param onResult **恰好回调一次**（缓存命中时同步回调，需要主动定位时异步回调）；
      *   被节流 / 未授权 / 超时 / 过滤后为空都回 null
@@ -93,8 +115,10 @@ class LocationCollector internal constructor(
         nowMs: Long = System.currentTimeMillis(),
         onResult: (LocationSample?) -> Unit,
     ) {
-        if (!throttle.canAcquire(nowMs)) {
-            env.log("定位节流中：${LocationPolicy.MIN_INTERVAL_MS / 60_000} 分钟内已采过", false)
+        val modeAtStart = mode
+        val interval = LocationPace.intervalOf(modeAtStart)
+        if (!throttle.canAcquire(nowMs, interval)) {
+            env.log("定位节流中：${modeAtStart.name} 间隔 ${interval / 1000}s 内已采过", false)
             onResult(null)
             return
         }
@@ -104,15 +128,16 @@ class LocationCollector internal constructor(
             return
         }
         val cached = LocationPolicy.pick(env.readCached(), nowMs)
-        if (cached != null) {
-            throttle.markAcquired(nowMs)
-            env.log("定位命中缓存 provider=${cached.provider} accuracy=${cached.accuracyMeters}", false)
-            onResult(cached)
+        val cachedFresh = cached != null && nowMs - cached.timeMs <= LocationPace.CACHE_FRESH_MS
+        // 静止：缓存只要没过期就用；移动：必须够新鲜，否则主动定位一次（10 秒节奏不能被旧点糊弄）
+        if (cached != null && (modeAtStart == SampleMode.STILL || cachedFresh)) {
+            deliver(cached, nowMs, modeAtStart, onResult)
+            env.log("定位命中缓存 provider=${cached.provider} accuracy=${cached.accuracyMeters} age=${nowMs - cached.timeMs}ms", false)
             return
         }
         env.log(
-            "定位缓存为空，发起单次主动定位（${LocationPolicy.ACTIVE_PROVIDERS.joinToString()} / " +
-                "${LocationPolicy.ACTIVE_FIX_BUDGET_MS}ms）",
+            "定位发起单次主动定位（${LocationPolicy.ACTIVE_PROVIDERS.joinToString()} / " +
+                "${LocationPolicy.ACTIVE_FIX_BUDGET_MS}ms，模式=$modeAtStart）",
             false,
         )
         try {
@@ -120,8 +145,7 @@ class LocationCollector internal constructor(
                 if (sample == null) {
                     onResult(null)
                 } else {
-                    throttle.markAcquired(nowMs)
-                    onResult(sample)
+                    deliver(sample, nowMs, modeAtStart, onResult)
                 }
             }
         } catch (e: Exception) {
@@ -133,10 +157,38 @@ class LocationCollector internal constructor(
 
     /** 兼容旧调用点：只读缓存的同步节流版（不做主动定位）。 */
     fun collectThrottled(nowMs: Long = System.currentTimeMillis()): LocationSample? {
-        if (!throttle.canAcquire(nowMs)) return null
+        if (!throttle.canAcquire(nowMs, samplingIntervalMs())) return null
         val sample = collect(nowMs) ?: return null
-        throttle.markAcquired(nowMs)
+        deliver(sample, nowMs, mode) { }
         return sample
+    }
+
+    /**
+     * 交付一个点：更新模式（状态机）→ 占节流窗口 → 回调。
+     *
+     * 顺序有意义：模式要在下一次「该不该采」判断前更新，否则移动的第一个点之后还会按静止间隔等。
+     */
+    private fun deliver(
+        sample: LocationSample,
+        nowMs: Long,
+        modeAtStart: SampleMode,
+        onResult: (LocationSample?) -> Unit,
+    ) {
+        val updated = modeTracker.onSample(sample)
+        throttle.markAcquired(nowMs)
+        if (updated != modeAtStart) {
+            env.log(
+                "定位采样模式切换：${modeAtStart.name} → ${updated.name}" +
+                    "（间隔 ${LocationPace.intervalOf(updated) / 1000}s）",
+                false,
+            )
+        }
+        env.log(
+            "定位采样成功 provider=${sample.provider} accuracy=${sample.accuracyMeters}" +
+                " 模式=$updated 间隔=${LocationPace.intervalOf(updated) / 1000}s",
+            false,
+        )
+        onResult(sample)
     }
 
     /** 权限是否至少给了前台定位（后台定位缺失时后台采样会拿到 null，见 [status]）。 */
@@ -155,8 +207,9 @@ class LocationCollector internal constructor(
         /**
          * 进程内单例。
          *
-         * 节流状态（上次落库时间）必须跨心跳保留：心跳每分钟来一次，每次 new 一个采集器会让
-         * 10 分钟节流失效，变成每分钟一条坐标。懒加载 + 双重校验，与仓库其它单例一致。
+         * 节流状态（上次落库时间）与采样模式必须跨心跳 / 定时器保留：每次 new 一个采集器会让
+         * 节流失效，变成每次调用都落一条坐标，模式也会一直停在静止。懒加载 + 双重校验，
+         * 与仓库其它单例一致。
          */
         fun get(context: Context): LocationCollector = instance ?: synchronized(this) {
             instance ?: LocationCollector(context.applicationContext).also { instance = it }
