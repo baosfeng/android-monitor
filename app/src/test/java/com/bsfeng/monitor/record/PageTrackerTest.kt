@@ -233,6 +233,74 @@ class PageTrackerTest {
         assertEquals("页面", handler.createLabel("CHANGED", null))
     }
 
+    // ===== 页面标题（P1：页面 #短码 → 真实标题） =====
+
+    @Test
+    fun `标题优先级 窗口标题优先于顶部可见文本 后者优先于首个短文本`() {
+        // 窗口标题最高优先
+        assertEquals(
+            "朋友圈",
+            PageTitle.resolve("朋友圈", listOf("返回", "聊天记录", "这是一段很长的正文内容超过三十字所以要被截断")),
+        )
+        // 没有窗口标题：跳过操作词与状态栏样式文本，取顶部标题文本
+        assertEquals(
+            "朋友圈",
+            PageTitle.resolve(null, listOf("返回", "17:51", "朋友圈", "张三：晚上一起吃饭")),
+        )
+        // 顶部文本全部是噪声 / 状态栏 → 兜底取首个非空短文本
+        assertEquals(
+            "聊天",
+            PageTitle.resolve(null, listOf("确定", "100%", "聊天", "李四：收到")),
+        )
+        // 一无所有 → null（调用方回落指纹文案，不编造标题）
+        assertNull(PageTitle.resolve(null, listOf("", "   ")))
+    }
+
+    @Test
+    fun `标题截断到 30 字`() {
+        val long = "一".repeat(40)
+        val title = PageTitle.resolve(long, emptyList())
+        assertEquals(PageTitle.MAX_LENGTH, title!!.length)
+        assertEquals(30, PageTitle.MAX_LENGTH)
+    }
+
+    @Test
+    fun `窗口事件先到 轮询补标题不算换页`() {
+        val tracker = PageTracker(pollConfirmMs = 0L)
+        tracker.observe(pkg, activity, emptyList(), "微信", PageEvent.SOURCE_WINDOW_EVENT, 1_000L)
+        // 同页补到标题：不产生事件，但状态里标题要更新（下一条结算才有标题）
+        val events = tracker.observe(pkg, activity, listOf("朋友圈"), "微信", PageEvent.SOURCE_POLL, 2_000L)
+        assertTrue(events.isEmpty())
+        assertEquals("朋友圈", tracker.flush(3_000L).single().title)
+    }
+
+    @Test
+    fun `开关关闭时不采集标题`() {
+        val tracker = PageTracker(pollConfirmMs = 0L)
+        val events = tracker.observe(
+            packageName = pkg, activityClass = activity, visibleTexts = listOf("朋友圈"),
+            appName = "微信", source = PageEvent.SOURCE_WINDOW_EVENT, timestamp = 1_000L,
+            windowTitle = "朋友圈", collectTitle = false,
+        )
+        assertNull(events.single().title)
+    }
+
+    @Test
+    fun `label 使用页面标题 缺失时回落指纹短码`() {
+        val handler = PageHandler()
+        assertEquals(
+            "微信 · 朋友圈",
+            handler.createLabel("CHANGED", mapOf("app_name" to "微信", "page_title" to "朋友圈", "page_key" to "c74c11eb")),
+        )
+        // 标题为空串 = 没采到：回落页面编号
+        assertEquals(
+            "微信 · 页面 #c74c",
+            handler.createLabel("CHANGED", mapOf("app_name" to "微信", "page_title" to " ", "page_key" to "c74c11eb")),
+        )
+        // 只有标题没有应用名：只显示标题
+        assertEquals("朋友圈", handler.createLabel("ENTER", mapOf("page_title" to "朋友圈")))
+    }
+
     @Test
     fun `同指纹必得同短码 不同指纹短码不同`() {
         val a = PageTracker.fingerprint(pkg, activity, listOf("首页", "搜索"))
