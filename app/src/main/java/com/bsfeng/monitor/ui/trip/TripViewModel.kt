@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.TripAggregator
-import com.bsfeng.monitor.ui.live.startOfDay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.ZoneId
 import java.util.LinkedHashMap
 
 data class TripState(
@@ -31,7 +32,7 @@ data class TripState(
  * s16 每日行程的数据源：打开页面现算，不新建表、不落库。
  *
  * 口径：
- * - 读当天 `[startOfDay(now), now)` 的记录（与概览页同一时间口径），交给 [TripAggregator]；
+ * - 读所选日期当天的记录（今天截到此刻，历史日期取整日），交给 [TripAggregator] 与 [TripTrace]；
  * - 结果进**进程内 LRU**（最多 4 天，按分钟切键）：今天的数据每分钟最多重算一次，
  *   历史日期当天内稳定命中；进程退出即丢弃，不产生任何持久化；
  * - 读库失败只落到 error 态，不抛到 UI。
@@ -45,32 +46,49 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 
     private var loaded = false
 
+    /** 当前选中的一天（当地 00:00 的毫秒）。 */
+    private var selectedDay: Long = 0L
+
     fun ensureLoaded() {
         if (loaded) return
         loaded = true
-        refresh()
+        loadDay(TripDays.today(System.currentTimeMillis()))
     }
 
+    /** 切到指定的一天；超出「最近 30 天 ~ 今天」范围时按边界夹住。 */
+    fun selectDay(dayStart: Long) {
+        loadDay(TripDays.clamp(dayStart, System.currentTimeMillis()))
+    }
+
+    /** 重试当前这一天（错误态按钮用）。 */
     fun refresh() {
+        val day = selectedDay.takeIf { it > 0L } ?: TripDays.today(System.currentTimeMillis())
+        loadDay(day)
+    }
+
+    private fun loadDay(dayStart: Long) {
+        selectedDay = dayStart
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
-            _state.value = withContext(Dispatchers.IO) { load() }
+            // 换天先清空旧数据：否则新日期标题下会短暂留着上一天的行程与轨迹
+            _state.value = TripState(isLoading = true, dayStart = dayStart, dayEnd = TripDays.dayEnd(dayStart, System.currentTimeMillis()))
+            _state.value = withContext(Dispatchers.IO) { load(dayStart) }
         }
     }
 
-    private fun load(): TripState {
+    private fun load(dayStart: Long): TripState {
         val now = System.currentTimeMillis()
-        val dayStart = startOfDay(now)
+        // 历史日期的窗口是 [当天 00:00, 次日 00:00)；今天截到「此刻」
+        val dayEnd = TripDays.dayEnd(dayStart, now)
         // 零点整点打开：窗口为 0，聚合器会拒绝非法区间；此时本来就没有行程
-        if (now <= dayStart) {
-            return TripState(isLoading = false, timeline = null, dayStart = dayStart, dayEnd = now)
+        if (dayEnd <= dayStart) {
+            return TripState(isLoading = false, timeline = null, dayStart = dayStart, dayEnd = dayEnd)
         }
         return try {
-            val day = TripCache.obtain(dayStart, now) {
+            val day = TripCache.obtain(dayStart, dayEnd) {
                 // 同一批 records 同时喂给聚合器与轨迹提取：不二次读库，轨迹与时间轴口径一致
-                val records = store.queryByDate(dayStart, now)
+                val records = store.queryByDate(dayStart, dayEnd)
                 TripDay(
-                    timeline = TripAggregator(dayStart, now).aggregate(records),
+                    timeline = TripAggregator(dayStart, dayEnd).aggregate(records),
                     samples = TripTrace.samples(records),
                 )
             }
@@ -79,7 +97,7 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
                 timeline = day.timeline,
                 trace = day.samples,
                 dayStart = dayStart,
-                dayEnd = now,
+                dayEnd = dayEnd,
             )
         } catch (e: CancellationException) {
             throw e
@@ -89,10 +107,55 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
                 isLoading = false,
                 error = e.message ?: "行程计算失败（本地数据库暂时不可用）",
                 dayStart = dayStart,
-                dayEnd = now,
+                dayEnd = dayEnd,
             )
         }
     }
+}
+
+/**
+ * 可切换的日期范围：最近 [WINDOW_DAYS] 天（含今天）到今天。
+ *
+ * 纯逻辑（不碰 Android / 数据库），按本地时区的「日」做加减：不按固定 86400000 毫秒推算，
+ * 避免跨夏令时地区出现「切一天少一小时」。
+ */
+internal object TripDays {
+
+    /** 可回看的天数（含今天）：30 天窗口。 */
+    const val WINDOW_DAYS = 30
+
+    fun today(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long = startOfDayOf(now, zone)
+
+    /** 窗口最早一天（今天往前 29 天）。 */
+    fun firstSelectable(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+        shift(today(now, zone), -(WINDOW_DAYS - 1).toLong(), zone)
+
+    fun previous(day: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+        clamp(shift(day, -1, zone), now, zone)
+
+    fun next(day: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+        clamp(shift(day, 1, zone), now, zone)
+
+    fun canPrevious(day: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean =
+        day > firstSelectable(now, zone)
+
+    fun canNext(day: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean =
+        day < today(now, zone)
+
+    /** 越界回退：早于窗口夹到最早一天，晚于今天夹到今天。 */
+    fun clamp(day: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+        day.coerceIn(firstSelectable(now, zone), today(now, zone))
+
+    /** 一天窗口的右边界：今天是「此刻」，历史日期是次日 00:00。 */
+    fun dayEnd(dayStart: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+        if (dayStart >= today(now, zone)) now else shift(dayStart, 1, zone)
+
+    private fun shift(dayStart: Long, days: Long, zone: ZoneId): Long =
+        Instant.ofEpochMilli(dayStart).atZone(zone).toLocalDate().plusDays(days)
+            .atStartOfDay(zone).toInstant().toEpochMilli()
+
+    private fun startOfDayOf(now: Long, zone: ZoneId): Long =
+        Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
 }
 
 /**
@@ -103,7 +166,8 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
 private data class TripDay(val timeline: DayTimeline, val samples: List<TraceSample>)
 
 private object TripCache {
-    private const val MAX_DAYS = 4
+    // 历史日期可翻 30 天：缓存 8 天，来回翻几天仍能秒开，又不至于把内存堆满
+    private const val MAX_DAYS = 8
 
     private val entries = object : LinkedHashMap<String, TripDay>(MAX_DAYS, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TripDay>) =
