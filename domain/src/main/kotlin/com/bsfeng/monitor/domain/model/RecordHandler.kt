@@ -149,16 +149,10 @@ class PageHandler : RecordHandler {
             if (app.isEmpty()) return title
             return if (title == app) app else "$app · $title"
         }
-        // 只用前 4 位做「页面编号」：8 位裸 hash 用户读不出信息。
-        // detail 里的 page_key 保持完整 8 位（去重与聚合仍需要全量指纹）。
-        val short = detail?.get("page_key")?.take(SHORT_KEY_LENGTH) ?: ""
-        val page = if (short.isEmpty()) "" else "页面 #$short"
-        return when {
-            app.isEmpty() && page.isEmpty() -> "页面"
-            app.isEmpty() -> page
-            page.isEmpty() -> app
-            else -> "$app · $page"
-        }
+        // 没有页面标题时只显示「应用 · 页面」：页面指纹对用户没有信息量（#cb64 读不出内容），
+        // 完整指纹仍在 detail.page_key 里，去重与聚合完全不受影响。
+        // 页面标题由无障碍窗口事件 / 可见文本提供，取不到就不编造。
+        return if (app.isEmpty()) "页面" else "$app · 页面"
     }
     override fun needsDuration(action: String) = false
 
