@@ -42,8 +42,20 @@ usage() {
   sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
 }
 
+# 远端 sh 转义：adb shell 会把参数拼成一条命令交给手机上的 sh 再解析一次，
+# SQL 里的括号 / 星号 / 引号不转义会直接变成 "syntax error: unexpected ("（实测 count(*)）。
+# 每个参数单引号包裹、内部的单引号写成 '\''。
+shell_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 send() {
-  adb_run shell am broadcast -n "$RECEIVER" --es tag "$TOKEN" "$@" >/dev/null 2>&1
+  local args=()
+  local arg
+  for arg in "$@"; do
+    args+=("$(shell_quote "$arg")")
+  done
+  adb_run shell am broadcast -n "$RECEIVER" --es tag "$TOKEN" "${args[@]}" >/dev/null 2>&1
 }
 
 # 轮询 logcat 直到收到本次 token 的结果；dump 会分片，等 part 数补齐
