@@ -1,8 +1,11 @@
 package com.bsfeng.monitor.data
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.util.Log
+import com.bsfeng.monitor.domain.model.RecordType
 
 /**
  * 数据库帮助类 — 仅负责表创建、升级和实例管理。
@@ -14,7 +17,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         private const val DATABASE_NAME = "monitor.db"
-        private const val DATABASE_VERSION = 4
+        /** 公开给测试做「版本无关」断言（与 FinanceDatabaseHelper.DATABASE_VERSION 同口径）。 */
+        const val DATABASE_VERSION = 5
         private const val TABLE_RECORDS = "records"
 
         /** 局域网互传任务历史表（v4 新增）。 */
@@ -28,6 +32,20 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
                 INSTANCE ?: DatabaseHelper(context.applicationContext).also { INSTANCE = it }
             }
     }
+
+    /** PRAGMA table_info 判断列是否存在（不依赖异常做流程控制）。 */
+    private fun hasColumn(db: SQLiteDatabase, table: String, column: String): Boolean =
+        db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val nameIndex = cursor.getColumnIndex("name")
+            var found = false
+            while (cursor.moveToNext()) {
+                if (nameIndex >= 0 && cursor.getString(nameIndex) == column) {
+                    found = true
+                    break
+                }
+            }
+            found
+        }
 
     override fun onCreate(db: SQLiteDatabase) {
         // 使用 IF NOT EXISTS：onUpgrade 可能对已存在 records 表的旧库调用 onCreate
@@ -86,5 +104,72 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
             // v4：新增局域网互传任务历史表（幂等，老库直接补建）
             createTransferTaskTable(db)
         }
+        if (oldVersion < 5) {
+            // v5：把 R8 混淆产生的 records.type 重写回规范名（可重跑，失败不吞）
+            migrateRecordTypes(db)
+        }
+    }
+
+    /**
+     * v5 迁移：`records.type` 由 R8 混淆名（如 `qg1`/`ig1`）改写为规范名。
+     *
+     * - **可重跑**：所有 UPDATE 都以「当前值」为条件，第二次跑匹配 0 行，不产生副作用。
+     * - **同事务**：不再嵌套 `beginTransaction` —— `getWritableDatabase` 本身就包着
+     *   `beginTransaction … setTransactionSuccessful … endTransaction`，onUpgrade 抛错即整体
+     *   回滚、版本号不推进、下次打开重试；嵌套一层反而会把内层失败标记污染到外层。
+     * - **失败不吞**：异常记日志后原样抛出，并把「重写行数 / 推不出的组合数」带进日志。
+     *
+     * 两遍：先按 [RecordType.LEGACY_ALIASES] 精确改名（本机实测的那批），再对剩下的非规范名
+     * 按 action 推断（换一个构建版本、短名变了也还能救）。仍推不出的保持原值，只记 W 日志。
+     */
+    private fun migrateRecordTypes(db: SQLiteDatabase) {
+        // v3 及更早的极简库 / 外来库可能压根没有 type 列（例如只建了 records(id) 的测试库）。
+        // 这种情况没有可改写的数据，跳过并记一条 W —— 迁移不该把启动拖崩。
+        if (!hasColumn(db, TABLE_RECORDS, "type")) {
+            Log.w("DatabaseHelper", "v5 迁移跳过：$TABLE_RECORDS 没有 type 列，无需改写")
+            return
+        }
+        var rewritten = 0
+        var unresolved = 0
+        try {
+            RecordType.LEGACY_ALIASES.forEach { (alias, type) ->
+                rewritten += db.update(
+                    TABLE_RECORDS,
+                    ContentValues().apply { put("type", RecordType.Companion.toString(type)) },
+                    "type = ?",
+                    arrayOf(alias),
+                )
+            }
+
+            // 非规范名：按 (type, action) 去重后逐组推断，避免逐行 UPDATE
+            val placeholders = RecordType.CANONICAL_NAMES.joinToString(",") { "?" }
+            val pairs = mutableListOf<Pair<String, String>>()
+            db.rawQuery(
+                "SELECT DISTINCT type, action FROM $TABLE_RECORDS WHERE type NOT IN ($placeholders)",
+                RecordType.CANONICAL_NAMES.toTypedArray(),
+            ).use { cursor ->
+                while (cursor.moveToNext()) pairs.add(cursor.getString(0) to cursor.getString(1))
+            }
+            for ((raw, action) in pairs) {
+                val inferred = RecordType.inferFromAction(action)
+                if (inferred == null) {
+                    unresolved++
+                    continue
+                }
+                rewritten += db.update(
+                    TABLE_RECORDS,
+                    ContentValues().apply { put("type", RecordType.Companion.toString(inferred)) },
+                    "type = ? AND action = ?",
+                    arrayOf(raw, action),
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("DatabaseHelper", "v5 迁移 records.type 失败（整事务回滚）：已重写 $rewritten 行", e)
+            throw e
+        }
+        Log.i(
+            "DatabaseHelper",
+            "v5 迁移 records.type 完成：重写 $rewritten 行；$unresolved 个 type/action 组合无法推断（保留原值）",
+        )
     }
 }
