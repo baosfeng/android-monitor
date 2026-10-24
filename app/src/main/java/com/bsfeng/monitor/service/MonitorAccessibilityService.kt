@@ -11,8 +11,6 @@ import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.autobook.AutoBookEngine
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
-import com.bsfeng.monitor.record.PageEvent
-import com.bsfeng.monitor.record.PageTracker
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
@@ -40,24 +38,12 @@ open class MonitorAccessibilityService : AccessibilityService() {
     internal val recordCollector: RecordCollector
         get() = (application as MonitorApp).container.recordCollector
 
-    /**
-     * 页面轨迹状态机：当前页面指纹 + 进入时间（指纹口径见 [PageTracker]）。
-     *
-     * 懒加载是为了拿到 attach 之后的 `packageName` 作为自身包名 —— 本 App 内的 Tab 切换
-     * 不产生 PAGE 记录（真机表现为每秒刷 4 条），过滤收口在 PageTracker 内部。
-     */
-    internal val pageTracker: PageTracker by lazy { PageTracker(selfPackage = packageName) }
-
-    /** WINDOWS_CHANGED 上次处理时刻（1 秒合并窗口） */
-    internal var windowsChangedAtMs: Long = 0L
-
     internal var lastPackageName: String? = null
     internal var lastActivityClass: String? = null
 
     /** [lastActivityClass] 所属包名：换了 App 旧的 Activity 名就无意义，必须清空 */
     private var lastActivityPackage: String? = null
     private var lastSwitchTimeMs: Long = System.currentTimeMillis()
-    private var lastPageTitle: String? = null  // 上一级页面标题
     /** 系统桌面包名（缓存；解析失败留空，不重复尝试）。 */
     private var homePackage: String? = null
 
@@ -129,7 +115,6 @@ open class MonitorAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowChange(event)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleContentChanged(event)
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> handleWindowsChanged()
             // 其余事件类型（通知、焦点、手势等）故意不处理：显式兜底，避免漏 case 的静默差异
             else -> Unit
         }
@@ -164,13 +149,11 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 过滤桌面和系统界面（纯日志，不处理 App 切换——由轮询负责）
         if (isHomeApp(packageName)) {
             Log.d("MonitorService", "handleWindowChange: home screen")
-            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
             return
         }
         if (isSystemUi(packageName)) {
             DiagnosticCounters.accessibilityFilteredCount++
             Log.d("MonitorService", "handleWindowChange: filtered as system UI: $packageName")
-            observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
             return
         }
 
@@ -189,30 +172,6 @@ open class MonitorAccessibilityService : AccessibilityService() {
         val appSwitched = packageName != lastActivityPackage
         lastActivityClass = ActivityNames.resolveActivityClass(lastActivityClass ?: "", className, appSwitched)
         lastActivityPackage = packageName
-
-        // ===== 页面轨迹（指纹档）：窗口事件的 Activity 变化是权威信号，不等轮询确认 =====
-        // 顺手读一次当前窗口的可见文本与窗口标题：ENTER 记录一出生就带标题，不用等轮询补；
-        // 指纹仍按「包名 + Activity + 文本」计算，与轮询路径口径一致（PageTracker 内部视为
-        // 同一页的就绪度变化，不会多记一条）。
-        val pageRoot = rootInActiveWindow
-        val pageTexts = collectVisibleTexts(pageRoot)
-        val windowTitle = pageRoot?.window?.title?.toString()
-        pageRoot?.recycle()
-        // 窗口事件自带的文本：TYPE_WINDOW_STATE_CHANGED 的 event.text 第一个通常就是标题栏文字，
-        // 比「窗口标题（=应用名）」和「遍历节点找文本」都更接近用户看到的页面名，且不用对照表。
-        val eventTexts = event.text?.mapNotNull { it?.toString()?.takeIf { t -> t.isNotBlank() } }
-            ?: emptyList()
-        observePage(
-            packageName,
-            lastActivityClass,
-            pageTexts,
-            AppUtils.getAppName(packageName),
-            now,
-            PageEvent.SOURCE_WINDOW_EVENT,
-            windowTitle,
-            eventTexts,
-        )
-
     }
 
     override fun onInterrupt() {
@@ -294,8 +253,6 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
-        // 结算当前页面（服务销毁 = 页面观测中断），时长不丢
-        runCatching { emitPageEvents(pageTracker.flush(System.currentTimeMillis())) }
         // 服务是「被正常销毁」而不是「被冻结」：清掉心跳，否则下次进设置页会误报进程被冻结
         HeartbeatWatchdog.onServiceStopped(this)
         removeCurrentDanmaku()

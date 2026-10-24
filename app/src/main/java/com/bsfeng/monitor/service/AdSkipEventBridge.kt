@@ -32,9 +32,7 @@ internal object AdSkipEventBridge {
         val skipEnabled = FeatureFlags.get().isEnabled(Feature.AD_SKIP)
         try {
             if (packageName == service.packageName) {
-                // 进入本 App：停止开屏跳过监控并重置状态。
-                // 页面轨迹同样不记录本 App —— PageTracker 收到自身包名会结算上一个外部页面并清空，
-                // 不产生新页（见 PageTracker.observe 的 selfPackage 分支），这里不需要额外开关。
+                // 进入本 App：停止开屏跳过监控并重置状态（页面轨迹已下线，这里只需管开屏跳过）。
                 if (skipEnabled) skipEngine.resetAppState(packageName)
             } else {
                 if (packageName != appSwitchedFrom) service.removeCurrentDanmaku()

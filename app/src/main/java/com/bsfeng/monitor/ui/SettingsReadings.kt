@@ -65,7 +65,6 @@ internal class SettingsReadings(
     val adSkipOn: Boolean,
     val financeOn: Boolean,
     val transportOn: Boolean,
-    val pageTraceOn: Boolean,
     val locationOn: Boolean,
     val quotaOn: Boolean,
 ) {
@@ -91,7 +90,6 @@ internal fun rememberSettingsReadings(viewModel: MainViewModel): SettingsReading
     val adSkipOn = enabledFeatures[Feature.AD_SKIP] == true
     val financeOn = enabledFeatures[Feature.FINANCE] == true
     val transportOn = enabledFeatures[Feature.TRANSPORT] == true
-    val pageTraceOn = enabledFeatures[Feature.PAGE_TRACE] == true
     val locationOn = enabledFeatures[Feature.LOCATION] == true
     val quotaOn = enabledFeatures[Feature.QUOTA] == true
     val quotaSettings = remember { QuotaSettings(context) }
@@ -152,7 +150,6 @@ internal fun rememberSettingsReadings(viewModel: MainViewModel): SettingsReading
         adSkipOn = adSkipOn,
         financeOn = financeOn,
         transportOn = transportOn,
-        pageTraceOn = pageTraceOn,
         locationOn = locationOn,
         quotaOn = quotaOn,
     )

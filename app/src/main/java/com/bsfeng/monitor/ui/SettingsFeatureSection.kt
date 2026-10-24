@@ -46,7 +46,6 @@ internal fun SettingsFeatureSection(
     adSkipOn: Boolean,
     financeOn: Boolean,
     transportOn: Boolean,
-    pageTraceOn: Boolean,
     locationOn: Boolean,
     quotaOn: Boolean,
     quotaSettings: QuotaSettings,
@@ -145,12 +144,6 @@ internal fun SettingsFeatureSection(
         quotaAlertsOnState = quotaAlertsOnState,
         setFeature = setFeature,
         onNavigateToQuotaSettings = onNavigateToQuotaSettings,
-    )
-
-    SettingsPageTraceFeatureCard(
-        t = t,
-        pageTraceOn = pageTraceOn,
-        setFeature = setFeature,
     )
 
     SettingsLocationCard(
