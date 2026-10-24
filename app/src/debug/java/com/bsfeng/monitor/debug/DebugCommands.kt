@@ -62,6 +62,38 @@ sealed interface DebugCommand {
     data object Heartbeat : DebugCommand {
         override val name: String = "heartbeat"
     }
+
+    /**
+     * 只读数据库查询：`tables`（表名 + 行数 + user_version）、`schema`（列定义）、
+     * `query`（单条 select/with）。
+     *
+     * 为什么不在 CLI 侧 `adb pull` 库文件：真机库 8MB 级，USB 一断就是半个文件；
+     * 库开着 WAL 时直接拷主文件还会拷到下坏页。查询走进程内、只读连接，拿到的永远是
+     * 一份一致的快照。
+     */
+    data class Db(val op: DbOp, val table: String? = null, val sql: String? = null, val limit: Int = 0) :
+        DebugCommand {
+        override val name: String = "db"
+    }
+}
+
+/** `db` 的子操作。 */
+enum class DbOp(val value: String) {
+    /** 所有表名 + 行数 + user_version。 */
+    TABLES("tables"),
+
+    /** 单表列定义（PRAGMA table_info）。 */
+    SCHEMA("schema"),
+
+    /** 单条只读查询。 */
+    QUERY("query"),
+    ;
+
+    companion object {
+        fun from(text: String): DbOp? = entries.firstOrNull { it.value == text }
+
+        fun list(): String = entries.joinToString("|") { it.value }
+    }
 }
 
 /** `open` 支持的目标屏。 */
@@ -141,12 +173,23 @@ object DebugCommands {
     const val EXTRA_BYPASS_THROTTLE = "bypass_throttle"
     const val EXTRA_ALL = "all"
 
+    const val EXTRA_OP = "op"
+    const val EXTRA_TABLE = "table"
+    const val EXTRA_SQL = "sql"
+
     const val DEFAULT_DUMP_LIMIT = 20
     const val MAX_DUMP_LIMIT = 200
 
+    /** `db query` 的行数默认值 / 上限：比 dump 宽一点（排障常要整段分布），但仍有硬顶。 */
+    const val DEFAULT_QUERY_LIMIT = 50
+    const val MAX_QUERY_LIMIT = 200
+
+    /** 表名只接受普通标识符：PRAGMA 不支持占位符，限制字符集比拼接转义更稳。 */
+    private val TABLE_NAME = Regex("[A-Za-z_][A-Za-z0-9_]*")
+
     /** 命令表（顺序 = 文档顺序，错误信息里直接复用它）。 */
     val SUPPORTED: List<String> = listOf(
-        "unlock", "state", "sample_location", "dump", "seed", "clear", "open", "heartbeat",
+        "unlock", "state", "sample_location", "dump", "seed", "clear", "open", "heartbeat", "db",
     )
 
     /**
@@ -219,6 +262,8 @@ object DebugCommands {
                     ParseResult.Ok(DebugCommand.Open(screen))
                 }
 
+                "db" -> ParseResult.Ok(dbCommandOf(extras))
+
                 else -> throw ArgError("未实现的命令：$cmd")
             }
         } catch (e: ArgError) {
@@ -281,10 +326,115 @@ object DebugCommands {
             ?: throw ArgError("type 取值非法：期望 ${KNOWN_TYPES.joinToString("|")}，实际 $text")
     }
 
+    /** `db` 的 op / table / sql / limit 解析；非法组合一律抛 [ArgError] 转 BadArgs。 */
+    private fun dbCommandOf(extras: Map<String, Any?>): DebugCommand.Db {
+        val rawOp = extras[EXTRA_OP]
+        if (rawOp == null) throw ArgError("db 需要 --es op <${DbOp.list()}>")
+        if (rawOp !is String) throw ArgError("参数 op 必须是字符串（--es op tables），实际 ${rawOp.javaClass.simpleName}")
+        val opText = rawOp.trim().lowercase()
+        if (opText.isEmpty()) throw ArgError("db 需要 --es op <${DbOp.list()}>")
+        val op = DbOp.from(opText) ?: throw ArgError("op 取值非法：期望 ${DbOp.list()}，实际 $opText")
+        return when (op) {
+            DbOp.TABLES -> DebugCommand.Db(DbOp.TABLES)
+            DbOp.SCHEMA -> DebugCommand.Db(DbOp.SCHEMA, table = tableOf(extras))
+            DbOp.QUERY -> {
+                val limit = intOf(extras, EXTRA_LIMIT, DEFAULT_QUERY_LIMIT)
+                if (limit < 1 || limit > MAX_QUERY_LIMIT) {
+                    throw ArgError("limit 超出范围：期望 1..$MAX_QUERY_LIMIT，实际 $limit")
+                }
+                val check = DbSql.validate(sqlOf(extras))
+                if (!check.ok) throw ArgError("sql 被拒绝：" + check.reason)
+                DebugCommand.Db(DbOp.QUERY, sql = check.sql, limit = limit)
+            }
+        }
+    }
+
+    private fun tableOf(extras: Map<String, Any?>): String {
+        val raw = extras[EXTRA_TABLE]
+        if (raw == null) throw ArgError("db schema 需要 --es table <表名>")
+        if (raw !is String) throw ArgError("参数 table 必须是字符串（--es table records），实际 ${raw.javaClass.simpleName}")
+        val table = raw.trim()
+        if (table.isEmpty()) throw ArgError("db schema 需要 --es table <表名>")
+        if (!TABLE_NAME.matches(table)) {
+            throw ArgError("table 取值非法：只接受字母/数字/下划线、且不以数字开头，实际 $table")
+        }
+        return table
+    }
+
+    private fun sqlOf(extras: Map<String, Any?>): String {
+        val raw = extras[EXTRA_SQL]
+        if (raw == null) throw ArgError("db query 需要 --es sql \"select ...\"")
+        if (raw !is String) throw ArgError("参数 sql 必须是字符串（--es sql \"select ...\"），实际 ${raw.javaClass.simpleName}")
+        return raw
+    }
+
     private fun scenarioOf(extras: Map<String, Any?>): String =
         when (val raw = extras[EXTRA_SCENARIO]) {
             null -> SeedScenario.DAY.value
             is String -> raw.trim().lowercase().ifEmpty { SeedScenario.DAY.value }
             else -> throw ArgError("scenario 必须是字符串（--es scenario ${scenarioList()}）")
         }
+}
+
+/**
+ * `db` 的只读闸门（纯函数，纯 JVM 单测）。
+ *
+ * 判定顺序（任一不满足即拒，理由都写进 [SqlCheck.reason] 供 CLI 直接回显）：
+ * 1. **单语句**：只允许结尾一个 `;`，中间再出现 `;` 一律拒；
+ * 2. **不做注释**：`--` / `/* */` 一律拒 —— 注释能把真实语句藏在无害前缀后面；
+ * 3. **白名单开头**：去掉字符串字面量后必须以 `select` / `with` 开头；
+ * 4. **黑名单词元**：attach / pragma / insert / update / delete / drop / alter / create /
+ *    replace / vacuum 等词元一律拒（[DANGEROUS]）。
+ *
+ * 词元级比较：`created_at` 不会误判成 `create`；但被引号包起来的 `"delete"` 会被拒 ——
+ * 宁可多拒一条，也不放过一条写语句。
+ */
+object DbSql {
+
+    /** 单字段截断长度：detail 里的 JSON 也可能很长，500 字足够看清又不会撑爆 logcat。 */
+    const val MAX_FIELD_CHARS = 500
+
+    /** 只读模式拒绝的关键字（词元级比较，忽略大小写）。 */
+    val DANGEROUS: List<String> = listOf(
+        "attach", "pragma", "insert", "update", "delete",
+        "drop", "alter", "create", "replace", "vacuum", "load_extension",
+    )
+
+    private val LITERAL = Regex("'(?:[^']|'')*'")
+    private val TOKEN_SEPARATOR = Regex("[^a-z0-9_]+")
+
+    fun validate(raw: String): SqlCheck {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return SqlCheck(null, "sql 不能为空")
+        val body = if (trimmed.endsWith(";")) trimmed.dropLast(1).trim() else trimmed
+        if (body.isEmpty()) return SqlCheck(null, "sql 不能只有分号")
+        if (body.contains(';')) {
+            return SqlCheck(null, "只允许单条语句：分号后面不能再有内容")
+        }
+        if (body.contains("--") || body.contains("/*") || body.contains("*/")) {
+            return SqlCheck(null, "不接受注释（-- 或 /* */）：注释会把真实语句藏起来")
+        }
+        val stripped = stripLiterals(body)
+        val head = stripped.lowercase().takeWhile { it.isLetter() && it.code < 128 }
+        if (head != "select" && head != "with") {
+            return SqlCheck(null, "只读：语句必须以 select 或 with 开头，实际以「${body.take(24)}」开头")
+        }
+        val hit = stripped.lowercase().split(TOKEN_SEPARATOR).firstOrNull { it in DANGEROUS }
+        if (hit != null) {
+            return SqlCheck(null, "只读模式拒绝 `$hit`：只允许 select / with 查询，不允许改库或读库结构")
+        }
+        return SqlCheck(body, null)
+    }
+
+    /** 把单引号字符串字面量的内容抹掉，避免 `where type='DELETE'` 被关键字表误伤。 */
+    fun stripLiterals(sql: String): String = LITERAL.replace(sql, "''")
+
+    /** 超长字段截断并加省略号（调用方据此计数「截断了几处」）。 */
+    fun truncate(value: String, max: Int = MAX_FIELD_CHARS): String =
+        if (value.length <= max) value else value.take(max) + "…"
+}
+
+/** [DbSql.validate] 的结果：ok 时 [sql] 是去掉结尾分号的语句，否则 [reason] 给拒绝理由。 */
+data class SqlCheck(val sql: String?, val reason: String?) {
+    val ok: Boolean get() = sql != null
 }

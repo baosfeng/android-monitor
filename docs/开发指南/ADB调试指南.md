@@ -11,15 +11,7 @@
 | ADB | `~/android-platform-tools/adb`（37.0.0，无 sudo 权限，解压到用户目录） |
 | JDK | 25：`export JAVA_HOME=/opt/homebrew/opt/openjdk@25` |
 
-安装（已装可跳）：
-
-```bash
-curl -L -o ~/android-platform-tools-latest-darwin.zip \
-  "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip"
-unzip -o ~/android-platform-tools-latest-darwin.zip -d ~/ && mv ~/platform-tools ~/android-platform-tools
-```
-
-PATH 已写入 `~/.zshrc`（`export PATH="$HOME/android-platform-tools:$PATH"`）；当前会话用全路径更省事。
+未装时：下载 `platform-tools-latest-darwin.zip`（dl.google.com/android/repository），解压到 `~` 并把 `platform-tools` 改名 `android-platform-tools`。PATH 已写入 `~/.zshrc`；当前会话用全路径更省事。
 
 ## 手机端设置（首次连接）
 
@@ -63,11 +55,9 @@ PATH 已写入 `~/.zshrc`（`export PATH="$HOME/android-platform-tools:$PATH"`�
 
 ## 🚨 不用 force-stop
 
-`adb shell am force-stop com.bsfeng.monitor` 会让 MIUI/HyperOS **自动移除无障碍服务权限**，必须手动在手机上重开（见[踩坑](../踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)）。
+`adb shell am force-stop com.bsfeng.monitor` 会让 MIUI/HyperOS **自动移除无障碍服务权限**，必须手动在手机上重开（见[踩坑](../踩坑/MIUI-force-stop导致无障碍服务被自动移除.md)）。替代做法：装新包直接用 `adb install -r`（进程自动切换）；唤醒用 `adb shell am start -n com.bsfeng.monitor/.MainActivity`。
 
-替代做法：装新包直接用 `adb install -r`（进程自动切换）；唤醒用 `adb shell am start -n com.bsfeng.monitor/.MainActivity`。
-
-全流程（每次改动后）：
+每次改动后的全流程：
 
 ```bash
 ./gradlew test && ./gradlew assembleDebug \
@@ -102,12 +92,22 @@ scripts/debug-cli.sh dump 20 PAGE  # 倒最近 20 条
 
 结果在 logcat tag `DebugCmd`：`RESULT cmd=<n> ok=<bool> data=<json>`，脚本退出码 = `ok`；`Broadcast completed: result=0` 只代表投递成功。
 
+## 取库数据（db 子命令）
+
+**优先用它代替 `adb pull` 库文件**：真机库 8MB 级，USB 一断就拿到半个文件；库开着 WAL 时只拷主文件还会拷到下坏页。db 命令在进程内只读查询，结果按行分片回传。
+
+```bash
+scripts/debug-cli.sh db tables                  # 表名 + 行数 + user_version
+scripts/debug-cli.sh db schema records          # 列定义（PRAGMA table_info）
+scripts/debug-cli.sh db query "select type,count(*) c from records group by type"
+scripts/debug-cli.sh db query "select * from records order by timestamp desc" 20
+```
+
+口径：`query` 默认 50 行、上限 200；单字段超 500 字截断并加 `…`（`truncatedFields` 报截了几处）；BLOB 只报长度。安全（端上 fail-closed，被拒时 `ok=false reason=bad_args`）：只允许**单条** `select`/`with`，中间再有分号、带注释、出现 attach/pragma/insert/update/delete/drop/alter/create/replace/vacuum 词元一律拒；`schema` 表名只收字母数字下划线；查询走只读连接（`mode=readonly`；WAL 机型退回 App 连接时标 `mode=app-connection`）。
+
 ## 常用命令
 
 ```bash
-adb devices -l
-adb uninstall com.bsfeng.monitor
-adb kill-server && adb start-server
 adb shell dumpsys package com.bsfeng.monitor | head -30
 adb shell dumpsys package com.bsfeng.monitor | grep -A 100 "runtime permissions"
 ```
