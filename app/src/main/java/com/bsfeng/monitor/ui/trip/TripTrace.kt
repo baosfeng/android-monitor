@@ -1,0 +1,275 @@
+package com.bsfeng.monitor.ui.trip
+
+// 每日定位轨迹的纯逻辑：LOCATION 记录 → 采样点 → 画布坐标。
+// 不依赖 Android / Compose，可在 JVM 单测里直接验证（TripTraceTest）。
+//
+// 口径：
+// - 只取 LOCATION 记录（detail: lat / lng / address），按 timestamp 升序；
+// - 相邻两点 < 5m 视为原地抖动，去重；最后按上限均匀抽稀到 500 点（保留首尾）；
+// - 投影用等距圆柱（x = lng · cos(meanLat)，y = -lat），等比缩放到画布并留 padding；
+// - 单点或全部重合时居中；画布宽高非法（<= 0）直接返回空投影，不产生 NaN / 负坐标。
+
+import com.bsfeng.monitor.domain.model.Record
+import com.bsfeng.monitor.domain.trip.Stay
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+/** 一个轨迹采样点（与数据库记录解耦，便于单测）。 */
+data class TraceSample(
+    val timestamp: Long,
+    val lat: Double,
+    val lng: Double,
+    val label: String? = null,
+)
+
+/** 画布坐标：x 向右、y 向下（与 Canvas 一致）。 */
+data class TracePoint(val x: Float, val y: Float, val timestamp: Long)
+
+/**
+ * 停留锚点。
+ *
+ * [radiusDp] 按停留时长在 6..14dp 之间插值；[labelVisible] = false 表示标签因重叠或超过
+ * 6 个被省略（圆仍画，只是不写名字）。
+ */
+data class TraceStay(
+    val x: Float,
+    val y: Float,
+    val radiusDp: Float,
+    val label: String,
+    val labelVisible: Boolean,
+    val durationMs: Long,
+)
+
+/** 投影结果；空轨迹时两个列表都为空。 */
+data class TraceProjection(
+    val points: List<TracePoint> = emptyList(),
+    val stays: List<TraceStay> = emptyList(),
+) {
+    val hasTrace: Boolean get() = points.isNotEmpty()
+}
+
+object TripTrace {
+
+    /** 最多画 500 个点：再密的采样在 180dp 高的画布上也看不出差别。 */
+    const val MAX_POINTS = 500
+
+    /** 相邻两点小于 5m 视为原地抖动（GPS 静止漂移量级）。 */
+    const val DEDUP_METERS = 5.0
+
+    /** 停留标签最多 6 个，其余只画圆不写名字。 */
+    const val MAX_STAY_LABELS = 6
+
+    const val MIN_STAY_RADIUS_DP = 6f
+    const val MAX_STAY_RADIUS_DP = 14f
+
+    private const val EARTH_METERS_PER_DEGREE = 111_320.0
+
+    /** 记录 → 采样点（升序、去重、抽稀）。 */
+    fun samples(records: List<Record>): List<TraceSample> = cap(dedupe(parse(records)))
+
+    private fun parse(records: List<Record>): List<TraceSample> = records
+        .mapNotNull { sampleOf(it) }
+        .sortedBy { it.timestamp }
+
+    private fun sampleOf(record: Record): TraceSample? {
+        val detail = record.detail ?: return null
+        val lat = detail["lat"]?.toDoubleOrNull() ?: return null
+        val lng = detail["lng"]?.toDoubleOrNull() ?: return null
+        if (lat.isNaN() || lng.isNaN()) return null
+        if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) return null
+        return TraceSample(
+            timestamp = record.timestamp,
+            lat = lat,
+            lng = lng,
+            label = detail["address"]?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** 相邻 < [DEDUP_METERS] 的点丢掉（保留每个位置上的第一个点）。 */
+    internal fun dedupe(samples: List<TraceSample>): List<TraceSample> {
+        if (samples.size < 2) return samples
+        val out = ArrayList<TraceSample>(samples.size)
+        out.add(samples.first())
+        for (i in 1 until samples.size) {
+            val prev = out[out.lastIndex]
+            val next = samples[i]
+            if (meters(prev.lat, prev.lng, next.lat, next.lng) >= DEDUP_METERS) out.add(next)
+        }
+        return out
+    }
+
+    /** 超过 [MAX_POINTS] 时按步长均匀抽稀，首尾必留。 */
+    internal fun cap(samples: List<TraceSample>): List<TraceSample> {
+        if (samples.size <= MAX_POINTS) return samples
+        val step = (samples.size - 1).toDouble() / (MAX_POINTS - 1)
+        val indices = HashSet<Int>(MAX_POINTS)
+        val out = ArrayList<TraceSample>(MAX_POINTS)
+        for (i in 0 until MAX_POINTS) {
+            val index = (i * step).roundToInt().coerceIn(0, samples.lastIndex)
+            if (indices.add(index)) out.add(samples[index])
+        }
+        if (out.last().timestamp != samples.last().timestamp) out[out.lastIndex] = samples.last()
+        return out
+    }
+
+    /** 等距圆柱近似下的两点距离（米）。 */
+    fun meters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val meanLat = Math.toRadians((lat1 + lat2) / 2.0)
+        val dx = (lng2 - lng1) * cos(meanLat) * EARTH_METERS_PER_DEGREE
+        val dy = (lat2 - lat1) * EARTH_METERS_PER_DEGREE
+        return hypot(dx, dy)
+    }
+
+    /**
+     * 投影到画布。
+     *
+     * @param widthPx / heightPx 画布尺寸（px）；<= 0 返回空投影
+     * @param paddingPx 四周留白（px）
+     * @param charPx 标签单字宽度估计（px），用于重叠判定；默认值只给单测用，屏内传实测
+     * @param labelHeightPx 标签行高估计（px）
+     */
+    fun project(
+        samples: List<TraceSample>,
+        stays: List<Stay> = emptyList(),
+        widthPx: Float,
+        heightPx: Float,
+        paddingPx: Float,
+        charPx: Float = 13f,
+        labelHeightPx: Float = 16f,
+        density: Float = 1f,
+    ): TraceProjection {
+        if (samples.isEmpty() || widthPx <= 0f || heightPx <= 0f) return TraceProjection()
+        val pad = paddingPx.coerceAtLeast(0f).coerceAtMost(min(widthPx, heightPx) / 2f)
+        val meanLat = samples.sumOf { it.lat } / samples.size
+        val cosLat = cos(Math.toRadians(meanLat))
+        val rawX = samples.map { it.lng * cosLat }
+        val rawY = samples.map { -it.lat }
+        val minX = rawX.min()
+        val maxX = rawX.max()
+        val minY = rawY.min()
+        val maxY = rawY.max()
+        val spanX = maxX - minX
+        val spanY = maxY - minY
+        val innerW = (widthPx - 2f * pad).coerceAtLeast(0f)
+        val innerH = (heightPx - 2f * pad).coerceAtLeast(0f)
+
+        // 全部重合（或只有一个点）：居中，不缩放
+        if (spanX < EPS && spanY < EPS) {
+            val cx = widthPx / 2f
+            val cy = heightPx / 2f
+            val single = samples.map { TracePoint(cx, cy, it.timestamp) }
+            return TraceProjection(
+                single,
+                projectStays(stays, widthPx, heightPx, cx, cy, 0.0, 0.0, 0.0, charPx, labelHeightPx, density),
+            )
+        }
+        // 等比缩放：取两个方向里更紧的那个；单方向无跨度时按另一方向铺满
+        val scale = when {
+            spanX < EPS -> innerH / spanY
+            spanY < EPS -> innerW / spanX
+            else -> min(innerW / spanX, innerH / spanY)
+        }
+        val drawnW = (spanX * scale).toFloat()
+        val drawnH = (spanY * scale).toFloat()
+        val offsetX = (widthPx - drawnW) / 2f
+        val offsetY = (heightPx - drawnH) / 2f
+        val points = samples.mapIndexed { i, sample ->
+            TracePoint(
+                x = offsetX + ((rawX[i] - minX) * scale).toFloat(),
+                y = offsetY + ((rawY[i] - minY) * scale).toFloat(),
+                timestamp = sample.timestamp,
+            )
+        }
+        return TraceProjection(
+            points = points,
+            stays = projectStays(
+                stays, widthPx, heightPx,
+                offsetX = offsetX, offsetY = offsetY,
+                minX = minX, minY = minY, scale = scale,
+                charPx = charPx, labelHeightPx = labelHeightPx, density = density,
+            ),
+        )
+    }
+
+    private fun projectStays(
+        stays: List<Stay>,
+        widthPx: Float,
+        heightPx: Float,
+        offsetX: Float,
+        offsetY: Float,
+        minX: Double,
+        minY: Double,
+        scale: Double,
+        charPx: Float,
+        labelHeightPx: Float,
+        density: Float,
+    ): List<TraceStay> {
+        val located = stays.filter { it.place.lat != null && it.place.lng != null }
+        if (located.isEmpty()) return emptyList()
+        val meanLat = located.sumOf { it.place.lat!! } / located.size
+        val cosLat = cos(Math.toRadians(meanLat))
+        val maxDuration = located.maxOf { it.durationMs }.coerceAtLeast(0L)
+        val centers = located.map { stay ->
+            val rawX = stay.place.lng!! * cosLat
+            val rawY = -stay.place.lat!!
+            TraceStay(
+                x = offsetX + ((rawX - minX) * scale).toFloat(),
+                y = offsetY + ((rawY - minY) * scale).toFloat(),
+                radiusDp = stayRadiusDp(stay.durationMs, maxDuration),
+                label = shortLabel(stay.place.label),
+                labelVisible = false,
+                durationMs = stay.durationMs,
+            )
+        }
+        // 重叠判定按「停留时长降序」贪心：长得住的标签优先保住，最多 6 个
+        val kept = ArrayList<Box>(MAX_STAY_LABELS)
+        val visible = BooleanArray(centers.size)
+        centers.indices.sortedByDescending { centers[it].durationMs }.forEach { index ->
+            if (kept.size >= MAX_STAY_LABELS) return@forEach
+            val marker = centers[index]
+            if (marker.x < 0f || marker.y < 0f || marker.x > widthPx || marker.y > heightPx) return@forEach
+            val radiusPx = marker.radiusDp * density
+            val box = Box(
+                left = marker.x - radiusPx,
+                right = marker.x + radiusPx + marker.label.length * charPx,
+                top = marker.y - radiusPx - labelHeightPx,
+                bottom = marker.y + radiusPx,
+            )
+            if (kept.none { it.overlaps(box) }) {
+                kept.add(box)
+                visible[index] = true
+            }
+        }
+        return centers.mapIndexed { i, stay -> stay.copy(labelVisible = visible[i]) }
+    }
+
+    private fun stayRadiusDp(durationMs: Long, maxDurationMs: Long): Float {
+        if (maxDurationMs <= 0L) return MIN_STAY_RADIUS_DP
+        val ratio = (durationMs.toDouble() / maxDurationMs).coerceIn(0.0, 1.0)
+        return MIN_STAY_RADIUS_DP + (MAX_STAY_RADIUS_DP - MIN_STAY_RADIUS_DP) * ratio.toFloat()
+    }
+
+    /** 地址去省 / 市 / 区县前缀，最多 12 字；去不干净时原样返回。 */
+    fun shortLabel(raw: String): String {
+        var text = raw.trim()
+        repeat(3) {
+            val index = text.indexOfFirst { it in ADMIN_SUFFIXES }
+            if (index in 0..6 && text.length - index - 1 >= 2) {
+                text = text.substring(index + 1).trim()
+            }
+        }
+        return text.take(12).ifBlank { raw }
+    }
+
+    private data class Box(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+        fun overlaps(other: Box): Boolean =
+            left < other.right && other.left < right && top < other.bottom && other.top < bottom
+    }
+
+    private const val EPS = 1e-9
+    // 只认「省 / 市 / 区 / 县」四级后缀：'州' 会误伤「杭州」「苏州」这类地名
+    private val ADMIN_SUFFIXES = charArrayOf('省', '市', '区', '县')
+}

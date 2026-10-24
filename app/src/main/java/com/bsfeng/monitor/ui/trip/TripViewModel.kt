@@ -21,6 +21,8 @@ data class TripState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val timeline: DayTimeline? = null,
+    /** 当天定位采样（升序、已去重，最多 500 点）；轨迹卡按画布尺寸再投影。 */
+    val trace: List<TraceSample> = emptyList(),
     val dayStart: Long = 0L,
     val dayEnd: Long = 0L,
 )
@@ -64,10 +66,21 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             return TripState(isLoading = false, timeline = null, dayStart = dayStart, dayEnd = now)
         }
         return try {
-            val timeline = TripCache.obtain(dayStart, now) {
-                TripAggregator(dayStart, now).aggregate(store.queryByDate(dayStart, now))
+            val day = TripCache.obtain(dayStart, now) {
+                // 同一批 records 同时喂给聚合器与轨迹提取：不二次读库，轨迹与时间轴口径一致
+                val records = store.queryByDate(dayStart, now)
+                TripDay(
+                    timeline = TripAggregator(dayStart, now).aggregate(records),
+                    samples = TripTrace.samples(records),
+                )
             }
-            TripState(isLoading = false, timeline = timeline, dayStart = dayStart, dayEnd = now)
+            TripState(
+                isLoading = false,
+                timeline = day.timeline,
+                trace = day.samples,
+                dayStart = dayStart,
+                dayEnd = now,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -87,21 +100,23 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
  *
  * 键含「分钟」：今天的时间轴每分钟随新记录变化；历史日期的键在同一天内固定，命中即秒开。
  */
+private data class TripDay(val timeline: DayTimeline, val samples: List<TraceSample>)
+
 private object TripCache {
     private const val MAX_DAYS = 4
 
-    private val entries = object : LinkedHashMap<String, DayTimeline>(MAX_DAYS, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, DayTimeline>) =
+    private val entries = object : LinkedHashMap<String, TripDay>(MAX_DAYS, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TripDay>) =
             size > MAX_DAYS
     }
 
     @Synchronized
-    fun obtain(dayStart: Long, dayEnd: Long, compute: () -> DayTimeline): DayTimeline {
+    fun obtain(dayStart: Long, dayEnd: Long, compute: () -> TripDay): TripDay {
         val key = dayStart.toString() + ":" + (dayEnd / 60_000L)
         entries[key]?.let { return it }
-        val timeline = compute()
-        entries[key] = timeline
-        return timeline
+        val day = compute()
+        entries[key] = day
+        return day
     }
 
     @Synchronized
