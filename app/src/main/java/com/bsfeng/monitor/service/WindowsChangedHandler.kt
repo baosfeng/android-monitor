@@ -29,10 +29,12 @@ internal fun MonitorAccessibilityService.handleWindowsChanged() {
     // 本 App（设置/实时页切 Tab）与桌面/系统 UI 一样不参与页面轨迹，也不做文本遍历
     val trackable = pkg != null && !isHomeApp(pkg) && !isSystemUi(pkg) && pkg != packageName
     val texts = if (trackable) collectVisibleTexts(root) else emptyList()
+    // 窗口标题要在 recycle 之前读（AccessibilityWindowInfo 由 root 持有）
+    val windowTitle = if (trackable) root.window?.title?.toString() else null
     root.recycle()
     if (pkg == null || !trackable) {
         observePage(null, null, emptyList(), null, now, PageEvent.SOURCE_WINDOW_EVENT)
         return
     }
-    observePage(pkg, lastActivityClass, texts, AppUtils.getAppName(pkg), now, PageEvent.SOURCE_WINDOW_EVENT)
+    observePage(pkg, lastActivityClass, texts, AppUtils.getAppName(pkg), now, PageEvent.SOURCE_WINDOW_EVENT, windowTitle)
 }
