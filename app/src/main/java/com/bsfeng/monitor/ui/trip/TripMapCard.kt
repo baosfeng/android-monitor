@@ -5,6 +5,7 @@ package com.bsfeng.monitor.ui.trip
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -13,8 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,9 +41,9 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.Badge
-import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.fgFade
 
 /** 轨迹画布高度：180dp 与其它图表卡同高（布局语义尺寸，留字面量并注明用途）。 */
 private val MAP_HEIGHT = 180.dp
@@ -57,16 +62,28 @@ internal fun TripMapCard(
     timeline: DayTimeline,
     samples: List<TraceSample>,
     modifier: Modifier = Modifier,
+    isToday: Boolean = true,
+    exporting: Boolean = false,
+    onExport: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = t.fg2)
 
     AppCard(modifier = modifier) {
-        CardHead(
-            title = "今日轨迹",
-            meta = traceMeta(timeline, samples),
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (isToday) "今日轨迹" else "当日轨迹",
+                style = MaterialTheme.typography.titleSmall,
+                color = t.fg,
+            )
+            Spacer(Modifier.width(t.space2))
+            MetaText(traceMeta(timeline, samples), Modifier.weight(1f))
+            if (samples.isNotEmpty() && onExport != null) {
+                Spacer(Modifier.width(t.space2))
+                TripExportChip(exporting = exporting, onClick = onExport)
+            }
+        }
         Spacer(Modifier.height(t.space3))
         if (samples.isEmpty()) {
             Box(
@@ -79,7 +96,11 @@ internal fun TripMapCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "今天还没有定位样本，开启位置采集后才有轨迹",
+                    text = if (isToday) {
+                        "今天还没有定位样本，开启位置采集后才有轨迹"
+                    } else {
+                        "这一天没有定位样本，开启位置采集后才有轨迹"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                     textAlign = TextAlign.Center,
@@ -161,6 +182,33 @@ internal fun TripMapCard(
         }
         Spacer(Modifier.height(t.space1))
         MetaText(traceNote(timeline, samples))
+    }
+}
+
+/** 卡头右侧「导出」：把当天轨迹渲染成 PNG 存进系统相册。 */
+@Composable
+private fun TripExportChip(exporting: Boolean, onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(t.radiusPill))
+            .background(t.fgFade(6))
+            .clickable(enabled = !exporting) { onClick() }
+            .padding(horizontal = t.space2, vertical = t.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.FileDownload,
+            contentDescription = null,
+            tint = if (exporting) t.muted else t.accent,
+            modifier = Modifier.size(t.space4),
+        )
+        Spacer(Modifier.width(t.space1))
+        Text(
+            text = if (exporting) "导出中…" else "导出",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (exporting) t.muted else t.accent,
+        )
     }
 }
 
