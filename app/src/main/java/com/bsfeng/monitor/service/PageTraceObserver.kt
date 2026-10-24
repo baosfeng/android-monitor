@@ -27,6 +27,7 @@ internal fun MonitorAccessibilityService.observePage(
     timestamp: Long,
     source: String,
     windowTitle: String? = null,
+    eventTexts: List<String> = emptyList(),
 ) {
     try {
         if (!pageTracingEnabled()) {
@@ -35,7 +36,8 @@ internal fun MonitorAccessibilityService.observePage(
         }
         if (BuildConfig.DEBUG) {
             Log.d("PageTitle", "pkg=" + packageName + " texts=" + visibleTexts.size +
-                " windowTitle=" + windowTitle + " first=" + visibleTexts.firstOrNull())
+                " eventTexts=" + eventTexts + " windowTitle=" + windowTitle +
+                " first=" + visibleTexts.firstOrNull())
         }
         emitPageEvents(
             pageTracker.observe(
@@ -46,6 +48,7 @@ internal fun MonitorAccessibilityService.observePage(
                 source = source,
                 timestamp = timestamp,
                 windowTitle = windowTitle,
+                eventTexts = eventTexts,
                 collectTitle = pageTitleEnabled(),
             )
         )
