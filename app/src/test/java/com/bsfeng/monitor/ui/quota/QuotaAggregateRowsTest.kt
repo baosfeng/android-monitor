@@ -194,7 +194,6 @@ class QuotaAggregateRowsTest {
     }
 
     // ───────────────── 百分比格式化 ─────────────────
-
     @Test
     fun `百分比按整数分位格式化不丢精度`() {
         assertEquals("12%", percentOfFraction(0.12f))

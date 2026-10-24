@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.quota.QuotaAggregateRow
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.EmptyState
+import com.bsfeng.monitor.ui.components.ErrorState
 import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
@@ -37,12 +38,17 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
  * 行首 22dp 圆形位次徽标（第 1 名危险色淡底）、名称 + 剩余百分比 + 三档进度条、
  * 副文案并排多窗口。灰行（余额型）从 [QuotaAggregateSnapshot.excluded] 来，
  * 不占位次、不可点开。
+ *
+ * 状态判定全在 [aggregateStatusOf]，这里只按它的结果分别画：
+ * 「没数据」有三种完全不同的原因（还在查 / 一家没配 / 配了全失败），
+ * 一律画空态会让人误以为配置丢了，跑去重填本来正确的凭据。
  */
 @Composable
 fun QuotaAggregateBody(
     snapshot: QuotaAggregateSnapshot,
     onOpenProvider: (String) -> Unit,
     onConfigure: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
@@ -50,16 +56,48 @@ fun QuotaAggregateBody(
         modifier = modifier.fillMaxWidth().padding(horizontal = t.space4),
         verticalArrangement = Arrangement.spacedBy(t.space1),
     ) {
-        if (!snapshot.hasRanked) {
-            EmptyState(
-                text = "只有能算出剩余百分比的 provider 参与排序，余额型不进聚合。",
-                title = "还没有可聚合的额度",
-                icon = Icons.Outlined.Storage,
-                actionLabel = "去配置 provider",
-                onAction = onConfigure,
-                modifier = Modifier.staggerEnterAt(0),
-            )
-            return@Column
+        when (snapshot.status) {
+            // 首次查询中：骨架与真实榜单同形，数据回来时不跳高度
+            QuotaAggregateStatus.Loading -> {
+                QuotaLoading(Modifier.staggerEnterAt(0))
+                return@Column
+            }
+            // 一家都没配：只有这一种情况的正确动作是「去配置」
+            QuotaAggregateStatus.NotConfigured -> {
+                EmptyState(
+                    text = "只有能算出剩余百分比的 provider 参与排序，余额型不进聚合。",
+                    title = "还没有可聚合的额度",
+                    icon = Icons.Outlined.Storage,
+                    actionLabel = "去配置 provider",
+                    onAction = onConfigure,
+                    modifier = Modifier.staggerEnterAt(0),
+                )
+                return@Column
+            }
+            // 凭据配对了、请求也通了，只是返回的额度算不出百分比：喊「去配置」同样指错方向
+            QuotaAggregateStatus.NoRankable -> {
+                EmptyState(
+                    text = "已配置 ${snapshot.configuredCount} 家，但它们返回的额度都算不出剩余百分比（余额型不进聚合）。",
+                    title = "没有可参与排序的额度",
+                    icon = Icons.Outlined.Storage,
+                    actionLabel = "查看 provider 设置",
+                    onAction = onConfigure,
+                    modifier = Modifier.staggerEnterAt(0),
+                )
+                return@Column
+            }
+            // 配了但全部失败：错在接口/凭据有效性，不是没配置，所以给原因 + 重试
+            QuotaAggregateStatus.AllFailed -> {
+                ErrorState(
+                    text = snapshot.failureMessage.orEmpty(),
+                    title = "查询失败",
+                    onRetry = onRetry,
+                    modifier = Modifier.staggerEnterAt(0),
+                )
+                return@Column
+            }
+            // 有数据：部分失败的家带 stale 照常上榜（行上标「旧数据」），不在这里另作状态
+            QuotaAggregateStatus.Content -> Unit
         }
         snapshot.leader?.let { leader ->
             AggregateHero(leader, Modifier.staggerEnterAt(0))

@@ -302,16 +302,155 @@ dependencies {
 // =============================================
 // 单元测试覆盖率
 // ------------------------------------------------------------
-// 使用 AGP 内置的覆盖率支持（见 buildTypes.debug.enableUnitTestCoverage）：
+// 使用 AGP 内置的覆盖率支持（见 buildTypes.debug.enableUnitTestCoverage）采集 exec 数据：
 //
+//   ./gradlew :app:testDebugUnitTest            # 产出 testDebugUnitTest.exec
 //   ./gradlew :app:createDebugUnitTestCoverageReport
+//   ./gradlew :app:coverageReport               # 带排除规则的报告 + XML，门禁用这个
 //
-// 报告：app/build/reports/coverage/test/debug/index.html
+// 报告：app/build/reports/coverage/test/debug/index.html（AGP 原始口径）
+//       app/build/reports/coverage/app-debug/   （AGP 口径，已排除生成代码与纯 Composable）
+//       app/build/reports/coverage/app-debug/report.xml（scripts/check-coverage.sh 读这个）
 // 数据：app/build/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec
 //
 // ⚠️ 已知限制：**Robolectric 用例的覆盖不会被计入**。
-// Robolectric 用自带的沙箱 ClassLoader 加载被测类，绕过了 JaCoCo 的在线插桩 agent，
-// 因此 exec 里只包含纯 JVM 用例（如 FinanceModelTest）触碰到的类。
+// AGP 只把 jacocoagent 以 -javaagent 方式挂到测试 JVM 上做在线插桩（不产出离线插桩类）；
+// Robolectric 用自带沙箱 ClassLoader 直接从原始 .class 字节加载被测类，不经过该 agent，
+// 因此 exec 里只包含纯 JVM 用例触碰到的类。
 // 由 Robolectric 覆盖的类（FinanceDao / FinanceManager / PandaImporter 等）在报告里显示 0%，
 // **不代表没有测试**——它们以「用例断言 + 反向验证（回滚修复后测试变红）」作为证据。
+// 结论：门禁阈值只能用来防「纯 JVM 可测代码」的覆盖率下滑，不能当作整体质量分数。
 // =============================================
+
+// ------------------------------------------------------------
+// 覆盖率排除清单
+// ------------------------------------------------------------
+// 原则：**只排除「测试根本碰不到、或不该用单测衡量」的代码**，不排除难测的核心逻辑。
+// 每项都写明理由；报告里被排除的行数会打印出来，便于核对没有借排除凑数字。
+
+// 1) 纯 Compose UI 文件：整个文件只有 @Composable 函数（含 private 的布局拆分函数），
+//    没有可独立调用的业务逻辑。Compose 的渲染需要 UI 测试（androidTest + Compose Testing），
+//    单元测试环境无法组合，强行计入会让分母膨胀且永远不涨。
+//    判定标准：文件内所有声明都是 @Composable 函数；一旦文件里出现普通 fun/class，
+//    就不排除它（那说明有可单测的逻辑）。
+//    写法是相对 src/main/java 的路径（去掉 .kt），下面转成 class 名 pattern。
+//    注意 Kotlin 顶层函数的 class 名是「文件名 + Kt」，排除时必须用它而不是文件名。
+val pureComposableSources = listOf(
+    "com/bsfeng/monitor/ui/AdScreen",
+    "com/bsfeng/monitor/ui/WhitelistScreen",
+    "com/bsfeng/monitor/ui/components/DebugGate",
+    "com/bsfeng/monitor/ui/components/PlaceholderScreens",
+    "com/bsfeng/monitor/ui/components/WindowOverlay",
+    "com/bsfeng/monitor/ui/foundation/Backdrop",
+    "com/bsfeng/monitor/ui/foundation/ImmersiveScrim",
+    "com/bsfeng/monitor/ui/quota/QuotaAggregateList",
+    "com/bsfeng/monitor/ui/quota/QuotaAggregateRow",
+    "com/bsfeng/monitor/ui/quota/QuotaAtoms",
+    "com/bsfeng/monitor/ui/quota/QuotaSettingsAlerts",
+    "com/bsfeng/monitor/ui/quota/QuotaSettingsProviders",
+    "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen",
+    "com/bsfeng/monitor/ui/quota/QuotaStateViews",
+    "com/bsfeng/monitor/ui/quota/QuotaUsageCard",
+    "com/bsfeng/monitor/ui/quota/QuotaViewModeSwitch",
+    "com/bsfeng/monitor/ui/theme/Components",
+    "com/bsfeng/monitor/ui/trip/TripCard",
+    "com/bsfeng/monitor/finance/ui/FinanceDialogs",
+)
+
+// 2) 代码生成产物：改了会被下一次生成覆盖，覆盖率高不代表逻辑可靠。
+//    - GeneratedTokens.kt：tools/gen-design-tokens.mjs 由原型 HTML 生成，
+//      产出 DesignTokens / GeneratedColorScheme / LegacyTokenMap 三个类（132 个 getter 纯转发）
+//    - Compose 编译器产出的 ComposableSingletons$* 与 *$WhenMappings 合成类：
+//      随源码自动生成、无法单独测试，随宿主文件一起统计才有意义
+//    注：R / BuildConfig 的 class 不进本报告的 classfiles（AGP 只喂 kotlinc/javac 输出），
+//    已实测报告内这两类计数为 0，故不写空 pattern 占位。
+val generatedCodeClasses = listOf(
+    "com/bsfeng/monitor/ui/theme/DesignTokens.class",
+    "com/bsfeng/monitor/ui/theme/GeneratedColorScheme.class",
+    "com/bsfeng/monitor/ui/theme/LegacyTokenMap.class",
+    "com/bsfeng/monitor/ui/theme/LegacyTokenMap\$*.class",
+    "**/ComposableSingletons\$*.class",
+    "**/*\$WhenMappings.class",
+)
+
+// 合并成 JaCoCo Ant 报告能吃的 pattern；纯 Composable 转成「文件名Kt 及其内部类」
+val coverageExcludes: List<String> = pureComposableSources.map { "$it" + "Kt*.class" } + generatedCodeClasses
+
+// 报告任务：用 JaCoCo Ant 而非 AGP 内置报告，因为 AGP 的 JacocoReportTask 不接受自定义排除项
+// （JacocoWorkParameters.exclusions 只供 on-the-fly 模式用）。Ant 报告与 AGP 报告在无排除时
+// 数字完全一致（LINE 19.78% / BRANCH 20.50%，已实测对比），换的只是过滤能力。
+val coverageReport by tasks.registering {
+    group = "verification"
+    description = "生成单元测试覆盖率报告（HTML + XML），排除生成代码与纯 Composable 文件"
+    dependsOn("testDebugUnitTest")
+
+    val execFile = layout.buildDirectory.file(
+        "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"
+    )
+    val classesDir = layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes")
+    val javaClassesDir = layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")
+    val sourceDir = file("src/main/java")
+    val reportDir = layout.buildDirectory.dir("reports/coverage/app-debug")
+    val excludes = coverageExcludes
+
+    inputs.file(execFile)
+    inputs.files(classesDir, javaClassesDir)
+    inputs.property("excludes", excludes)
+    outputs.dir(reportDir)
+
+    doLast {
+        val classDirs = listOf(classesDir.get().asFile, javaClassesDir.get().asFile).filter { it.exists() }
+
+        // 自检：每个排除 pattern 必须真命中 class 文件，否则是静默失效（曾用 .kt 路径踩过，
+        // 报告数字一点没变却毫无提示）。命中 0 直接失败，逼着改 pattern。
+        val hitsByPattern = excludes.associateWith { pattern ->
+            classDirs.sumOf { dir ->
+                fileTree(dir) { include(pattern) }.files.size
+            }
+        }
+        val misses = hitsByPattern.filterValues { it == 0 }.keys
+        if (misses.isNotEmpty()) {
+            throw GradleException(
+                "覆盖率排除规则未命中任何 class 文件，排除已失效：$misses\n" +
+                    "请改成正确的 class 名 pattern（Kotlin 顶层函数在 <文件名>Kt 里）。"
+            )
+        }
+        val excludedCount = classDirs.sumOf { dir -> fileTree(dir) { exclude(excludes) ; include("**/*.class") }.files.size }
+        val totalClassFiles = classDirs.sumOf { dir -> fileTree(dir) { include("**/*.class") }.files.size }
+        println("覆盖率排除自检通过：${excludes.size} 条规则全部命中；排除后保留 $excludedCount / $totalClassFiles 个 class")
+
+        val antClasspath = configurations.getByName("androidJacocoAnt").files
+            .joinToString(":") { it.absolutePath }
+        val outDir = reportDir.get().asFile
+        outDir.mkdirs()
+        ant.withGroovyBuilder {
+            "taskdef"("name" to "jacocoReport", "classname" to "org.jacoco.ant.ReportTask") {
+                "classpath" { "pathelement"("path" to antClasspath) }
+            }
+            "jacocoReport" {
+                "executiondata" {
+                    "file"("file" to execFile.get().asFile)
+                }
+                "structure"("name" to "app-debug") {
+                    "classfiles" {
+                        classDirs.forEach { d ->
+                            "fileset"("dir" to d) {
+                                excludes.forEach { "exclude"("name" to it) }
+                            }
+                        }
+                    }
+                    "sourcefiles" {
+                        "fileset"("dir" to sourceDir)
+                    }
+                }
+                "html"("destdir" to File(outDir, "html"))
+                "xml"("destfile" to File(outDir, "report.xml"))
+            }
+        }
+        println("覆盖率报告（含排除）: file://${File(outDir, "html/index.html")}")
+    }
+}
+
+tasks.matching { it.name == "check" }.configureEach {
+    dependsOn(coverageReport)
+}
