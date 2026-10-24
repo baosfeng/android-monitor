@@ -11,7 +11,10 @@ import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.autobook.AutoBookEngine
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
+import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.LocationPace
 import com.bsfeng.monitor.record.RecordCollector
+import com.bsfeng.monitor.record.SampleMode
 import com.bsfeng.monitor.skip.ActionExecutor
 import com.bsfeng.monitor.skip.SkipEventRecorder
 import com.bsfeng.monitor.skip.SkipRuleEngine
@@ -97,6 +100,39 @@ open class MonitorAccessibilityService : AccessibilityService() {
 
     /** 轮询链运行标志：onServiceConnected 启动，onDestroy 停止（防叠加） */
     private var pollerActive: Boolean = false
+
+    /**
+     * 位置采集的 10 秒定时器：只在 [SampleMode.MOVING] 时补采。
+     *
+     * 静止时它只做「现在该不该采」的纯判断，然后什么都不做 —— 静止的 3 分钟节奏交给
+     * 1 分钟 [AlarmReceiver] 心跳（服务被系统杀掉时仍能补点）。服务销毁必须 removeCallbacks，
+     * 否则服务重建会叠加多条定时链。
+     */
+    private val locationTickerHandler: android.os.Handler =
+        android.os.Handler(android.os.Looper.getMainLooper())
+
+    private val locationTicker = object : Runnable {
+        override fun run() {
+            try {
+                maybeSampleLocation()
+            } catch (e: Exception) {
+                Log.w("MonitorService", "定位补采异常", e)
+            }
+            // 仅当服务仍存活时继续调度（与前台轮询链同一口径）
+            if (pollerActive) {
+                locationTickerHandler.postDelayed(this, LocationPace.MOVING_INTERVAL_MS)
+            }
+        }
+    }
+
+    /** 移动时每 10 秒补一个点；静止 / 未开启位置采集一律跳过（交给心跳兜底）。 */
+    private fun maybeSampleLocation() {
+        if (!FeatureFlags.get().isEnabled(Feature.LOCATION)) return
+        val collector = LocationCollector.get(this)
+        if (collector.mode != SampleMode.MOVING) return
+        if (!collector.shouldSampleNow()) return
+        sampleLocationOnce(this) { }
+    }
 
     /** 输出干净的时间线日志：adb logcat -v time | grep MonitorTimeline */
     internal fun timeline(emoji: String, message: String) {
@@ -242,6 +278,9 @@ open class MonitorAccessibilityService : AccessibilityService() {
         if (!pollerActive) {
             pollerActive = true
             foregroundHandler.postDelayed(foregroundPoller, 10_000L)
+            // 位置采集的 10 秒补采定时器：先移除旧回调，防止服务重建后叠加定时链
+            locationTickerHandler.removeCallbacks(locationTicker)
+            locationTickerHandler.postDelayed(locationTicker, LocationPace.MOVING_INTERVAL_MS)
         }
         // 预热自动记账：提前加载分类，第一笔账单弹窗时不再现查库（浮窗更快）
         runCatching { autoBookEngine.warmUp() }
@@ -253,6 +292,7 @@ open class MonitorAccessibilityService : AccessibilityService() {
         // 停止轮询链 + 清理弹幕浮层，防止服务重建后残留回调
         pollerActive = false
         foregroundHandler.removeCallbacks(foregroundPoller)
+        locationTickerHandler.removeCallbacks(locationTicker)
         // 服务是「被正常销毁」而不是「被冻结」：清掉心跳，否则下次进设置页会误报进程被冻结
         HeartbeatWatchdog.onServiceStopped(this)
         removeCurrentDanmaku()

@@ -51,7 +51,7 @@ AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
     TokenRow(
         title = "位置采集",
         subtitle = if (locationOn) {
-            "每 10 分钟记录一次粗略位置（3 位小数）"
+            "移动时约 10 秒、静止时约 3 分钟记录一次（3 位小数）"
         } else {
             "已关闭：不读位置、不落坐标"
         },

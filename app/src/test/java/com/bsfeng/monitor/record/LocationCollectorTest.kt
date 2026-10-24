@@ -109,12 +109,25 @@ class LocationCollectorTest {
     // ===== 节流 =====
 
     @Test
-    fun `COORDINATE 十分钟内最多一条`() {
+    fun `节流窗口按传入的模式间隔生效`() {
         val throttle = LocationThrottle()
         assertTrue(throttle.canAcquire(now))
         throttle.markAcquired(now)
-        assertFalse(throttle.canAcquire(now + 9 * 60 * 1000L))
-        assertTrue(throttle.canAcquire(now + LocationPolicy.MIN_INTERVAL_MS))
+        // 移动：10 秒一个点
+        assertFalse("移动模式 9 秒还不够", throttle.canAcquire(now + 9_000L, LocationPace.MOVING_INTERVAL_MS))
+        assertTrue("移动模式满 10 秒可以再采", throttle.canAcquire(now + 10_000L, LocationPace.MOVING_INTERVAL_MS))
+        // 静止：3 分钟一个点
+        assertFalse("静止模式 2 分钟内不能再采", throttle.canAcquire(now + 2 * 60_000L, LocationPace.STILL_INTERVAL_MS))
+        assertTrue("静止模式满 3 分钟可以再采", throttle.canAcquire(now + 3 * 60_000L, LocationPace.STILL_INTERVAL_MS))
+    }
+
+    @Test
+    fun `默认间隔是最省电的静止间隔`() {
+        val throttle = LocationThrottle()
+        throttle.markAcquired(now)
+        // 调用方漏传间隔时按静止处理：1 分钟内不会再采
+        assertFalse(throttle.canAcquire(now + 60_000L))
+        assertTrue(throttle.canAcquire(now + LocationPace.STILL_INTERVAL_MS))
     }
 
     @Test
@@ -241,6 +254,159 @@ class LocationCollectorTest {
         collector.collectThrottledAsync(now) { result = it }
         assertEquals(0, env.activeRequests)
         assertNull(result)
+    }
+
+    // ===== 自适应节奏：模式状态机（纯逻辑） =====
+
+    private fun point(
+        ts: Long,
+        lat: Double = 31.2304,
+        lng: Double = 121.4737,
+        accuracy: Float = 30f,
+    ) = LocationSample("network", lat, lng, accuracy, ts)
+
+    /** 纬度 0.001° ≈ 111m：用它造「走了一段」。 */
+    private fun north(lat: Double, meters: Double) = lat + meters / 111_000.0
+
+    @Test
+    fun `间隔按模式取 移动10秒 静止3分钟`() {
+        assertEquals(10_000L, LocationPace.intervalOf(SampleMode.MOVING))
+        assertEquals(180_000L, LocationPace.intervalOf(SampleMode.STILL))
+        assertEquals(
+            "静止间隔取 1–3 分钟区间的上限（省电优先）",
+            3 * 60_000L,
+            LocationPace.STILL_INTERVAL_MS,
+        )
+    }
+
+    @Test
+    fun `位移超过100米且在5分钟内 切到移动`() {
+        val tracker = LocationModeTracker()
+        assertEquals(SampleMode.STILL, tracker.onSample(point(now)))
+        val moved = tracker.onSample(point(now + 10_000L, lat = north(31.2304, 150.0)))
+        assertEquals(SampleMode.MOVING, moved)
+    }
+
+    @Test
+    fun `精度明显改善时 50米出头的小位移也算移动`() {
+        val tracker = LocationModeTracker()
+        tracker.onSample(point(now, accuracy = 80f))
+        val moved = tracker.onSample(
+            point(now + 20_000L, lat = north(31.2304, 70.0), accuracy = 20f),
+        )
+        assertEquals("精度从 80m 改善到 20m 且位移 > 50m", SampleMode.MOVING, moved)
+    }
+
+    @Test
+    fun `精度没改善时 70米位移不足以切移动`() {
+        val tracker = LocationModeTracker()
+        tracker.onSample(point(now, accuracy = 30f))
+        val still = tracker.onSample(point(now + 20_000L, lat = north(31.2304, 70.0), accuracy = 30f))
+        assertEquals(SampleMode.STILL, still)
+    }
+
+    @Test
+    fun `跨天或长断档的大跳变不算移动`() {
+        val tracker = LocationModeTracker()
+        tracker.onSample(point(now))
+        // 隔夜 8 小时、位移 5km：中间没有轨迹，不能当成「刚刚走了一步」
+        val mode = tracker.onSample(point(now + 8 * 60 * 60_000L, lat = north(31.2304, 5_000.0)))
+        assertEquals(SampleMode.STILL, mode)
+    }
+
+    @Test
+    fun `零位移连续3次回到静止`() {
+        val tracker = LocationModeTracker(initialMode = SampleMode.MOVING)
+        val p = point(now)
+        tracker.onSample(p)
+        assertEquals(SampleMode.MOVING, tracker.onSample(point(now + 10_000L)))
+        assertEquals(SampleMode.MOVING, tracker.onSample(point(now + 20_000L)))
+        assertEquals("第 3 次原地采样才判静止", SampleMode.STILL, tracker.onSample(point(now + 30_000L)))
+    }
+
+    @Test
+    fun `模式抖动抑制 一次小位移会清零静止计数`() {
+        val tracker = LocationModeTracker(initialMode = SampleMode.MOVING)
+        tracker.onSample(point(now))
+        tracker.onSample(point(now + 10_000L))
+        tracker.onSample(point(now + 20_000L))
+        // 第 3 次前走了一步（80m > 50m）：计数清零，仍在移动
+        val afterMove = tracker.onSample(point(now + 30_000L, lat = north(31.2304, 80.0)))
+        assertEquals(SampleMode.MOVING, afterMove)
+        // 重新数 3 次原地
+        tracker.onSample(point(now + 40_000L, lat = north(31.2304, 80.0)))
+        tracker.onSample(point(now + 50_000L, lat = north(31.2304, 80.0)))
+        assertEquals(SampleMode.STILL, tracker.onSample(point(now + 60_000L, lat = north(31.2304, 80.0))))
+    }
+
+    @Test
+    fun `重启后从静止开始 3 分钟内即可重新识别移动`() {
+        val tracker = LocationModeTracker()
+        assertEquals("新实例默认静止", SampleMode.STILL, tracker.mode)
+        tracker.onSample(point(now))
+        // 静止间隔就是 3 分钟：下一次采样若已移动，立刻切回移动
+        assertEquals(
+            SampleMode.MOVING,
+            tracker.onSample(point(now + LocationPace.STILL_INTERVAL_MS, lat = north(31.2304, 150.0))),
+        )
+    }
+
+    // ===== 自适应节奏：采集器编排 =====
+
+    @Test
+    fun `移动时30秒内的缓存直接命中 不主动定位`() {
+        val cached = LocationSample("passive", 31.23, 121.47, 20f, now - 10_000L)
+        val env = FakeEnv(cached = listOf(cached))
+        val collector = LocationCollector(env, modeTracker = LocationModeTracker(SampleMode.MOVING))
+
+        var result: LocationSample? = null
+        collector.collectThrottledAsync(now) { result = it }
+        assertEquals(0, env.activeRequests)
+        assertSame(cached, result)
+    }
+
+    @Test
+    fun `移动时旧缓存不够新 触发一次主动定位`() {
+        val cached = LocationSample("passive", 31.23, 121.47, 20f, now - 5 * 60_000L)
+        val fresh = LocationSample("gps", 31.2304, 121.4737, 8f, now)
+        val env = FakeEnv(cached = listOf(cached), onActive = { _, callback -> callback(fresh) })
+        val collector = LocationCollector(env, modeTracker = LocationModeTracker(SampleMode.MOVING))
+
+        var result: LocationSample? = null
+        collector.collectThrottledAsync(now) { result = it }
+        assertEquals("移动节奏不能被 5 分钟前的旧点糊弄", 1, env.activeRequests)
+        assertSame(fresh, result)
+    }
+
+    @Test
+    fun `静止时旧缓存直接用 不主动定位`() {
+        val cached = LocationSample("passive", 31.23, 121.47, 20f, now - 5 * 60_000L)
+        val env = FakeEnv(cached = listOf(cached))
+        val collector = LocationCollector(env, modeTracker = LocationModeTracker(SampleMode.STILL))
+
+        var result: LocationSample? = null
+        collector.collectThrottledAsync(now) { result = it }
+        assertEquals(0, env.activeRequests)
+        assertSame(cached, result)
+    }
+
+    @Test
+    fun `采样后模式与间隔同步更新`() {
+        val first = LocationSample("network", 31.2304, 121.4737, 30f, now)
+        val moved = LocationSample("network", north(31.2304, 200.0), 121.4737, 25f, now + LocationPace.STILL_INTERVAL_MS)
+        val env = FakeEnv(cached = listOf(first))
+        val collector = LocationCollector(env)
+
+        assertEquals("初始按静止算", SampleMode.STILL, collector.mode)
+        assertEquals(LocationPace.STILL_INTERVAL_MS, collector.samplingIntervalMs())
+        collector.collectThrottledAsync(now) { }
+        // 3 分钟后再采到明显位移 → 切移动，间隔随之为 10 秒
+        env.cached = listOf(moved)
+        collector.collectThrottledAsync(now + LocationPace.STILL_INTERVAL_MS) { }
+        assertEquals(SampleMode.MOVING, collector.mode)
+        assertEquals(LocationPace.MOVING_INTERVAL_MS, collector.samplingIntervalMs())
+        assertTrue("移动模式下 10 秒即可再采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 10_000L))
+        assertFalse("不到 10 秒不采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 9_000L))
     }
 
     // ===== 主动定位的 provider 编排 =====
