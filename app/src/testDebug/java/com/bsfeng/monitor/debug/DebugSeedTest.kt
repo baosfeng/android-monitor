@@ -45,12 +45,13 @@ class DebugSeedTest {
     }
 
     @Test
-    fun `day 场景 - 四类记录齐全（LOCATION-APP_USAGE-PAGE-SCREEN）`() {
+    fun `day 场景 - 三类记录齐全（LOCATION-APP_USAGE-SCREEN）`() {
         val types = DebugSeed.build(SeedScenario.DAY, dayStart, now).map { RecordType.toString(it.type) }.toSet()
         assertTrue(types.contains("LOCATION"))
         assertTrue(types.contains("APP_USAGE"))
-        assertTrue(types.contains("PAGE"))
         assertTrue(types.contains("SCREEN"))
+        // 页面轨迹功能已下线：造数不能再出现 PAGE
+        assertTrue(!types.contains("PAGE"))
     }
 
     @Test

@@ -82,13 +82,10 @@ object DebugSeed {
         out += movePoints(officeEnd, home2Start, OFFICE, HOME)
         out += stayPoints(home2Start, end, HOME)
 
-        // 三个停留段各配一段使用记录 + 页面轨迹（聚合器按停留区间挑 topApps / pages）
+        // 三个停留段各配一段使用记录（聚合器按停留区间挑 topApps）
         out += usage(start + span * 10 / 100, "微信", "com.tencent.mm", 25 * MINUTE_MS)
-        out += pages(start + span * 12 / 100, "微信", "com.tencent.mm", listOf("Chatting", "Moments"))
         out += usage(officeStart + span * 8 / 100, "飞书", "com.ss.android.lark", 40 * MINUTE_MS)
-        out += pages(officeStart + span * 10 / 100, "飞书", "com.ss.android.lark", listOf("Doc", "Calendar"))
         out += usage(home2Start + span * 3 / 100, "哔哩哔哩", "tv.danmaku.bili", 35 * MINUTE_MS)
-        out += pages(home2Start + span * 5 / 100, "哔哩哔哩", "tv.danmaku.bili", listOf("Home", "Player"))
         // 亮屏记录：一对 UNLOCKED/OFF，让概览的亮屏时长不为 0
         out += screenOn(start + span * 9 / 100, 12 * MINUTE_MS)
         out += screenOn(officeStart + span * 7 / 100, 8 * MINUTE_MS)
@@ -101,7 +98,6 @@ object DebugSeed {
         val out = ArrayList<Record>()
         out += stayPoints(start, end, HOME)
         out += usage(start + span * 20 / 100, "微信", "com.tencent.mm", 30 * MINUTE_MS)
-        out += pages(start + span * 22 / 100, "微信", "com.tencent.mm", listOf("Chatting"))
         out += screenOn(start + span * 18 / 100, 10 * MINUTE_MS)
         return out
     }
@@ -231,25 +227,6 @@ object DebugSeed {
         label = appName,
         detail = mapOf("package_name" to pkg, "app_name" to appName, "source" to SOURCE),
     )
-
-    private fun pages(ts: Long, appName: String, pkg: String, keys: List<String>): List<Record> =
-        keys.mapIndexed { index, key ->
-            Record(
-                id = UUID.randomUUID().toString(),
-                type = RecordType.PAGE,
-                action = if (index == 0) "ENTER" else "CHANGED",
-                timestamp = ts + index * MINUTE_MS,
-                duration = 45_000L,
-                label = "$appName › $key",
-                detail = mapOf(
-                    "package_name" to pkg,
-                    "app_name" to appName,
-                    "page_key" to key,
-                    "source" to SOURCE,
-                    "duration_ms" to "45000",
-                ),
-            )
-        }
 
     private fun screenOn(ts: Long, durationMs: Long): List<Record> = listOf(
         Record(UUID.randomUUID().toString(), RecordType.SCREEN, "UNLOCKED", ts, null, "亮屏", mapOf("source" to SOURCE)),

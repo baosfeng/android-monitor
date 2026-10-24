@@ -158,26 +158,6 @@ class RecordCollector(
     }
 
     /**
-     * 写入一条页面轨迹。
-     *
-     * ⚠️ detail 白名单：`package_name` / `app_name` / `page_key` / `source` / `duration_ms`
-     * / `page_title`（仅本地，用户确认后新增；上报链路不得携带）。
-     * 页面文本只在 [PageTracker.fingerprint] 里参与哈希，**任何情况下都不进 detail**。
-     */
-    fun onPageChanged(event: PageEvent) {
-        val detail = mutableMapOf(
-            "package_name" to event.packageName,
-            "page_key" to event.pageKey,
-            "source" to event.source
-        )
-        event.appName?.let { detail["app_name"] = it }
-        event.durationMs?.let { detail["duration_ms"] = it.toString() }
-        // 页面标题：开关关闭时 PageTracker 不会产出 title，这里也就不会写入
-        event.title?.takeIf { it.isNotBlank() }?.let { detail["page_title"] = it }
-        emit(RecordType.PAGE, event.action, event.timestamp, event.durationMs, detail)
-    }
-
-    /**
      * 写入一次定位采样（COORDINATE）。
      *
      * 坐标为量化后的 3 位小数（≈110m）；有逆地理编码结果时额外写一个中文地址（仅地址文本）。

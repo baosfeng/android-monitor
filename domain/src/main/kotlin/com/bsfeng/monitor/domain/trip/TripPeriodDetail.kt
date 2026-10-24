@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.domain.trip
 
-// 从 domain/trip/TripAggregator.kt 拆出：停留期间明细（App 使用时长 / 页面切换次数）。
-// 纯聚合计算，只依赖 TripModels 的 UsageSlice / PageTally，可在纯 JVM 单测里直接验证。
+// 从 domain/trip/TripAggregator.kt 拆出：停留期间明细（App 使用时长）。
+// 纯聚合计算，只依赖 TripModels 的 UsageSlice，可在纯 JVM 单测里直接验证。
 
 // ────────────────────────────── 期间明细 ──────────────────────────────
 
@@ -36,24 +36,6 @@ internal fun topApps(usage: List<UsageSlice>, start: Long, end: Long): List<Usag
         i++
     }
     return acc.values.sortedByDescending { it.ms }
-}
-
-/**
- * 停留期间**每个 App** 的页面切换次数（按次数降序，**不截断**——停留抽屉要完整列表，
- * 摘要行自己只取 Top1）。只数次数，不带任何页面文本（指纹档）。
- */
-internal fun tallyPages(pages: List<PageSample>, start: Long, end: Long): List<PageTally> {
-    if (pages.isEmpty() || end <= start) return emptyList()
-    val counts = LinkedHashMap<String, Int>()
-    var i = TripAggregatorRules.lowerBoundByTs(pages, start)
-    while (i < pages.size && pages[i].ts < end) {
-        val app = pages[i].app
-        counts[app] = (counts[app] ?: 0) + 1
-        i++
-    }
-    return counts.entries
-        .sortedByDescending { it.value }
-        .map { PageTally(it.key, it.value) }
 }
 
 internal fun coveragePct(activeMs: Long, windowMs: Long): Int {

@@ -93,7 +93,7 @@ class RecordTypeMigrationTest {
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
         assertEquals(DatabaseHelper.DATABASE_VERSION, db.version)
-        assertEquals(5, db.version)
+        assertEquals(6, db.version)
 
         // zz9/WHAT 推不出来 → 保留原值；其余混淆名全部改名
         assertEquals(listOf("APP_USAGE", "BATTERY", "CHARGING", "SCREEN", "WIFI", "zz9"), distinctTypes(db))
@@ -125,7 +125,7 @@ class RecordTypeMigrationTest {
 
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
-        assertEquals(5, db.version)
+        assertEquals(6, db.version)
         val total = db.rawQuery("SELECT COUNT(*) FROM records", null).use { if (it.moveToFirst()) it.getInt(0) else -1 }
         assertEquals("重跑不能丢数据", seedRows.size, total)
         assertEquals(listOf("APP_USAGE", "BATTERY", "CHARGING", "SCREEN", "WIFI", "zz9"), distinctTypes(db))
@@ -153,6 +153,56 @@ class RecordTypeMigrationTest {
         assertEquals(RecordType.SCREEN, fallback.type)
         assertNotNull(fallback.id)
         assertTrue(all.none { it.action.isBlank() })
+        helper.close()
+    }
+
+    // ===== v6：页面轨迹下线，历史 PAGE 行清掉 =====
+
+    @Test
+    fun `升级到 v6 后历史 PAGE 记录被删除 其它类型保留`() {
+        createLegacyDatabase()
+        // 往 v4 老库里塞两条 PAGE（功能下线前的历史数据）
+        val file = context.getDatabasePath(DATABASE_NAME)
+        val raw = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
+        raw.execSQL(
+            "INSERT INTO records (id, type, action, timestamp, label, owner) VALUES (?, 'PAGE', 'ENTER', ?, '页面', '')",
+            arrayOf<Any>("page-1", 11_000L),
+        )
+        raw.execSQL(
+            "INSERT INTO records (id, type, action, timestamp, label, owner) VALUES (?, 'PAGE', 'CHANGED', ?, '页面', '')",
+            arrayOf<Any>("page-2", 12_000L),
+        )
+        raw.version = 4
+        raw.close()
+
+        val helper = DatabaseHelper(context)
+        val db = helper.writableDatabase
+        assertEquals(6, db.version)
+        assertEquals(
+            "PAGE 行必须清零",
+            0,
+            db.rawQuery("SELECT COUNT(*) FROM records WHERE type='PAGE'", null)
+                .use { if (it.moveToFirst()) it.getInt(0) else -1 },
+        )
+        val total = db.rawQuery("SELECT COUNT(*) FROM records", null).use { if (it.moveToFirst()) it.getInt(0) else -1 }
+        assertEquals("其它类型一行不丢", seedRows.size, total)
+        helper.close()
+    }
+
+    @Test
+    fun `v6 迁移可重跑：版本退回 5 再升一次 不报错也不误删`() {
+        createLegacyDatabase()
+        DatabaseHelper(context).use { it.writableDatabase }
+
+        val raw = SQLiteDatabase.openDatabase(context.getDatabasePath(DATABASE_NAME).path, null, SQLiteDatabase.OPEN_READWRITE)
+        raw.version = 5
+        raw.close()
+
+        val helper = DatabaseHelper(context)
+        val db = helper.writableDatabase
+        assertEquals(6, db.version)
+        val total = db.rawQuery("SELECT COUNT(*) FROM records", null).use { if (it.moveToFirst()) it.getInt(0) else -1 }
+        assertEquals("重跑 v6 不能丢非 PAGE 数据", seedRows.size, total)
         helper.close()
     }
 

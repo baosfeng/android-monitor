@@ -55,8 +55,8 @@ class DebugCommandsTest {
     @Test
     fun `合法 - dump 带 limit 与 type（大小写不敏感）`() {
         assertEquals(
-            ParseResult.Ok(DebugCommand.Dump(limit = 3, type = RecordType.PAGE)),
-            DebugCommands.parse(mapOf("cmd" to "dump", "limit" to 3, "type" to "page")),
+            ParseResult.Ok(DebugCommand.Dump(limit = 3, type = RecordType.LOCATION)),
+            DebugCommands.parse(mapOf("cmd" to "dump", "limit" to 3, "type" to "location")),
         )
     }
 
@@ -146,7 +146,7 @@ class DebugCommandsTest {
 
     @Test
     fun `非法组合 - clear 同时给 type 与 all 被拒`() {
-        val result = DebugCommands.parse(mapOf("cmd" to "clear", "type" to "PAGE", "all" to true))
+        val result = DebugCommands.parse(mapOf("cmd" to "clear", "type" to "LOCATION", "all" to true))
         assertTrue(result is ParseResult.BadArgs)
         assertTrue((result as ParseResult.BadArgs).message.contains("互斥"))
     }
@@ -207,7 +207,7 @@ class DebugCommandsTest {
     fun `非法值 - type 不在类型表里`() {
         val result = DebugCommands.parse(mapOf("cmd" to "dump", "type" to "NOT_A_TYPE"))
         assertTrue(result is ParseResult.BadArgs)
-        assertTrue((result as ParseResult.BadArgs).message.contains("PAGE"))
+        assertTrue((result as ParseResult.BadArgs).message.contains("LOCATION"))
     }
 
     @Test

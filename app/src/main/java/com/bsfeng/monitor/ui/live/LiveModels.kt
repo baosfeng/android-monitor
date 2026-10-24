@@ -14,12 +14,11 @@ import java.util.Locale
  * 数据源与 token 均来自 W0 冻结接口，本文件不含任何色值 / 字号 / 间距字面量。
  */
 
-/** 类型筛选：与原型 s02 的 chip 一一对应（PAGE 为页面轨迹，位于「应用」之后）。 */
+/** 类型筛选：与原型 s02 的 chip 一一对应。 */
 enum class LiveFilter(val label: String, val types: Set<RecordType>) {
     ALL("全部", emptySet()),
     SCREEN("屏幕", setOf(RecordType.SCREEN)),
     APP_USAGE("应用", setOf(RecordType.APP_USAGE)),
-    PAGE("页面", setOf(RecordType.PAGE)),
     CHARGING("充电", setOf(RecordType.CHARGING, RecordType.BATTERY)),
     WIFI("网络", setOf(RecordType.WIFI, RecordType.PHONE_STATE, RecordType.AIRPLANE)),
     AUDIO("音频", setOf(RecordType.AUDIO));

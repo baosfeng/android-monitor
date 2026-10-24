@@ -142,8 +142,6 @@ internal class PlaceRegistry(private val fallbackLabel: String) {
     }
 }
 
-internal data class PageSample(val app: String, val ts: Long)
-
 internal data class WifiSample(val ssid: String, val ts: Long, val disconnect: Boolean)
 
 internal class SsidRun(val start: Long, val end: Long, val ssid: String)

@@ -86,8 +86,8 @@ scripts/debug-cli.sh unlock        # 首次：解锁调试层
 scripts/debug-cli.sh state         # 开关 / 定位权限 / 各类型当日计数
 scripts/debug-cli.sh seed day      # 造数：day | stay | move | gap
 scripts/debug-cli.sh open trip     # 直达行程页（不点 Tab）
-scripts/debug-cli.sh reset all     # 全表清空；单类型写 reset PAGE
-scripts/debug-cli.sh dump 20 PAGE  # 倒最近 20 条
+scripts/debug-cli.sh reset all     # 全表清空；单类型写 reset LOCATION
+scripts/debug-cli.sh dump 20 LOCATION  # 倒最近 20 条
 ```
 
 结果在 logcat tag `DebugCmd`：`RESULT cmd=<n> ok=<bool> data=<json>`，脚本退出码 = `ok`；`Broadcast completed: result=0` 只代表投递成功。

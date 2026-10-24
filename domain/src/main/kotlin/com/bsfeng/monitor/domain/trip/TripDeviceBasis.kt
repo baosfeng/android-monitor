@@ -8,7 +8,6 @@ package com.bsfeng.monitor.domain.trip
 
 internal fun TripAggregator.fromDevice(
     usage: List<UsageSlice>,
-    pages: List<PageSample>,
     wifis: List<WifiSample>,
 ): DayTimeline {
     if (usage.isEmpty() && wifis.isEmpty()) {
@@ -54,7 +53,6 @@ internal fun TripAggregator.fromDevice(
                 end = end,
                 place = place,
                 topApps = topApps(usage, start, end),
-                pages = tallyPages(pages, start, end),
             ),
         )
         activeMs += end - start
