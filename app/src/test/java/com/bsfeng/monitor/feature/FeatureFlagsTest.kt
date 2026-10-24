@@ -76,13 +76,13 @@ class FeatureFlagsTest {
         val tabs = flags.visibleTabs()
         assertFalse("传送关闭后不应有传送 Tab", AppTab.TRANSFER in tabs)
         assertEquals(
-            listOf(AppTab.OVERVIEW, AppTab.LIVE, AppTab.AD, AppTab.FINANCE, AppTab.SETTINGS),
+            listOf(AppTab.OVERVIEW, AppTab.LIVE, AppTab.AD, AppTab.FINANCE, AppTab.QUOTA, AppTab.SETTINGS),
             tabs,
         )
 
-        // 重新开启：传送 Tab 回到原位置（概览 / 实时 / 广告 / 记账 / 传送 / 设置）
+        // 重新开启：传送 Tab 回到显示顺序里的位置（概览 / 实时 / 广告 / 记账 / 额度 / 传送 / 设置）
         flags.setEnabled(Feature.TRANSPORT, true)
-        assertEquals(AppTab.entries, flags.visibleTabs())
+        assertEquals(FeatureCatalog.DISPLAY_ORDER, flags.visibleTabs())
     }
 
     @Test
@@ -96,7 +96,7 @@ class FeatureFlagsTest {
         assertFalse("规则引擎侧读到的是关闭", flags.isEnabled(Feature.AD_SKIP))
         assertEquals(
             "常驻 Tab（概览 / 广告 / 设置）不因任何开关消失",
-            listOf(AppTab.OVERVIEW, AppTab.LIVE, AppTab.AD, AppTab.FINANCE, AppTab.SETTINGS),
+            listOf(AppTab.OVERVIEW, AppTab.LIVE, AppTab.AD, AppTab.FINANCE, AppTab.QUOTA, AppTab.SETTINGS),
             flags.visibleTabs(),
         )
     }
@@ -110,7 +110,7 @@ class FeatureFlagsTest {
 
         // 实时 / 记账被关，传送本来默认关 → 只剩常驻的概览 / 广告 / 设置
         assertEquals(
-            listOf(AppTab.OVERVIEW, AppTab.AD, AppTab.SETTINGS),
+            listOf(AppTab.OVERVIEW, AppTab.AD, AppTab.QUOTA, AppTab.SETTINGS),
             flags.visibleTabs(),
         )
     }
@@ -132,5 +132,45 @@ class FeatureFlagsTest {
         assertEquals(AppTab.OVERVIEW, FeatureCatalog.tabOfIndex(99))
         assertEquals(AppTab.OVERVIEW, FeatureCatalog.tabOfIndex(-1))
         assertEquals(AppTab.OVERVIEW, flags.resolveTab(FeatureCatalog.tabOfIndex(99)))
+    }
+
+    @Test
+    fun `额度默认开启 且排在设置之前`() {
+        val flags = FeatureFlags(FakeStore())
+
+        assertTrue("额度监控默认开启", flags.isEnabled(Feature.QUOTA))
+
+        val tabs = flags.visibleTabs()
+        assertTrue(AppTab.QUOTA in tabs)
+        assertEquals(
+            "显示顺序里额度紧挨设置之前，而不是跟在枚举末尾",
+            tabs.indexOf(AppTab.SETTINGS) - 1,
+            tabs.indexOf(AppTab.QUOTA),
+        )
+    }
+
+    @Test
+    fun `关闭额度监控 额度 Tab 消失且回退概览`() {
+        val flags = FeatureFlags(FakeStore())
+
+        flags.setEnabled(Feature.QUOTA, false)
+
+        assertFalse(AppTab.QUOTA in flags.visibleTabs())
+        assertEquals(
+            "深链落到已关闭的额度 Tab 时回退概览",
+            AppTab.OVERVIEW,
+            FeatureCatalog.resolveTab(AppTab.QUOTA) { flags.isEnabled(it) },
+        )
+    }
+
+    @Test
+    fun `额度 Tab 的枚举下标固定为 6 旧通知不位移`() {
+        // 深链用枚举下标，额度只能追加在末尾；插到中间会让已发出的通知跳到别的 Tab
+        assertEquals(0, AppTab.OVERVIEW.ordinal)
+        assertEquals(3, AppTab.FINANCE.ordinal)
+        assertEquals(5, AppTab.SETTINGS.ordinal)
+        assertEquals(6, AppTab.QUOTA.ordinal)
+        assertEquals(AppTab.QUOTA, FeatureCatalog.tabOfIndex(6))
+        assertEquals(AppTab.SETTINGS, FeatureCatalog.tabOfIndex(5))
     }
 }

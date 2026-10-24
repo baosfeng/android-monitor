@@ -1,6 +1,17 @@
 package com.bsfeng.monitor.core.di
 
 import android.app.Application
+import com.bsfeng.monitor.domain.quota.QuotaProviderRegistry
+import com.bsfeng.monitor.quota.QuotaAlertNotifier
+import com.bsfeng.monitor.quota.QuotaCredentialStore
+import com.bsfeng.monitor.quota.QuotaRepository
+import com.bsfeng.monitor.quota.QuotaSnapshotStore
+import com.bsfeng.monitor.quota.provider.DeepSeekQuotaProvider
+import com.bsfeng.monitor.quota.provider.OllamaQuotaProvider
+import com.bsfeng.monitor.quota.provider.OpenDesignQuotaProvider
+import com.bsfeng.monitor.quota.provider.OpencodeGoQuotaProvider
+import com.bsfeng.monitor.quota.provider.QuotaHttp
+import com.bsfeng.monitor.MainActivity
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.data.repository.DeviceRepositoryImpl
 import com.bsfeng.monitor.data.repository.SkipRuleRepositoryImpl
@@ -48,6 +59,45 @@ class ServiceContainer(private val app: Application) {
     val skipRuleManager: SkipRuleManager by lazy { SkipRuleManager(app) }
 
     val skipRuleEngine: SkipRuleEngine by lazy { SkipRuleEngine(skipRuleManager) }
+
+    // ========== 额度监控 ==========
+
+    /** 凭据存储（Android Keystore AES-GCM）。 */
+    val quotaCredentials: QuotaCredentialStore by lazy { QuotaCredentialStore(app) }
+
+    /** provider 注册表 —— 新增 provider 只在这里加一行。 */
+    /** 所有 provider 共用一条 HTTP 通道；日志走 logcat（QuotaHttp 里不直接依赖 android.util.Log）。 */
+    private val quotaHttp: QuotaHttp by lazy {
+        QuotaHttp(log = { message -> android.util.Log.i("QuotaHttp", message) })
+    }
+
+    val quotaRegistry: QuotaProviderRegistry by lazy {
+        QuotaProviderRegistry(
+            listOf(
+                OllamaQuotaProvider(http = quotaHttp),
+                DeepSeekQuotaProvider(http = quotaHttp),
+                OpenDesignQuotaProvider(http = quotaHttp),
+                OpencodeGoQuotaProvider(http = quotaHttp),
+            ),
+        )
+    }
+
+    /** 阈值提醒（通知渠道 + 已提醒状态持久化）。 */
+    val quotaNotifier: QuotaAlertNotifier by lazy {
+        QuotaAlertNotifier(app) { MainActivity.quotaTabIntent(app) }
+    }
+
+    /** 额度状态单一数据源：拉取 / 节流 / 退避 / 预警。 */
+    val quotaRepository: QuotaRepository by lazy {
+        QuotaRepository(
+            registry = quotaRegistry,
+            credentials = quotaCredentials,
+            notifier = quotaNotifier,
+            // 失败原因写 logcat（tag=Quota），排查「查询失败」时 adb logcat -s Quota 就能看到
+            logger = { message -> android.util.Log.w("Quota", message) },
+            cache = QuotaSnapshotStore(app),
+        )
+    }
 
     // ========== Repository ==========
 

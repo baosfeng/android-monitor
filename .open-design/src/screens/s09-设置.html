@@ -57,6 +57,12 @@
 .screen.s09 .s09-loc .badge{white-space:nowrap;flex:0 0 auto}
 .screen.s09 .s09-loc .badge.is-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
 .screen.s09 .s09-loc .badge.is-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+
+/* ── 额度监控：开关关闭时整组折叠成一行（保留开关，随时可开回） ──── */
+.screen.s09 .s09-quota-body > .row:first-child{border-top:1px solid var(--border-soft)}
+.screen.s09 .s09-quota-body .row-sub{white-space:normal}
+.screen.s09 .s09-quota-body .badge{flex:0 0 auto;white-space:nowrap}
+.screen.s09 .s09-quota-body .s09-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
 </style>
 <!--@od:section-->
 <section class="screen s09" data-screen="s09" data-title="设置" data-od-id="screen-s09">
@@ -205,6 +211,54 @@
             <p class="fine mt-2">自检只看三件事：定位已开、后台位置可用、省电策略未限制。默认关闭，开启后行程才有地址与距离。</p>
           </div>
         </details>
+      </div>
+
+      <div class="set-group" data-od-id="s09-quota">
+        <p class="group-label">额度监控</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M5.4 11.8v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9v-5.2"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">额度监控</span>
+              <span class="row-sub" data-od-id="s09-quota-sub">2 个 provider 已连接 · 每小时刷新</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度监控" data-quota-switch data-od-id="s09-quota-switch"></button>
+          </div>
+          <div class="s09-quota-body" data-quota-body data-od-id="s09-quota-body">
+            <button class="row" type="button" data-goto="s19" data-od-id="s09-goto-quota">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="12" r="3.4"/><path d="M11.4 12H21"/><path d="M18 12v3"/><path d="M14.8 12v2.2"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">Provider 与 API Key</span>
+                <span class="row-sub">Ollama 已连接 · DeepSeek 未配置</span>
+              </span>
+              <span class="row-tail"><span class="badge s09-badge-ok" data-od-min-fs>已连接 2 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">预警通知</span>
+                <span class="row-sub">剩余 5% / 4% / 3% / 2% / 1% 各提醒一次</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="预警通知" data-toggle data-on-msg="预警通知已开启" data-off-msg="预警通知已关闭 · 额度仍会刷新"></button>
+            </div>
+            <div class="row" data-od-id="s09-quota-refresh">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M20 11.5a8 8 0 1 0-2.6 6.3"/><path d="M20 4.5v6h-6"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">后台刷新</span>
+                <span class="row-sub">息屏不请求 · 解锁后不补跑</span>
+              </span>
+              <span class="row-tail"><span class="num">每小时</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="set-group" data-od-id="s09-granularity">
@@ -379,6 +433,26 @@
       sec.addEventListener('click', function (e) {
         var t = e.target;
         if (!t || !t.closest) return;
+        /* 额度监控（Feature.QUOTA）：关闭时子项折叠成一行，并隐藏底部「额度」Tab。
+           原型直接切 #odTabbar 上对应按钮的 hidden；实现侧由 Feature.QUOTA 驱动导航枚举。 */
+        var quotaSw = t.closest('[data-quota-switch]');
+        if (quotaSw) {
+          var quotaOn = quotaSw.getAttribute('aria-checked') === 'true';
+          quotaSw.setAttribute('aria-checked', quotaOn ? 'false' : 'true');
+          var quotaBody = sec.querySelector('[data-quota-body]');
+          var quotaSub = sec.querySelector('[data-od-id="s09-quota-sub"]');
+          if (quotaBody) quotaBody.hidden = quotaOn;
+          if (quotaSub) {
+            quotaSub.textContent = quotaOn
+              ? '开启后可用 · 额度 Tab、预警通知与后台刷新'
+              : '2 个 provider 已连接 · 每小时后台刷新';
+          }
+          var quotaTab = document.querySelector('#odTabbar [data-tab="quota"]');
+          if (quotaTab) quotaTab.hidden = quotaOn;
+          window.App.haptic('light');
+          window.App.toast(quotaOn ? '额度监控已关闭 · 底部「额度」Tab 已隐藏' : '额度监控已开启 · 底部「额度」Tab 已恢复');
+          return;
+        }
         var sw = t.closest('[data-toggle]');
         if (sw) {
           var on = sw.getAttribute('aria-checked') === 'true';

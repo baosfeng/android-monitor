@@ -1,0 +1,652 @@
+<!-- ============================================================
+     s20 · 额度聚合（两种聚合粒度并排对比：A 按 provider / B 按额度项）
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     本分片含两屏（成对先例见 s14a / s14b）：
+       · s20a = 方案 A：一个 provider 一行，主指标取该家「剩余最少」的窗口，
+                opencode-go 的三窗口在行内小字并排。
+       · s20b = 方案 B：每个额度项单独一行，同家多窗口被打散到不同位次。
+     两屏顶部入口与排序规则完全一致，差异只在列表粒度，便于并排判读。
+
+     数据口径（已拍板的定稿方向）：
+       · 只聚合能算出剩余百分比的 provider；余额型（DeepSeek 那类 total 为空的纯金额）不进排序。
+       · 可聚合 3 家：opencode-go（5 小时 / 每周 / 每月三条 PERCENT）、open-design（月度 PERCENT）、
+         ollama（百分比型：会话 + 每周）。
+       · 排序：剩余百分比低的排最前；查询失败的家保留上次数据并参与排序，标「旧数据 + 停更时间」。
+       · 聚合页只读本地缓存（QuotaRepository.states），不新增任何请求。
+
+     演示件（不进产品，实现时按 07-contract 机械排除，锚点都带 demo-only: 前缀）：
+       · 评审辅助卡：聚合粒度 A/B 切换 + 三种状态覆盖（正常 / 某家未配置 / 某家查询失败）。
+
+     已知口径不一致（本轮不改，交给 leader 定）：s18 仍把 opencode-go / opendesign 标成
+     「下个版本接入 / 手动录入」，与「4 家已接入只有 DeepSeek 是余额型」不一致；s18 不在本分片 scope 内。
+
+     演示数据全部为占位值，不出现真实 Key / 账号 / 邮箱 / 真实余额。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s20">
+/* ── s20 额度聚合（A 按 provider / B 按额度项） ───────────────────── */
+.screen.s20a,.screen.s20b{font-size:max(var(--text-sm),14px)}
+/* 状态块被外壳置为 display:grid：轨道按容器宽度收敛，避免长文案把卡片撑出屏外 */
+.screen:is(.s20a,.s20b) [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen:is(.s20a,.s20b) .btn{font-size:max(var(--text-base),14px)}
+.screen:is(.s20a,.s20b) :is(.chip,.segmented>*,.btn,.s20-btn):focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+/* 顶部：入口「聚合 / 单家」（定稿：与 provider chip 并列，聚合模式下 chip 行隐藏） */
+.s20-entry .segmented{width:100%}
+.s20-entry .meta{display:block;margin-top:var(--space-2)}
+
+/* 评审辅助卡（演示件）：虚线框让它一眼区别于产品内容。
+   刻意做成两行紧凑 chips —— 它不为好看，只为让人不动手也能看全 A 的完整列表。 */
+.s20-probe{
+  margin-top:var(--space-3);padding:var(--space-2) var(--space-3);
+  border:1px dashed var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);
+  display:flex;flex-direction:column;gap:var(--space-2);
+}
+.s20-probe-chips{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.s20-probe-chips .chip{min-height:var(--tap-min);padding:0 var(--space-2);flex:0 0 auto}
+.s20-probe-lab{flex:0 0 auto;color:var(--muted)}
+
+/* 结论条：最先见底的那条窗口 */
+.s20-hero{
+  margin-top:var(--space-3);padding:var(--space-2) var(--space-3);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-2);
+}
+.s20-hero .row-icon{--k:var(--danger);width:30px;height:30px}
+.s20-hero-body{min-width:0;display:flex;align-items:baseline;gap:6px}
+.s20-hero-label{flex:0 0 auto;font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s20-hero-title{min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s20-hero-pct{font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--danger-text)}
+
+/* 排序位次条 */
+.s20-sortbar{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin:var(--space-4) 0 var(--space-2)}
+.s20-sortbar .group-label{padding:0;margin:0}
+.s20-note{color:var(--muted);white-space:nowrap}
+
+/* 列表：一张 group 卡 + 行间细分隔线（与 .group / .row 同一套节奏） */
+.s20-list{
+  list-style:none;margin:0;padding:0 var(--space-4);
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);
+}
+.s20-row{border-top:1px solid var(--border-soft)}
+.s20-row:first-child{border-top:0}
+.s20-btn{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;
+  border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:opacity var(--dur-state) var(--ease-standard);
+}
+.s20-btn:active{opacity:.68}
+
+/* 位次徽标：第 1 名用危险色的淡底，其余中性；不参与排序的家用虚线空心 */
+.s20-rank{
+  flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;
+  border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:max(var(--text-sm),14px);font-weight:700;line-height:1;
+}
+.s20-rank.is-top{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+.s20-btn.is-off{cursor:default}
+.s20-btn.is-off .s20-rank{background:transparent;border:1px dashed var(--border);color:var(--muted);font-weight:600}
+
+.s20-main{min-width:0;display:flex;flex-direction:column;gap:6px}
+.s20-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s20-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg)}
+.s20-name-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s20-btn.is-off .s20-name{color:var(--muted);font-weight:500}
+.s20-pct{flex:0 0 auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--fg)}
+.s20-pct.is-warn{color:var(--warn-text)}
+.s20-pct.is-low{color:var(--danger-text)}
+.s20-pct.is-off{color:var(--muted);font-weight:500}
+
+/* 剩余百分比进度条：越低越短，颜色按紧急度三档（与 s18 同一套语义） */
+.s20-bar{display:block;height:6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.s20-bar-fill{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--chart-seq)}
+.s20-bar-fill.is-warn{background:var(--warn)}
+.s20-bar-fill.is-low{background:var(--danger)}
+.s20-bar-fill.is-stale{background:color-mix(in srgb,var(--warn) 55%,transparent)}
+
+.s20-sub{display:block;color:var(--muted);line-height:1.4}
+
+/* 窗口名徽标（B 方案每行一个额度项） */
+.s20-win{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-weight:600;line-height:1.7;white-space:nowrap;
+}
+/* 「旧数据」「不参与聚合」标注 */
+.s20-tag{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-text);
+}
+.s20-tag.is-off{background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--muted)}
+.s20-btn.is-off .chev{display:none}
+
+/* 口径说明（14px 正文级，不是 12px 角标） */
+.s20-cap{margin:var(--space-3) 0 0;color:var(--muted);line-height:1.45}
+
+/* 入场错落（本屏再次激活时重播） */
+.s20-in{opacity:0}
+.screen:is(.s20a,.s20b).is-active .s20-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.screen:is(.s20a,.s20b).is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.screen:is(.s20a,.s20b).is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.screen:is(.s20a,.s20b).is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) :is(#s20a,#s20b) *{animation:none}
+</style>
+<!--@od:section-->
+<!-- ═══ 方案 A · 一个 provider 一行 ══════════════════════════════════ -->
+<section class="screen s20a" data-screen="s20a" data-title="额度聚合 · A" id="s20a" data-od-id="screen-s20a">
+  <div class="content pad" data-od-id="s20a-content">
+
+    <div class="s20-entry s20-in od-d1" data-od-id="s20a-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s20-view="agg" data-od-id="s20a-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s20-view="single" data-od-id="s20a-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s20a-meta">3 家参与排序 · 更新于 9:41</p>
+    </div>
+
+    <!-- 演示件：只在评审时存在。三行紧凑 chips：粒度 / 状态 / 一行对照说明 -->
+    <div class="s20-probe s20-in od-d1" data-od-id="demo-only:agg-probe-a">
+      <div class="s20-probe-chips" role="group" aria-label="聚合粒度预览">
+        <span class="s20-probe-lab">粒度</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-grain="a" data-od-id="demo-only:grain-a">A · 按 provider</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-grain="b" data-od-id="demo-only:grain-b">B · 按额度项</button>
+      </div>
+      <div class="s20-probe-chips" role="group" aria-label="状态覆盖预览">
+        <span class="s20-probe-lab">状态</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-scen="normal" data-od-id="demo-only:scen-normal">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="missing" data-od-id="demo-only:scen-missing">未配置</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="stale" data-od-id="demo-only:scen-stale">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s20a-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s20a-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度</p>
+        <p class="st-desc">只有能算出剩余百分比的 provider 参与排序，余额型不进聚合。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s20a-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s20-main" data-state-hide="loading empty edge">
+
+      <div class="card s20-hero s20-in od-d2" data-od-id="s20a-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s20-hero-body">
+          <span class="s20-hero-label">最先见底</span>
+          <span class="s20-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s20-hero-pct num">12%</span>
+      </div>
+
+      <div class="s20-sortbar">
+        <span class="group-label">按剩余由低到高</span>
+        <span class="s20-note">行首为位次</span>
+      </div>
+
+      <ol class="s20-list s20-in od-d3" data-od-id="s20a-list">
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 5 小时" data-od-id="s20a-row-1">
+            <span class="s20-rank" aria-hidden>1</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span></span>
+                <span class="s20-pct is-low num">12%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 12%"><span class="s20-bar-fill is-low" style="--p:12%"></span></span>
+              <span class="s20-sub">5 小时 12% · 每周 46% · 每月 71%</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="open-design · 月度" data-od-id="s20a-row-2" data-scen-row="open-design">
+            <span class="s20-rank" aria-hidden>2</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">open-design</span></span>
+                <span class="s20-pct is-warn num" data-scen-part="on">34%</span>
+                <span class="s20-pct is-off num" data-scen-part="off" hidden>—</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 34%" data-scen-part="on"><span class="s20-bar-fill is-warn" style="--p:34%"></span></span>
+              <span class="s20-sub" data-scen-part="on">月度窗口 34% · 单窗口</span>
+              <span class="s20-sub" data-scen-part="off" hidden>未配置 Key · 不参与排序</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 每周" data-od-id="s20a-row-3" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>3</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct is-warn num">40%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s20-bar-fill is-warn" style="--p:40%"></span></span>
+              <span class="s20-sub" data-scen-part="on">每周 40% · 会话 75%</span>
+              <span class="s20-sub" data-scen-part="off" hidden>每周 40% · 会话 75% · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <span class="s20-btn is-off" data-od-id="s20a-row-4">
+            <span class="s20-rank" aria-hidden>—</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">deepseek</span><span class="s20-tag is-off">不参与聚合</span></span>
+                <span class="s20-pct is-off num">—</span>
+              </span>
+              <span class="s20-sub">余额型 · 无总量，算不出百分比</span>
+            </span>
+          </span>
+        </li>
+      </ol>
+
+      <p class="s20-cap s20-in od-d3" data-od-id="s20a-spec">余额型不进聚合 · 失败的家保留旧数据、照常排序 · 只读本地缓存</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s20a：顶部入口 / 粒度预览 / 状态覆盖都是纯 DOM 反应。
+     状态只改「行内表现 + 位次」，不改排序规则本身：未配置的家掉出排序，查询失败的家保留。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s20-list');
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    /* 位次跟着可见顺序重算：只数参与排序的行 */
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s20-row'), function (li) {
+        var btn = li.querySelector('.s20-btn');
+        var rank = li.querySelector('.s20-rank');
+        if (!btn || !rank) return;
+        rank.classList.remove('is-top');
+        if (btn.classList.contains('is-off')) { rank.textContent = '—'; return; }
+        n += 1;
+        rank.textContent = String(n);
+        if (n === 1) rank.classList.add('is-top');
+      });
+    }
+
+    function scene(name) {
+      pick('data-s20-scen', name);
+      var od = sec.querySelector('[data-scen-row="open-design"]');
+      var miss = name === 'missing';
+      if (od) {
+        od.classList.toggle('is-off', miss);
+        Array.prototype.forEach.call(od.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== miss;
+        });
+      }
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      /* 旧数据用「降饱和的琥珀」而非满色琥珀：一眼看出这是过去的读数，不是刚查到的 */
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s20-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-low') ? 'is-low' : fill.classList.contains('is-warn') ? 'is-warn' : '';
+        fill.classList.remove('is-low', 'is-warn', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次首位徽标与进度条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var grain = t.closest('[data-s20-grain]');
+      if (grain) {
+        e.stopPropagation();
+        if (grain.getAttribute('data-s20-grain') === 'b' && window.App) App.go('s20b');
+        return;
+      }
+
+      var scen = t.closest('[data-s20-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s20-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s20-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s20-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s20-row]');
+      if (row) {
+        e.stopPropagation();
+        var off = row.classList.contains('is-off');
+        if (window.App) App.toast(off ? '这家未配置 Key · 去额度设置填写' : '打开 ' + row.getAttribute('data-s20-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<!-- ═══ 方案 B · 一个额度项一行 ══════════════════════════════════════ -->
+<section class="screen s20b" data-screen="s20b" data-title="额度聚合 · B" id="s20b" data-od-id="screen-s20b">
+  <div class="content pad" data-od-id="s20b-content">
+
+    <div class="s20-entry s20-in od-d1" data-od-id="s20b-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s20-view="agg" data-od-id="s20b-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s20-view="single" data-od-id="s20b-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s20b-meta">6 个额度项 · 更新于 9:41</p>
+    </div>
+
+    <div class="s20-probe s20-in od-d1" data-od-id="demo-only:agg-probe-b">
+      <div class="s20-probe-chips" role="group" aria-label="聚合粒度预览">
+        <span class="s20-probe-lab">粒度</span>
+        <button class="chip" type="button" aria-pressed="false" data-s20-grain="a" data-od-id="demo-only:grain-a-b">A · 按 provider</button>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-grain="b" data-od-id="demo-only:grain-b-b">B · 按额度项</button>
+      </div>
+      <div class="s20-probe-chips" role="group" aria-label="状态覆盖预览">
+        <span class="s20-probe-lab">状态</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-scen="normal" data-od-id="demo-only:scen-normal-b">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="missing" data-od-id="demo-only:scen-missing-b">未配置</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="stale" data-od-id="demo-only:scen-stale-b">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s20b-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s20b-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度项</p>
+        <p class="st-desc">只有能算出剩余百分比的额度项参与排序，余额型不进聚合。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s20b-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s20-main" data-state-hide="loading empty edge">
+
+      <div class="card s20-hero s20-in od-d2" data-od-id="s20b-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s20-hero-body">
+          <span class="s20-hero-label">最先见底</span>
+          <span class="s20-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s20-hero-pct num">12%</span>
+      </div>
+
+      <div class="s20-sortbar">
+        <span class="group-label">按剩余由低到高</span>
+        <span class="s20-note">行首为位次</span>
+      </div>
+
+      <ol class="s20-list s20-in od-d3" data-od-id="s20b-list">
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 5 小时" data-od-id="s20b-row-1">
+            <span class="s20-rank" aria-hidden>1</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">5 小时</span></span>
+                <span class="s20-pct is-low num">12%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 12%"><span class="s20-bar-fill is-low" style="--p:12%"></span></span>
+              <span class="s20-sub">17:00 重置 · 该家最紧急</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="open-design · 月度" data-od-id="s20b-row-2" data-scen-row="open-design">
+            <span class="s20-rank" aria-hidden>2</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">open-design</span><span class="s20-win">月度</span></span>
+                <span class="s20-pct is-warn num" data-scen-part="on">34%</span>
+                <span class="s20-pct is-off num" data-scen-part="off" hidden>—</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 34%" data-scen-part="on"><span class="s20-bar-fill is-warn" style="--p:34%"></span></span>
+              <span class="s20-sub" data-scen-part="on">11/01 重置 · 单窗口</span>
+              <span class="s20-sub" data-scen-part="off" hidden>未配置 Key · 不参与排序</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 每周" data-od-id="s20b-row-3" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>3</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-win">每周</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct is-warn num">40%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s20-bar-fill is-warn" style="--p:40%"></span></span>
+              <span class="s20-sub" data-scen-part="on">周一 00:00 重置</span>
+              <span class="s20-sub" data-scen-part="off" hidden>周一 00:00 重置 · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 每周" data-od-id="s20b-row-4">
+            <span class="s20-rank" aria-hidden>4</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">每周</span></span>
+                <span class="s20-pct is-warn num">46%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 46%"><span class="s20-bar-fill is-warn" style="--p:46%"></span></span>
+              <span class="s20-sub">周一 00:00 重置 · 同家第 2 项</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 每月" data-od-id="s20b-row-5">
+            <span class="s20-rank" aria-hidden>5</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">每月</span></span>
+                <span class="s20-pct num">71%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 71%"><span class="s20-bar-fill" style="--p:71%"></span></span>
+              <span class="s20-sub">11/01 重置 · 同家第 3 项</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 会话" data-od-id="s20b-row-6" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>6</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-win">会话</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct num">75%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 75%" data-scen-bar><span class="s20-bar-fill" style="--p:75%"></span></span>
+              <span class="s20-sub" data-scen-part="on">每日 07:00 重置</span>
+              <span class="s20-sub" data-scen-part="off" hidden>每日 07:00 重置 · 与第 3 行同一份旧数据</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <span class="s20-btn is-off" data-od-id="s20b-row-7">
+            <span class="s20-rank" aria-hidden>—</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">deepseek</span><span class="s20-tag is-off">不参与聚合</span></span>
+                <span class="s20-pct is-off num">—</span>
+              </span>
+              <span class="s20-sub">余额型 · 无总量，算不出百分比</span>
+            </span>
+          </span>
+        </li>
+      </ol>
+
+      <p class="s20-cap s20-in od-d3" data-od-id="s20b-spec">代价：同家的窗口被别的家隔开（1 → 4 → 5 都是 opencode-go），一屏看不全、要滚动；好处是每一项都有自己的位次与重置时间。</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s20b：与 s20a 同一套顶部入口、同一套状态覆盖；粒度 chips 点 A 回 s20a。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s20-list');
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s20-row'), function (li) {
+        var btn = li.querySelector('.s20-btn');
+        var rank = li.querySelector('.s20-rank');
+        if (!btn || !rank) return;
+        rank.classList.remove('is-top');
+        if (btn.classList.contains('is-off')) { rank.textContent = '—'; return; }
+        n += 1;
+        rank.textContent = String(n);
+        if (n === 1) rank.classList.add('is-top');
+      });
+    }
+
+    function scene(name) {
+      pick('data-s20-scen', name);
+      var od = sec.querySelector('[data-scen-row="open-design"]');
+      var miss = name === 'missing';
+      if (od) {
+        od.classList.toggle('is-off', miss);
+        Array.prototype.forEach.call(od.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== miss;
+        });
+      }
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      /* 旧数据用「降饱和的琥珀」而非满色琥珀：一眼看出这是过去的读数，不是刚查到的 */
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s20-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-low') ? 'is-low' : fill.classList.contains('is-warn') ? 'is-warn' : '';
+        fill.classList.remove('is-low', 'is-warn', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次首位徽标与进度条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var grain = t.closest('[data-s20-grain]');
+      if (grain) {
+        e.stopPropagation();
+        if (grain.getAttribute('data-s20-grain') === 'a' && window.App) App.go('s20a');
+        return;
+      }
+
+      var scen = t.closest('[data-s20-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s20-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s20-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s20-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s20-row]');
+      if (row) {
+        e.stopPropagation();
+        var off = row.classList.contains('is-off');
+        if (window.App) App.toast(off ? '这家未配置 Key · 去额度设置填写' : '打开 ' + row.getAttribute('data-s20-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

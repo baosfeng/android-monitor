@@ -42,6 +42,9 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Save
 import com.bsfeng.monitor.autobook.AutoBookConfig
+import com.bsfeng.monitor.quota.QuotaSettings
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Key
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureCatalog
 import com.bsfeng.monitor.feature.FeatureFlags
@@ -129,6 +132,7 @@ import android.view.View
 import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Timer
@@ -176,6 +180,7 @@ fun SettingsScreen(
     onNavigateToWhitelist: () -> Unit = {},
     onNavigateToAppearance: (() -> Unit)? = null,
     onNavigateToGallery: (() -> Unit)? = null,
+    onNavigateToQuotaSettings: () -> Unit = {},
 ) {
     val t = LocalDesignTokens.current
     val context = LocalContext.current
@@ -191,6 +196,10 @@ fun SettingsScreen(
     val transportOn = enabledFeatures[Feature.TRANSPORT] == true
     val pageTraceOn = enabledFeatures[Feature.PAGE_TRACE] == true
     val locationOn = enabledFeatures[Feature.LOCATION] == true
+    val quotaOn = enabledFeatures[Feature.QUOTA] == true
+    val quotaSettings = remember { QuotaSettings(context) }
+    var quotaAlertsOn by remember { mutableStateOf(quotaSettings.alertsEnabled) }
+    var quotaRefreshHours by remember { mutableStateOf(quotaSettings.refreshIntervalHours) }
     val transferViewModel: TransferViewModel? = if (transportOn) viewModel() else null
     val state by viewModel.state.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -576,6 +585,59 @@ fun SettingsScreen(
                                 TokenRow(
                                     title = "传送设置",
                                     subtitle = FeatureCatalog.offHint(Feature.TRANSPORT) + "：后台接收、提示音、接收目录",
+                                    icon = Icons.Outlined.Settings,
+                                )
+                            }
+                            Spacer(Modifier.height(t.space1))
+                        }
+
+                        // 额度监控（Tab：额度；默认开启）：provider 凭据、预警、后台刷新
+                        AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+                            TokenRow(
+                                title = "额度监控",
+                                subtitle = if (quotaOn) {
+                                    "聚合 AI 服务的余额与用量 · " + QuotaSettings.labelOf(quotaRefreshHours) + "刷新"
+                                } else {
+                                    "已关闭：不生成「额度」Tab，也不后台查询"
+                                },
+                                icon = Icons.Outlined.AccountBalanceWallet,
+                                trailing = { AppSwitch(quotaOn, { setFeature(Feature.QUOTA, it) }) },
+                            )
+                            if (quotaOn) {
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "Provider 与凭据",
+                                    subtitle = "Ollama API Key · DeepSeek Key 与平台令牌",
+                                    icon = Icons.Outlined.Key,
+                                    onClick = onNavigateToQuotaSettings,
+                                    trailing = { TailChevron() },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "预警通知",
+                                    subtitle = "剩余 5% / 4% / 3% / 2% / 1% 各提醒一次",
+                                    icon = Icons.Outlined.Notifications,
+                                    trailing = {
+                                        AppSwitch(quotaAlertsOn, {
+                                            quotaAlertsOn = it
+                                            quotaSettings.alertsEnabled = it
+                                        })
+                                    },
+                                )
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "后台刷新",
+                                    subtitle = "息屏不请求 · 解锁后不补跑",
+                                    icon = Icons.Outlined.Refresh,
+                                    onClick = onNavigateToQuotaSettings,
+                                    trailing = { TailNum(QuotaSettings.labelOf(quotaRefreshHours)) },
+                                )
+                            } else {
+                                TokenDivider(first = false)
+                                TokenRow(
+                                    title = "额度设置",
+                                    subtitle = FeatureCatalog.offHint(Feature.QUOTA) +
+                                        "：provider、预警、后台刷新",
                                     icon = Icons.Outlined.Settings,
                                 )
                             }

@@ -28,6 +28,9 @@ enum class Feature(
 
     /** 定位采集（3 位小数的粗略坐标）。需要定位权限，默认关闭。 */
     LOCATION("位置采集", "每 10 分钟记录一次粗略位置", "location"),
+
+    /** 多 provider 额度监控（余额 / 用量 / 阈值预警）。 */
+    QUOTA("额度监控", "聚合 Ollama、DeepSeek 等服务的余额与用量", "quota"),
 }
 
 /**
@@ -43,6 +46,12 @@ enum class AppTab(val title: String, val feature: Feature?) {
     FINANCE("记账", Feature.FINANCE),
     TRANSFER("传送", Feature.TRANSPORT),
     SETTINGS("设置", null),
+
+    /**
+     * 额度 Tab —— **只能追加在末尾**：`EXTRA_START_TAB` 用的是枚举下标，
+     * 插在中间会让已发出的通知跳到别的 Tab。显示顺序另由 [FeatureCatalog.DISPLAY_ORDER] 决定。
+     */
+    QUOTA("额度", Feature.QUOTA),
 }
 
 /**
@@ -65,9 +74,24 @@ object FeatureCatalog {
     fun isTabVisible(tab: AppTab, enabled: (Feature) -> Boolean): Boolean =
         tab.feature?.let(enabled) ?: true
 
-    /** 当前可见的 Tab（保持枚举顺序）。 */
+    /**
+     * 底部导航的显示顺序 —— 与枚举顺序解耦。
+     *
+     * 枚举顺序服务深链下标，显示顺序服务产品：额度排在设置前面。
+     */
+    val DISPLAY_ORDER: List<AppTab> = listOf(
+        AppTab.OVERVIEW,
+        AppTab.LIVE,
+        AppTab.AD,
+        AppTab.FINANCE,
+        AppTab.QUOTA,
+        AppTab.TRANSFER,
+        AppTab.SETTINGS,
+    )
+
+    /** 当前可见的 Tab（按 [DISPLAY_ORDER] 排序）。 */
     fun visibleTabs(enabled: (Feature) -> Boolean): List<AppTab> =
-        AppTab.entries.filter { isTabVisible(it, enabled) }
+        DISPLAY_ORDER.filter { isTabVisible(it, enabled) }
 
     /** 深链 / 通知跳转落点：目标功能已关闭时回退 [FALLBACK_TAB]，不产生空 Tab。 */
     fun resolveTab(tab: AppTab, enabled: (Feature) -> Boolean): AppTab =

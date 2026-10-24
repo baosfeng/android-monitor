@@ -3,6 +3,7 @@ package com.bsfeng.monitor
 import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
@@ -22,9 +23,11 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -59,6 +62,8 @@ import com.bsfeng.monitor.finance.ui.ImportScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
 import com.bsfeng.monitor.ui.MainScreen
 import com.bsfeng.monitor.ui.MainViewModel
+import com.bsfeng.monitor.ui.quota.QuotaScreen
+import com.bsfeng.monitor.ui.quota.QuotaSettingsScreen
 import com.bsfeng.monitor.ui.SettingsScreen
 import com.bsfeng.monitor.ui.SkipRuleScreen
 import com.bsfeng.monitor.ui.SkipRuleViewModel
@@ -187,12 +192,14 @@ class MainActivity : ComponentActivity() {
                 var showWhitelistScreen by remember { mutableStateOf(false) }
                 var showGallery by remember { mutableStateOf(false) }
                 var showAppearance by remember { mutableStateOf(false) }
+                // 额度设置（从额度页齿轮 / 设置页分组 push）
+                var showQuotaSettings by remember { mutableStateOf(false) }
                 // s16 每日行程（从概览「今日行程」卡 push）
                 var showTripScreen by remember { mutableStateOf(false) }
                 var showSplash by remember { mutableStateOf(true) }
                 val view = LocalView.current
                 val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery ||
-                    showAppearance || showTripScreen
+                    showAppearance || showTripScreen || showQuotaSettings
                 // 原型二级页（记账子页 / 设置子页）无 Tab 栏
                 val financeSubPage = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main
                 val bottomBarVisible = !overlayOpen && !showSplash && !financeSubPage
@@ -419,12 +426,17 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
+                                AppTab.QUOTA -> QuotaScreen(
+                                    onOpenSettings = { showQuotaSettings = true },
+                                    modifier = Modifier.fillMaxSize()
+                                )
                                 AppTab.SETTINGS -> SettingsScreen(
                                     viewModel = viewModel,
                                     onNavigateToSkipRules = { showSkipRuleScreen = true },
                                     onNavigateToWhitelist = { showWhitelistScreen = true },
                                     onNavigateToAppearance = { showAppearance = true },
                                     onNavigateToGallery = { showGallery = true },
+                                    onNavigateToQuotaSettings = { showQuotaSettings = true },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -478,6 +490,14 @@ class MainActivity : ComponentActivity() {
                         ComponentGalleryScreen(onBack = { showGallery = false })
                     }
 
+                    // 额度设置：从额度页齿轮或设置页分组 push
+                    AnimatedScreenOverlay(
+                        visible = showQuotaSettings,
+                        onBack = { showQuotaSettings = false },
+                    ) {
+                        QuotaSettingsScreen(onBack = { showQuotaSettings = false })
+                    }
+
                     // s13 外观 / 主题切换（占位屏，W3 接手）
                     AnimatedScreenOverlay(
                         visible = showAppearance,
@@ -515,6 +535,14 @@ class MainActivity : ComponentActivity() {
         const val FINANCE_TAB = 3
         const val TRANSFER_TAB = 4
         const val SETTINGS_TAB = 5
+        const val QUOTA_TAB = 6
+
+        /** 额度预警通知的落点：打开 App 并切到额度 Tab。 */
+        fun quotaTabIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_START_TAB, QUOTA_TAB)
+            }
 
         /** 旋转 / 进程重建后仍停留在原子页：把路由编码成可保存的原语列表。 */
         private val FinanceRouteSaver: Saver<FinanceRoute, Any> = listSaver(
@@ -571,4 +599,6 @@ private fun AppTab.icon(selected: Boolean): ImageVector = when (this) {
     AppTab.FINANCE -> if (selected) Icons.Filled.AddCircle else Icons.Outlined.AddCircle
     AppTab.TRANSFER -> Icons.Outlined.SwapHoriz
     AppTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+    AppTab.QUOTA -> if (selected) Icons.Filled.AccountBalanceWallet
+        else Icons.Outlined.AccountBalanceWallet
 }

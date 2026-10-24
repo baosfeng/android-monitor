@@ -12,6 +12,7 @@ import com.bsfeng.monitor.autobook.AutoBookConfig
 import com.bsfeng.monitor.backup.BackupManager
 import com.bsfeng.monitor.backup.HealOutcome
 import com.bsfeng.monitor.core.di.ServiceContainer
+import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
 import com.bsfeng.monitor.skip.GkdSubscription
@@ -48,6 +49,7 @@ class MonitorApp : Application() {
         registerWifiNetworkCallback()
         // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
         scheduleAlarmCheck(this)
+        QuotaScheduler.reschedule(this)
         checkSubscriptionUpdate()
     }
 
