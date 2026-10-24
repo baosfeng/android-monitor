@@ -87,6 +87,7 @@ object QuotaScheduler {
 class QuotaRefreshReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
+        if (!acceptsAction(intent?.action)) return
         if (!FeatureFlags.get().isEnabled(Feature.QUOTA)) return
         val app = context.applicationContext as? MonitorApp ?: return
         val pending = goAsync()
@@ -95,5 +96,21 @@ class QuotaRefreshReceiver : BroadcastReceiver() {
             runCatching { app.container.quotaRepository.refreshAll() }
             pending.finish()
         }
+    }
+
+    companion object {
+        /**
+         * 该 action 是否该触发一次刷新。
+         *
+         * 本接收器有两个入口：系统 BOOT_COMPLETED（action 有值）与 AlarmManager 显式
+         * PendingIntent（显式组件、action 为空）。除这两者外一律忽略——不校验时收到任何
+         * intent 都会全量刷新一次；虽然 exported=false 挡住外部伪造，但同进程误发的
+         * 别的 action 也会白烧一轮限流额度。
+         *
+         * 抽成 companion 里的纯函数是为了能直接断言：`BroadcastReceiver.onReceive`
+         * 依赖 Context 与 goAsync()，在 JVM 单测里构造代价高。
+         */
+        fun acceptsAction(action: String?): Boolean =
+            action == null || action == Intent.ACTION_BOOT_COMPLETED
     }
 }

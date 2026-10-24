@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.quota
 
 import android.content.Context
+import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.QuotaBucket
 import com.bsfeng.monitor.domain.quota.QuotaGranularity
 import com.bsfeng.monitor.domain.quota.QuotaGroup
@@ -50,13 +51,13 @@ class QuotaSnapshotStore(context: Context) : QuotaSnapshotCache {
 
     override fun save(snapshot: QuotaSnapshot) {
         if (snapshot.items.isEmpty() && snapshot.usage == null) return
-        prefs.edit()
-            .putString(KEY_PREFIX + snapshot.providerId, QuotaSnapshotJson.encode(snapshot))
-            .apply()
+        prefs.edit {
+            putString(KEY_PREFIX + snapshot.providerId, QuotaSnapshotJson.encode(snapshot))
+        }
     }
 
     override fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear() }
     }
 
     private companion object {

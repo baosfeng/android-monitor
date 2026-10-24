@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.ui.quota
 
 import android.content.Context
+import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import java.math.BigDecimal
 
@@ -18,7 +19,7 @@ internal class QuotaAlertPrefs(context: Context) {
 
     var enabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_ENABLED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_ENABLED, value) }
 
     fun lowBalance(unit: QuotaUnit): BigDecimal {
         val fallback = if (unit == QuotaUnit.USD) DEFAULT_USD else DEFAULT_CNY
@@ -27,7 +28,7 @@ internal class QuotaAlertPrefs(context: Context) {
     }
 
     fun setLowBalance(unit: QuotaUnit, value: BigDecimal) {
-        prefs.edit().putString(keyOf(unit), value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()).apply()
+        prefs.edit { putString(keyOf(unit), value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()) }
     }
 
     private fun keyOf(unit: QuotaUnit): String =
