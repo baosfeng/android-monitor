@@ -19,8 +19,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!--
-        定位采集（Feature.LOCATION，默认关闭）：只在设置页开启后、由 1 分钟心跳每 10 分钟读一次
-        系统缓存位置（getLastKnownLocation），不常驻监听。
+        定位采集（Feature.LOCATION，默认关闭）：设置页开启后按运动状态自适应采样 ——
+        移动时约 10 秒、静止时约 3 分钟（读系统缓存优先，必要时单次主动定位），不常驻监听。
+        1 分钟心跳作为服务被系统杀掉后的兜底。
         ACCESS_BACKGROUND_LOCATION 是 Android 10+ 后台读位置的前提，缺它时后台采不到点 ——
         设置页把它作为「缺后台定位」的独立状态提示，不伪造已授权。
     -->
