@@ -4,7 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.database.Cursor
 import android.database.DatabaseUtils
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import androidx.core.database.sqlite.transaction
 import com.bsfeng.monitor.BuildConfig
@@ -141,6 +143,7 @@ class DebugCommandReceiver : BroadcastReceiver() {
             is DebugCommand.Seed -> emitSeed(context, command, token)
             is DebugCommand.Clear -> emitClear(context, command, token)
             is DebugCommand.Open -> emitOpen(context, command, token)
+            is DebugCommand.Db -> emitDb(context, command, token)
             DebugCommand.Heartbeat -> emitHeartbeat(context, token)
         }
     }
@@ -413,6 +416,190 @@ class DebugCommandReceiver : BroadcastReceiver() {
         )
     }
 
+
+    // ──────────────────────────────── db ────────────────────────────────
+
+    /**
+     * 只读查询通道，替代 `adb pull` 整个库文件（USB 一断就是半个文件；WAL 库拷主文件会拷到下坏页）。
+     *
+     * 三道闸：解析期已按 [DbSql.validate] 拒掉非单条 select/with → 优先只读连接打开 →
+     * 全程只走 `rawQuery`，不碰 execSQL。
+     *
+     * 只读连接优先 `OPEN_READONLY`；WAL 库在部分机型上只读打开会失败（缺 `-shm` 写权限），
+     * 退回到 App 已打开的可读连接，并在输出里标注 `mode`，让验证方知道走的是哪条路。
+     */
+    private fun emitDb(context: Context, cmd: DebugCommand.Db, token: String?) {
+        val file = context.getDatabasePath(MONITOR_DB)
+        if (!file.exists()) {
+            emitFailure(
+                cmd = cmd.name,
+                token = token,
+                reason = "db_missing",
+                data = JSONObject().put("path", file.path).put("hint", "App 尚未写过库：先跑一次 state"),
+            )
+            return
+        }
+        val own = runCatching {
+            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
+        }.getOrNull()
+        val db = own ?: context.serviceContainer.databaseHelper.readableDatabase
+        val mode = if (own != null) "readonly" else "app-connection"
+        try {
+            when (cmd.op) {
+                DbOp.TABLES -> emitDbTables(db, cmd, mode, token)
+                DbOp.SCHEMA -> emitDbSchema(db, cmd, mode, token)
+                DbOp.QUERY -> emitDbQuery(db, cmd, mode, token)
+            }
+        } finally {
+            // 只关自己的连接；退回 App 连接时不能关，否则把生产链路一起关掉
+            own?.close()
+        }
+    }
+
+    private fun emitDbTables(db: SQLiteDatabase, cmd: DebugCommand.Db, mode: String, token: String?) {
+        val userVersion = db.rawQuery("PRAGMA user_version", null)
+            .use { if (it.moveToFirst()) it.getInt(0) else -1 }
+        val names = mutableListOf<String>()
+        db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+            null,
+        ).use { cursor -> while (cursor.moveToNext()) names.add(cursor.getString(0)) }
+
+        val tables = JSONArray()
+        names.forEach { name ->
+            val rows = db.rawQuery("SELECT COUNT(*) FROM ${quoteIdentifier(name)}", null)
+                .use { if (it.moveToFirst()) it.getLong(0) else -1L }
+            tables.put(JSONObject().put("name", name).put("rows", rows))
+        }
+        emit(
+            cmd = cmd.name,
+            token = token,
+            data = JSONObject()
+                .put("op", DbOp.TABLES.value)
+                .put("mode", mode)
+                .put("userVersion", userVersion)
+                .put("count", names.size)
+                .put("tables", tables)
+                .put("part", 1)
+                .put("parts", 1),
+        )
+    }
+
+    private fun emitDbSchema(db: SQLiteDatabase, cmd: DebugCommand.Db, mode: String, token: String?) {
+        val table = cmd.table.orEmpty()
+        val columns = JSONArray()
+        db.rawQuery("PRAGMA table_info(${quoteIdentifier(table)})", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val defaultIndex = cursor.getColumnIndexOrThrow("dflt_value")
+                columns.put(
+                    JSONObject()
+                        .put("name", cursor.getString(cursor.getColumnIndexOrThrow("name")))
+                        .put("type", cursor.getString(cursor.getColumnIndexOrThrow("type")))
+                        .put("notNull", cursor.getInt(cursor.getColumnIndexOrThrow("notnull")) != 0)
+                        .put("default", if (cursor.isNull(defaultIndex)) JSONObject.NULL else cursor.getString(defaultIndex))
+                        .put("pk", cursor.getInt(cursor.getColumnIndexOrThrow("pk"))),
+                )
+            }
+        }
+        if (columns.length() == 0) {
+            // PRAGMA 对不存在的表返回空结果集，不会报错：这里显式拦下，别让「空 schema」看起来像成功
+            emitFailure(
+                cmd = cmd.name,
+                token = token,
+                reason = "no_such_table",
+                data = JSONObject().put("table", table).put("hint", "先跑 db tables 看实际表名"),
+            )
+            return
+        }
+        emit(
+            cmd = cmd.name,
+            token = token,
+            data = JSONObject()
+                .put("op", DbOp.SCHEMA.value)
+                .put("mode", mode)
+                .put("table", table)
+                .put("count", columns.length())
+                .put("columns", columns)
+                .put("part", 1)
+                .put("parts", 1),
+        )
+    }
+
+    private fun emitDbQuery(db: SQLiteDatabase, cmd: DebugCommand.Db, mode: String, token: String?) {
+        val sql = cmd.sql.orEmpty()
+        val rows = mutableListOf<JSONObject>()
+        val columns = JSONArray()
+        var truncatedFields = 0
+        db.rawQuery(sql, null).use { cursor ->
+            cursor.columnNames.forEach { columns.put(it) }
+            var taken = 0
+            while (taken < cmd.limit && cursor.moveToNext()) {
+                val row = JSONObject()
+                cursor.columnNames.forEachIndexed { index, name ->
+                    when (cursor.getType(index)) {
+                        Cursor.FIELD_TYPE_NULL -> row.put(name, JSONObject.NULL)
+                        Cursor.FIELD_TYPE_INTEGER -> row.put(name, cursor.getLong(index))
+                        Cursor.FIELD_TYPE_FLOAT -> row.put(name, cursor.getDouble(index))
+                        // BLOB 只报长度：调试通道不该把二进制塞进 logcat
+                        Cursor.FIELD_TYPE_BLOB -> row.put(name, "<blob:" + cursor.getBlob(index).size + "B>")
+                        else -> {
+                            val text = cursor.getString(index) ?: ""
+                            val cut = DbSql.truncate(text)
+                            if (cut.length != text.length) truncatedFields++
+                            row.put(name, cut)
+                        }
+                    }
+                }
+                rows.add(row)
+                taken++
+            }
+        }
+
+        // 与 dump 同一套分片：logcat 单行约 4KB，CLI 靠 part/parts 判断「收齐了没」
+        val chunks = chunkRows(rows, columns, MAX_LINE_CHARS)
+        chunks.forEachIndexed { index, chunk ->
+            emit(
+                cmd = cmd.name,
+                token = token,
+                data = JSONObject()
+                    .put("op", DbOp.QUERY.value)
+                    .put("mode", mode)
+                    .put("sql", sql)
+                    .put("limit", cmd.limit)
+                    .put("count", rows.size)
+                    .put("truncatedFields", truncatedFields)
+                    .put("columns", columns)
+                    .put("part", index + 1)
+                    .put("parts", chunks.size)
+                    .put("rows", chunk),
+            )
+        }
+    }
+
+    /** 按字符预算切片；单行超预算时自己独占一片（宁可多片，也不截断行）。 */
+    private fun chunkRows(rows: List<JSONObject>, columns: JSONArray, maxChars: Int): List<JSONArray> {
+        val headerChars = columns.toString().length
+        val chunks = ArrayList<JSONArray>()
+        var current = JSONArray()
+        var size = headerChars
+        for (row in rows) {
+            val length = row.toString().length + 1
+            if (current.length() > 0 && size + length > maxChars) {
+                chunks.add(current)
+                current = JSONArray()
+                size = headerChars
+            }
+            current.put(row)
+            size += length
+        }
+        if (current.length() > 0) chunks.add(current)
+        if (chunks.isEmpty()) chunks.add(JSONArray())
+        return chunks
+    }
+
+    /** 标识符加双引号：表名只来自 sqlite_master 或解析期校验过的普通标识符。 */
+    private fun quoteIdentifier(name: String): String = "\"" + name.replace("\"", "\"\"") + "\""
+
     // ──────────────────────────── heartbeat ────────────────────────────
 
     private fun emitHeartbeat(context: Context, token: String?) {
@@ -477,5 +664,8 @@ class DebugCommandReceiver : BroadcastReceiver() {
 
         /** 单片 JSON 的字符上限：logcat 约 4KB/行，中文按 UTF-8 最坏 3 字节/字符，取 1200 留足余量。 */
         const val MAX_LINE_CHARS = 1200
+
+        /** 监控库文件名（`DatabaseHelper.DATABASE_NAME` 是私有的，这里只读打开要用绝对路径）。 */
+        const val MONITOR_DB = "monitor.db"
     }
 }
