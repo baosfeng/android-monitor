@@ -98,34 +98,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
         }
 
-        try {
-            LocationCollector.get(context).collectThrottledAsync { sample ->
-                try {
-                    if (sample == null) {
-                        Log.w(TAG, "定位采样无可用点（节流中 / 未授权 / 缓存空且主动定位失败）")
-                    } else {
-                        // 落库在主线程回调里执行：SQLite 单条 insert 是毫秒级，但放 IO 更稳妥
-                        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-                            try {
-                                context.serviceContainer.recordCollector.onLocation(sample)
-                                Log.d(TAG, "定位采样成功 provider=${sample.provider} accuracy=${sample.accuracyMeters}")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "定位落库失败", e)
-                            } finally {
-                                finishOnce()
-                            }
-                        }
-                        return@collectThrottledAsync
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "定位采样失败", e)
-                }
-                finishOnce()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "定位采样异常", e)
-            finishOnce()
-        }
+        sampleLocationOnce(context) { finishOnce() }
     }
 
     private fun isAccessibilityServiceRunning(context: Context): Boolean {
@@ -162,6 +135,44 @@ class AlarmReceiver : BroadcastReceiver() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         runCatching { context.startActivity(wakeIntent) }
+    }
+}
+
+/**
+ * 采样一次位置并落库（COORDINATE）。
+ *
+ * 1 分钟心跳与前台服务里的 10 秒定时器共用这一条路径：节流间隔按当前模式自适应
+ * （移动 10 秒 / 静止 3 分钟），落库放 IO 协程，[onFinished] 在**恰好一次**的回调里执行
+ * （广播要 finish PendingResult，服务侧传空实现）。
+ *
+ * 任何异常都不上抛：定位失败不能影响上报、保活与无障碍主链路。
+ */
+internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
+    try {
+        LocationCollector.get(context).collectThrottledAsync { sample ->
+            if (sample == null) {
+                Log.w("LocationSample", "定位采样无可用点（节流中 / 未授权 / 缓存不新鲜且主动定位失败）")
+                onFinished()
+                return@collectThrottledAsync
+            }
+            // 落库放 IO：SQLite 单条 insert 毫秒级，但别占着广播/主线程回调
+            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                try {
+                    context.serviceContainer.recordCollector.onLocation(sample)
+                    Log.d(
+                        "LocationSample",
+                        "定位落库成功 provider=${sample.provider} accuracy=${sample.accuracyMeters}",
+                    )
+                } catch (e: Exception) {
+                    Log.w("LocationSample", "定位落库失败", e)
+                } finally {
+                    onFinished()
+                }
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("LocationSample", "定位采样异常", e)
+        onFinished()
     }
 }
 
