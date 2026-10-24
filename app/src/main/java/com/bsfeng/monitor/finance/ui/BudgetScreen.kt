@@ -1,22 +1,18 @@
 package com.bsfeng.monitor.finance.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
+// 来源：原 finance/ui/BudgetScreen.kt；职责：预算设置屏幕装配（总预算/分类预算状态、空态与编辑弹窗）。
+
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Savings
@@ -25,29 +21,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import com.bsfeng.monitor.finance.model.Budget
-import com.bsfeng.monitor.finance.model.Category
-import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.FiveState
-import com.bsfeng.monitor.ui.components.GlassCard
-import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.StateContainer
-import com.bsfeng.monitor.ui.components.animatedAmount
-import com.bsfeng.monitor.ui.components.staggerEnterAt
-import com.bsfeng.monitor.ui.components.tweenOf
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /**
  * s06 预算设置。
@@ -171,108 +157,41 @@ fun BudgetScreen(
                     }
 
                     item(key = "kpis") {
-                        Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
-                            GlassCard {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(t.space2),
-                                    ) {
-                                        BudgetKpiLine(
-                                            label = "总预算",
-                                            value = yen(animatedAmount(totalBudget.toFloat()).toDouble(), 0),
-                                            color = t.fg,
-                                            onClick = {
-                                                haptic(HapticTone.LIGHT)
-                                                editingTarget = BudgetEditorTarget(
-                                                    categoryName = "",
-                                                    title = "总预算",
-                                                    currentAmount = overallBudget?.budgetAmount ?: 0.0,
-                                                )
-                                            },
-                                        )
-                                        BudgetKpiLine(
-                                            label = "已支出",
-                                            value = yen(animatedAmount(spentTotal.toFloat()).toDouble(), 0),
-                                            color = t.expenseText,
-                                        )
-                                        BudgetKpiLine(
-                                            label = "剩余",
-                                            value = yen(animatedAmount(remaining.toFloat()).toDouble(), 0),
-                                            color = if (remaining < 0) t.expenseText else t.fg,
-                                        )
-                                    }
-                                    Spacer(Modifier.width(t.space3))
-                                    FinanceRingGauge(
-                                        fraction = fraction,
-                                        big = ((fraction * 100).toInt()).toString() + "%",
-                                        small = "已用",
-                                        // B1：超支只改文本色，环保持强调色
-                                        color = t.accent,
-                                    )
-                                }
-                            }
-                        }
+                        BudgetKpiSection(
+                            totalBudget = totalBudget,
+                            spentTotal = spentTotal,
+                            remaining = remaining,
+                            fraction = fraction,
+                            onEditTotal = {
+                                haptic(HapticTone.LIGHT)
+                                editingTarget = BudgetEditorTarget(
+                                    categoryName = "",
+                                    title = "总预算",
+                                    currentAmount = overallBudget?.budgetAmount ?: 0.0,
+                                )
+                            },
+                        )
                     }
 
                     item(key = "listhead") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = t.space4, vertical = t.space2),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "分类预算",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = t.fg,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                "点任意一行可修改",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = t.meta,
-                            )
-                        }
+                        BudgetListHead()
                     }
 
                     item(key = "rows") {
-                        Column(Modifier.padding(horizontal = t.space4)) {
-                            AppCard(padding = t.space1) {
-                                rows.forEachIndexed { index, category ->
-                                    val budget = budgetByCategory[category.name]
-                                    BudgetRow(
-                                        title = category.name,
-                                        budgetAmount = budget?.budgetAmount ?: 0.0,
-                                        spentAmount = budget?.spentAmount ?: 0.0,
-                                        enterIndex = index,
-                                        onClick = {
-                                            haptic(HapticTone.LIGHT)
-                                            editingTarget = BudgetEditorTarget(
-                                                categoryName = category.name,
-                                                title = category.name,
-                                                currentAmount = budget?.budgetAmount ?: 0.0,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(t.space3))
-                            Text(
-                                "分类预算合计等于总预算；超出后进度条转为深色并提示超支。",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = t.meta,
-                            )
-                            Spacer(Modifier.height(t.space1))
-                            Text(
-                                // 原型 .s06-kpis 卡内只有 3 行 KPI + 环（无文本节点），说明统一挂到列表下方；
-                                // App 的总预算行可点开编辑弹窗，故保留这句操作提示（原型无此句）。
-                                "点「总预算」可修改总额，点任意分类行可分配额度。",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = t.meta,
-                            )
-                        }
+                        BudgetCategoryRowsSection(
+                            rows = rows,
+                            budgetByCategory = budgetByCategory,
+                            onEditCategory = { category, budget ->
+                                haptic(HapticTone.LIGHT)
+                                editingTarget = BudgetEditorTarget(
+                                    categoryName = category.name,
+                                    title = category.name,
+                                    currentAmount = budget?.budgetAmount ?: 0.0,
+                                )
+                            },
+                        )
                     }
+
 
                     item(key = "bottom") { Spacer(Modifier.height(t.space12)) }
                 }
@@ -312,136 +231,3 @@ fun BudgetScreen(
     }
 }
 
-/** 预算编辑目标（总预算的 categoryName 为空串） */
-private data class BudgetEditorTarget(
-    val categoryName: String,
-    val title: String,
-    val currentAmount: Double,
-)
-
-/** 展示用行：有预算的分类优先，不足 6 行时用其余支出分类补齐至 6 行。 */
-private fun budgetRowsFor(
-    expenseCategories: List<Category>,
-    budgetByCategory: Map<String, Budget>,
-): List<Category> {
-    val withBudget = expenseCategories.filter { budgetByCategory.containsKey(it.name) }
-    val others = expenseCategories.filterNot { budgetByCategory.containsKey(it.name) }
-    return if (withBudget.size >= ROW_TARGET) withBudget else (withBudget + others).take(ROW_TARGET)
-}
-
-@Composable
-private fun BudgetKpiLine(
-    label: String,
-    value: String,
-    color: androidx.compose.ui.graphics.Color,
-    onClick: (() -> Unit)? = null,
-) {
-    val t = LocalDesignTokens.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                onClick?.let { action ->
-                    Modifier.clip(RoundedCornerShape(t.radiusMd)).clickable { action() }
-                } ?: Modifier,
-            ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)
-        Text(value, style = MaterialTheme.typography.titleSmall, color = color, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/** 单行预算：名称 + 预算额 + 进度条 + 已支出/剩余。 */
-@Composable
-private fun BudgetRow(
-    title: String,
-    budgetAmount: Double,
-    spentAmount: Double,
-    enterIndex: Int,
-    onClick: () -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    val hasBudget = budgetAmount > 0
-    val progress = if (hasBudget) (spentAmount / budgetAmount).toFloat() else 0f
-    val isOverBudget = hasBudget && spentAmount > budgetAmount
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = t.tweenOf(MotionToken.State),
-        label = "budgetBar",
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .staggerEnterAt(enterIndex)
-            .clip(RoundedCornerShape(t.radiusMd))
-            .clickable { onClick() }
-            .padding(horizontal = t.space3, vertical = t.space3),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                color = t.fg,
-                maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(t.space2))
-            Text(
-                if (hasBudget) yen(budgetAmount, 0) else "未设置",
-                // 原型 .s06-amt = 17px/600 + 正文色（--fg 系）；「未设置」保留 muted 的弱化语义
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (hasBudget) t.fg else t.muted,
-            )
-        }
-        Spacer(Modifier.height(t.space2))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(t.space2)
-                .clip(RoundedCornerShape(t.radiusPill))
-                .background(t.borderSoft),
-        ) {
-            if (hasBudget) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(animatedProgress)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(t.radiusPill))
-                        // 原型 s06:27-28：常态 chart-3，超支 chart-1
-                        .background(if (isOverBudget) t.chart1 else t.chart3),
-                )
-            }
-        }
-        Spacer(Modifier.height(t.space2))
-        Text(
-            if (!hasBudget) {
-                "未设置预算"
-            } else if (isOverBudget) {
-                "已支出 " + yen(spentAmount, 0) + " · 超支 " + yen(spentAmount - budgetAmount, 0)
-            } else {
-                "已支出 " + yen(spentAmount, 0) + " · 剩余 " + yen(budgetAmount - spentAmount, 0)
-            },
-            // 原型 .s06-brow .row-sub = 14px（--text-sm）；12sp 的 labelSmall 比原型小一号
-            style = MaterialTheme.typography.bodySmall,
-            color = if (isOverBudget) t.expenseText else t.meta,
-        )
-    }
-}
-
-/** 金额格式化（两位小数，与其余记账页面一致）。 */
-private fun formatAmount(value: Double): String =
-    String.format(java.util.Locale.CHINA, "%.2f", value)
-
-/** 交易类型：支出 */
-private const val TYPE_EXPENSE = 0
-
-/** 原型固定 6 条分类进度条 */
-private const val ROW_TARGET = 6

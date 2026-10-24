@@ -1,9 +1,9 @@
 package com.bsfeng.monitor.finance
 
-import android.content.ContentValues
+// 来源：原 finance/FinanceDao.kt；职责：记账数据访问的统一入口。交易/分类/账户/预算四组读写分别委托给
+// FinanceTransactionDao / FinanceCategoryDao / FinanceAccountDao / FinanceBudgetDao，公开方法签名保持不变。
+
 import androidx.core.database.sqlite.transaction
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteConstraintException
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
@@ -13,100 +13,42 @@ import com.bsfeng.monitor.finance.model.Transaction
  * 记账模块数据访问对象。
  *
  * 所有数据库读写操作集中在此类中，FinanceManager 通过此类访问数据。
+ * 实现按实体拆到四个 internal DAO，本类只做同签名转发（调用方与测试无需改 import）。
  */
 class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
+
+    internal val transactionDao = FinanceTransactionDao(dbHelper)
+    internal val categoryDao = FinanceCategoryDao(dbHelper)
+    internal val accountDao = FinanceAccountDao(dbHelper)
+    internal val budgetDao = FinanceBudgetDao(dbHelper)
 
     // ========== Transaction ==========
 
     /** 插入一条交易记录 */
-    fun insertTransaction(tx: Transaction): Long {
-        val db = dbHelper.writableDatabase
-        return db.insertOrThrow(TransactionEntity.TABLE_NAME, null, TransactionEntity.toContentValues(tx))
-    }
+    fun insertTransaction(tx: Transaction): Long = transactionDao.insertTransaction(tx)
 
     /** 批量插入交易记录（事务） */
-    fun insertTransactions(txs: List<Transaction>): Int {
-        if (txs.isEmpty()) return 0
-        val db = dbHelper.writableDatabase
-        var count = 0
-        db.transaction {
-            for (tx in txs) {
-                val id = insertWithOnConflict(
-                    TransactionEntity.TABLE_NAME, null,
-                    TransactionEntity.toContentValues(tx),
-                    SQLiteDatabase.CONFLICT_IGNORE
-                )
-                if (id > 0) count++
-            }
-        }
-        return count
-    }
+    fun insertTransactions(txs: List<Transaction>): Int = transactionDao.insertTransactions(txs)
 
     /** 更新交易记录 */
-    fun updateTransaction(tx: Transaction): Int {
-        val db = dbHelper.writableDatabase
-        val cv = TransactionEntity.toContentValues(tx)
-        return db.update(TransactionEntity.TABLE_NAME, cv, "${TransactionEntity.COL_ID} = ?", arrayOf(tx.id.toString()))
-    }
+    fun updateTransaction(tx: Transaction): Int = transactionDao.updateTransaction(tx)
 
     /** 删除交易记录 */
-    fun deleteTransaction(id: Long): Int {
-        val db = dbHelper.writableDatabase
-        return db.delete(TransactionEntity.TABLE_NAME, "${TransactionEntity.COL_ID} = ?", arrayOf(id.toString()))
-    }
+    fun deleteTransaction(id: Long): Int = transactionDao.deleteTransaction(id)
 
     /** 按 ID 查询 */
-    fun getTransactionById(id: Long): Transaction? {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_ID} = ?", arrayOf(id.toString()),
-            null, null, null
-        )
-        return cursor.use { c ->
-            if (c.moveToFirst()) TransactionEntity.fromCursor(c) else null
-        }
-    }
+    fun getTransactionById(id: Long): Transaction? = transactionDao.getTransactionById(id)
 
     /** 按月份查询（按日期降序） */
-    fun getTransactionsByMonth(yearMonth: String): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val startDate = "$yearMonth-01"
-        val endDate = getNextMonthStart(yearMonth)
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} < ?",
-            arrayOf(startDate, endDate),
-            null, null,
-            "${TransactionEntity.COL_DATE} DESC, ${TransactionEntity.COL_DATE_TIME} DESC"
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun getTransactionsByMonth(yearMonth: String): List<Transaction> =
+        transactionDao.getTransactionsByMonth(yearMonth)
 
     /** 按日期范围查询 */
-    fun getTransactionsByDateRange(startDate: String, endDate: String): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} <= ?",
-            arrayOf(startDate, endDate),
-            null, null,
-            "${TransactionEntity.COL_DATE} DESC, ${TransactionEntity.COL_DATE_TIME} DESC"
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun getTransactionsByDateRange(startDate: String, endDate: String): List<Transaction> =
+        transactionDao.getTransactionsByDateRange(startDate, endDate)
 
     /** 获取最近的交易记录 */
-    fun getRecentTransactions(limit: Int = 50): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            null, null, null, null,
-            "${TransactionEntity.COL_DATE} DESC, ${TransactionEntity.COL_DATE_TIME} DESC",
-            limit.toString()
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun getRecentTransactions(limit: Int = 50): List<Transaction> = transactionDao.getRecentTransactions(limit)
 
     /**
      * 自动记账记录里按「来源 + 金额」找候选（交易详情页补全用）。
@@ -114,43 +56,18 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
      * 详情页发生在记账之后，无法用 sourceId 精确定位（结果页往往没有订单号/时间），
      * 因此先按来源（`auto_alipay` / `auto_wechat`）+ 金额捞一小批，再由纯逻辑按时间挑最近的一笔。
      */
-    fun findAutoTransactionsByAmount(source: String, amount: Double, limit: Int = 20): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_SOURCE} = ? AND ABS(${TransactionEntity.COL_AMOUNT} - ?) < 0.005",
-            arrayOf(source, amount.toString()),
-            null, null,
-            "${TransactionEntity.COL_DATE_TIME} DESC",
-            limit.toString()
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun findAutoTransactionsByAmount(source: String, amount: Double, limit: Int = 20): List<Transaction> =
+        transactionDao.findAutoTransactionsByAmount(source, amount, limit)
 
     /**
      * 自动记账记录里「说明」非空的全部行（旧版拼接残留清理用，见 [LegacyRemarkCleaner]）。
      *
      * `LIKE 'auto_%'` 覆盖 auto_alipay / auto_wechat；手动记账（manual）与熊猫导入不参与。
      */
-    fun getAutoTransactionsWithRemark(): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_SOURCE} LIKE 'auto\\_%' ESCAPE '\\' AND ${TransactionEntity.COL_REMARK} != ''",
-            null, null, null, null
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun getAutoTransactionsWithRemark(): List<Transaction> = transactionDao.getAutoTransactionsWithRemark()
 
     /** 只清说明列（旧拼接迁移用）：不动类型 / 分类 / 金额 / 余额。 */
-    fun clearTransactionRemark(id: Long): Int {
-        val db = dbHelper.writableDatabase
-        val values = ContentValues().apply { put(TransactionEntity.COL_REMARK, "") }
-        return db.update(
-            TransactionEntity.TABLE_NAME, values,
-            "${TransactionEntity.COL_ID} = ?", arrayOf(id.toString())
-        )
-    }
+    fun clearTransactionRemark(id: Long): Int = transactionDao.clearTransactionRemark(id)
 
     /**
      * 同一商户最近一笔交易（自动记账「上次选过的类型 / 分类」默认值用）。
@@ -158,113 +75,28 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
      * 精确匹配商户名：自动记账落库的商户来自同一页面，跨次稳定；手工录入的商户名与页面
      * 不一致时自然不命中 —— 宁可回落到解析器默认分类，也不能把别家店的分类套过来。
      */
-    fun findLastByMerchant(merchant: String): Transaction? {
-        if (merchant.isBlank()) return null
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_MERCHANT} = ?",
-            arrayOf(merchant),
-            null, null,
-            "${TransactionEntity.COL_DATE_TIME} DESC, ${TransactionEntity.COL_ID} DESC",
-            "1"
-        )
-        return TransactionEntity.listFromCursor(cursor).firstOrNull()
-    }
+    fun findLastByMerchant(merchant: String): Transaction? = transactionDao.findLastByMerchant(merchant)
 
     /** 搜索交易（按说明或分类名模糊匹配） */
-    fun searchTransactions(query: String, limit: Int = 50): List<Transaction> {
-        val db = dbHelper.readableDatabase
-        val pattern = "%$query%"
-        val cursor = db.query(
-            TransactionEntity.TABLE_NAME, null,
-            "${TransactionEntity.COL_REMARK} LIKE ? OR ${TransactionEntity.COL_CATEGORY_NAME} LIKE ?",
-            arrayOf(pattern, pattern),
-            null, null,
-            "${TransactionEntity.COL_DATE} DESC",
-            limit.toString()
-        )
-        return TransactionEntity.listFromCursor(cursor)
-    }
+    fun searchTransactions(query: String, limit: Int = 50): List<Transaction> =
+        transactionDao.searchTransactions(query, limit)
 
     /** 获取某月的总支出 */
-    fun getMonthlyExpenseTotal(yearMonth: String): Double {
-        val db = dbHelper.readableDatabase
-        val startDate = "$yearMonth-01"
-        val endDate = getNextMonthStart(yearMonth)
-        val cursor = db.rawQuery(
-            "SELECT COALESCE(SUM(${TransactionEntity.COL_AMOUNT}), 0) FROM ${TransactionEntity.TABLE_NAME} " +
-                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} < ? " +
-                "AND ${TransactionEntity.COL_TYPE} = 0",
-            arrayOf(startDate, endDate)
-        )
-        return cursor.use { c -> if (c.moveToFirst()) c.getDouble(0) else 0.0 }
-    }
+    fun getMonthlyExpenseTotal(yearMonth: String): Double = transactionDao.getMonthlyExpenseTotal(yearMonth)
 
     /** 获取某月的总收入 */
-    fun getMonthlyIncomeTotal(yearMonth: String): Double {
-        val db = dbHelper.readableDatabase
-        val startDate = "$yearMonth-01"
-        val endDate = getNextMonthStart(yearMonth)
-        val cursor = db.rawQuery(
-            "SELECT COALESCE(SUM(${TransactionEntity.COL_AMOUNT}), 0) FROM ${TransactionEntity.TABLE_NAME} " +
-                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} < ? " +
-                "AND ${TransactionEntity.COL_TYPE} = 1",
-            arrayOf(startDate, endDate)
-        )
-        return cursor.use { c -> if (c.moveToFirst()) c.getDouble(0) else 0.0 }
-    }
+    fun getMonthlyIncomeTotal(yearMonth: String): Double = transactionDao.getMonthlyIncomeTotal(yearMonth)
 
     /** 获取某月的分类支出统计 */
-    fun getMonthlyCategoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> {
-        val db = dbHelper.readableDatabase
-        val startDate = "$yearMonth-01"
-        val endDate = getNextMonthStart(yearMonth)
-        val cursor = db.rawQuery(
-            "SELECT ${TransactionEntity.COL_CATEGORY_NAME}, COALESCE(SUM(${TransactionEntity.COL_AMOUNT}), 0) " +
-                "FROM ${TransactionEntity.TABLE_NAME} " +
-                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} < ? " +
-                "AND ${TransactionEntity.COL_TYPE} = ? " +
-                "GROUP BY ${TransactionEntity.COL_CATEGORY_NAME} " +
-                "ORDER BY SUM(${TransactionEntity.COL_AMOUNT}) DESC",
-            arrayOf(startDate, endDate, type.toString())
-        )
-        val map = mutableMapOf<String, Double>()
-        cursor.use { c ->
-            while (c.moveToNext()) {
-                map[c.getString(0)] = c.getDouble(1)
-            }
-        }
-        return map
-    }
+    fun getMonthlyCategoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> =
+        transactionDao.getMonthlyCategoryBreakdown(yearMonth, type)
 
     /** 获取所有数据的月份列表（去重降序） */
-    fun getAvailableMonths(): List<String> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT DISTINCT substr(${TransactionEntity.COL_DATE}, 1, 7) AS ym " +
-                "FROM ${TransactionEntity.TABLE_NAME} ORDER BY ym DESC",
-            null
-        )
-        val months = mutableListOf<String>()
-        cursor.use { c ->
-            while (c.moveToNext()) {
-                months.add(c.getString(0))
-            }
-        }
-        return months
-    }
+    fun getAvailableMonths(): List<String> = transactionDao.getAvailableMonths()
 
     /** 检查某笔交易是否已导入（按 source + sourceId 去重） */
-    fun transactionExists(source: String, sourceId: String): Boolean {
-        val db = dbHelper.readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT COUNT(*) FROM ${TransactionEntity.TABLE_NAME} " +
-                "WHERE ${TransactionEntity.COL_SOURCE} = ? AND ${TransactionEntity.COL_SOURCE_ID} = ?",
-            arrayOf(source, sourceId)
-        )
-        return cursor.use { c -> c.moveToFirst() && c.getInt(0) > 0 }
-    }
+    fun transactionExists(source: String, sourceId: String): Boolean =
+        transactionDao.transactionExists(source, sourceId)
 
     // ========== Category ==========
 
@@ -273,200 +105,63 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
      *
      * @return 实际新增的分类数量；已存在的同名分类（UNIQUE(name) 冲突）不计入
      */
-    fun insertCategories(categories: List<Category>): Int {
-        if (categories.isEmpty()) return 0
-        val db = dbHelper.writableDatabase
-        var inserted = 0
-        db.transaction {
-            for (cat in categories) {
-                try {
-                    insertOrThrow(CategoryEntity.TABLE_NAME, null, CategoryEntity.toContentValues(cat))
-                    inserted++
-                } catch (_: SQLiteConstraintException) {
-                    // UNIQUE 冲突忽略
-                }
-            }
-        }
-        return inserted
-    }
+    fun insertCategories(categories: List<Category>): Int = categoryDao.insertCategories(categories)
 
     /** 获取所有分类 */
-    fun getAllCategories(): List<Category> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            CategoryEntity.TABLE_NAME, null, null, null, null, null,
-            "${CategoryEntity.COL_TYPE} ASC, ${CategoryEntity.COL_SORT_ORDER} ASC"
-        )
-        return CategoryEntity.listFromCursor(cursor)
-    }
+    fun getAllCategories(): List<Category> = categoryDao.getAllCategories()
 
     /** 某类型的一级分类（parent_id = -1，按 sort_order） */
-    fun getTopLevelCategories(type: Int): List<Category> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            CategoryEntity.TABLE_NAME, null,
-            "${CategoryEntity.COL_TYPE} = ? AND ${CategoryEntity.COL_PARENT_ID} < 0",
-            arrayOf(type.toString()),
-            null, null, "${CategoryEntity.COL_SORT_ORDER} ASC"
-        )
-        return CategoryEntity.listFromCursor(cursor)
-    }
+    fun getTopLevelCategories(type: Int): List<Category> = categoryDao.getTopLevelCategories(type)
 
     /** 某一级分类下的二级分类（按 sort_order） */
-    fun getChildCategories(parentId: Long): List<Category> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            CategoryEntity.TABLE_NAME, null,
-            "${CategoryEntity.COL_PARENT_ID} = ?", arrayOf(parentId.toString()),
-            null, null, "${CategoryEntity.COL_SORT_ORDER} ASC"
-        )
-        return CategoryEntity.listFromCursor(cursor)
-    }
+    fun getChildCategories(parentId: Long): List<Category> = categoryDao.getChildCategories(parentId)
 
     /** 清空分类表（分类体系迁移用，事务内调用） */
-    fun clearCategories(): Int {
-        val db = dbHelper.writableDatabase
-        return db.delete(CategoryEntity.TABLE_NAME, null, null)
-    }
+    fun clearCategories(): Int = categoryDao.clearCategories()
 
     /** 把交易里旧的分类名批量改到新分类（迁移用；不动金额/余额/时间） */
-    fun updateTransactionCategory(oldName: String, newName: String): Int {
-        if (oldName == newName) return 0
-        val db = dbHelper.writableDatabase
-        val values = ContentValues().apply { put(TransactionEntity.COL_CATEGORY_NAME, newName) }
-        return db.update(
-            TransactionEntity.TABLE_NAME, values,
-            "${TransactionEntity.COL_CATEGORY_NAME} = ?", arrayOf(oldName)
-        )
-    }
+    fun updateTransactionCategory(oldName: String, newName: String): Int =
+        transactionDao.updateTransactionCategory(oldName, newName)
 
     /** 把预算里旧的分类名改到新一级（迁移用） */
-    fun updateBudgetCategory(oldName: String, newName: String): Int {
-        if (oldName == newName) return 0
-        val db = dbHelper.writableDatabase
-        val values = ContentValues().apply { put(BudgetEntity.COL_CATEGORY_NAME, newName) }
-        return db.update(
-            BudgetEntity.TABLE_NAME, values,
-            "${BudgetEntity.COL_CATEGORY_NAME} = ?", arrayOf(oldName)
-        )
-    }
+    fun updateBudgetCategory(oldName: String, newName: String): Int =
+        categoryDao.updateBudgetCategory(oldName, newName)
 
     /** 按类型获取分类 */
-    fun getCategoriesByType(type: Int): List<Category> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            CategoryEntity.TABLE_NAME, null,
-            "${CategoryEntity.COL_TYPE} = ?", arrayOf(type.toString()),
-            null, null, "${CategoryEntity.COL_SORT_ORDER} ASC"
-        )
-        return CategoryEntity.listFromCursor(cursor)
-    }
+    fun getCategoriesByType(type: Int): List<Category> = categoryDao.getCategoriesByType(type)
 
     /** 插入一个分类并返回新 id（分类体系迁移/种子用；冲突返回 -1） */
-    fun insertCategory(category: Category): Long {
-        val db = dbHelper.writableDatabase
-        return db.insertWithOnConflict(
-            CategoryEntity.TABLE_NAME, null,
-            CategoryEntity.toContentValues(category),
-            SQLiteDatabase.CONFLICT_IGNORE
-        )
-    }
+    fun insertCategory(category: Category): Long = categoryDao.insertCategory(category)
 
     /** 交易里出现过的分类名 + 类型（迁移映射用；跳过空分类） */
-    fun getDistinctTransactionCategoryTypes(): List<Pair<String, Int>> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT DISTINCT ${TransactionEntity.COL_CATEGORY_NAME}, ${TransactionEntity.COL_TYPE} " +
-                "FROM ${TransactionEntity.TABLE_NAME} " +
-                "WHERE ${TransactionEntity.COL_CATEGORY_NAME} != ''",
-            null
-        )
-        val rows = mutableListOf<Pair<String, Int>>()
-        cursor.use { c ->
-            while (c.moveToNext()) rows += c.getString(0) to c.getInt(1)
-        }
-        return rows
-    }
+    fun getDistinctTransactionCategoryTypes(): List<Pair<String, Int>> =
+        transactionDao.getDistinctTransactionCategoryTypes()
 
     /** 预算里出现过的分类名（迁移映射用；总预算空串跳过） */
-    fun getDistinctBudgetCategoryNames(): List<String> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT DISTINCT ${BudgetEntity.COL_CATEGORY_NAME} FROM ${BudgetEntity.TABLE_NAME} " +
-                "WHERE ${BudgetEntity.COL_CATEGORY_NAME} != ''",
-            null
-        )
-        val names = mutableListOf<String>()
-        cursor.use { c ->
-            while (c.moveToNext()) names += c.getString(0)
-        }
-        return names
-    }
+    fun getDistinctBudgetCategoryNames(): List<String> = categoryDao.getDistinctBudgetCategoryNames()
 
     // ========== Account ==========
 
     /** 插入账户（去重） */
-    fun insertAccount(account: Account): Long {
-        val db = dbHelper.writableDatabase
-        return try {
-            db.insertOrThrow(AccountEntity.TABLE_NAME, null, AccountEntity.toContentValues(account))
-        } catch (_: SQLiteConstraintException) {
-            // UNIQUE(name) 冲突时查询已有 ID
-            getAccountByName(account.name)?.id ?: -1L
-        }
-    }
+    fun insertAccount(account: Account): Long = accountDao.insertAccount(account)
 
     /** 获取所有账户 */
-    fun getAllAccounts(): List<Account> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            AccountEntity.TABLE_NAME, null, null, null, null, null,
-            "${AccountEntity.COL_SORT_ORDER} ASC"
-        )
-        return AccountEntity.listFromCursor(cursor)
-    }
+    fun getAllAccounts(): List<Account> = accountDao.getAllAccounts()
 
     /** 按名称查询账户 */
-    fun getAccountByName(name: String): Account? {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            AccountEntity.TABLE_NAME, null,
-            "${AccountEntity.COL_NAME} = ?", arrayOf(name),
-            null, null, null
-        )
-        return cursor.use { c ->
-            if (c.moveToFirst()) AccountEntity.fromCursor(c) else null
-        }
-    }
+    fun getAccountByName(name: String): Account? = accountDao.getAccountByName(name)
 
     /** 更新账户余额 */
-    fun updateAccountBalance(accountId: Long, newBalance: Double): Int {
-        val db = dbHelper.writableDatabase
-        val cv = ContentValues().apply { put(AccountEntity.COL_BALANCE, newBalance) }
-        return db.update(AccountEntity.TABLE_NAME, cv, "${AccountEntity.COL_ID} = ?", arrayOf(accountId.toString()))
-    }
+    fun updateAccountBalance(accountId: Long, newBalance: Double): Int =
+        accountDao.updateAccountBalance(accountId, newBalance)
 
     // ========== Budget ==========
 
     /** 插入或更新预算（按 month + category 唯一约束） */
-    fun upsertBudget(budget: Budget): Long {
-        val db = dbHelper.writableDatabase
-        val cv = BudgetEntity.toContentValues(budget)
-        return db.insertWithOnConflict(
-            BudgetEntity.TABLE_NAME, null, cv, SQLiteDatabase.CONFLICT_REPLACE
-        )
-    }
+    fun upsertBudget(budget: Budget): Long = budgetDao.upsertBudget(budget)
 
     /** 获取某月预算列表 */
-    fun getBudgetsByMonth(month: String): List<Budget> {
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            BudgetEntity.TABLE_NAME, null,
-            "${BudgetEntity.COL_MONTH} = ?", arrayOf(month),
-            null, null, null
-        )
-        return BudgetEntity.listFromCursor(cursor)
-    }
+    fun getBudgetsByMonth(month: String): List<Budget> = budgetDao.getBudgetsByMonth(month)
 
     // ========== Helper ==========
 
@@ -479,14 +174,5 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     fun <T> runInTransaction(block: () -> T): T {
         val db = dbHelper.writableDatabase
         return db.transaction { block() }
-    }
-
-    /** 获取下个月起始日期字符串 yyyy-MM-dd */
-    private fun getNextMonthStart(yearMonth: String): String {
-        val parts = yearMonth.split("-")
-        val year = parts[0].toInt()
-        val month = parts[1].toInt()
-        return if (month == 12) "${year + 1}-01-01"
-        else String.format(java.util.Locale.CHINA, "%04d-%02d-01", year, month + 1)
     }
 }

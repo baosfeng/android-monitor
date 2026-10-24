@@ -12,8 +12,6 @@ import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.TransferEngine
-import com.bsfeng.monitor.transfer.service.TransferService
-import com.bsfeng.monitor.transfer.service.TransferTileService
 import com.bsfeng.monitor.transfer.transport.DownloadsSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -74,14 +72,32 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     val localPort: Int get() = engine.localPort
 
     private val selected = MutableStateFlow<String?>(null)
-    private val soundState = MutableStateFlow(readSoundSettings())
     private val started = MutableStateFlow(false)
     private val discoverableState = MutableStateFlow(engine.settings().discoverable)
-    private val openPairingState = MutableStateFlow(readOpenPairing())
     private val thresholdState = MutableStateFlow(engine.settings().autoApproveThresholdMb)
     private val receivedStatsState = MutableStateFlow(DownloadsSink.ReceivedStats(0, 0L))
     private val backgroundReceiveState = MutableStateFlow(engine.settings().backgroundReceive)
     private val autoCloseMinutesState = MutableStateFlow(engine.settings().autoCloseMinutes)
+    private val soundState = MutableStateFlow(TransferSettingsController.readSoundSettings(engine))
+    private val openPairingState = MutableStateFlow(TransferSettingsController.readOpenPairing(engine))
+
+    /** 接收侧开关的编排（服务起停 / 可见性 / 后台接收），实现见 TransferReceivingController。 */
+    private val receiving = TransferReceivingController(
+        engine = engine,
+        application = application,
+        serviceStarted = started,
+        discoverableState = discoverableState,
+        backgroundReceiveState = backgroundReceiveState,
+    )
+
+    /** 设置项的委托（免配对 / 阈值 / 提示音 / 接收目录），实现见 TransferSettingsController。 */
+    private val settingsController = TransferSettingsController(
+        engine = engine,
+        openPairingState = openPairingState,
+        thresholdState = thresholdState,
+        receivedStatsState = receivedStatsState,
+        soundState = soundState,
+    )
 
     /** 当前选中的发送目标设备 id。 */
     val selectedDeviceId: StateFlow<String?> = selected.asStateFlow()
@@ -127,76 +143,31 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
      * App 启动时**不会**自动调用本方法——接收只由用户显式开启（磁贴或传送页），
      * 保证「磁贴关了、App 里就真的是关的」。
      */
-    fun startReceiving() {
-        // 功能关闭：不开「可被发现」、不拉服务（磁贴 / 旧入口遗留调用也走这里）
-        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
-        val settings = engine.settings()
-        settings.discoverable = true
-        // 用户此刻就在界面上操作：先标记可见，再启动服务，
-        // 避免「服务已启动但发现线程按不可见判定不启动」的半启动状态。
-        engine.setAppVisible(true)
-        engine.setDiscoverable(true)
-        started.value = true
-        TransferService.start(getApplication())
-        discoverableState.value = true
-    }
+    fun startReceiving() = receiving.startReceiving()
 
     /** 关闭接收：停服务（端口释放、对端列表消失），并同步关闭「可被发现」。 */
-    fun stopReceiving() {
-        val settings = engine.settings()
-        settings.backgroundReceive = false
-        settings.discoverable = false
-        engine.setDiscoverable(false)
-        TransferService.stop(getApplication())
-        discoverableState.value = false
-        backgroundReceiveState.value = false
-    }
+    fun stopReceiving() = receiving.stopReceiving()
 
     /** 兼容旧调用点：不再自动启动服务，仅记录一次。 */
-    fun ensureStarted() {
-        started.value = true
-    }
+    fun ensureStarted() = receiving.ensureStarted()
 
     /** App 回到前台：只更新可见性，不自动开启接收。 */
-    fun onAppForeground() {
-        if (!FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
-        engine.setAppVisible(true)
-    }
+    fun onAppForeground() = receiving.onAppForeground()
 
     /** App 退到后台：停发现；「后台接收」关闭时连服务一起停（对端列表随之消失）。 */
-    fun onAppBackground() {
-        engine.setAppVisible(false)
-        if (!engine.settings().backgroundReceive) TransferService.stop(getApplication())
-    }
+    fun onAppBackground() = receiving.onAppBackground()
 
     /** 切换「后台接收」：开启→常驻前台服务；关闭→退前台、仅 App 可见时运行。 */
-    fun setBackgroundReceive(enabled: Boolean) {
-        if (enabled && !FeatureFlags.get().isEnabled(Feature.TRANSPORT)) return
-        engine.settings().backgroundReceive = enabled
-        backgroundReceiveState.value = enabled
-        if (enabled) {
-            // 后台接收 = 允许服务常驻；同时把「可被发现」打开，避免服务跑着却搜不到
-            engine.settings().discoverable = true
-            discoverableState.value = true
-            TransferService.start(getApplication())
-        } else {
-            TransferService.refresh(getApplication())
-        }
-        TransferTileService.requestRefresh(getApplication())
-    }
+    fun setBackgroundReceive(enabled: Boolean) = receiving.setBackgroundReceive(enabled)
 
     /** 通知动作「暂停 5 分钟」的等价入口（设置页/调试用）。 */
-    fun pauseOffers() {
-        engine.pauseOffers()
-    }
+    fun pauseOffers() = receiving.pauseOffers()
 
     /** 立即恢复接收。 */
-    fun resumeOffers() {
-        engine.resumeOffers()
-    }
+    fun resumeOffers() = receiving.resumeOffers()
 
     /** 当前是否暂停接收。 */
-    fun isOffersPaused(): Boolean = engine.isOffersPaused()
+    fun isOffersPaused(): Boolean = receiving.isOffersPaused()
 
     /** 选中 / 取消选中发送目标。 */
     fun selectDevice(deviceId: String?) {
@@ -263,69 +234,25 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** 开关免配对窗口：开启时从此刻起算当前时长，关闭立即回到需配对。 */
-    fun setOpenPairingWindow(enabled: Boolean) {
-        val settings = engine.settings()
-        if (enabled) settings.startOpenPairingWindow() else settings.stopOpenPairingWindow()
-        openPairingState.value = readOpenPairing()
-    }
+    fun setOpenPairingWindow(enabled: Boolean) = settingsController.setOpenPairingWindow(enabled)
 
     /** 切换免配对窗口时长（开启状态下会以新时长重新计时）。 */
-    fun setOpenPairingMinutes(minutes: Int) {
-        val settings = engine.settings()
-        settings.openPairingMinutes = minutes
-        if (settings.isOpenPairingActive()) settings.startOpenPairingWindow(minutes = minutes)
-        openPairingState.value = readOpenPairing()
-    }
+    fun setOpenPairingMinutes(minutes: Int) = settingsController.setOpenPairingMinutes(minutes)
 
     /** 切换体积阈值（MB；0 = 关闭）。 */
-    fun setAutoApproveThresholdMb(mb: Int) {
-        engine.settings().autoApproveThresholdMb = mb
-        thresholdState.value = mb
-    }
+    fun setAutoApproveThresholdMb(mb: Int) = settingsController.setAutoApproveThresholdMb(mb)
 
     /** 免配对窗口剩余毫秒（UI 每秒刷新）。 */
-    fun openPairingRemainingMs(): Long = engine.settings().openPairingRemainingMs()
+    fun openPairingRemainingMs(): Long = settingsController.openPairingRemainingMs()
 
     /** 刷新接收目录占用（IO 由调用方所在协程调度决定）。 */
-    fun refreshReceivedStats() {
-        receivedStatsState.value = engine.receivedStats()
-    }
+    fun refreshReceivedStats() = settingsController.refreshReceivedStats()
 
     /** 清理接收目录并清空对应历史；返回删除条数。 */
-    fun clearReceivedHistory(): Int {
-        val removed = engine.clearReceivedHistory()
-        receivedStatsState.value = engine.receivedStats()
-        return removed
-    }
-
-    private fun readOpenPairing(): OpenPairingState {
-        val settings = engine.settings()
-        return OpenPairingState(
-            enabled = settings.openPairingEnabled,
-            minutes = settings.openPairingMinutes,
-            expiresAtMs = settings.openPairingExpiresAtMs,
-        )
-    }
+    fun clearReceivedHistory(): Int = settingsController.clearReceivedHistory()
 
     /** 切换提示音开关。 */
-    fun setSound(enabled: Boolean, kind: SoundKind) {
-        val settings = engine.settings()
-        when (kind) {
-            SoundKind.COMPLETE -> settings.soundOnComplete = enabled
-            SoundKind.FAILURE -> settings.soundOnFailure = enabled
-            SoundKind.NEW_DEVICE -> settings.soundOnNewDevice = enabled
-        }
-        soundState.value = readSoundSettings()
-    }
-
-    private fun readSoundSettings(): TransferSoundState {
-        val settings = engine.settings()
-        return TransferSoundState(
-            complete = settings.soundOnComplete,
-            failure = settings.soundOnFailure,
-            newDevice = settings.soundOnNewDevice,
-        )
-    }
+    fun setSound(enabled: Boolean, kind: SoundKind) = settingsController.setSound(enabled, kind)
 
     /** 提示音开关状态。 */
     data class TransferSoundState(

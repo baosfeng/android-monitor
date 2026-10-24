@@ -1,5 +1,8 @@
 package com.bsfeng.monitor.autobook
 
+// 自动记账确认卡片本体：信息层级与「记一笔 / 忽略」两个按钮。
+// 排版原子（来源胶囊 / 分段项 / 元信息行 / 说明行）在 AutoBookSheetParts.kt。
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -41,9 +44,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -100,26 +101,14 @@ fun AutoBookConfirmSheet(
     }
 
     // 编辑说明：窗口要先从 FLAG_NOT_FOCUSABLE 切到可聚焦，输入法才会弹，否则输入框拿不到焦点。
-    // 失焦 / 点「完成」后恢复不可聚焦，把输入交还目标 App。
-    LaunchedEffect(editing) {
-        if (!editing) {
-            onImeFocusRequest(false)
-            return@LaunchedEffect
-        }
-        onImeFocusRequest(true)
-        // flags → updateViewLayout 要过一次 View 刷新，等两帧再抢焦点
-        withFrameNanos { }
-        withFrameNanos { }
-        // FocusRequester.requestFocus() 在本版本没有返回值，只能靠 onFocusChanged 回读是否拿到焦点
-        var attempt = 0
-        while (!remarkFocused && attempt < 3) {
-            runCatching { remarkFocus.requestFocus() }
-            withFrameNanos { }
-            attempt++
-        }
-        // 拿不到焦点（ROM 限制 / 窗口未及时可聚焦）就退回不可编辑，不假装能输入
-        if (!remarkFocused) editing = false
-    }
+    // 失焦 / 点「完成」后恢复不可聚焦，把输入交还目标 App。实现见 RememberRemarkFocusEffect。
+    RememberRemarkFocusEffect(
+        editing = editing,
+        focused = { remarkFocused },
+        onGiveUp = { editing = false },
+        focusRequester = remarkFocus,
+        onImeFocusRequest = onImeFocusRequest,
+    )
 
     val isIncome = type == AutoBookDraft.TYPE_INCOME
     val amountColor = if (isIncome) tokens.success else tokens.danger
@@ -134,12 +123,7 @@ fun AutoBookConfirmSheet(
     }
 
     // 卡片高度上限 ≈ 82% 窗口高（原型 .ab-sheet max-height:82vh）：小屏上内容区先滚，按钮仍在屏内。
-    // 取 WindowInfo.containerSize（px → dp）而非 Configuration.screenHeightDp：后者的 insets 口径随
-    // targetSdk 变化、还会取整到 dp；浮窗外层窗口的实际可用高度以容器尺寸为准。
-    val density = LocalDensity.current
-    val panelMaxHeight = with(density) {
-        (LocalWindowInfo.current.containerSize.height * PANEL_MAX_HEIGHT_RATIO).toDp()
-    }
+    val panelMaxHeight = rememberPanelMaxHeight()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -309,245 +293,8 @@ fun AutoBookConfirmSheet(
                     contentColor = tokens.accentOn
                 )
             ) {
-                Text(
-                    text = "记一笔",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("记一笔", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
-
-@Composable
-private fun SourceChip(label: String, channel: String) {
-    val tokens = LocalDesignTokens.current
-    val brandColor = when (channel) {
-        AutoBookRules.CHANNEL_WECHAT -> tokens.success
-        else -> tokens.accent
-    }
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(MonitorRadius.circle))
-            .background(brandColor.copy(alpha = 0.14f))
-            .padding(start = 4.dp, end = MonitorSpacing.sm, top = 3.dp, bottom = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(brandColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label.take(1),
-                style = MaterialTheme.typography.labelSmall,
-                color = tokens.accentOn,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = brandColor,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-@Composable
-private fun SegmentItem(
-    text: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val tokens = LocalDesignTokens.current
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(MonitorRadius.sm - 2.dp))
-            .background(if (selected) tokens.surface else tokens.surface.copy(alpha = 0f))
-            .clickable(onClick = onClick)
-            .padding(vertical = MonitorSpacing.sm),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) tokens.fg else tokens.muted,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-private fun Label(text: String) {
-    val tokens = LocalDesignTokens.current
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = tokens.muted,
-        modifier = Modifier.padding(top = MonitorSpacing.md, bottom = MonitorSpacing.sm)
-    )
-}
-
-@Composable
-private fun Divider() {
-    val tokens = LocalDesignTokens.current
-    HorizontalDivider(
-        modifier = Modifier.padding(vertical = MonitorSpacing.md),
-        thickness = 1.dp,
-        color = tokens.borderSoft
-    )
-}
-
-@Composable
-private fun MetaRow(key: String, value: String) {
-    val tokens = LocalDesignTokens.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MonitorSpacing.xs),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(key, style = MaterialTheme.typography.labelMedium, color = tokens.muted)
-        Text(
-            value,
-            style = MaterialTheme.typography.labelMedium,
-            color = tokens.fg,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-/**
- * 可编辑的「说明」行：未编辑时是灰色占位「写一下买了什么」，点整行进入编辑态。
- *
- * 编辑态**只影响窗口的输入焦点**，不会关闭浮窗；失焦 / 点「完成」/ 键盘 Done 都只收起键盘。
- * 之所以点整行而不是直接点输入框：窗口默认 FLAG_NOT_FOCUSABLE，输入框在窗口不可聚焦时
- * 拿不到焦点，必须先把窗口切成可聚焦（见 [AutoBookOverlay.setImeFocusable]）。
- */
-@Composable
-private fun RemarkRow(
-    remark: String,
-    onRemarkChange: (String) -> Unit,
-    editing: Boolean,
-    onRequestEdit: () -> Unit,
-    onFinishEdit: () -> Unit,
-    onFocusChange: (Boolean) -> Unit = {},
-    focusRequester: FocusRequester,
-) {
-    val tokens = LocalDesignTokens.current
-    val focusManager = LocalFocusManager.current
-    // 「曾经拿到过焦点后失焦」才算结束编辑：首次组合时输入框本来就是无焦点，不能误判
-    var hadFocus by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            // 44dp 与记账页输入行同高（触摸目标下限，布局语义尺寸故留字面量）
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(MonitorRadius.sm))
-            .background(tokens.fg.copy(alpha = 0.06f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onRequestEdit() }
-            .padding(horizontal = MonitorSpacing.md, vertical = MonitorSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.weight(1f)) {
-            BasicTextField(
-                value = remark,
-                onValueChange = { onRemarkChange(it.take(AutoBookDraft.REMARK_MAX_LENGTH)) },
-                enabled = editing,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall.copy(
-                    color = tokens.fg,
-                    fontWeight = FontWeight.Medium,
-                ),
-                cursorBrush = SolidColor(tokens.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    focusManager.clearFocus()
-                    onFinishEdit()
-                }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { state ->
-                        onFocusChange(state.isFocused)
-                        if (state.isFocused) {
-                            hadFocus = true
-                        } else if (hadFocus) {
-                            hadFocus = false
-                            onFinishEdit()
-                        }
-                    },
-            )
-            if (remark.isBlank()) {
-                Text(
-                    text = "写一下买了什么",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = tokens.muted,
-                )
-            }
-        }
-        if (editing) {
-            Spacer(Modifier.width(MonitorSpacing.sm))
-            Text(
-                text = "完成",
-                style = MaterialTheme.typography.labelMedium,
-                color = tokens.accentText,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(MonitorRadius.xs))
-                    .clickable { onFinishEdit() }
-                    .padding(horizontal = MonitorSpacing.xs, vertical = MonitorSpacing.xxs),
-            )
-        }
-    }
-}
-
-/**
- * 把分类名归一成「该类型分类树里存在的名字」。
- *
- * 识别结果不一定在树里：分类体系升级前的旧名（如「出行」）或历史商户默认值都可能残留。
- * 树里没有时回退该类型的兜底一级（支出「其他」/ 收入「其他收入」），与
- * [com.bsfeng.monitor.autobook.AutoBookEngine] 落库前的校验同一口径 ——
- * 否则浮窗会显示一个「一个都没选中」的分类，用户不知道最终会记成什么。
- * 树为空（加载失败）时原样返回：浮窗照常可用，落库时由引擎兜底。
- */
-private fun resolveCategory(tree: CategoryTree, type: Int, name: String): String {
-    val pickerType = if (type == AutoBookDraft.TYPE_INCOME) 1 else 0
-    val topNames = tree.topLevel(pickerType).map { it.name }
-    if (topNames.isEmpty()) return name
-    if (name.isNotBlank() && tree.contains(name) && tree.topLevelNameOf(name) in topNames) {
-        return name
-    }
-    val fallback = if (pickerType == 1) INCOME_FALLBACK else CategoryCatalog.FALLBACK
-    return if (fallback in topNames) fallback else topNames.first()
-}
-
-/** 收入分类的兜底一级：支出侧兜底是 [CategoryCatalog.FALLBACK]「其他」 */
-private const val INCOME_FALLBACK = "其他收入"
-
-/**
- * 浮窗分类区高度受限：一级 6 列 3 行（约 3×52dp）+ 间距 + 二级网格。
- *
- * 内容区整体可滚动（见 [AutoBookConfirmSheet]），所以二级网格不必再压到极小；
- * 176dp ≈ 6 列下两行多一点，任一常见的 4-9 个二级都能滚到。
- */
-private val PANEL_GRID_MAX_H: Dp = 176.dp
-
-/** 浮窗里的分类格图标：与「记一笔」同一口径 32dp（原型 .cat-icon 32×32） */
-private val PANEL_CATEGORY_ICON_SIZE: Dp = 32.dp
-
-/** 卡片高度上限占屏高比例（原型 .ab-sheet max-height:82vh） */
-private const val PANEL_MAX_HEIGHT_RATIO = 0.82f
-
-/** 金额格式化：千分位 + 固定两位小数（与记账页交易行口径一致） */
-internal fun formatAmount(amount: Double): String =
-    String.format(java.util.Locale.CHINA, "%,.2f", kotlin.math.abs(amount))
