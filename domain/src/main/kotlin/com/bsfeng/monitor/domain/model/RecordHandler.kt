@@ -141,6 +141,9 @@ class PageHandler : RecordHandler {
         action in setOf("ENTER", "CHANGED")
     override fun createLabel(action: String, detail: Map<String, String>?): String {
         val app = detail?.get("app_name") ?: detail?.get("package_name") ?: ""
+        // 页面标题优先（仅本地采集，缺了就沿用指纹短码，绝不编造标题）
+        val title = detail?.get("page_title")?.takeIf { it.isNotBlank() }
+        if (title != null) return if (app.isEmpty()) title else "$app · $title"
         // 只用前 4 位做「页面编号」：8 位裸 hash 用户读不出信息。
         // detail 里的 page_key 保持完整 8 位（去重与聚合仍需要全量指纹）。
         val short = detail?.get("page_key")?.take(SHORT_KEY_LENGTH) ?: ""
@@ -172,13 +175,13 @@ class PhoneStateHandler : RecordHandler {
     override fun needsDuration(action: String) = action == "OFFHOOK"
 }
 
-// LOCATION Handler 作为预留，第二期实现完整逻辑
+// LOCATION Handler：label 优先中文地址（逆地理编码结果），失败回落经纬度
 class LocationHandler : RecordHandler {
     override val type = RecordType.LOCATION
     override fun validate(action: String, detail: Map<String, String>?): Boolean =
         action in setOf("COORDINATE", "ENTER", "EXIT")
     override fun createLabel(action: String, detail: Map<String, String>?): String {
-        return detail?.get("address")
+        return detail?.get("address")?.takeIf { it.isNotBlank() }
             ?: detail?.let { d ->
                 val lat = d["lat"]
                 val lng = d["lng"]
