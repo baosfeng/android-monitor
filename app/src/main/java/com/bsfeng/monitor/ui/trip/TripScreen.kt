@@ -82,6 +82,8 @@ fun TripScreen(
     val now = remember { System.currentTimeMillis() }
     var selected by remember { mutableStateOf<Stay?>(null) }
     var exporting by remember { mutableStateOf(false) }
+    // 底图开关：默认关，落盘到 SharedPreferences（TripBasemap）；开着时轨迹卡与导出图都带底图
+    var basemap by remember { mutableStateOf(TripBasemap.isEnabled(context)) }
 
     // 首帧 state.dayStart 还是 0：先按今天渲染，等 VM 回填后再对齐
     val dayStart = state.dayStart.takeIf { it > 0L } ?: TripDays.today(now)
@@ -126,6 +128,7 @@ fun TripScreen(
                     success = t.success.toArgb(),
                     danger = t.danger.toArgb(),
                 ),
+                basemap = basemap,
             )
             exporting = false
             result.fold(
@@ -191,6 +194,13 @@ fun TripScreen(
                                 isToday = isToday,
                                 exporting = exporting,
                                 onExport = { exportTrace() },
+                                basemapEnabled = basemap,
+                                onToggleBasemap = {
+                                    val next = !basemap
+                                    basemap = next
+                                    TripBasemap.setEnabled(context, next)
+                                    view.performHaptic(HapticTone.LIGHT)
+                                },
                             )
                         }
                         item(key = "trip-timeline") {

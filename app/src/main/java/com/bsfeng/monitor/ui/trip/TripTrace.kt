@@ -163,7 +163,14 @@ object TripTrace {
             val single = samples.map { TracePoint(cx, cy, it.timestamp) }
             return TraceProjection(
                 single,
-                projectStays(stays, widthPx, heightPx, cx, cy, 0.0, 0.0, 0.0, charPx, labelHeightPx, density),
+                projectStaysAt(
+                    located = locatedStays(stays),
+                    widthPx = widthPx,
+                    heightPx = heightPx,
+                    density = density,
+                    charPx = charPx,
+                    labelHeightPx = labelHeightPx,
+                ) { _, _ -> cx to cy },
             )
         }
         // 等比缩放：取两个方向里更紧的那个；单方向无跨度时按另一方向铺满
@@ -183,41 +190,94 @@ object TripTrace {
                 timestamp = sample.timestamp,
             )
         }
+        val located = locatedStays(stays)
+        val locatedCos = meanCosLat(located)
         return TraceProjection(
             points = points,
-            stays = projectStays(
-                stays, widthPx, heightPx,
-                offsetX = offsetX, offsetY = offsetY,
-                minX = minX, minY = minY, scale = scale,
-                charPx = charPx, labelHeightPx = labelHeightPx, density = density,
-            ),
+            stays = projectStaysAt(
+                located = located,
+                widthPx = widthPx,
+                heightPx = heightPx,
+                density = density,
+                charPx = charPx,
+                labelHeightPx = labelHeightPx,
+            ) { lat, lng ->
+                val x = offsetX + ((lng * locatedCos - minX) * scale).toFloat()
+                val y = offsetY + ((-lat - minY) * scale).toFloat()
+                x to y
+            },
         )
     }
 
-    private fun projectStays(
-        stays: List<Stay>,
+    /**
+     * 底图模式下的投影：轨迹点与停留点都走 [TileView] 的 Mercator 映射。
+     *
+     * 与 [project] 的区别只在「缩放怎么定」——这里由地图级别定，点必须跟瓦片严丝合缝；
+     * 半径、标签避让、短名等口径与无底图时完全一致。
+     */
+    fun projectOnMap(
+        samples: List<TraceSample>,
+        stays: List<Stay> = emptyList(),
+        view: TileView,
         widthPx: Float,
         heightPx: Float,
-        offsetX: Float,
-        offsetY: Float,
-        minX: Double,
-        minY: Double,
-        scale: Double,
+        density: Float = 1f,
+        charPx: Float = 13f,
+        labelHeightPx: Float = 16f,
+    ): TraceProjection {
+        if (samples.isEmpty() || widthPx <= 0f || heightPx <= 0f) return TraceProjection()
+        val points = samples.map { sample ->
+            TracePoint(
+                x = (TileMath.canvasX(sample.lng, view) * density).toFloat(),
+                y = (TileMath.canvasY(sample.lat, view) * density).toFloat(),
+                timestamp = sample.timestamp,
+            )
+        }
+        return TraceProjection(
+            points = points,
+            stays = projectStaysAt(
+                located = locatedStays(stays),
+                widthPx = widthPx,
+                heightPx = heightPx,
+                density = density,
+                charPx = charPx,
+                labelHeightPx = labelHeightPx,
+            ) { lat, lng ->
+                (TileMath.canvasX(lng, view) * density).toFloat() to
+                    (TileMath.canvasY(lat, view) * density).toFloat()
+            },
+        )
+    }
+
+    /** 有坐标的停留（没有坐标的停留只留在时间轴里，不画圆）。 */
+    private fun locatedStays(stays: List<Stay>): List<Stay> =
+        stays.filter { it.place.lat != null && it.place.lng != null }
+
+    /** 这批停留点的平均纬度余弦：等距圆柱近似的经度压缩比。 */
+    private fun meanCosLat(located: List<Stay>): Double =
+        if (located.isEmpty()) 1.0 else cos(Math.toRadians(located.sumOf { it.place.lat!! } / located.size))
+
+    /**
+     * 停留点投影 + 标签重叠剔除。
+     *
+     * [map] 只负责「经纬度 → 画布 px」，两种画法（自适应缩放 / 底图 Mercator）共用半径与避让逻辑。
+     */
+    private fun projectStaysAt(
+        located: List<Stay>,
+        widthPx: Float,
+        heightPx: Float,
+        density: Float,
         charPx: Float,
         labelHeightPx: Float,
-        density: Float,
+        map: (lat: Double, lng: Double) -> Pair<Float, Float>,
     ): List<TraceStay> {
-        val located = stays.filter { it.place.lat != null && it.place.lng != null }
         if (located.isEmpty()) return emptyList()
-        val meanLat = located.sumOf { it.place.lat!! } / located.size
-        val cosLat = cos(Math.toRadians(meanLat))
         val maxDuration = located.maxOf { it.durationMs }.coerceAtLeast(0L)
         val centers = located.map { stay ->
-            val rawX = stay.place.lng!! * cosLat
-            val rawY = -stay.place.lat!!
+            val (x, y) = map(stay.place.lat!!, stay.place.lng!!)
             TraceStay(
-                x = offsetX + ((rawX - minX) * scale).toFloat(),
-                y = offsetY + ((rawY - minY) * scale).toFloat(),
+                x = x,
+                y = y,
                 radiusDp = stayRadiusDp(stay.durationMs, maxDuration),
                 label = shortLabel(stay.place.label),
                 labelVisible = false,
