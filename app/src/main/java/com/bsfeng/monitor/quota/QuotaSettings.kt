@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.quota
 
 import android.content.Context
+import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 
 /**
@@ -17,7 +18,7 @@ class QuotaSettings(context: Context) {
     /** 后台刷新间隔（小时）；0 = 关闭。默认每小时。 */
     var refreshIntervalHours: Int
         get() = prefs.getInt(KEY_REFRESH_HOURS, 1)
-        set(value) = prefs.edit().putInt(KEY_REFRESH_HOURS, value.coerceIn(0, 24)).apply()
+        set(value) = prefs.edit { putInt(KEY_REFRESH_HOURS, value.coerceIn(0, 24)) }
 
     /**
      * 单个 provider 的前台刷新间隔（分钟），默认走 [defaultMinutesFor]。
@@ -31,20 +32,18 @@ class QuotaSettings(context: Context) {
     }
 
     fun setRefreshIntervalMinutes(providerId: String, minutes: Int) {
-        prefs.edit()
-            .putInt(KEY_REFRESH_MINUTES + providerId, minutes.coerceIn(1, 60))
-            .apply()
+        prefs.edit { putInt(KEY_REFRESH_MINUTES + providerId, minutes.coerceIn(1, 60)) }
     }
 
     /** 额度预警总开关（只影响通知，不影响刷新）。 */
     var alertsEnabled: Boolean
         get() = prefs.getBoolean(KEY_ALERTS, true)
-        set(value) = prefs.edit().putBoolean(KEY_ALERTS, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_ALERTS, value) }
 
     /** Ollama 计费模式：用户手动选，默认按百分比。 */
     var ollamaPlan: OllamaPlanMode
         get() = OllamaPlanMode.of(prefs.getString(KEY_OLLAMA_PLAN, null))
-        set(value) = prefs.edit().putString(KEY_OLLAMA_PLAN, value.storageValue).apply()
+        set(value) = prefs.edit { putString(KEY_OLLAMA_PLAN, value.storageValue) }
 
     /**
      * 额度页顶部视图：`true` = 聚合榜单（一家一行），`false` = 单家卡片。
@@ -54,7 +53,7 @@ class QuotaSettings(context: Context) {
      */
     var aggregateMode: Boolean
         get() = prefs.getBoolean(KEY_AGGREGATE_MODE, true)
-        set(value) = prefs.edit().putBoolean(KEY_AGGREGATE_MODE, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_AGGREGATE_MODE, value) }
 
     companion object {
         private const val PREFS_NAME = "quota_settings"

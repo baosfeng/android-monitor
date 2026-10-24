@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.QuotaAlertEvaluator
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaUnit
@@ -34,7 +35,7 @@ class QuotaAlertNotifier(
     /** 通知总开关（与额度设置的开关联动，关闭时只刷新不评估）。 */
     var enabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_ENABLED, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_ENABLED, value) }
 
     /** 低余额阈值（各币种；默认 CNY 50）。 */
     fun lowBalanceThreshold(unit: QuotaUnit): BigDecimal? = when (unit) {
@@ -148,7 +149,7 @@ class QuotaAlertNotifier(
                 },
             )
         }
-        prefs.edit().putString(KEY_STATE, root.toString()).apply()
+        prefs.edit { putString(KEY_STATE, root.toString()) }
     }
 
     private companion object {

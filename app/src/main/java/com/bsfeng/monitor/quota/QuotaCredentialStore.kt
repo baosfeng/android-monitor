@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log
+import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -31,11 +32,11 @@ class QuotaCredentialStore(context: Context) {
         val key = storageKey(providerId, kind)
         val trimmed = value?.trim().orEmpty()
         if (trimmed.isEmpty()) {
-            prefs.edit().remove(key).apply()
+            prefs.edit { remove(key) }
             return
         }
         runCatching { encrypt(trimmed) }
-            .onSuccess { prefs.edit().putString(key, it).apply() }
+            .onSuccess { encrypted -> prefs.edit { putString(key, encrypted) } }
             .onFailure { Log.w(TAG, "凭据加密失败：${it.javaClass.simpleName}") }
     }
 
@@ -46,7 +47,7 @@ class QuotaCredentialStore(context: Context) {
         return runCatching { decrypt(stored) }
             .onFailure {
                 Log.w(TAG, "凭据解密失败，已清除：${it.javaClass.simpleName}")
-                prefs.edit().remove(key).apply()
+                prefs.edit { remove(key) }
             }
             .getOrNull()
     }
@@ -56,9 +57,9 @@ class QuotaCredentialStore(context: Context) {
 
     /** 清除某个 provider 的全部凭据（两种类型都清）。 */
     fun clearAll(providerId: String) {
-        val editor = prefs.edit()
-        QuotaCredentialKind.entries.forEach { editor.remove(storageKey(providerId, it)) }
-        editor.apply()
+        prefs.edit {
+            QuotaCredentialKind.entries.forEach { remove(storageKey(providerId, it)) }
+        }
     }
 
     private fun storageKey(providerId: String, kind: QuotaCredentialKind): String =
