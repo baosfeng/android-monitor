@@ -4,6 +4,7 @@ package com.bsfeng.monitor.service
 // 只做「喂一次观测 + 把结果交给 RecordCollector」，指纹状态机本身在 record/PageTracker。
 
 import android.util.Log
+import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.record.PageEvent
@@ -25,11 +26,16 @@ internal fun MonitorAccessibilityService.observePage(
     appName: String?,
     timestamp: Long,
     source: String,
+    windowTitle: String? = null,
 ) {
     try {
         if (!pageTracingEnabled()) {
             emitPageEvents(pageTracker.flush(timestamp))
             return
+        }
+        if (BuildConfig.DEBUG) {
+            Log.d("PageTitle", "pkg=" + packageName + " texts=" + visibleTexts.size +
+                " windowTitle=" + windowTitle + " first=" + visibleTexts.firstOrNull())
         }
         emitPageEvents(
             pageTracker.observe(
@@ -39,8 +45,7 @@ internal fun MonitorAccessibilityService.observePage(
                 appName = appName,
                 source = source,
                 timestamp = timestamp,
-                // 窗口标题暂由可见文本推断（windowTitle 预留：调用方拿到 root.window.title 后直接传入）
-                windowTitle = null,
+                windowTitle = windowTitle,
                 collectTitle = pageTitleEnabled(),
             )
         )

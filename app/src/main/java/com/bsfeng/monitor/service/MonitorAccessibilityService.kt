@@ -191,15 +191,21 @@ open class MonitorAccessibilityService : AccessibilityService() {
         lastActivityPackage = packageName
 
         // ===== 页面轨迹（指纹档）：窗口事件的 Activity 变化是权威信号，不等轮询确认 =====
-        // 事件里没有页面文本，指纹先用「包名 + Activity」；轮询读到文本后会补上（PageTracker 内部
-        // 视为同一页的就绪度变化，不会多记一条）。
+        // 顺手读一次当前窗口的可见文本与窗口标题：ENTER 记录一出生就带标题，不用等轮询补；
+        // 指纹仍按「包名 + Activity + 文本」计算，与轮询路径口径一致（PageTracker 内部视为
+        // 同一页的就绪度变化，不会多记一条）。
+        val pageRoot = rootInActiveWindow
+        val pageTexts = collectVisibleTexts(pageRoot)
+        val windowTitle = pageRoot?.window?.title?.toString()
+        pageRoot?.recycle()
         observePage(
             packageName,
             lastActivityClass,
-            emptyList(),
+            pageTexts,
             AppUtils.getAppName(packageName),
             now,
             PageEvent.SOURCE_WINDOW_EVENT,
+            windowTitle,
         )
 
     }

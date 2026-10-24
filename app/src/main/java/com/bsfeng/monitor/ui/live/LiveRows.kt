@@ -124,16 +124,13 @@ fun LiveEventRow(
             modifier = Modifier.width(TL_TIME_COL_W),
         )
         Spacer(Modifier.width(t.space1))
-        // 应用事件（APP_USAGE 且带 package_name）优先显示应用图标；无包名的类型行默认走 TypeIconDot，
-        // 这是有意为之（不是漏做）：AUDIO 记录的 detail 只有 device（SCREEN / WIFI / 充电中 … 同理），
-        // 没有包名 / 应用名，取不到应用图标。
-        val pkg = if (record.type == RecordType.APP_USAGE) {
-            record.detail?.get("package_name")?.takeIf { it.isNotBlank() }
-        } else {
-            null
-        }
+        // 凡是 detail 里带 package_name 的记录都显示应用图标（APP_USAGE / PAGE 页面轨迹 /
+        // SCREEN.AD_SKIPPED 跳过广告 / PACKAGE 安装卸载）；系统事件（屏幕 / WiFi / 电量 / 充电 /
+        // 音频）的 detail 没有包名，继续走类型图标，这是数据本身的边界而不是漏做。
+        val pkg = record.detail?.get("package_name")?.takeIf { it.isNotBlank() }
+        val iconAppName = record.detail?.get("app_name")?.takeIf { it.isNotBlank() } ?: record.label
         if (pkg != null) {
-            AppIcon(packageName = pkg, appName = record.label)
+            AppIcon(packageName = pkg, appName = iconAppName)
         } else {
             TypeIconDot(record.type)
         }
