@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.bsfeng.monitor.backup.BackupScheduler
+import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
@@ -36,6 +37,7 @@ class AlarmReceiver : BroadcastReceiver() {
         scheduleAlarmCheck(context)
         // 定期备份的闹钟同理：Restart 后补排一次（已在跑时是空操作，不会把触发时间往后推）
         BackupScheduler.ensureScheduled(context)
+        QuotaScheduler.ensureScheduled(context)
 
         HealthChecker.checkAndRestore(context)
 

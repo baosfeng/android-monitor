@@ -117,6 +117,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- 额度后台刷新：按「每小时 / 每 3 小时 / 每 6 小时」由 AlarmManager 触发（关闭时不排闹钟） -->
+        <receiver
+            android:name=".quota.QuotaRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 应用内更新：下载的 APK 通过 FileProvider 交给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -6,6 +6,7 @@
     { id: 'live', screen: 's02' },
     { id: 'ad', screen: 's03' },
     { id: 'finance', screen: 's04' },
+    { id: 'quota', screen: 's18' },
     { id: 'settings', screen: 's09' }
   ];
   var TAB_OF_SCREEN = {};
@@ -543,16 +544,29 @@
     syncDev();
   }
 
+  /* 转场退场计时器：同一屏在 300ms 内被重新激活（例如齿轮进设置后马上返回）时，
+     旧计时器会把刚恢复的 is-active 再撤掉，导致所有屏 display:none。激活前先清计时器，
+     计时器回调里也只在「已不是当前屏」时撤 is-active。 */
+  function clearLeave(el) {
+    if (el && el._odLeaveTimer) {
+      window.clearTimeout(el._odLeaveTimer);
+      el._odLeaveTimer = null;
+    }
+  }
+
   function activate(next, prev) {
     if (!next) return;
-    if (prev === next) { syncChrome(next); return; }
+    if (prev === next) { clearLeave(next); syncChrome(next); return; }
     var fast = reduced();
+    clearLeave(next);
     if (prev) {
+      clearLeave(prev);
       prev.classList.remove('is-entering');
       prev.classList.add('is-leaving');
     }
     next.classList.add('is-entering');
     next.classList.add('is-active');
+    next.classList.remove('is-leaving');
     void next.offsetWidth;
     next.classList.remove('is-entering');
     current = next;
@@ -560,8 +574,10 @@
     syncAutoBook(next);
     if (prev) {
       var old = prev;
-      window.setTimeout(function () {
-        old.classList.remove('is-active', 'is-leaving');
+      old._odLeaveTimer = window.setTimeout(function () {
+        old._odLeaveTimer = null;
+        if (old !== current) old.classList.remove('is-active');
+        old.classList.remove('is-leaving');
       }, fast ? 0 : 300);
     }
   }
@@ -713,7 +729,7 @@
       var mx = maxOf(v);
       var bw = Math.max(4, (w - padL - padR - gap * (v.length + 1)) / v.length);
       var inner = '';
-      [0, 0.5, 1].forEach(function (t) {
+      [0, 1].forEach(function (t) {
         var y = fx((h - padB) - t * (h - padB - padT));
         inner += '<line class="chart-grid" x1="' + padL + '" y1="' + y + '" x2="' + (w - padR) + '" y2="' + y + '"/>';
         inner += '<text x="' + (padL - 6) + '" y="' + (parseFloat(y) + 3.5) + '" text-anchor="end">' + Math.round(t * mx) + '</text>';
@@ -803,7 +819,9 @@
             values: el.getAttribute('data-chart-values') || '',
             labels: (el.getAttribute('data-chart-labels') || '').split(',').filter(function (s) { return s !== ''; }),
             value: el.getAttribute('data-chart-value'),
-            label: el.getAttribute('data-chart-label') || ''
+            label: el.getAttribute('data-chart-label') || '',
+            vlabels: el.getAttribute('data-chart-vlabels') !== 'false',
+            peak: el.getAttribute('data-chart-peak') !== 'false'
           });
           if (html) { el.innerHTML = html; el.setAttribute('data-chart-done', '1'); }
         } catch (err) {
@@ -960,11 +978,20 @@
       if (!abOpenNow()) openAutoBook();   /* 演示入口：没有浮窗就先开，再模拟「切到记账页」 */
       abSwitch();
     });
+    /* s20 不在 TABS 里（额度聚合是评审中的两张对比稿，不是已定稿的 Tab），
+       外壳没有屏导航入口，评审时必须靠 hash 或这两个按钮直达 */
+    var devS20A = document.getElementById('devS20A');
+    if (devS20A) devS20A.addEventListener('click', function () { go('s20a'); });
+    var devS20B = document.getElementById('devS20B');
+    if (devS20B) devS20B.addEventListener('click', function () { go('s20b'); });
+    /* s21 同理：全额度聚合是评审中的新方案，同样不在 TABS 里 */
+    var devS21 = document.getElementById('devS21');
+    if (devS21) devS21.addEventListener('click', function () { go('s21'); });
 
     document.addEventListener('keydown', function (e) {
       /* Esc 也关不掉浮窗：等价于点遮罩（轻震 + 每笔一次 Toast） */
       if (e.key === 'Escape' && abOpenNow()) { abScrimTap(); e.preventDefault(); return; }
-      if (e.altKey && e.key >= '1' && e.key <= '5') {
+      if (e.altKey && e.key >= '1' && e.key <= '6') {
         var t = TABS[Number(e.key) - 1];
         if (t) { tab(t.id); e.preventDefault(); }
       }

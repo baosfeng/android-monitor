@@ -120,7 +120,8 @@ body{
 
 .tabbar{
   position:absolute;left:0;right:0;bottom:var(--gesture-h);z-index:20;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:2px;
+  /* 列数跟随可见 tab：额度 Tab 可被 Feature.QUOTA 关闭，隐藏项不占轨道 */
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;
   padding:var(--space-1) var(--space-1) 0;
   background:var(--surface);
   -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);

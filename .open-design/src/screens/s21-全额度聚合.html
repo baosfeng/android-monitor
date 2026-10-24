@@ -1,0 +1,377 @@
+<!-- ============================================================
+     s21 · 全额度聚合（含余额型，一屏装下）
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     与 s20 的差别（s20 = 余额型不进聚合，只排百分比型）：
+       · 本轮要「全部额度都聚合」，DeepSeek 这类余额型必须进榜；
+       · 难点不是排版而是量纲：¥28 与 12% 没有共同刻度，硬塞进一个数字就是编数据。
+       · 解法：先分「紧迫档」再档内排序，档位是跨类型的粗分组，档内才用各自的原生度量。
+
+     排序模型（档位与配色同源，避免一屏内出现两套阈值语义）：
+       紧迫档 3 / 2 / 1（3 = 最急）
+       百分比型  剩余 p：p < 20 → 3；p < 50 → 2；否则 1
+       余额型    能算出日均 d（有 usage.cost）时用 daysLeft = 余额 ÷ d：
+                 daysLeft < 7 → 3；< 30 → 2；否则 1
+                 算不出日均（未配用量令牌）时按项目已有的低余额阈值兜底：
+                 余额 < 阈值（CNY 50 / USD 5）→ 3；否则 1
+       排序：档降序 → 档内百分比按剩余升序、余额按 daysLeft 升序
+             → 同档跨类型时余额型排后面（它的换算依赖估算，精度低于实测百分比）
+       进度条配色直接由档位驱动（3 = danger / 2 = warn / 1 = chart），
+       不再按剩余百分比另算一套阈值——两套边界会给同一行打出矛盾的颜色。
+
+     进度条长度的两种含义（都在副文案里写明，不让读者猜）：
+       百分比型 = 剩余百分比；
+       余额型可算日均 = min(daysLeft / 30, 1)；算不出日均 = min(余额 / 阈值×2, 1)。
+
+     演示件（不进产品，实现时按 07-contract 机械排除，锚点都带 demo-only: 前缀）：
+       · 状态覆盖条：正常 / 余额算不出日均 / 某家查询失败。
+
+     演示数据全部为占位值，不出现真实 Key / 账号 / 邮箱 / 真实余额。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s21">
+/* ── s21 全额度聚合（含余额型） ───────────────────────────────────── */
+.screen.s21{font-size:max(var(--text-sm),14px)}
+/* 状态块被外壳置为 display:grid：轨道按容器宽度收敛，避免长文案把卡片撑出屏外 */
+.screen.s21 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s21 .btn{font-size:max(var(--text-base),14px)}
+.screen.s21 :is(.chip,.segmented>*,.btn,.s21-btn):focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+/* 顶部：入口「聚合 / 单家」（定稿方向：与 provider chip 并列，聚合模式下 chip 行隐藏） */
+.s21-entry .segmented{width:100%}
+.s21-entry .meta{display:block;margin-top:var(--space-2)}
+
+/* 评审辅助条（演示件）：一行放完，虚线框一眼区别于产品内容。
+   比 s20 少一行——s21 只有一个方案，不需要粒度切换，省下的高度留给第 4 行。 */
+.s21-probe{
+  margin-top:var(--space-2);padding:var(--space-2) var(--space-3);
+  border:1px dashed var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);
+  display:flex;align-items:center;gap:var(--space-2);min-width:0;
+}
+.s21-probe-chips{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.s21-probe-chips .chip{min-height:var(--tap-min);padding:0 var(--space-2);flex:0 0 auto}
+.s21-probe-lab{flex:0 0 auto;color:var(--muted)}
+
+/* 结论条：最先见底的那一条 */
+.s21-hero{
+  margin-top:var(--space-2);padding:var(--space-2) var(--space-3);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-2);
+}
+.s21-hero .row-icon{--k:var(--danger);width:30px;height:30px}
+.s21-hero-body{min-width:0;display:flex;align-items:baseline;gap:6px}
+.s21-hero-label{flex:0 0 auto;font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s21-hero-title{min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s21-hero-v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--danger-text)}
+
+/* 排序位次条 */
+.s21-sortbar{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin:var(--space-3) 0 var(--space-2)}
+.s21-sortbar .group-label{padding:0;margin:0}
+.s21-note{color:var(--muted);white-space:nowrap}
+
+/* 列表：一张 group 卡 + 行间细分隔线 */
+.s21-list{
+  list-style:none;margin:0;padding:0 var(--space-4);
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);
+}
+.s21-row{border-top:1px solid var(--border-soft)}
+.s21-row:first-child{border-top:0}
+.s21-btn{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;
+  border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:opacity var(--dur-state) var(--ease-standard);
+}
+.s21-btn:active{opacity:.68}
+
+/* 位次徽标：第 1 名用危险色淡底，其余中性 */
+.s21-rank{
+  flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;
+  border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:max(var(--text-sm),14px);font-weight:700;line-height:1;
+}
+.s21-rank.is-top{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+
+.s21-main{min-width:0;display:flex;flex-direction:column;gap:5px}
+.s21-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s21-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg)}
+.s21-name-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 主值：百分比型是「12%」，余额型是「¥28.00」——单位不同，字重一致，量纲靠副文案说清 */
+.s21-val{flex:0 0 auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--fg)}
+.s21-val.is-tier3{color:var(--danger-text)}
+.s21-val.is-tier2{color:var(--warn-text)}
+
+/* 紧迫档徽标：3 = 红、2 = 琥珀、1 = 中性。这是「为什么排这个位次」的唯一可见依据 */
+.s21-tier{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+}
+.s21-tier.is-t3{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+.s21-tier.is-t2{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+
+/* 进度条：颜色由紧迫档驱动；余额型算不出日均时同样有值（离阈值多远），语义写在副文案 */
+.s21-bar{display:block;height:6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.s21-bar-fill{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--chart-seq)}
+.s21-bar-fill.is-t2{background:var(--warn)}
+.s21-bar-fill.is-t3{background:var(--danger)}
+.s21-bar-fill.is-stale{background:color-mix(in srgb,var(--warn) 55%,transparent)}
+
+/* 副文案 = 换算依据。这是本屏最要紧的一行：¥ 与 % 不同量纲全靠它交代 */
+.s21-sub{display:block;color:var(--muted);line-height:1.4}
+
+/* 「旧数据」标注 */
+.s21-tag{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-text);
+}
+
+/* 口径脚注 */
+.s21-cap{margin:var(--space-3) 0 0;color:var(--muted);line-height:1.45}
+
+/* 入场错落（本屏再次激活时重播） */
+.s21-in{opacity:0}
+.screen.s21.is-active .s21-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.screen.s21.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.screen.s21.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.screen.s21.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) #s21 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen s21" data-screen="s21" data-title="全额度聚合" id="s21" data-od-id="screen-s21">
+  <div class="content pad" data-od-id="s21-content">
+
+    <div class="s21-entry s21-in od-d1" data-od-id="s21-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s21-view="agg" data-od-id="s21-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s21-view="single" data-od-id="s21-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s21-meta">4 家全部参与 · 更新于 9:41</p>
+    </div>
+
+    <!-- 演示件：只在评审时存在。一行三态，不动手也能看全三种状态 -->
+    <div class="s21-probe s21-in od-d1" data-od-id="demo-only:s21-probe">
+      <span class="s21-probe-lab">状态</span>
+      <div class="s21-probe-chips" role="group" aria-label="状态覆盖预览">
+        <button class="chip is-on" type="button" aria-pressed="true" data-s21-scen="normal" data-od-id="demo-only:s21-scen-normal">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s21-scen="nodegrade" data-od-id="demo-only:s21-scen-nodegrade">算不出日均</button>
+        <button class="chip" type="button" aria-pressed="false" data-s21-scen="stale" data-od-id="demo-only:s21-scen-stale">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s21-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s21-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度</p>
+        <p class="st-desc">配置任一 provider 的 Key 后，百分比限额与账户余额都会进这张榜。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s21-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s21-main" data-state-hide="loading empty edge">
+
+      <div class="card s21-hero s21-in od-d2" data-od-id="s21-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s21-hero-body">
+          <span class="s21-hero-label">最先见底</span>
+          <span class="s21-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s21-hero-v num">12%</span>
+      </div>
+
+      <div class="s21-sortbar">
+        <span class="group-label">按紧迫度分档，同档按剩余</span>
+        <span class="s21-note">行首为位次</span>
+      </div>
+
+      <ol class="s21-list s21-in od-d3" data-od-id="s21-list">
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="opencode-go · 5 小时" data-od-id="s21-row-1">
+            <span class="s21-rank" aria-hidden>1</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">opencode-go</span><span class="s21-tier is-t3" title="紧迫档 3：剩余低于 20%">最急</span></span>
+                <span class="s21-val is-tier3 num">12%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 12%"><span class="s21-bar-fill is-t3" style="--p:12%"></span></span>
+              <span class="s21-sub">5 小时 12% · 每周 46% · 每月 71%</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="deepseek · 余额" data-od-id="s21-row-2" data-scen-row="deepseek">
+            <span class="s21-rank" aria-hidden>2</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <!-- 余额型这一行没有「旧数据」态：本屏的失败样例给的是 ollama。
+                     标签若挂在这里，会被「算不出日均」复用同一条 data-scen-part 连带打开，还挤掉名称 -->
+                <span class="s21-name"><span class="s21-name-t">deepseek</span><span class="s21-tier is-t3">最急</span></span>
+                <span class="s21-val is-tier3 num">¥28.00</span>
+              </span>
+              <!-- 余额型条长有两种含义：能算日均=daysLeft/30，算不出=余额/(阈值×2)。副文案各自写明 -->
+              <span class="s21-bar" role="img" aria-label="余额约还能撑 6 天" data-scen-bar><span class="s21-bar-fill is-t3" style="--p:20%"></span></span>
+              <span class="s21-sub" data-scen-part="on">约还能撑 6 天 · 按近 7 天日均 ¥4.7</span>
+              <span class="s21-sub" data-scen-part="off" hidden>未配用量令牌 · 仅按低余额阈值 ¥50 判断</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="open-design · 月度" data-od-id="s21-row-3">
+            <span class="s21-rank" aria-hidden>3</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">open-design</span><span class="s21-tier is-t2">偏低</span></span>
+                <span class="s21-val is-tier2 num">34%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 34%"><span class="s21-bar-fill is-t2" style="--p:34%"></span></span>
+              <span class="s21-sub">月度 34% · 11/01 重置</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="ollama · 每周" data-od-id="s21-row-4" data-scen-row="ollama">
+            <span class="s21-rank" aria-hidden>4</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">ollama</span><span class="s21-tier is-t2">偏低</span><span class="s21-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s21-val is-tier2 num">40%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s21-bar-fill is-t2" style="--p:40%"></span></span>
+              <span class="s21-sub" data-scen-part="on">每周 40% · 会话 75%</span>
+              <span class="s21-sub" data-scen-part="off" hidden>每周 40% · 会话 75% · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+      </ol>
+
+      <p class="s21-cap s21-in od-d3" data-od-id="s21-spec">百分比按剩余；余额按「还能撑几天」＝余额 ÷ 近 7 天日均，两者不同量纲、只分档不合并换算</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s21：状态覆盖只改「行内依据说明 + 条色」，不改排序规则本身——
+     算不出日均时 deepseek 仍按低余额阈值判为最急档，位次不动；
+     换掉依据文案是为了不让人以为那个「6 天」是算出来的。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s21-list');
+    if (!list) return;
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    /* 位次跟着可见顺序重算：档位徽标不动，只重编序号 */
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s21-row'), function (li) {
+        var btn = li.querySelector('.s21-btn');
+        var rank = li.querySelector('.s21-rank');
+        if (!btn || !rank) return;
+        n += 1;
+        rank.textContent = String(n);
+        rank.classList.toggle('is-top', n === 1);
+      });
+    }
+
+    function scene(name) {
+      pick('data-s21-scen', name);
+
+      /* deepseek：算不出日均 —— 只换依据文案，档位/位次/条长都保持（阈值 ¥50 仍判最急） */
+      var ds = sec.querySelector('[data-scen-row="deepseek"]');
+      if (ds) {
+        var noDeg = name === 'nodegrade';
+        Array.prototype.forEach.call(ds.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== noDeg;
+        });
+      }
+
+      /* ollama：查询失败 —— 保留旧数据照常排序，条色转降饱和琥珀 */
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s21-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-t3') ? 'is-t3'
+          : fill.classList.contains('is-t2') ? 'is-t2' : '';
+        fill.classList.remove('is-t3', 'is-t2', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次徽标与条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var scen = t.closest('[data-s21-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s21-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s21-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s21-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s21-row]');
+      if (row) {
+        e.stopPropagation();
+        if (window.App) App.toast('打开 ' + row.getAttribute('data-s21-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

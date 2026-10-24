@@ -1145,7 +1145,8 @@ body{
 
 .tabbar{
   position:absolute;left:0;right:0;bottom:var(--gesture-h);z-index:20;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:2px;
+  /* 列数跟随可见 tab：额度 Tab 可被 Feature.QUOTA 关闭，隐藏项不占轨道 */
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;
   padding:var(--space-1) var(--space-1) 0;
   background:var(--surface);
   -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -2198,6 +2199,12 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s09 .s09-loc .badge{white-space:nowrap;flex:0 0 auto}
 .screen.s09 .s09-loc .badge.is-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
 .screen.s09 .s09-loc .badge.is-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+
+/* ── 额度监控：开关关闭时整组折叠成一行（保留开关，随时可开回） ──── */
+.screen.s09 .s09-quota-body > .row:first-child{border-top:1px solid var(--border-soft)}
+.screen.s09 .s09-quota-body .row-sub{white-space:normal}
+.screen.s09 .s09-quota-body .badge{flex:0 0 auto;white-space:nowrap}
+.screen.s09 .s09-quota-body .s09-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
 </style>
 
 <style data-for="s10">
@@ -2866,6 +2873,413 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 #s17 .s17-opt:active{transform:scale(.99)}
 #s17 .s17-check{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0}
 #s17 .s17-opt[aria-checked="true"] .s17-check{opacity:1}
+</style>
+
+<style data-for="s18">
+/* ── s18 额度 ───────────────────────────────────────────────────── */
+.screen.s18{font-size:max(var(--text-sm),14px)}
+/* 状态块被外壳置为 display:grid：轨道按容器宽度收敛，避免长文案把卡片撑出屏外 */
+.screen.s18 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s18 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.st-desc,.field,.kpi-label,.kpi-unit,.kpi-delta){font-size:max(var(--text-sm),14px)}
+.screen.s18 :is(.btn,.st-title,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s18 [role="tab"]:focus-visible,.screen.s18 .chip:focus-visible,
+.screen.s18 .field:focus-visible,.screen.s18 .btn:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+/* 页头右上角：刷新 + 额度设置 */
+.s18-head-actions{display:flex;align-items:center;gap:var(--space-2);flex:0 0 auto}
+.s18-head .meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.s18-refresh svg{transition:transform var(--dur-state) var(--ease-standard)}
+.s18-refresh.is-spinning svg{animation:s18-spin 720ms var(--ease-standard)}
+@keyframes s18-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* provider 横向 chip：超过宽度可横滑，不撑破屏幕 */
+.s18-providers{flex:0 0 auto;padding-bottom:var(--space-2)}
+.s18-chips{
+  display:flex;align-items:center;gap:var(--space-2);
+  overflow-x:auto;padding:2px var(--space-4) 4px 2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  /* 右侧渐隐提示还可横滑：mask 只吃 alpha，用前景 token，不引入新颜色 */
+  -webkit-mask-image:linear-gradient(90deg,var(--fg) 0,var(--fg) calc(100% - 24px),transparent 100%);
+  mask-image:linear-gradient(90deg,var(--fg) 0,var(--fg) calc(100% - 24px),transparent 100%);
+}
+.s18-chips::-webkit-scrollbar{display:none}
+.s18-chips .chip{flex:0 0 auto;gap:6px}
+.s18-provider-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--fg-2);opacity:.55}
+.s18-chips .chip[aria-selected="true"] .s18-provider-dot{background:var(--success);opacity:1}
+.s18-soon{
+  flex:0 0 auto;padding:1px 6px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--warn) 16%,transparent);
+  color:var(--warn-text);font-family:var(--font-mono);font-size:var(--text-xs);font-weight:600;line-height:1.5;
+}
+
+/* 主面板：计划类型演示开关（两种 Ollama 额度结构） */
+.s18-planbar{padding-bottom:0}
+.s18-planbar .segment-note{display:block;margin-top:var(--space-2)}
+.s18-panel > .pad{padding-top:0}
+.s18-panel > .pad:first-child{padding-top:var(--space-1)}
+
+/* 额度卡 */
+.s18-quota{display:flex;flex-direction:column;gap:var(--space-3)}
+.s18-hero{display:flex;flex-direction:column;gap:2px}
+.s18-hero-label{display:block;font-size:var(--text-sm);color:var(--muted);margin:0}
+.s18-hero-value{
+  display:block;margin:0;font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);line-height:1.12;
+}
+.s18-hero-sub{display:block;font-size:var(--text-sm);color:var(--muted);margin:0}
+.s18-meter{display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border-soft)}
+.s18-meter-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s18-m-label{font-size:var(--text-sm);color:var(--fg-2)}
+.s18-m-val{font-size:var(--text-sm);color:var(--fg);white-space:nowrap}
+.s18-meta{display:block;font-size:var(--text-sm);color:var(--muted)}
+.s18-bar{height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.s18-bar-fill{display:block;height:100%;border-radius:inherit;background:var(--chart-seq)}
+.s18-bar-fill.is-warn{background:var(--warn)}
+.s18-bar-fill.is-low{background:var(--danger)}
+.s18-line{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s18-line-t{font-size:var(--text-sm);color:var(--muted)}
+.s18-line-v{font-size:var(--text-sm);color:var(--fg)}
+.s18-off{color:var(--muted)}
+.s18-note-text{font-size:var(--text-sm);color:var(--muted);margin:var(--space-1) 0 0;line-height:1.45}
+
+/* 用量卡 */
+.s18-usage{display:flex;flex-direction:column;gap:var(--space-3)}
+.s18-range{width:100%}
+.s18-range-panel{display:flex;flex-direction:column;gap:var(--space-3)}
+.s18-metrics{display:flex;flex-direction:column;gap:var(--space-2)}
+.s18-metric{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s18-mk{flex:0 0 auto;font-size:var(--text-sm);color:var(--muted)}
+.s18-mv{min-width:0;font-size:var(--text-sm);color:var(--fg);text-align:right}
+.s18-chart{width:100%}
+.s18-models{display:flex;flex-direction:column;gap:2px;padding-top:var(--space-2);border-top:1px solid var(--border-soft)}
+.s18-model{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;
+  gap:var(--space-3);align-items:baseline;min-height:30px;padding:var(--space-1) 0;
+}
+.s18-model-name{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s18-model-req{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--muted);white-space:nowrap}
+.s18-model-cost{min-width:58px;text-align:right;font-family:var(--font-mono);font-size:var(--text-sm);color:var(--fg);white-space:nowrap}
+.s18-model.is-other .s18-model-name{color:var(--muted)}
+
+/* DeepSeek 说明卡 */
+.s18-note-card{display:flex;flex-direction:column;gap:var(--space-3)}
+.s18-note-head{display:flex;align-items:center;gap:var(--space-3)}
+.s18-note-head .row-icon{width:36px;height:36px}
+
+/* 未接入 provider 空态 */
+.s18-soon-state{padding-top:var(--space-8)}
+.s18-soon-state .st-desc{max-width:280px}
+
+/* 未配置 Key：配置卡（empty 态） */
+.s18-config-card{
+  display:flex;flex-direction:column;align-items:center;gap:var(--space-3);
+  padding:var(--space-5) var(--space-4);text-align:center;
+}
+.s18-config-card .st-desc{max-width:280px}
+.s18-config-card .s18-field{text-align:left}
+.s18-field{
+  width:100%;min-height:var(--tap-min);padding:0 var(--space-3);
+  border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);color:var(--fg);font:inherit;
+}
+.s18-field::placeholder{color:var(--muted)}
+.s18-link{
+  min-height:var(--tap-min);padding:0 var(--space-2);border:0;border-radius:var(--radius-md);
+  background:transparent;color:var(--fg-2);font:inherit;font-size:var(--text-sm);
+  text-decoration:underline;cursor:pointer;
+}
+.s18-link:hover{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s18-save{width:100%}
+
+/* 查询失败：错误条 + 上次数据 */
+.s18-errorbar{
+  display:flex;align-items:center;gap:var(--space-3);
+  padding:var(--space-3);border:1px solid color-mix(in srgb,var(--danger) 34%,transparent);
+  border-radius:var(--radius-md);background:color-mix(in srgb,var(--danger) 10%,transparent);
+}
+.s18-errorbar .row-icon{width:32px;height:32px;background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+.s18-errorbar .row-title{color:var(--danger-text);font-size:var(--text-sm);white-space:normal}
+.s18-errorbar .row-sub{color:var(--fg-2);white-space:normal}
+.s18-errorbar .row-body{flex:1 1 auto;min-width:0}
+.s18-retry{flex:0 0 auto;min-height:var(--tap-min);padding:0 var(--space-3);font-size:var(--text-sm)}
+.s18-stale-tag{color:var(--warn-text)}
+
+/* 入场错落（本屏再次激活时重播） */
+.s18 .s18-in{opacity:0}
+.s18.is-active .s18-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s18.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s18.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s18.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.s18:not(.is-active) .chart-bar{animation:none}
+.device-screen:has(#odSplash:not([hidden])) #s18 *{animation:none}
+
+/* 用量趋势：请求次数曲线 + Token 堆叠柱（与控制台同源数据，两种画法） */
+.s18-stack-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);font-size:var(--text-sm);color:var(--fg-2)}
+.s18-stack-head .num{color:var(--fg);font-variant-numeric:tabular-nums}
+.s18-stack{display:flex;align-items:flex-end;gap:4px;height:76px;padding:0 12px 0 30px;margin-top:var(--space-2)}
+.s18-stack-col{flex:1 1 0;display:flex;flex-direction:column;height:var(--h,0%);min-width:0;border-radius:2px 2px 0 0;overflow:hidden}
+.s18-stack-in{display:block;width:100%;height:var(--in,100%);flex:0 0 auto;background:var(--chart-seq)}
+.s18-stack-out{display:block;width:100%;flex:1 1 auto;background:color-mix(in srgb,var(--chart-seq) 40%,transparent)}
+.s18-stack-legend{display:flex;align-items:center;gap:var(--space-4);margin-top:var(--space-2);font-size:var(--text-sm);color:var(--muted)}
+.s18-stack-legend > span{display:inline-flex;align-items:center;gap:6px}
+.s18-legend-dot{display:inline-block;width:8px;height:8px;border-radius:2px}
+.s18-legend-dot.is-in{background:var(--chart-seq)}
+.s18-legend-dot.is-out{background:color-mix(in srgb,var(--chart-seq) 40%,transparent)}
+</style>
+
+<style data-for="s19">
+/* ── s19 额度设置 ─────────────────────────────────────────────── */
+.screen.s19{font-size:max(var(--text-sm),14px)}
+.screen.s19 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s19 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.st-desc,.field){font-size:max(var(--text-sm),14px)}
+.screen.s19 :is(.btn,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s19 [role="switch"]:focus-visible,.screen.s19 .chip:focus-visible,
+.screen.s19 .btn:focus-visible,.screen.s19 .row:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s19-intro{display:block;margin:0 0 var(--space-3)}
+.s19-intro .meta{line-height:1.45}
+.s19-group + .s19-group{margin-top:var(--space-4)}
+.s19-chips{display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-3) 0}
+.s19-actions{padding:0 0 var(--space-3)}
+.s19-actions .btn{width:100%}
+.s19-note{display:block;padding:0 0 var(--space-3);line-height:1.45}
+.s19-provider .row-sub{white-space:normal}
+.s19-provider .badge{flex:0 0 auto;white-space:nowrap}
+.s19-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+.s19-badge-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+.s19-badge-off{color:var(--muted)}
+.s19-soon{opacity:.85}
+.s19-threshold{font-size:var(--text-sm);color:var(--fg-2);white-space:nowrap}
+.s19-row-alert .row-sub{white-space:normal}
+.s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3);white-space:normal;line-height:1.45}
+.s19-foot{margin-top:var(--space-4);line-height:1.45}
+.s19-in{opacity:0}
+.s19.is-active .s19-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s19.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s19.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s19.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.s19.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+.device-screen:has(#odSplash:not([hidden])) #s19 *{animation:none}
+</style>
+
+<style data-for="s20">
+/* ── s20 额度聚合（A 按 provider / B 按额度项） ───────────────────── */
+.screen.s20a,.screen.s20b{font-size:max(var(--text-sm),14px)}
+/* 状态块被外壳置为 display:grid：轨道按容器宽度收敛，避免长文案把卡片撑出屏外 */
+.screen:is(.s20a,.s20b) [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen:is(.s20a,.s20b) .btn{font-size:max(var(--text-base),14px)}
+.screen:is(.s20a,.s20b) :is(.chip,.segmented>*,.btn,.s20-btn):focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+/* 顶部：入口「聚合 / 单家」（定稿：与 provider chip 并列，聚合模式下 chip 行隐藏） */
+.s20-entry .segmented{width:100%}
+.s20-entry .meta{display:block;margin-top:var(--space-2)}
+
+/* 评审辅助卡（演示件）：虚线框让它一眼区别于产品内容。
+   刻意做成两行紧凑 chips —— 它不为好看，只为让人不动手也能看全 A 的完整列表。 */
+.s20-probe{
+  margin-top:var(--space-3);padding:var(--space-2) var(--space-3);
+  border:1px dashed var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);
+  display:flex;flex-direction:column;gap:var(--space-2);
+}
+.s20-probe-chips{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.s20-probe-chips .chip{min-height:var(--tap-min);padding:0 var(--space-2);flex:0 0 auto}
+.s20-probe-lab{flex:0 0 auto;color:var(--muted)}
+
+/* 结论条：最先见底的那条窗口 */
+.s20-hero{
+  margin-top:var(--space-3);padding:var(--space-2) var(--space-3);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-2);
+}
+.s20-hero .row-icon{--k:var(--danger);width:30px;height:30px}
+.s20-hero-body{min-width:0;display:flex;align-items:baseline;gap:6px}
+.s20-hero-label{flex:0 0 auto;font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s20-hero-title{min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s20-hero-pct{font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--danger-text)}
+
+/* 排序位次条 */
+.s20-sortbar{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin:var(--space-4) 0 var(--space-2)}
+.s20-sortbar .group-label{padding:0;margin:0}
+.s20-note{color:var(--muted);white-space:nowrap}
+
+/* 列表：一张 group 卡 + 行间细分隔线（与 .group / .row 同一套节奏） */
+.s20-list{
+  list-style:none;margin:0;padding:0 var(--space-4);
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);
+}
+.s20-row{border-top:1px solid var(--border-soft)}
+.s20-row:first-child{border-top:0}
+.s20-btn{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;
+  border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:opacity var(--dur-state) var(--ease-standard);
+}
+.s20-btn:active{opacity:.68}
+
+/* 位次徽标：第 1 名用危险色的淡底，其余中性；不参与排序的家用虚线空心 */
+.s20-rank{
+  flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;
+  border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:max(var(--text-sm),14px);font-weight:700;line-height:1;
+}
+.s20-rank.is-top{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+.s20-btn.is-off{cursor:default}
+.s20-btn.is-off .s20-rank{background:transparent;border:1px dashed var(--border);color:var(--muted);font-weight:600}
+
+.s20-main{min-width:0;display:flex;flex-direction:column;gap:6px}
+.s20-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s20-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg)}
+.s20-name-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s20-btn.is-off .s20-name{color:var(--muted);font-weight:500}
+.s20-pct{flex:0 0 auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--fg)}
+.s20-pct.is-warn{color:var(--warn-text)}
+.s20-pct.is-low{color:var(--danger-text)}
+.s20-pct.is-off{color:var(--muted);font-weight:500}
+
+/* 剩余百分比进度条：越低越短，颜色按紧急度三档（与 s18 同一套语义） */
+.s20-bar{display:block;height:6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.s20-bar-fill{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--chart-seq)}
+.s20-bar-fill.is-warn{background:var(--warn)}
+.s20-bar-fill.is-low{background:var(--danger)}
+.s20-bar-fill.is-stale{background:color-mix(in srgb,var(--warn) 55%,transparent)}
+
+.s20-sub{display:block;color:var(--muted);line-height:1.4}
+
+/* 窗口名徽标（B 方案每行一个额度项） */
+.s20-win{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-weight:600;line-height:1.7;white-space:nowrap;
+}
+/* 「旧数据」「不参与聚合」标注 */
+.s20-tag{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-text);
+}
+.s20-tag.is-off{background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--muted)}
+.s20-btn.is-off .chev{display:none}
+
+/* 口径说明（14px 正文级，不是 12px 角标） */
+.s20-cap{margin:var(--space-3) 0 0;color:var(--muted);line-height:1.45}
+
+/* 入场错落（本屏再次激活时重播） */
+.s20-in{opacity:0}
+.screen:is(.s20a,.s20b).is-active .s20-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.screen:is(.s20a,.s20b).is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.screen:is(.s20a,.s20b).is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.screen:is(.s20a,.s20b).is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) :is(#s20a,#s20b) *{animation:none}
+</style>
+
+<style data-for="s21">
+/* ── s21 全额度聚合（含余额型） ───────────────────────────────────── */
+.screen.s21{font-size:max(var(--text-sm),14px)}
+/* 状态块被外壳置为 display:grid：轨道按容器宽度收敛，避免长文案把卡片撑出屏外 */
+.screen.s21 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s21 .btn{font-size:max(var(--text-base),14px)}
+.screen.s21 :is(.chip,.segmented>*,.btn,.s21-btn):focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+/* 顶部：入口「聚合 / 单家」（定稿方向：与 provider chip 并列，聚合模式下 chip 行隐藏） */
+.s21-entry .segmented{width:100%}
+.s21-entry .meta{display:block;margin-top:var(--space-2)}
+
+/* 评审辅助条（演示件）：一行放完，虚线框一眼区别于产品内容。
+   比 s20 少一行——s21 只有一个方案，不需要粒度切换，省下的高度留给第 4 行。 */
+.s21-probe{
+  margin-top:var(--space-2);padding:var(--space-2) var(--space-3);
+  border:1px dashed var(--border);border-radius:var(--radius-md);
+  background:var(--surface-warm);
+  display:flex;align-items:center;gap:var(--space-2);min-width:0;
+}
+.s21-probe-chips{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.s21-probe-chips .chip{min-height:var(--tap-min);padding:0 var(--space-2);flex:0 0 auto}
+.s21-probe-lab{flex:0 0 auto;color:var(--muted)}
+
+/* 结论条：最先见底的那一条 */
+.s21-hero{
+  margin-top:var(--space-2);padding:var(--space-2) var(--space-3);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-2);
+}
+.s21-hero .row-icon{--k:var(--danger);width:30px;height:30px}
+.s21-hero-body{min-width:0;display:flex;align-items:baseline;gap:6px}
+.s21-hero-label{flex:0 0 auto;font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s21-hero-title{min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s21-hero-v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--danger-text)}
+
+/* 排序位次条 */
+.s21-sortbar{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);margin:var(--space-3) 0 var(--space-2)}
+.s21-sortbar .group-label{padding:0;margin:0}
+.s21-note{color:var(--muted);white-space:nowrap}
+
+/* 列表：一张 group 卡 + 行间细分隔线 */
+.s21-list{
+  list-style:none;margin:0;padding:0 var(--space-4);
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);
+}
+.s21-row{border-top:1px solid var(--border-soft)}
+.s21-row:first-child{border-top:0}
+.s21-btn{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;
+  border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:opacity var(--dur-state) var(--ease-standard);
+}
+.s21-btn:active{opacity:.68}
+
+/* 位次徽标：第 1 名用危险色淡底，其余中性 */
+.s21-rank{
+  flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;
+  border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:max(var(--text-sm),14px);font-weight:700;line-height:1;
+}
+.s21-rank.is-top{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+
+.s21-main{min-width:0;display:flex;flex-direction:column;gap:5px}
+.s21-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.s21-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--text-base);font-weight:600;color:var(--fg)}
+.s21-name-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 主值：百分比型是「12%」，余额型是「¥28.00」——单位不同，字重一致，量纲靠副文案说清 */
+.s21-val{flex:0 0 auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-lg);font-weight:700;line-height:1.1;color:var(--fg)}
+.s21-val.is-tier3{color:var(--danger-text)}
+.s21-val.is-tier2{color:var(--warn-text)}
+
+/* 紧迫档徽标：3 = 红、2 = 琥珀、1 = 中性。这是「为什么排这个位次」的唯一可见依据 */
+.s21-tier{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+}
+.s21-tier.is-t3{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)}
+.s21-tier.is-t2{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+
+/* 进度条：颜色由紧迫档驱动；余额型算不出日均时同样有值（离阈值多远），语义写在副文案 */
+.s21-bar{display:block;height:6px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 10%,transparent);overflow:hidden}
+.s21-bar-fill{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--chart-seq)}
+.s21-bar-fill.is-t2{background:var(--warn)}
+.s21-bar-fill.is-t3{background:var(--danger)}
+.s21-bar-fill.is-stale{background:color-mix(in srgb,var(--warn) 55%,transparent)}
+
+/* 副文案 = 换算依据。这是本屏最要紧的一行：¥ 与 % 不同量纲全靠它交代 */
+.s21-sub{display:block;color:var(--muted);line-height:1.4}
+
+/* 「旧数据」标注 */
+.s21-tag{
+  flex:0 0 auto;padding:0 6px;border-radius:var(--radius-pill);font-weight:600;line-height:1.7;white-space:nowrap;
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-text);
+}
+
+/* 口径脚注 */
+.s21-cap{margin:var(--space-3) 0 0;color:var(--muted);line-height:1.45}
+
+/* 入场错落（本屏再次激活时重播） */
+.s21-in{opacity:0}
+.screen.s21.is-active .s21-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.screen.s21.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.screen.s21.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.screen.s21.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) #s21 *{animation:none}
 </style>
 
 </head>
@@ -5393,6 +5807,54 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </details>
       </div>
 
+      <div class="set-group" data-od-id="s09-quota">
+        <p class="group-label">额度监控</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M5.4 11.8v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9v-5.2"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">额度监控</span>
+              <span class="row-sub" data-od-id="s09-quota-sub">2 个 provider 已连接 · 每小时刷新</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度监控" data-quota-switch data-od-id="s09-quota-switch"></button>
+          </div>
+          <div class="s09-quota-body" data-quota-body data-od-id="s09-quota-body">
+            <button class="row" type="button" data-goto="s19" data-od-id="s09-goto-quota">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="12" r="3.4"/><path d="M11.4 12H21"/><path d="M18 12v3"/><path d="M14.8 12v2.2"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">Provider 与 API Key</span>
+                <span class="row-sub">Ollama 已连接 · DeepSeek 未配置</span>
+              </span>
+              <span class="row-tail"><span class="badge s09-badge-ok" data-od-min-fs>已连接 2 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">预警通知</span>
+                <span class="row-sub">剩余 5% / 4% / 3% / 2% / 1% 各提醒一次</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="预警通知" data-toggle data-on-msg="预警通知已开启" data-off-msg="预警通知已关闭 · 额度仍会刷新"></button>
+            </div>
+            <div class="row" data-od-id="s09-quota-refresh">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M20 11.5a8 8 0 1 0-2.6 6.3"/><path d="M20 4.5v6h-6"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">后台刷新</span>
+                <span class="row-sub">息屏不请求 · 解锁后不补跑</span>
+              </span>
+              <span class="row-tail"><span class="num">每小时</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="set-group" data-od-id="s09-granularity">
         <p class="group-label">页面记录</p>
         <div class="group">
@@ -5565,6 +6027,26 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       sec.addEventListener('click', function (e) {
         var t = e.target;
         if (!t || !t.closest) return;
+        /* 额度监控（Feature.QUOTA）：关闭时子项折叠成一行，并隐藏底部「额度」Tab。
+           原型直接切 #odTabbar 上对应按钮的 hidden；实现侧由 Feature.QUOTA 驱动导航枚举。 */
+        var quotaSw = t.closest('[data-quota-switch]');
+        if (quotaSw) {
+          var quotaOn = quotaSw.getAttribute('aria-checked') === 'true';
+          quotaSw.setAttribute('aria-checked', quotaOn ? 'false' : 'true');
+          var quotaBody = sec.querySelector('[data-quota-body]');
+          var quotaSub = sec.querySelector('[data-od-id="s09-quota-sub"]');
+          if (quotaBody) quotaBody.hidden = quotaOn;
+          if (quotaSub) {
+            quotaSub.textContent = quotaOn
+              ? '开启后可用 · 额度 Tab、预警通知与后台刷新'
+              : '2 个 provider 已连接 · 每小时后台刷新';
+          }
+          var quotaTab = document.querySelector('#odTabbar [data-tab="quota"]');
+          if (quotaTab) quotaTab.hidden = quotaOn;
+          window.App.haptic('light');
+          window.App.toast(quotaOn ? '额度监控已关闭 · 底部「额度」Tab 已隐藏' : '额度监控已开启 · 底部「额度」Tab 已恢复');
+          return;
+        }
         var sw = t.closest('[data-toggle]');
         if (sw) {
           var on = sw.getAttribute('aria-checked') === 'true';
@@ -8289,6 +8771,1451 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   </script>
 </section>
 
+<section class="screen s18" data-screen="s18" data-title="额度" id="s18" data-od-id="screen-s18">
+
+  <header class="screen-head s18-head" data-od-id="s18-head">
+    <div>
+      <p class="meta">2 个 provider 已连接 · <span data-s18-updated data-od-id="s18-updated">更新于 9:41</span></p>
+      <h1 class="h1 mt-2">额度</h1>
+    </div>
+    <div class="s18-head-actions">
+      <button class="icon-btn s18-refresh" type="button" aria-label="刷新额度" data-s18-refresh data-od-id="s18-refresh">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M20 11.5a8 8 0 1 0-2.6 6.3"/><path d="M20 4.5v6h-6"/></svg>
+      </button>
+      <button class="icon-btn" type="button" aria-label="额度设置" data-goto="s19" data-od-id="s18-settings">
+        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="pad s18-providers" data-od-id="s18-providers">
+    <div class="s18-chips" role="tablist" aria-label="选择额度 provider">
+      <button class="chip is-on" type="button" role="tab" aria-selected="true" data-quota-provider="ollama" data-od-id="s18-provider-ollama">
+        <span class="s18-provider-dot" aria-hidden></span>Ollama
+      </button>
+      <button class="chip" type="button" role="tab" aria-selected="false" data-quota-provider="deepseek" data-od-id="s18-provider-deepseek">
+        <span class="s18-provider-dot" aria-hidden></span>DeepSeek
+      </button>
+      <button class="chip" type="button" role="tab" aria-selected="false" data-quota-provider="opencode-go" data-od-id="s18-provider-opencode">
+        opencode-go <span class="s18-soon" data-od-min-fs>v1.1 可接入</span>
+      </button>
+      <button class="chip" type="button" role="tab" aria-selected="false" data-quota-provider="opendesign" data-od-id="s18-provider-opendesign">
+        opendesign <span class="s18-soon" data-od-min-fs>手动录入</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="content" data-od-id="s18-content">
+
+    <!-- 加载态 -->
+    <div class="st-loading" data-state-when="loading" data-od-id="s18-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <!-- 未配置 Key（empty） -->
+    <div class="pad" data-state-when="empty" data-od-id="s18-config">
+      <div class="card s18-config-card">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H21"/><path d="M18 12v3.2"/><path d="M14.6 12v2.4"/></svg>
+        </span>
+        <p class="st-title">配置 API Key 后查看额度</p>
+        <p class="st-desc">余额与用量来自 provider 官方接口；未配置前不会发起任何请求。</p>
+        <input class="s18-field" id="s18-key" type="password" placeholder="sk-****" autocomplete="off" aria-label="Ollama API Key" data-od-id="s18-key" />
+        <button class="btn s18-save" type="button" data-s18-save data-od-id="s18-save">保存并查询</button>
+        <button class="s18-link" type="button" data-s18-link data-od-id="s18-key-link">在 ollama.com 获取 API Key ↗</button>
+        <p class="fine" data-od-min-fs>Key 只保存在本机，使用 Android Keystore 加密；不写日志、不上传。</p>
+      </div>
+    </div>
+
+    <!-- 查询失败（error） -->
+    <div class="pad" data-state-when="error" data-od-id="s18-error">
+      <div class="s18-errorbar" role="alert" data-od-id="s18-errorbar">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">Key 无效或已过期</span>
+          <span class="row-sub">Ollama 返回 401 · 可重新填写 Key 后重试</span>
+        </span>
+        <button class="btn btn-ghost s18-retry" type="button" data-s18-retry data-od-id="s18-retry">重试</button>
+      </div>
+
+      <div class="card s18-quota mt-3" data-od-id="s18-stale">
+        <div class="s18-hero">
+          <span class="s18-hero-label">上次可用额度</span>
+          <span class="s18-hero-value num">$72.50</span>
+          <span class="s18-hero-sub s18-stale-tag">数据停在 22:14 · 刷新失败</span>
+        </div>
+        <div class="s18-meter">
+          <div class="s18-meter-head">
+            <span class="s18-m-label">内含额度</span>
+            <span class="s18-m-val num">$72.50 / $100.00</span>
+          </div>
+          <div class="s18-bar" role="img" aria-label="上次数据：内含额度剩余 72.5%"><span class="s18-bar-fill" style="width:72.5%"></span></div>
+          <span class="s18-meta">保留上次成功结果，恢复后自动覆盖</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 已配置有数据（populated） -->
+    <div class="s18-main" data-state-hide="loading empty error">
+
+      <div class="pad s18-planbar" data-od-id="s18-planbar">
+        <div class="segmented" role="group" aria-label="Ollama 计费模式">
+          <button type="button" aria-pressed="true" data-quota-plan="ollama-legacy" data-od-id="s18-plan-legacy">按百分比限额</button>
+          <button type="button" aria-pressed="false" data-quota-plan="ollama-usd" data-od-id="s18-plan-usd">按金额（USD）</button>
+        </div>
+        <span class="meta segment-note" data-od-min-fs>计费模式由你选择，选择会记住；与 Ollama 返回的结构不一致时，卡片里会提示</span>
+      </div>
+
+      <!-- ── a · Ollama 新版 USD 型 ───────────────────────────── -->
+      <div class="s18-panel" data-quota-panel="ollama-usd" hidden data-od-id="s18-panel-ollama-usd">
+        <div class="pad mt-3 s18-in od-d1">
+          <div class="card s18-quota" data-od-id="s18-ollama-quota">
+            <div class="s18-hero">
+              <span class="s18-hero-label">可用额度</span>
+              <span class="s18-hero-value num">$72.50</span>
+              <span class="s18-hero-sub">内含 + 已购</span>
+            </div>
+            <div class="s18-meter" data-od-id="s18-ollama-included">
+              <div class="s18-meter-head">
+                <span class="s18-m-label">内含额度</span>
+                <span class="s18-m-val num">$72.50 / $100.00</span>
+              </div>
+              <div class="s18-bar" role="img" aria-label="内含额度剩余 72.5%"><span class="s18-bar-fill" style="width:72.5%"></span></div>
+              <span class="s18-meta">本周期剩 18 天 · 10/27 重置</span>
+            </div>
+            <div class="s18-line" data-od-id="s18-ollama-purchased">
+              <span class="s18-line-t">已购额度</span>
+              <span class="s18-line-v num">$25.00</span>
+            </div>
+          </div>
+          <p class="fine mt-2" data-od-min-fs>余额随计划周期自动更新，重置时间按本地时区显示。</p>
+        </div>
+
+        <div class="pad mt-3 s18-in od-d2">
+          <div class="card s18-usage" data-od-id="s18-ollama-usage">
+            <div class="row-between">
+              <h2 class="h3">用量</h2>
+              <span class="meta" data-od-id="s18-usage-range-label" data-range-label>近 24 小时</span>
+            </div>
+            <div class="segmented s18-range" role="group" aria-label="用量范围">
+              <button type="button" role="radio" aria-checked="true" data-quota-range="24" data-od-id="s18-range-24">24 小时</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="7" data-od-id="s18-range-7">7 天</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="30" data-od-id="s18-range-30">30 天</button>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="24">
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">15 次 · $0.017</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">10.6 万 · 4.6 万 · 1.4 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="0,1,0,2,1,0,3,1,2,0,2,3"
+                   data-chart-labels="00,02,04,06,08,10,12,14,16,18,20,22"
+                   data-chart-label="近 24 小时每小时请求数"></div>
+              <div class="s18-models" data-od-id="s18-models-24">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">glm-5.3-flash</span><span class="s18-model-req">10 次</span><span class="s18-model-cost num">$0.010</span></div>
+                <div class="s18-model"><span class="s18-model-name">gpt-oss:120b</span><span class="s18-model-req">3 次</span><span class="s18-model-cost num">$0.006</span></div>
+                <div class="s18-model is-other"><span class="s18-model-name">其他</span><span class="s18-model-req">2 次</span><span class="s18-model-cost num">$0.001</span></div>
+              </div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="7" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">96 次 · $0.121</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">68.4 万 · 29.7 万 · 9.8 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="12,9,18,11,16,14,16"
+                   data-chart-labels="10/16,10/17,10/18,10/19,10/20,10/21,10/22"
+                   data-chart-label="近 7 天每日请求数"></div>
+              <div class="s18-models" data-od-id="s18-models-7">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">glm-5.3-flash</span><span class="s18-model-req">64 次</span><span class="s18-model-cost num">$0.082</span></div>
+                <div class="s18-model"><span class="s18-model-name">gpt-oss:120b</span><span class="s18-model-req">21 次</span><span class="s18-model-cost num">$0.031</span></div>
+                <div class="s18-model is-other"><span class="s18-model-name">其他</span><span class="s18-model-req">11 次</span><span class="s18-model-cost num">$0.008</span></div>
+              </div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="30" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">412 次 · $0.508</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">286.2 万 · 121.4 万 · 38.6 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="56,68,72,74,71,71"
+                   data-chart-labels="9/27,10/03,10/09,10/15,10/21,10/27"
+                   data-chart-label="近 30 天每 5 日请求数"></div>
+              <div class="s18-models" data-od-id="s18-models-30">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">glm-5.3-flash</span><span class="s18-model-req">274 次</span><span class="s18-model-cost num">$0.338</span></div>
+                <div class="s18-model"><span class="s18-model-name">gpt-oss:120b</span><span class="s18-model-req">92 次</span><span class="s18-model-cost num">$0.131</span></div>
+                <div class="s18-model is-other"><span class="s18-model-name">其他</span><span class="s18-model-req">46 次</span><span class="s18-model-cost num">$0.039</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="fine mt-2" data-od-min-fs>用量为云端统计值，写入有几到十几分钟延迟。</p>
+        </div>
+      </div>
+
+      <!-- ── b · Ollama 旧版百分比计划 ─────────────────────────── -->
+      <div class="s18-panel" data-quota-panel="ollama-legacy" data-od-id="s18-panel-ollama-legacy">
+        <div class="pad mt-3 s18-in od-d1">
+          <div class="card s18-quota" data-od-id="s18-legacy-quota">
+            <div class="s18-hero">
+              <span class="s18-hero-label">会话剩余</span>
+              <span class="s18-hero-value num">75%</span>
+              <span class="s18-hero-sub">按百分比限额计费</span>
+            </div>
+            <div class="s18-meter" data-od-id="s18-legacy-session">
+              <div class="s18-meter-head">
+                <span class="s18-m-label">会话</span>
+                <span class="s18-m-val num">剩余 75%</span>
+              </div>
+              <div class="s18-bar" role="img" aria-label="会话剩余 75%"><span class="s18-bar-fill" style="width:75%"></span></div>
+              <span class="s18-meta">10/01 07:00 重置</span>
+            </div>
+            <div class="s18-meter" data-od-id="s18-legacy-weekly">
+              <div class="s18-meter-head">
+                <span class="s18-m-label">每周</span>
+                <span class="s18-m-val num">剩余 40%</span>
+              </div>
+              <div class="s18-bar" role="img" aria-label="每周剩余 40%"><span class="s18-bar-fill is-warn" style="width:40%"></span></div>
+              <span class="s18-meta">10/05 00:00 重置</span>
+            </div>
+            <p class="s18-note-text">该计划按百分比限额计费，不提供金额明细；预警阈值按剩余百分比计算。</p>
+          </div>
+        </div>
+
+        <div class="pad mt-3 s18-in od-d2">
+          <div class="card s18-usage" data-od-id="s18-legacy-usage">
+            <div class="row-between">
+              <h2 class="h3">用量</h2>
+              <span class="meta" data-od-id="s18-legacy-range-label" data-range-label>近 24 小时</span>
+            </div>
+            <div class="segmented s18-range" role="group" aria-label="用量范围">
+              <button type="button" role="radio" aria-checked="true" data-quota-range="24" data-od-id="s18-legacy-range-24">24 小时</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="7" data-od-id="s18-legacy-range-7">7 天</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="30" data-od-id="s18-legacy-range-30">30 天</button>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="24">
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求次数</span><span class="s18-mv num">15 次</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="0,1,0,2,1,0,3,1,2,0,2,3"
+                   data-chart-labels="00,02,04,06,08,10,12,14,16,18,20,22"
+                   data-chart-label="近 24 小时每小时请求次数"></div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="7" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求次数</span><span class="s18-mv num">96 次</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="12,9,18,11,16,14,16"
+                   data-chart-labels="10/16,10/17,10/18,10/19,10/20,10/21,10/22"
+                   data-chart-label="近 7 天每日请求次数"></div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="30" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求次数</span><span class="s18-mv num">412 次</span></div>
+              </div>
+              <div class="s18-chart" data-chart="bars" data-chart-vlabels="false"
+                   data-chart-values="56,68,72,74,71,71"
+                   data-chart-labels="9/27,10/03,10/09,10/15,10/21,10/27"
+                   data-chart-label="近 30 天每 5 日请求次数"></div>
+            </div>
+
+            <p class="s18-note-text">旧版计划只返回请求次数，不提供花费、token 与按模型明细。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── c · DeepSeek 余额 ─────────────────────────────────── -->
+      <div class="s18-panel" data-quota-panel="deepseek" hidden data-od-id="s18-panel-deepseek">
+        <div class="pad mt-3 s18-in od-d1">
+          <div class="card s18-quota" data-od-id="s18-deepseek-balance">
+            <div class="s18-hero">
+              <span class="s18-hero-label">账户余额 · CNY</span>
+              <span class="s18-hero-value num">¥110.00</span>
+              <span class="s18-hero-sub">赠金 ¥10.00 + 充值 ¥100.00</span>
+            </div>
+            <div class="s18-line" data-od-id="s18-deepseek-grant">
+              <span class="s18-line-t">赠金</span>
+              <span class="s18-line-v num">¥10.00</span>
+            </div>
+            <div class="s18-line" data-od-id="s18-deepseek-topup">
+              <span class="s18-line-t">充值</span>
+              <span class="s18-line-v num">¥100.00</span>
+            </div>
+            <div class="s18-line" data-od-id="s18-deepseek-usd">
+              <span class="s18-line-t">USD 余额</span>
+              <span class="badge s18-off" data-od-min-fs>未开通</span>
+            </div>
+          </div>
+          <p class="fine mt-2" data-od-min-fs>余额来自 DeepSeek 账户，多币种分行展示，不做换算合并。</p>
+        </div>
+
+        <div class="pad mt-3 s18-in od-d2">
+          <div class="card s18-usage" data-od-id="s18-deepseek-usage">
+            <div class="row-between">
+              <h2 class="h3">用量</h2>
+              <span class="meta" data-od-id="s18-ds-range-label" data-range-label>近 24 小时</span>
+            </div>
+            <div class="segmented s18-range" role="group" aria-label="用量范围">
+              <button type="button" role="radio" aria-checked="true" data-quota-range="24" data-od-id="s18-ds-range-24">24 小时</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="7" data-od-id="s18-ds-range-7">7 天</button>
+              <button type="button" role="radio" aria-checked="false" data-quota-range="30" data-od-id="s18-ds-range-30">30 天</button>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="24">
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">34 次 · ¥0.36</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">21.9 万 · 1.3 万 · 2.8 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="area" data-chart-peak="false"
+                   data-chart-values="0,0,0,0,0,0,0,0,0,14,0,20"
+                   data-chart-labels="00,02,04,06,08,10,12,14,16,18,20,22"
+                   data-chart-label="近 24 小时每小时请求次数"></div>
+      <div class="s18-stack-head"><span>Tokens · 近 24 小时</span><span class="num">25.9 万</span></div>
+      <div class="s18-stack" role="img" aria-label="近 24 小时 Token 用量：输入 21.9 万，输出 2.8 万">
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col" style="--h:68.3%"><i class="s18-stack-in" style="--in:88.8%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col"></span>
+        <span class="s18-stack-col" style="--h:100%"><i class="s18-stack-in" style="--in:89.6%"></i><i class="s18-stack-out"></i></span>
+      </div>
+      <div class="s18-stack-legend"><span><i class="s18-legend-dot is-in"></i>输入 21.9 万</span><span><i class="s18-legend-dot is-out"></i>输出 2.8 万</span></div>
+              <div class="s18-models" data-od-id="s18-ds-models-24">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">deepseek-flash</span><span class="s18-model-req">34 次</span><span class="s18-model-cost num">¥0.36</span></div>
+              </div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="7" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">268 次 · ¥2.84</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">172.4 万 · 10.6 万 · 22.1 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="area" data-chart-peak="false"
+                   data-chart-values="34,41,38,29,45,39,42"
+                   data-chart-labels="10/17,10/18,10/19,10/20,10/21,10/22,10/23"
+                   data-chart-label="近 7 天每日请求次数"></div>
+      <div class="s18-stack-head"><span>Tokens · 近 7 天</span><span class="num">194.5 万</span></div>
+      <div class="s18-stack" role="img" aria-label="近 7 天 Token 用量：输入 172.4 万，输出 22.1 万">
+        <span class="s18-stack-col" style="--h:75.4%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:91.2%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:84.5%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:64.3%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:100%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:86.8%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:93.3%"><i class="s18-stack-in" style="--in:88%"></i><i class="s18-stack-out"></i></span>
+      </div>
+      <div class="s18-stack-legend"><span><i class="s18-legend-dot is-in"></i>输入 172.4 万</span><span><i class="s18-legend-dot is-out"></i>输出 22.1 万</span></div>
+              <div class="s18-models" data-od-id="s18-ds-models-7">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">deepseek-flash</span><span class="s18-model-req">236 次</span><span class="s18-model-cost num">¥2.51</span></div>
+                <div class="s18-model"><span class="s18-model-name">deepseek-chat &amp; reasoner</span><span class="s18-model-req">32 次</span><span class="s18-model-cost num">¥0.33</span></div>
+              </div>
+            </div>
+
+            <div class="s18-range-panel" data-range-panel="30" hidden>
+              <div class="s18-metrics">
+                <div class="s18-metric"><span class="s18-mk">请求 · 花费</span><span class="s18-mv num">1,024 次 · ¥10.92</span></div>
+                <div class="s18-metric"><span class="s18-mk">输入 / 缓存 / 输出</span><span class="s18-mv num">658.9 万 · 41.2 万 · 84.6 万</span></div>
+              </div>
+              <div class="s18-chart" data-chart="area" data-chart-peak="false"
+                   data-chart-values="151,168,176,182,163,184"
+                   data-chart-labels="9/28,10/03,10/08,10/13,10/18,10/23"
+                   data-chart-label="近 30 天每 5 日请求次数"></div>
+      <div class="s18-stack-head"><span>Tokens · 近 30 天</span><span class="num">743.5 万</span></div>
+      <div class="s18-stack" role="img" aria-label="近 30 天 Token 用量：输入 658.9 万，输出 84.6 万">
+        <span class="s18-stack-col" style="--h:82%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:91.4%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:95.7%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:98.6%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:88.6%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+        <span class="s18-stack-col" style="--h:100%"><i class="s18-stack-in" style="--in:89%"></i><i class="s18-stack-out"></i></span>
+      </div>
+      <div class="s18-stack-legend"><span><i class="s18-legend-dot is-in"></i>输入 658.9 万</span><span><i class="s18-legend-dot is-out"></i>输出 84.6 万</span></div>
+              <div class="s18-models" data-od-id="s18-ds-models-30">
+                <div class="row-between"><span class="s18-mk">按模型</span><span class="badge" data-od-min-fs>Top 3</span></div>
+                <div class="s18-model"><span class="s18-model-name">deepseek-flash</span><span class="s18-model-req">902 次</span><span class="s18-model-cost num">¥9.62</span></div>
+                <div class="s18-model"><span class="s18-model-name">deepseek-chat &amp; reasoner</span><span class="s18-model-req">122 次</span><span class="s18-model-cost num">¥1.30</span></div>
+              </div>
+            </div>
+
+            <p class="s18-note-text">用量来自 DeepSeek 平台用量接口（按模型、按小时），云端统计有几到十几分钟延迟。</p>
+          </div>
+          <p class="fine mt-2" data-od-min-fs>余额型 provider 没有周期与总量，预警走「低于设定金额提醒一次」，充值回升后重新计数；默认阈值 ¥50.00，可在额度设置里调整。</p>
+        </div>
+      </div>
+
+      <!-- ── d · 未接入 provider ──────────────────────────────── -->
+      <div class="s18-panel" data-quota-panel="opencode-go" hidden data-od-id="s18-panel-opencode">
+        <div class="s18-soon-state st-empty" data-od-id="s18-soon-opencode">
+          <span class="st-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="3.4" y="6" width="17.2" height="13" rx="3"/><path d="M3.4 10.4h17.2"/><path d="M8 15h3"/></svg>
+          </span>
+          <p class="st-title">下个版本接入</p>
+          <p class="st-desc">官方额度接口已确认可用：一次 GET 返回 5 小时 / 周 / 月三个窗口的已用比例，下个版本直连；当前不预置假数据。</p>
+          <button class="btn btn-ghost" type="button" data-goto="s19" data-od-id="s18-soon-opencode-cta">查看已接入的 provider</button>
+        </div>
+      </div>
+
+      <div class="s18-panel" data-quota-panel="opendesign" hidden data-od-id="s18-panel-opendesign">
+        <div class="s18-soon-state st-empty" data-od-id="s18-soon-opendesign">
+          <span class="st-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
+          </span>
+          <p class="st-title">无公开接口 · 手动录入</p>
+          <p class="st-desc">opendesign 只有控制台内部接口（要浏览器会话令牌），App 无法直连。首版支持手动录入档位与剩余百分比，照样参与额度预警。</p>
+          <button class="btn btn-ghost" type="button" data-goto="s19" data-od-id="s18-soon-opendesign-cta">去设置里手动录入</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+  /* s18：provider chip / Ollama 计划类型 / 用量范围 都是纯 DOM 切换（不走 App.go）。
+     provider chip 与面板用 data-quota-provider / data-quota-panel 一一对应；
+     USD 型与百分比型同属 Ollama，用 data-quota-plan 做演示切换。
+     五态由外壳 App.state('s18', …) 驱动，这里只负责保存 / 重试 / 刷新反馈。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var chips = Array.prototype.slice.call(sec.querySelectorAll('[data-quota-provider]'));
+    var panels = Array.prototype.slice.call(sec.querySelectorAll('[data-quota-panel]'));
+    var planbar = sec.querySelector('[data-od-id="s18-planbar"]');
+    var planBtns = Array.prototype.slice.call(sec.querySelectorAll('[data-quota-plan]'));
+    var updated = sec.querySelector('[data-s18-updated]');
+
+    function providerOf(panelKey) {
+      return panelKey.indexOf('ollama') === 0 ? 'ollama' : panelKey;
+    }
+    function showPanel(key) {
+      panels.forEach(function (p) {
+        p.hidden = p.getAttribute('data-quota-panel') !== key;
+      });
+      var prov = providerOf(key);
+      chips.forEach(function (c) {
+        var on = c.getAttribute('data-quota-provider') === prov;
+        c.classList.toggle('is-on', on);
+        c.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      if (planbar) planbar.hidden = prov !== 'ollama';
+      planBtns.forEach(function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-quota-plan') === key ? 'true' : 'false');
+      });
+    }
+    function showRange(panel, range) {
+      var panelsR = panel.querySelectorAll('[data-range-panel]');
+      Array.prototype.forEach.call(panelsR, function (p) {
+        p.hidden = p.getAttribute('data-range-panel') !== range;
+      });
+      var btns = panel.querySelectorAll('[data-quota-range]');
+      Array.prototype.forEach.call(btns, function (b) {
+        b.setAttribute('aria-checked', b.getAttribute('data-quota-range') === range ? 'true' : 'false');
+      });
+      var label = panel.querySelector('[data-range-label]');
+      var TEXT = { '24': '近 24 小时', '7': '近 7 天', '30': '近 30 天' };
+      if (label) label.textContent = TEXT[range] || '';
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var chip = t.closest('[data-quota-provider]');
+      if (chip) {
+        var key = chip.getAttribute('data-quota-provider');
+        var panelKey = key === 'ollama' ? 'ollama-legacy' : key;
+        showPanel(panelKey);
+        var NAME = { ollama: 'Ollama', deepseek: 'DeepSeek', 'opencode-go': 'opencode-go', opendesign: 'opendesign' };
+        if (window.App && App.toast) App.toast(NAME[key] + ' · ' + (key === 'opencode-go' ? '下个版本接入' : key === 'opendesign' ? '需手动录入' : '已切换'));
+        return;
+      }
+
+      var plan = t.closest('[data-quota-plan]');
+      if (plan) {
+        var pk = plan.getAttribute('data-quota-plan');
+        showPanel(pk);
+        if (window.App && App.toast) App.toast('Ollama · 已切换为' + (pk === 'ollama-usd' ? '按金额展示' : '按百分比展示'));
+        return;
+      }
+
+      var rangeBtn = t.closest('[data-quota-range]');
+      if (rangeBtn) {
+        var panel = rangeBtn.closest('[data-quota-panel]');
+        if (panel) showRange(panel, rangeBtn.getAttribute('data-quota-range'));
+        return;
+      }
+
+      if (t.closest('[data-s18-refresh]')) {
+        var btn = sec.querySelector('[data-s18-refresh]');
+        if (btn) {
+          btn.classList.remove('is-spinning');
+          void btn.offsetWidth;
+          btn.classList.add('is-spinning');
+          window.setTimeout(function () { btn.classList.remove('is-spinning'); }, 760);
+        }
+        if (updated) updated.textContent = '刚刚更新';
+        if (window.App && App.toast) App.toast('已刷新 · Ollama 与 DeepSeek');
+        return;
+      }
+
+      if (t.closest('[data-s18-save]')) {
+        var input = sec.querySelector('#s18-key');
+        var value = input ? String(input.value || '').trim() : '';
+        if (!value) { if (window.App) App.toast('请先填写 API Key'); return; }
+        if (value.length < 8) { if (window.App) App.toast('Key 格式不正确，至少 8 位'); return; }
+        if (input) input.value = '';
+        if (window.App) { App.state('s18', 'populated'); App.toast('已保存并查询 · Ollama 余额 $72.50'); }
+        return;
+      }
+
+      if (t.closest('[data-s18-retry]')) {
+        if (window.App) { App.state('s18', 'populated'); App.toast('重试成功 · 已更新到 9:41'); }
+        return;
+      }
+
+      if (t.closest('[data-s18-link]')) {
+        if (window.App) App.toast('演示态：真实设备上打开 ollama.com/settings/keys');
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s19" data-screen="s19" data-title="额度设置" id="s19" data-od-id="screen-s19">
+  <div class="content pad" data-od-id="s19-content">
+
+    <p class="s19-intro s19-in od-d1" data-od-min-fs>
+      <span class="meta">凭据只保存在本机 · 设置随时可改</span>
+    </p>
+
+    <div class="stack" data-state-hide="loading empty error">
+      <div class="s19-group s19-in od-d1" data-od-id="s19-providers">
+        <p class="group-label">Provider</p>
+        <div class="group">
+          <button class="row s19-provider" type="button" data-s19-provider="Ollama" data-connected="true" data-od-id="s19-provider-ollama">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.8v10.4"/><path d="M8.8 9.6h6.4"/><path d="M8.8 13.2h6.4"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">Ollama</span>
+              <span class="row-sub">已连接 · 10 次/分钟限流</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已连接</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <button class="row s19-provider" type="button" data-s19-provider="DeepSeek" data-connected="false" data-od-id="s19-provider-deepseek">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 3.4 20.6 8v8L12 20.6 3.4 16V8z"/><path d="M9.2 12h5.6"/><path d="M12 9.2v5.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">DeepSeek</span>
+              <span class="row-sub">未配置 · 余额 + 用量（需平台登录令牌）</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-warn" data-od-min-fs>未配置</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <div class="row s19-soon" data-od-id="s19-provider-opencode">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><rect x="3.4" y="6" width="17.2" height="13" rx="3"/><path d="M3.4 10.4h17.2"/><path d="M8 15h3"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">opencode-go</span>
+              <span class="row-sub">有公开接口 · 下版接入</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>下次接入</span></span>
+          </div>
+          <div class="row s19-soon" data-od-id="s19-provider-opendesign">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">opendesign</span>
+              <span class="row-sub">无公开接口 · 手动录入</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>手动</span></span>
+          </div>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>API Key 与平台令牌都加密后只存本机，不写日志、不导出；卸载 App 即随之删除。</p>
+      </div>
+
+      <div class="s19-group s19-in od-d2" data-od-id="s19-alerts">
+        <p class="group-label">预警</p>
+        <div class="group">
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">额度预警</span>
+              <span class="row-sub">剩余 5% / 4% / 3% / 2% / 1% 各提醒一次，周期重置后重新计数</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度预警" data-s19-switch data-od-id="s19-alert-switch"></button>
+          </div>
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M4 17.5h16"/><path d="M6.5 17.5V11a5.5 5.5 0 1 1 11 0v6.5"/><path d="M12 5.5V3.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">低余额提醒</span>
+              <span class="row-sub">仅余额型 provider · 低于阈值提醒一次，充值回升后重新计数</span>
+            </span>
+            <span class="row-tail"><span class="num s19-threshold">¥50.00</span></span>
+          </div>
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/><path d="M3.4 10.2h17.2"/><path d="M7 15h3"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">通知权限</span>
+              <span class="row-sub">点通知可直接进入额度页</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已允许</span></span>
+          </div>
+          <div class="s19-actions">
+            <button class="btn btn-ghost" type="button" data-s19-test data-od-id="s19-test">发送测试通知</button>
+          </div>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>一次刷新命中多档只合并成一条通知；总开关关闭时仍刷新额度，但不评估预警。</p>
+      </div>
+
+      <div class="s19-group s19-in od-d3" data-od-id="s19-refresh">
+        <p class="group-label">刷新</p>
+        <div class="group">
+          <div class="s19-chips" role="group" aria-label="后台刷新频率">
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="0" data-od-id="s19-refresh-off">关闭</button>
+            <button class="chip is-on" type="button" aria-pressed="true" data-s19-refresh="1" data-od-id="s19-refresh-1h">每小时</button>
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="3" data-od-id="s19-refresh-3h">每 3 小时</button>
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="6" data-od-id="s19-refresh-6h">每 6 小时</button>
+          </div>
+          <p class="row-sub s19-refresh-note" data-od-id="s19-foreground-note">前台自动刷新 60 秒一次（Ollama 限流 10 次/分钟）；息屏与锁屏不触发后台请求，解锁后不补跑。</p>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>关闭后台刷新后，只在打开 App 时刷新与评估额度。</p>
+      </div>
+
+      <p class="fine s19-foot s19-in od-d4" data-od-min-fs>额度数据只用于本机展示与预警通知，不上传。</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s19：开关 / 后台刷新 chip / 测试通知 / provider 行反馈。
+     provider 行与刷新 chip 都是真实 button；开关用 role=switch + aria-checked。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var sw = t.closest('[data-s19-switch]');
+      if (sw) {
+        var on = sw.getAttribute('aria-checked') === 'true';
+        sw.setAttribute('aria-checked', on ? 'false' : 'true');
+        if (window.App) App.toast(on ? '额度预警已关闭' : '额度预警已开启 · 剩余 5% 起逐档提醒');
+        return;
+      }
+
+      var chip = t.closest('[data-s19-refresh]');
+      if (chip) {
+        var all = sec.querySelectorAll('[data-s19-refresh]');
+        Array.prototype.forEach.call(all, function (b) {
+          b.classList.remove('is-on');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        chip.classList.add('is-on');
+        chip.setAttribute('aria-pressed', 'true');
+        var label = (chip.textContent || '').replace(/\s+/g, '');
+        if (window.App) App.toast('后台刷新：' + label);
+        return;
+      }
+
+      if (t.closest('[data-s19-test]')) {
+        if (window.App) App.toast('测试通知已发送 · 额度预警渠道');
+        return;
+      }
+
+      var prov = t.closest('[data-s19-provider]');
+      if (prov) {
+        var name = prov.getAttribute('data-s19-provider');
+        var connected = prov.getAttribute('data-connected') === 'true';
+        if (window.App) App.toast(name + (connected ? ' · 已连接，可更新 Key' : ' · 未配置，去填写 API Key'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<!-- ═══ 方案 A · 一个 provider 一行 ══════════════════════════════════ -->
+<section class="screen s20a" data-screen="s20a" data-title="额度聚合 · A" id="s20a" data-od-id="screen-s20a">
+  <div class="content pad" data-od-id="s20a-content">
+
+    <div class="s20-entry s20-in od-d1" data-od-id="s20a-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s20-view="agg" data-od-id="s20a-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s20-view="single" data-od-id="s20a-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s20a-meta">3 家参与排序 · 更新于 9:41</p>
+    </div>
+
+    <!-- 演示件：只在评审时存在。三行紧凑 chips：粒度 / 状态 / 一行对照说明 -->
+    <div class="s20-probe s20-in od-d1" data-od-id="demo-only:agg-probe-a">
+      <div class="s20-probe-chips" role="group" aria-label="聚合粒度预览">
+        <span class="s20-probe-lab">粒度</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-grain="a" data-od-id="demo-only:grain-a">A · 按 provider</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-grain="b" data-od-id="demo-only:grain-b">B · 按额度项</button>
+      </div>
+      <div class="s20-probe-chips" role="group" aria-label="状态覆盖预览">
+        <span class="s20-probe-lab">状态</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-scen="normal" data-od-id="demo-only:scen-normal">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="missing" data-od-id="demo-only:scen-missing">未配置</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="stale" data-od-id="demo-only:scen-stale">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s20a-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s20a-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度</p>
+        <p class="st-desc">只有能算出剩余百分比的 provider 参与排序，余额型不进聚合。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s20a-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s20-main" data-state-hide="loading empty edge">
+
+      <div class="card s20-hero s20-in od-d2" data-od-id="s20a-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s20-hero-body">
+          <span class="s20-hero-label">最先见底</span>
+          <span class="s20-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s20-hero-pct num">12%</span>
+      </div>
+
+      <div class="s20-sortbar">
+        <span class="group-label">按剩余由低到高</span>
+        <span class="s20-note">行首为位次</span>
+      </div>
+
+      <ol class="s20-list s20-in od-d3" data-od-id="s20a-list">
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 5 小时" data-od-id="s20a-row-1">
+            <span class="s20-rank" aria-hidden>1</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span></span>
+                <span class="s20-pct is-low num">12%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 12%"><span class="s20-bar-fill is-low" style="--p:12%"></span></span>
+              <span class="s20-sub">5 小时 12% · 每周 46% · 每月 71%</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="open-design · 月度" data-od-id="s20a-row-2" data-scen-row="open-design">
+            <span class="s20-rank" aria-hidden>2</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">open-design</span></span>
+                <span class="s20-pct is-warn num" data-scen-part="on">34%</span>
+                <span class="s20-pct is-off num" data-scen-part="off" hidden>—</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 34%" data-scen-part="on"><span class="s20-bar-fill is-warn" style="--p:34%"></span></span>
+              <span class="s20-sub" data-scen-part="on">月度窗口 34% · 单窗口</span>
+              <span class="s20-sub" data-scen-part="off" hidden>未配置 Key · 不参与排序</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 每周" data-od-id="s20a-row-3" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>3</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct is-warn num">40%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s20-bar-fill is-warn" style="--p:40%"></span></span>
+              <span class="s20-sub" data-scen-part="on">每周 40% · 会话 75%</span>
+              <span class="s20-sub" data-scen-part="off" hidden>每周 40% · 会话 75% · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <span class="s20-btn is-off" data-od-id="s20a-row-4">
+            <span class="s20-rank" aria-hidden>—</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">deepseek</span><span class="s20-tag is-off">不参与聚合</span></span>
+                <span class="s20-pct is-off num">—</span>
+              </span>
+              <span class="s20-sub">余额型 · 无总量，算不出百分比</span>
+            </span>
+          </span>
+        </li>
+      </ol>
+
+      <p class="s20-cap s20-in od-d3" data-od-id="s20a-spec">余额型不进聚合 · 失败的家保留旧数据、照常排序 · 只读本地缓存</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s20a：顶部入口 / 粒度预览 / 状态覆盖都是纯 DOM 反应。
+     状态只改「行内表现 + 位次」，不改排序规则本身：未配置的家掉出排序，查询失败的家保留。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s20-list');
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    /* 位次跟着可见顺序重算：只数参与排序的行 */
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s20-row'), function (li) {
+        var btn = li.querySelector('.s20-btn');
+        var rank = li.querySelector('.s20-rank');
+        if (!btn || !rank) return;
+        rank.classList.remove('is-top');
+        if (btn.classList.contains('is-off')) { rank.textContent = '—'; return; }
+        n += 1;
+        rank.textContent = String(n);
+        if (n === 1) rank.classList.add('is-top');
+      });
+    }
+
+    function scene(name) {
+      pick('data-s20-scen', name);
+      var od = sec.querySelector('[data-scen-row="open-design"]');
+      var miss = name === 'missing';
+      if (od) {
+        od.classList.toggle('is-off', miss);
+        Array.prototype.forEach.call(od.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== miss;
+        });
+      }
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      /* 旧数据用「降饱和的琥珀」而非满色琥珀：一眼看出这是过去的读数，不是刚查到的 */
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s20-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-low') ? 'is-low' : fill.classList.contains('is-warn') ? 'is-warn' : '';
+        fill.classList.remove('is-low', 'is-warn', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次首位徽标与进度条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var grain = t.closest('[data-s20-grain]');
+      if (grain) {
+        e.stopPropagation();
+        if (grain.getAttribute('data-s20-grain') === 'b' && window.App) App.go('s20b');
+        return;
+      }
+
+      var scen = t.closest('[data-s20-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s20-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s20-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s20-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s20-row]');
+      if (row) {
+        e.stopPropagation();
+        var off = row.classList.contains('is-off');
+        if (window.App) App.toast(off ? '这家未配置 Key · 去额度设置填写' : '打开 ' + row.getAttribute('data-s20-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<!-- ═══ 方案 B · 一个额度项一行 ══════════════════════════════════════ -->
+<section class="screen s20b" data-screen="s20b" data-title="额度聚合 · B" id="s20b" data-od-id="screen-s20b">
+  <div class="content pad" data-od-id="s20b-content">
+
+    <div class="s20-entry s20-in od-d1" data-od-id="s20b-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s20-view="agg" data-od-id="s20b-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s20-view="single" data-od-id="s20b-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s20b-meta">6 个额度项 · 更新于 9:41</p>
+    </div>
+
+    <div class="s20-probe s20-in od-d1" data-od-id="demo-only:agg-probe-b">
+      <div class="s20-probe-chips" role="group" aria-label="聚合粒度预览">
+        <span class="s20-probe-lab">粒度</span>
+        <button class="chip" type="button" aria-pressed="false" data-s20-grain="a" data-od-id="demo-only:grain-a-b">A · 按 provider</button>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-grain="b" data-od-id="demo-only:grain-b-b">B · 按额度项</button>
+      </div>
+      <div class="s20-probe-chips" role="group" aria-label="状态覆盖预览">
+        <span class="s20-probe-lab">状态</span>
+        <button class="chip is-on" type="button" aria-pressed="true" data-s20-scen="normal" data-od-id="demo-only:scen-normal-b">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="missing" data-od-id="demo-only:scen-missing-b">未配置</button>
+        <button class="chip" type="button" aria-pressed="false" data-s20-scen="stale" data-od-id="demo-only:scen-stale-b">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s20b-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s20b-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度项</p>
+        <p class="st-desc">只有能算出剩余百分比的额度项参与排序，余额型不进聚合。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s20b-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s20-main" data-state-hide="loading empty edge">
+
+      <div class="card s20-hero s20-in od-d2" data-od-id="s20b-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s20-hero-body">
+          <span class="s20-hero-label">最先见底</span>
+          <span class="s20-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s20-hero-pct num">12%</span>
+      </div>
+
+      <div class="s20-sortbar">
+        <span class="group-label">按剩余由低到高</span>
+        <span class="s20-note">行首为位次</span>
+      </div>
+
+      <ol class="s20-list s20-in od-d3" data-od-id="s20b-list">
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 5 小时" data-od-id="s20b-row-1">
+            <span class="s20-rank" aria-hidden>1</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">5 小时</span></span>
+                <span class="s20-pct is-low num">12%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 12%"><span class="s20-bar-fill is-low" style="--p:12%"></span></span>
+              <span class="s20-sub">17:00 重置 · 该家最紧急</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="open-design · 月度" data-od-id="s20b-row-2" data-scen-row="open-design">
+            <span class="s20-rank" aria-hidden>2</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">open-design</span><span class="s20-win">月度</span></span>
+                <span class="s20-pct is-warn num" data-scen-part="on">34%</span>
+                <span class="s20-pct is-off num" data-scen-part="off" hidden>—</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 34%" data-scen-part="on"><span class="s20-bar-fill is-warn" style="--p:34%"></span></span>
+              <span class="s20-sub" data-scen-part="on">11/01 重置 · 单窗口</span>
+              <span class="s20-sub" data-scen-part="off" hidden>未配置 Key · 不参与排序</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 每周" data-od-id="s20b-row-3" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>3</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-win">每周</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct is-warn num">40%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s20-bar-fill is-warn" style="--p:40%"></span></span>
+              <span class="s20-sub" data-scen-part="on">周一 00:00 重置</span>
+              <span class="s20-sub" data-scen-part="off" hidden>周一 00:00 重置 · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 每周" data-od-id="s20b-row-4">
+            <span class="s20-rank" aria-hidden>4</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">每周</span></span>
+                <span class="s20-pct is-warn num">46%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 46%"><span class="s20-bar-fill is-warn" style="--p:46%"></span></span>
+              <span class="s20-sub">周一 00:00 重置 · 同家第 2 项</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="opencode-go · 每月" data-od-id="s20b-row-5">
+            <span class="s20-rank" aria-hidden>5</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">opencode-go</span><span class="s20-win">每月</span></span>
+                <span class="s20-pct num">71%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 71%"><span class="s20-bar-fill" style="--p:71%"></span></span>
+              <span class="s20-sub">11/01 重置 · 同家第 3 项</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <button class="s20-btn" type="button" data-s20-row="ollama · 会话" data-od-id="s20b-row-6" data-scen-row="ollama">
+            <span class="s20-rank" aria-hidden>6</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">ollama</span><span class="s20-win">会话</span><span class="s20-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s20-pct num">75%</span>
+              </span>
+              <span class="s20-bar" role="img" aria-label="剩余 75%" data-scen-bar><span class="s20-bar-fill" style="--p:75%"></span></span>
+              <span class="s20-sub" data-scen-part="on">每日 07:00 重置</span>
+              <span class="s20-sub" data-scen-part="off" hidden>每日 07:00 重置 · 与第 3 行同一份旧数据</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+        <li class="s20-row">
+          <span class="s20-btn is-off" data-od-id="s20b-row-7">
+            <span class="s20-rank" aria-hidden>—</span>
+            <span class="s20-main">
+              <span class="s20-head">
+                <span class="s20-name"><span class="s20-name-t">deepseek</span><span class="s20-tag is-off">不参与聚合</span></span>
+                <span class="s20-pct is-off num">—</span>
+              </span>
+              <span class="s20-sub">余额型 · 无总量，算不出百分比</span>
+            </span>
+          </span>
+        </li>
+      </ol>
+
+      <p class="s20-cap s20-in od-d3" data-od-id="s20b-spec">代价：同家的窗口被别的家隔开（1 → 4 → 5 都是 opencode-go），一屏看不全、要滚动；好处是每一项都有自己的位次与重置时间。</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s20b：与 s20a 同一套顶部入口、同一套状态覆盖；粒度 chips 点 A 回 s20a。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s20-list');
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s20-row'), function (li) {
+        var btn = li.querySelector('.s20-btn');
+        var rank = li.querySelector('.s20-rank');
+        if (!btn || !rank) return;
+        rank.classList.remove('is-top');
+        if (btn.classList.contains('is-off')) { rank.textContent = '—'; return; }
+        n += 1;
+        rank.textContent = String(n);
+        if (n === 1) rank.classList.add('is-top');
+      });
+    }
+
+    function scene(name) {
+      pick('data-s20-scen', name);
+      var od = sec.querySelector('[data-scen-row="open-design"]');
+      var miss = name === 'missing';
+      if (od) {
+        od.classList.toggle('is-off', miss);
+        Array.prototype.forEach.call(od.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== miss;
+        });
+      }
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      /* 旧数据用「降饱和的琥珀」而非满色琥珀：一眼看出这是过去的读数，不是刚查到的 */
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s20-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-low') ? 'is-low' : fill.classList.contains('is-warn') ? 'is-warn' : '';
+        fill.classList.remove('is-low', 'is-warn', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次首位徽标与进度条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var grain = t.closest('[data-s20-grain]');
+      if (grain) {
+        e.stopPropagation();
+        if (grain.getAttribute('data-s20-grain') === 'a' && window.App) App.go('s20a');
+        return;
+      }
+
+      var scen = t.closest('[data-s20-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s20-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s20-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s20-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s20-row]');
+      if (row) {
+        e.stopPropagation();
+        var off = row.classList.contains('is-off');
+        if (window.App) App.toast(off ? '这家未配置 Key · 去额度设置填写' : '打开 ' + row.getAttribute('data-s20-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s21" data-screen="s21" data-title="全额度聚合" id="s21" data-od-id="screen-s21">
+  <div class="content pad" data-od-id="s21-content">
+
+    <div class="s21-entry s21-in od-d1" data-od-id="s21-entry">
+      <div class="segmented" role="group" aria-label="额度视图">
+        <button type="button" aria-pressed="true" data-s21-view="agg" data-od-id="s21-view-agg">聚合</button>
+        <button type="button" aria-pressed="false" data-s21-view="single" data-od-id="s21-view-single">单家</button>
+      </div>
+      <p class="meta" data-od-id="s21-meta">4 家全部参与 · 更新于 9:41</p>
+    </div>
+
+    <!-- 演示件：只在评审时存在。一行三态，不动手也能看全三种状态 -->
+    <div class="s21-probe s21-in od-d1" data-od-id="demo-only:s21-probe">
+      <span class="s21-probe-lab">状态</span>
+      <div class="s21-probe-chips" role="group" aria-label="状态覆盖预览">
+        <button class="chip is-on" type="button" aria-pressed="true" data-s21-scen="normal" data-od-id="demo-only:s21-scen-normal">正常</button>
+        <button class="chip" type="button" aria-pressed="false" data-s21-scen="nodegrade" data-od-id="demo-only:s21-scen-nodegrade">算不出日均</button>
+        <button class="chip" type="button" aria-pressed="false" data-s21-scen="stale" data-od-id="demo-only:s21-scen-stale">查询失败</button>
+      </div>
+    </div>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s21-loading">
+      <div class="pad">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100 mt-2"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100 tall mt-3"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <div class="pad" data-state-when="empty edge" data-od-id="s21-edge">
+      <div class="card st-empty">
+        <span class="st-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v10.4c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M9 12.4h6"/></svg>
+        </span>
+        <p class="st-title">还没有可聚合的额度</p>
+        <p class="st-desc">配置任一 provider 的 Key 后，百分比限额与账户余额都会进这张榜。</p>
+        <button class="btn btn-ghost" type="button" data-goto="s18" data-od-id="s21-edge-cta">去配置 provider</button>
+      </div>
+    </div>
+
+    <div class="s21-main" data-state-hide="loading empty edge">
+
+      <div class="card s21-hero s21-in od-d2" data-od-id="s21-hero">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        </span>
+        <span class="s21-hero-body">
+          <span class="s21-hero-label">最先见底</span>
+          <span class="s21-hero-title">opencode-go · 5 小时</span>
+        </span>
+        <span class="s21-hero-v num">12%</span>
+      </div>
+
+      <div class="s21-sortbar">
+        <span class="group-label">按紧迫度分档，同档按剩余</span>
+        <span class="s21-note">行首为位次</span>
+      </div>
+
+      <ol class="s21-list s21-in od-d3" data-od-id="s21-list">
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="opencode-go · 5 小时" data-od-id="s21-row-1">
+            <span class="s21-rank" aria-hidden>1</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">opencode-go</span><span class="s21-tier is-t3" title="紧迫档 3：剩余低于 20%">最急</span></span>
+                <span class="s21-val is-tier3 num">12%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 12%"><span class="s21-bar-fill is-t3" style="--p:12%"></span></span>
+              <span class="s21-sub">5 小时 12% · 每周 46% · 每月 71%</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="deepseek · 余额" data-od-id="s21-row-2" data-scen-row="deepseek">
+            <span class="s21-rank" aria-hidden>2</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <!-- 余额型这一行没有「旧数据」态：本屏的失败样例给的是 ollama。
+                     标签若挂在这里，会被「算不出日均」复用同一条 data-scen-part 连带打开，还挤掉名称 -->
+                <span class="s21-name"><span class="s21-name-t">deepseek</span><span class="s21-tier is-t3">最急</span></span>
+                <span class="s21-val is-tier3 num">¥28.00</span>
+              </span>
+              <!-- 余额型条长有两种含义：能算日均=daysLeft/30，算不出=余额/(阈值×2)。副文案各自写明 -->
+              <span class="s21-bar" role="img" aria-label="余额约还能撑 6 天" data-scen-bar><span class="s21-bar-fill is-t3" style="--p:20%"></span></span>
+              <span class="s21-sub" data-scen-part="on">约还能撑 6 天 · 按近 7 天日均 ¥4.7</span>
+              <span class="s21-sub" data-scen-part="off" hidden>未配用量令牌 · 仅按低余额阈值 ¥50 判断</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="open-design · 月度" data-od-id="s21-row-3">
+            <span class="s21-rank" aria-hidden>3</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">open-design</span><span class="s21-tier is-t2">偏低</span></span>
+                <span class="s21-val is-tier2 num">34%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 34%"><span class="s21-bar-fill is-t2" style="--p:34%"></span></span>
+              <span class="s21-sub">月度 34% · 11/01 重置</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+
+        <li class="s21-row">
+          <button class="s21-btn" type="button" data-s21-row="ollama · 每周" data-od-id="s21-row-4" data-scen-row="ollama">
+            <span class="s21-rank" aria-hidden>4</span>
+            <span class="s21-main">
+              <span class="s21-head">
+                <span class="s21-name"><span class="s21-name-t">ollama</span><span class="s21-tier is-t2">偏低</span><span class="s21-tag" data-scen-part="off" hidden>旧数据</span></span>
+                <span class="s21-val is-tier2 num">40%</span>
+              </span>
+              <span class="s21-bar" role="img" aria-label="剩余 40%" data-scen-bar><span class="s21-bar-fill is-t2" style="--p:40%"></span></span>
+              <span class="s21-sub" data-scen-part="on">每周 40% · 会话 75%</span>
+              <span class="s21-sub" data-scen-part="off" hidden>每周 40% · 会话 75% · 停在 22:14</span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+        </li>
+      </ol>
+
+      <p class="s21-cap s21-in od-d3" data-od-id="s21-spec">百分比按剩余；余额按「还能撑几天」＝余额 ÷ 近 7 天日均，两者不同量纲、只分档不合并换算</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s21：状态覆盖只改「行内依据说明 + 条色」，不改排序规则本身——
+     算不出日均时 deepseek 仍按低余额阈值判为最急档，位次不动；
+     换掉依据文案是为了不让人以为那个「6 天」是算出来的。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var list = sec.querySelector('.s21-list');
+    if (!list) return;
+
+    function pick(groupAttr, value) {
+      var all = sec.querySelectorAll('[' + groupAttr + ']');
+      Array.prototype.forEach.call(all, function (b) {
+        var on = b.getAttribute(groupAttr) === value;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    /* 位次跟着可见顺序重算：档位徽标不动，只重编序号 */
+    function renumber() {
+      var n = 0;
+      Array.prototype.forEach.call(list.querySelectorAll('.s21-row'), function (li) {
+        var btn = li.querySelector('.s21-btn');
+        var rank = li.querySelector('.s21-rank');
+        if (!btn || !rank) return;
+        n += 1;
+        rank.textContent = String(n);
+        rank.classList.toggle('is-top', n === 1);
+      });
+    }
+
+    function scene(name) {
+      pick('data-s21-scen', name);
+
+      /* deepseek：算不出日均 —— 只换依据文案，档位/位次/条长都保持（阈值 ¥50 仍判最急） */
+      var ds = sec.querySelector('[data-scen-row="deepseek"]');
+      if (ds) {
+        var noDeg = name === 'nodegrade';
+        Array.prototype.forEach.call(ds.querySelectorAll('[data-scen-part]'), function (p) {
+          p.hidden = (p.getAttribute('data-scen-part') === 'off') !== noDeg;
+        });
+      }
+
+      /* ollama：查询失败 —— 保留旧数据照常排序，条色转降饱和琥珀 */
+      var stale = name === 'stale';
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-row="ollama"] [data-scen-part]'), function (p) {
+        p.hidden = (p.getAttribute('data-scen-part') === 'off') !== stale;
+      });
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-scen-bar]'), function (bar) {
+        var fill = bar.querySelector('.s21-bar-fill');
+        if (!fill) return;
+        var base = fill.classList.contains('is-t3') ? 'is-t3'
+          : fill.classList.contains('is-t2') ? 'is-t2' : '';
+        fill.classList.remove('is-t3', 'is-t2', 'is-stale');
+        /* 中性态没有类名：classList.add('') 会抛 DOMException，整段状态切换就此中断 */
+        var next = stale ? 'is-stale' : base;
+        if (next) fill.classList.add(next);
+      });
+
+      renumber();
+    }
+
+    /* 进屏先按「正常」态归一：位次徽标与条色都由这一条统一算，
+       避免 HTML 里再抄一份初始态（两处口径漂移是这类列表最常见的问题）。 */
+    scene('normal');
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var scen = t.closest('[data-s21-scen]');
+      if (scen) {
+        e.stopPropagation();
+        scene(scen.getAttribute('data-s21-scen'));
+        return;
+      }
+
+      var view = t.closest('[data-s21-view]');
+      if (view) {
+        e.stopPropagation();
+        if (view.getAttribute('data-s21-view') === 'single' && window.App) {
+          App.toast('已切回单家视图');
+          App.go('s18');
+        } else if (window.App) {
+          App.toast('已在聚合视图');
+        }
+        return;
+      }
+
+      var row = t.closest('[data-s21-row]');
+      if (row) {
+        e.stopPropagation();
+        if (window.App) App.toast('打开 ' + row.getAttribute('data-s21-row'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
 
 
         </div>
@@ -8309,6 +10236,10 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <button class="tab" type="button" role="tab" data-tab="finance" aria-selected="false" data-od-id="tab-finance">
             <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><path d="M16.5 15h1.5"/></svg></span>
             <span>记账</span>
+          </button>
+          <button class="tab" type="button" role="tab" data-tab="quota" aria-selected="false" data-od-id="tab-quota">
+            <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M5.4 11.8v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9v-5.2"/></svg></span>
+            <span>额度</span>
           </button>
           <button class="tab" type="button" role="tab" data-tab="settings" aria-selected="false" data-od-id="tab-settings">
             <span class="tab-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
@@ -8380,6 +10311,11 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     <div class="dev-group dev-actions">
       <button class="btn btn-ghost" type="button" id="devAutoSwitch" data-od-id="dev-autoswitch">浮窗演示：切到记账页（浮窗不关闭）</button>
     </div>
+    <div class="dev-group dev-actions">
+      <button class="btn btn-ghost" type="button" id="devS20A" data-od-id="dev-s20a">额度聚合 · 方案A</button>
+      <button class="btn btn-ghost" type="button" id="devS20B" data-od-id="dev-s20b">额度聚合 · 方案B</button>
+      <button class="btn btn-ghost" type="button" id="devS21" data-od-id="dev-s21">全额度聚合</button>
+    </div>
     <p class="dev-hint">接口：App.go / App.back / App.tab / App.toast / App.haptic / App.state / App.theme / App.chart / App.initCategoryPickers / App.openAutoBook / App.autoBookCommitted</p>
   </div>
   <button class="devbar-toggle" type="button" id="devToggle" aria-expanded="false" aria-controls="devPanel" data-od-id="dev-toggle">
@@ -8397,6 +10333,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     { id: 'live', screen: 's02' },
     { id: 'ad', screen: 's03' },
     { id: 'finance', screen: 's04' },
+    { id: 'quota', screen: 's18' },
     { id: 'settings', screen: 's09' }
   ];
   var TAB_OF_SCREEN = {};
@@ -8934,16 +10871,29 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     syncDev();
   }
 
+  /* 转场退场计时器：同一屏在 300ms 内被重新激活（例如齿轮进设置后马上返回）时，
+     旧计时器会把刚恢复的 is-active 再撤掉，导致所有屏 display:none。激活前先清计时器，
+     计时器回调里也只在「已不是当前屏」时撤 is-active。 */
+  function clearLeave(el) {
+    if (el && el._odLeaveTimer) {
+      window.clearTimeout(el._odLeaveTimer);
+      el._odLeaveTimer = null;
+    }
+  }
+
   function activate(next, prev) {
     if (!next) return;
-    if (prev === next) { syncChrome(next); return; }
+    if (prev === next) { clearLeave(next); syncChrome(next); return; }
     var fast = reduced();
+    clearLeave(next);
     if (prev) {
+      clearLeave(prev);
       prev.classList.remove('is-entering');
       prev.classList.add('is-leaving');
     }
     next.classList.add('is-entering');
     next.classList.add('is-active');
+    next.classList.remove('is-leaving');
     void next.offsetWidth;
     next.classList.remove('is-entering');
     current = next;
@@ -8951,8 +10901,10 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     syncAutoBook(next);
     if (prev) {
       var old = prev;
-      window.setTimeout(function () {
-        old.classList.remove('is-active', 'is-leaving');
+      old._odLeaveTimer = window.setTimeout(function () {
+        old._odLeaveTimer = null;
+        if (old !== current) old.classList.remove('is-active');
+        old.classList.remove('is-leaving');
       }, fast ? 0 : 300);
     }
   }
@@ -9104,7 +11056,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       var mx = maxOf(v);
       var bw = Math.max(4, (w - padL - padR - gap * (v.length + 1)) / v.length);
       var inner = '';
-      [0, 0.5, 1].forEach(function (t) {
+      [0, 1].forEach(function (t) {
         var y = fx((h - padB) - t * (h - padB - padT));
         inner += '<line class="chart-grid" x1="' + padL + '" y1="' + y + '" x2="' + (w - padR) + '" y2="' + y + '"/>';
         inner += '<text x="' + (padL - 6) + '" y="' + (parseFloat(y) + 3.5) + '" text-anchor="end">' + Math.round(t * mx) + '</text>';
@@ -9194,7 +11146,9 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             values: el.getAttribute('data-chart-values') || '',
             labels: (el.getAttribute('data-chart-labels') || '').split(',').filter(function (s) { return s !== ''; }),
             value: el.getAttribute('data-chart-value'),
-            label: el.getAttribute('data-chart-label') || ''
+            label: el.getAttribute('data-chart-label') || '',
+            vlabels: el.getAttribute('data-chart-vlabels') !== 'false',
+            peak: el.getAttribute('data-chart-peak') !== 'false'
           });
           if (html) { el.innerHTML = html; el.setAttribute('data-chart-done', '1'); }
         } catch (err) {
@@ -9351,11 +11305,20 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       if (!abOpenNow()) openAutoBook();   /* 演示入口：没有浮窗就先开，再模拟「切到记账页」 */
       abSwitch();
     });
+    /* s20 不在 TABS 里（额度聚合是评审中的两张对比稿，不是已定稿的 Tab），
+       外壳没有屏导航入口，评审时必须靠 hash 或这两个按钮直达 */
+    var devS20A = document.getElementById('devS20A');
+    if (devS20A) devS20A.addEventListener('click', function () { go('s20a'); });
+    var devS20B = document.getElementById('devS20B');
+    if (devS20B) devS20B.addEventListener('click', function () { go('s20b'); });
+    /* s21 同理：全额度聚合是评审中的新方案，同样不在 TABS 里 */
+    var devS21 = document.getElementById('devS21');
+    if (devS21) devS21.addEventListener('click', function () { go('s21'); });
 
     document.addEventListener('keydown', function (e) {
       /* Esc 也关不掉浮窗：等价于点遮罩（轻震 + 每笔一次 Toast） */
       if (e.key === 'Escape' && abOpenNow()) { abScrimTap(); e.preventDefault(); return; }
-      if (e.altKey && e.key >= '1' && e.key <= '5') {
+      if (e.altKey && e.key >= '1' && e.key <= '6') {
         var t = TABS[Number(e.key) - 1];
         if (t) { tab(t.id); e.preventDefault(); }
       }

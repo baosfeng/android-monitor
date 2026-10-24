@@ -1,0 +1,210 @@
+<!-- ============================================================
+     s19 · 额度设置（push 屏）
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     入口：设置页「额度监控 › Provider 与 API Key」/ 额度页右上角齿轮。
+     push 屏：appbar 由外壳按 data-title 生成，不要放进 TABS。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s19">
+/* ── s19 额度设置 ─────────────────────────────────────────────── */
+.screen.s19{font-size:max(var(--text-sm),14px)}
+.screen.s19 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s19 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.st-desc,.field){font-size:max(var(--text-sm),14px)}
+.screen.s19 :is(.btn,.row-title){font-size:max(var(--text-base),14px)}
+.screen.s19 [role="switch"]:focus-visible,.screen.s19 .chip:focus-visible,
+.screen.s19 .btn:focus-visible,.screen.s19 .row:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s19-intro{display:block;margin:0 0 var(--space-3)}
+.s19-intro .meta{line-height:1.45}
+.s19-group + .s19-group{margin-top:var(--space-4)}
+.s19-chips{display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-3) 0}
+.s19-actions{padding:0 0 var(--space-3)}
+.s19-actions .btn{width:100%}
+.s19-note{display:block;padding:0 0 var(--space-3);line-height:1.45}
+.s19-provider .row-sub{white-space:normal}
+.s19-provider .badge{flex:0 0 auto;white-space:nowrap}
+.s19-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+.s19-badge-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+.s19-badge-off{color:var(--muted)}
+.s19-soon{opacity:.85}
+.s19-threshold{font-size:var(--text-sm);color:var(--fg-2);white-space:nowrap}
+.s19-row-alert .row-sub{white-space:normal}
+.s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3);white-space:normal;line-height:1.45}
+.s19-foot{margin-top:var(--space-4);line-height:1.45}
+.s19-in{opacity:0}
+.s19.is-active .s19-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s19.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s19.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s19.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.s19.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+.device-screen:has(#odSplash:not([hidden])) #s19 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen s19" data-screen="s19" data-title="额度设置" id="s19" data-od-id="screen-s19">
+  <div class="content pad" data-od-id="s19-content">
+
+    <p class="s19-intro s19-in od-d1" data-od-min-fs>
+      <span class="meta">凭据只保存在本机 · 设置随时可改</span>
+    </p>
+
+    <div class="stack" data-state-hide="loading empty error">
+      <div class="s19-group s19-in od-d1" data-od-id="s19-providers">
+        <p class="group-label">Provider</p>
+        <div class="group">
+          <button class="row s19-provider" type="button" data-s19-provider="Ollama" data-connected="true" data-od-id="s19-provider-ollama">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.8v10.4"/><path d="M8.8 9.6h6.4"/><path d="M8.8 13.2h6.4"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">Ollama</span>
+              <span class="row-sub">已连接 · 10 次/分钟限流</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已连接</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <button class="row s19-provider" type="button" data-s19-provider="DeepSeek" data-connected="false" data-od-id="s19-provider-deepseek">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 3.4 20.6 8v8L12 20.6 3.4 16V8z"/><path d="M9.2 12h5.6"/><path d="M12 9.2v5.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">DeepSeek</span>
+              <span class="row-sub">未配置 · 余额 + 用量（需平台登录令牌）</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-warn" data-od-min-fs>未配置</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+          <div class="row s19-soon" data-od-id="s19-provider-opencode">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><rect x="3.4" y="6" width="17.2" height="13" rx="3"/><path d="M3.4 10.4h17.2"/><path d="M8 15h3"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">opencode-go</span>
+              <span class="row-sub">有公开接口 · 下版接入</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>下次接入</span></span>
+          </div>
+          <div class="row s19-soon" data-od-id="s19-provider-opendesign">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">opendesign</span>
+              <span class="row-sub">无公开接口 · 手动录入</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>手动</span></span>
+          </div>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>API Key 与平台令牌都加密后只存本机，不写日志、不导出；卸载 App 即随之删除。</p>
+      </div>
+
+      <div class="s19-group s19-in od-d2" data-od-id="s19-alerts">
+        <p class="group-label">预警</p>
+        <div class="group">
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">额度预警</span>
+              <span class="row-sub">剩余 5% / 4% / 3% / 2% / 1% 各提醒一次，周期重置后重新计数</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度预警" data-s19-switch data-od-id="s19-alert-switch"></button>
+          </div>
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M4 17.5h16"/><path d="M6.5 17.5V11a5.5 5.5 0 1 1 11 0v6.5"/><path d="M12 5.5V3.6"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">低余额提醒</span>
+              <span class="row-sub">仅余额型 provider · 低于阈值提醒一次，充值回升后重新计数</span>
+            </span>
+            <span class="row-tail"><span class="num s19-threshold">¥50.00</span></span>
+          </div>
+          <div class="row s19-row-alert">
+            <span class="row-icon" aria-hidden>
+              <svg viewBox="0 0 24 24"><rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/><path d="M3.4 10.2h17.2"/><path d="M7 15h3"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">通知权限</span>
+              <span class="row-sub">点通知可直接进入额度页</span>
+            </span>
+            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已允许</span></span>
+          </div>
+          <div class="s19-actions">
+            <button class="btn btn-ghost" type="button" data-s19-test data-od-id="s19-test">发送测试通知</button>
+          </div>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>一次刷新命中多档只合并成一条通知；总开关关闭时仍刷新额度，但不评估预警。</p>
+      </div>
+
+      <div class="s19-group s19-in od-d3" data-od-id="s19-refresh">
+        <p class="group-label">刷新</p>
+        <div class="group">
+          <div class="s19-chips" role="group" aria-label="后台刷新频率">
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="0" data-od-id="s19-refresh-off">关闭</button>
+            <button class="chip is-on" type="button" aria-pressed="true" data-s19-refresh="1" data-od-id="s19-refresh-1h">每小时</button>
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="3" data-od-id="s19-refresh-3h">每 3 小时</button>
+            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="6" data-od-id="s19-refresh-6h">每 6 小时</button>
+          </div>
+          <p class="row-sub s19-refresh-note" data-od-id="s19-foreground-note">前台自动刷新 60 秒一次（Ollama 限流 10 次/分钟）；息屏与锁屏不触发后台请求，解锁后不补跑。</p>
+        </div>
+        <p class="fine mt-2" data-od-min-fs>关闭后台刷新后，只在打开 App 时刷新与评估额度。</p>
+      </div>
+
+      <p class="fine s19-foot s19-in od-d4" data-od-min-fs>额度数据只用于本机展示与预警通知，不上传。</p>
+    </div>
+
+  </div>
+
+  <script>
+  /* s19：开关 / 后台刷新 chip / 测试通知 / provider 行反馈。
+     provider 行与刷新 chip 都是真实 button；开关用 role=switch + aria-checked。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var sw = t.closest('[data-s19-switch]');
+      if (sw) {
+        var on = sw.getAttribute('aria-checked') === 'true';
+        sw.setAttribute('aria-checked', on ? 'false' : 'true');
+        if (window.App) App.toast(on ? '额度预警已关闭' : '额度预警已开启 · 剩余 5% 起逐档提醒');
+        return;
+      }
+
+      var chip = t.closest('[data-s19-refresh]');
+      if (chip) {
+        var all = sec.querySelectorAll('[data-s19-refresh]');
+        Array.prototype.forEach.call(all, function (b) {
+          b.classList.remove('is-on');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        chip.classList.add('is-on');
+        chip.setAttribute('aria-pressed', 'true');
+        var label = (chip.textContent || '').replace(/\s+/g, '');
+        if (window.App) App.toast('后台刷新：' + label);
+        return;
+      }
+
+      if (t.closest('[data-s19-test]')) {
+        if (window.App) App.toast('测试通知已发送 · 额度预警渠道');
+        return;
+      }
+
+      var prov = t.closest('[data-s19-provider]');
+      if (prov) {
+        var name = prov.getAttribute('data-s19-provider');
+        var connected = prov.getAttribute('data-connected') === 'true';
+        if (window.App) App.toast(name + (connected ? ' · 已连接，可更新 Key' : ' · 未配置，去填写 API Key'));
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->
