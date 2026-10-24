@@ -10,7 +10,13 @@
 #   scripts/debug-cli.sh reset [TYPE]           # 删「当日」某类型（默认 PAGE）
 #   scripts/debug-cli.sh reset all              # 清空全表（所有类型、所有日期）
 #   scripts/debug-cli.sh open <trip|settings|live|overview>
+#   scripts/debug-cli.sh db tables              # 表名 + 行数 + user_version（只读）
+#   scripts/debug-cli.sh db schema <表名>       # 列定义（只读）
+#   scripts/debug-cli.sh db query "<sql>" [limit]   # 单条 select/with，默认 50 行、上限 200
 #   scripts/debug-cli.sh heartbeat              # 转发一次真实心跳
+#
+# db 系列替代 `adb pull` 整个库：USB 易断、WAL 库拷出来常是坏页。只读闸门在端上做
+# （单语句 + select/with 开头 + 拒绝写关键字），被拒时 ok=false 且 reason=bad_args。
 #
 # 设备：ANDROID_SERIAL=xxx 指定（多设备时必须给）；adb 路径 ADB=... 可覆盖。
 # 输出：原样打印本次调用的 logcat 行（tag=DebugCmd）；退出码 = 命令的 ok
@@ -125,6 +131,36 @@ case "$cmd" in
       exit 2
     fi
     send --es cmd open --es screen "$1"
+    ;;
+  db)
+    op="${1:-}"
+    case "$op" in
+      tables)
+        send --es cmd db --es op tables
+        ;;
+      schema)
+        if [ -z "${2:-}" ]; then
+          echo "debug-cli: db schema 需要表名（db schema records）" >&2
+          exit 2
+        fi
+        send --es cmd db --es op schema --es table "$2"
+        ;;
+      query)
+        if [ -z "${2:-}" ]; then
+          echo "debug-cli: db query 需要 SQL（db query \"select ...\" [limit]）" >&2
+          exit 2
+        fi
+        if [ -n "${3:-}" ]; then
+          send --es cmd db --es op query --es sql "$2" --ei limit "$3"
+        else
+          send --es cmd db --es op query --es sql "$2"
+        fi
+        ;;
+      *)
+        echo "debug-cli: db 需要 tables|schema|query（db tables / db schema <表> / db query \"<sql>\" [limit]）" >&2
+        exit 2
+        ;;
+    esac
     ;;
   *)
     echo "debug-cli: 未知子命令 $cmd" >&2
