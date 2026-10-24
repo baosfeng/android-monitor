@@ -134,34 +134,6 @@ class AirplaneHandler : RecordHandler {
     override fun needsDuration(action: String) = false
 }
 
-// PAGE 页面轨迹（指纹档）：label 只拼应用名 + 指纹短串，detail 里没有任何页面文本
-class PageHandler : RecordHandler {
-    override val type = RecordType.PAGE
-    override fun validate(action: String, detail: Map<String, String>?): Boolean =
-        action in setOf("ENTER", "CHANGED")
-    override fun createLabel(action: String, detail: Map<String, String>?): String {
-        val app = detail?.get("app_name") ?: detail?.get("package_name") ?: ""
-        // 页面标题优先（仅本地采集，缺了就沿用指纹短码，绝不编造标题）。
-        // 标题等于应用名时不拼「抖音 · 抖音」：自绘界面（如抖音）只给得出窗口标题，
-        // 这时的标题没有页面含义，直接显示应用名即可，比页面指纹更好读。
-        val title = detail?.get("page_title")?.takeIf { it.isNotBlank() }
-        if (title != null) {
-            if (app.isEmpty()) return title
-            return if (title == app) app else "$app · $title"
-        }
-        // 没有页面标题时只显示「应用 · 页面」：页面指纹对用户没有信息量（#cb64 读不出内容），
-        // 完整指纹仍在 detail.page_key 里，去重与聚合完全不受影响。
-        // 页面标题由无障碍窗口事件 / 可见文本提供，取不到就不编造。
-        return if (app.isEmpty()) "页面" else "$app · 页面"
-    }
-    override fun needsDuration(action: String) = false
-
-    companion object {
-        /** label 里展示的指纹短码长度（4 位 hex，碰撞率 1/65536，可接受）。 */
-        const val SHORT_KEY_LENGTH = 4
-    }
-}
-
 class PhoneStateHandler : RecordHandler {
     override val type = RecordType.PHONE_STATE
     override fun validate(action: String, detail: Map<String, String>?): Boolean =

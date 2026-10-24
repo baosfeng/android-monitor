@@ -91,7 +91,6 @@ internal fun rememberSettingsScreenRuntime(
     val adSkipOn = enabledFeatures[Feature.AD_SKIP] == true
     val financeOn = enabledFeatures[Feature.FINANCE] == true
     val transportOn = enabledFeatures[Feature.TRANSPORT] == true
-    val pageTraceOn = enabledFeatures[Feature.PAGE_TRACE] == true
     val locationOn = enabledFeatures[Feature.LOCATION] == true
     val quotaOn = enabledFeatures[Feature.QUOTA] == true
     val quotaSettings = remember { QuotaSettings(context) }
@@ -214,7 +213,6 @@ internal fun rememberSettingsScreenRuntime(
         adSkipOn = adSkipOn,
         financeOn = financeOn,
         transportOn = transportOn,
-        pageTraceOn = pageTraceOn,
         locationOn = locationOn,
         quotaOn = quotaOn,
         quotaSettings = quotaSettings,

@@ -43,7 +43,7 @@ sealed interface DebugCommand {
 
     /**
      * 删除记录。**`type` 与 `all` 必须二选一**（两个都给也拒绝，避免「以为删了全部其实只删了一类」）：
-     * - `--es type PAGE`：只删**当天**该类型；
+     * - `--es type LOCATION`：只删**当天**该类型；
      * - `--ez all true`：删**全部类型、全部日期**（全表），此时不接受 `type`。
      *
      * 历史事故：`clear --ez all true` 没带 type 时命令被拒，但 `am broadcast` 照样打印
@@ -315,7 +315,7 @@ object DebugCommands {
             return null
         }
         if (raw !is String) {
-            throw ArgError("参数 type 必须是字符串（--es type PAGE），实际 ${raw.javaClass.simpleName}")
+            throw ArgError("参数 type 必须是字符串（--es type LOCATION），实际 ${raw.javaClass.simpleName}")
         }
         val text = raw.trim().uppercase()
         if (text.isEmpty()) {

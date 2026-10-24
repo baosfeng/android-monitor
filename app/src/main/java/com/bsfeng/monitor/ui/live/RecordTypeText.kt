@@ -5,7 +5,6 @@ package com.bsfeng.monitor.ui.live
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Build
@@ -30,7 +29,6 @@ fun recordTypeIcon(type: RecordType): ImageVector = when (type) {
     RecordType.AIRPLANE -> Icons.Outlined.AirplanemodeActive
     RecordType.PHONE_STATE -> Icons.Outlined.Phone
     RecordType.LOCATION -> Icons.Outlined.LocationOn
-    RecordType.PAGE -> Icons.Outlined.Article
 }
 
 fun recordTypeLabel(type: RecordType): String = when (type) {
@@ -45,12 +43,11 @@ fun recordTypeLabel(type: RecordType): String = when (type) {
     RecordType.AIRPLANE -> "飞行模式"
     RecordType.PHONE_STATE -> "通话"
     RecordType.LOCATION -> "定位"
-    RecordType.PAGE -> "页面"
 }
 
 /** 采集来源短名（对齐原型行副标题的「· 无障碍服务 / 广播接收」）。 */
 fun recordSourceLabel(type: RecordType): String = when (type) {
-    RecordType.APP_USAGE, RecordType.PAGE -> "无障碍服务"
+    RecordType.APP_USAGE -> "无障碍服务"
     RecordType.AUDIO -> "音频焦点"
     RecordType.LOCATION -> "位置服务"
     else -> "广播接收"

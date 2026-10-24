@@ -18,7 +18,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     companion object {
         private const val DATABASE_NAME = "monitor.db"
         /** 公开给测试做「版本无关」断言（与 FinanceDatabaseHelper.DATABASE_VERSION 同口径）。 */
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 6
         private const val TABLE_RECORDS = "records"
 
         /** 局域网互传任务历史表（v4 新增）。 */
@@ -107,6 +107,32 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
         if (oldVersion < 5) {
             // v5：把 R8 混淆产生的 records.type 重写回规范名（可重跑，失败不吞）
             migrateRecordTypes(db)
+        }
+        if (oldVersion < 6) {
+            // v6：页面轨迹功能下线，清掉历史 PAGE 记录（其它类型原样保留）
+            purgePageRecords(db)
+        }
+    }
+
+    /**
+     * v6 迁移：删除历史页面轨迹记录（`type = 'PAGE'`）。
+     *
+     * 页面轨迹功能已整体下线：留着历史行会让实时页继续出现「页面」事件、筛选里出现空分类。
+     * - **可重跑**：第二次执行删除 0 行，无副作用；
+     * - **只删 PAGE**：其他类型一行不动；
+     * - **失败不吞**：记 E 日志后原样抛出，由 SQLiteOpenHelper 回滚事务、下次打开重试。
+     */
+    private fun purgePageRecords(db: SQLiteDatabase) {
+        if (!hasColumn(db, TABLE_RECORDS, "type")) {
+            Log.w("DatabaseHelper", "v6 迁移跳过：$TABLE_RECORDS 没有 type 列，无需删除")
+            return
+        }
+        try {
+            val deleted = db.delete(TABLE_RECORDS, "type = ?", arrayOf("PAGE"))
+            Log.i("DatabaseHelper", "v6 迁移：删除 PAGE 记录 $deleted 行")
+        } catch (e: Exception) {
+            Log.e("DatabaseHelper", "v6 迁移删除 PAGE 记录失败（整事务回滚）", e)
+            throw e
         }
     }
 

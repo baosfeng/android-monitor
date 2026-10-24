@@ -20,7 +20,7 @@ class RecordTypeTest {
     private val allTypes = listOf(
         RecordType.SCREEN, RecordType.CHARGING, RecordType.APP_USAGE, RecordType.WIFI,
         RecordType.AUDIO, RecordType.BATTERY, RecordType.PACKAGE, RecordType.POWER_SAVE,
-        RecordType.AIRPLANE, RecordType.PHONE_STATE, RecordType.LOCATION, RecordType.PAGE,
+        RecordType.AIRPLANE, RecordType.PHONE_STATE, RecordType.LOCATION,
     )
 
     // ─────────────────────────── 正常路径：全类型往返 ───────────────────────────
@@ -40,7 +40,7 @@ class RecordTypeTest {
         assertEquals(
             listOf(
                 "SCREEN", "CHARGING", "APP_USAGE", "WIFI", "AUDIO", "BATTERY",
-                "PACKAGE", "POWER_SAVE", "AIRPLANE", "PHONE_STATE", "LOCATION", "PAGE",
+                "PACKAGE", "POWER_SAVE", "AIRPLANE", "PHONE_STATE", "LOCATION",
             ),
             RecordType.CANONICAL_NAMES,
         )
@@ -56,7 +56,7 @@ class RecordTypeTest {
     @Test
     fun `fromString 忽略前后空白与大小写`() {
         assertEquals(RecordType.SCREEN, RecordType.fromString("  screen "))
-        assertEquals(RecordType.PAGE, RecordType.fromString("Page"))
+        assertEquals(RecordType.LOCATION, RecordType.fromString("Location"))
         assertEquals(RecordType.APP_USAGE, RecordType.fromString("app_usage"))
     }
 
@@ -116,12 +116,13 @@ class RecordTypeTest {
         assertEquals(RecordType.BATTERY, RecordType.inferFromAction("LOW"))
         assertEquals(RecordType.PHONE_STATE, RecordType.inferFromAction("RINGING"))
         assertEquals(RecordType.LOCATION, RecordType.inferFromAction("COORDINATE"))
-        assertEquals(RecordType.PAGE, RecordType.inferFromAction("ENTER"))
+        // 页面轨迹下线后 ENTER 不再是合法 action：反推必须返回 null，不能凭空造出类型
+        assertNull(RecordType.inferFromAction("ENTER"))
     }
 
     @Test
     fun `歧义与未知 action 不猜（OFF、ON、CHANGED、未知）`() {
-        // OFF 同时属于 SCREEN / POWER_SAVE / AIRPLANE；CHANGED 同时属于 BATTERY / PAGE
+        // OFF 同时属于 SCREEN / POWER_SAVE / AIRPLANE；CHANGED 只能属于 BATTERY
         assertNull(RecordType.inferFromAction("OFF"))
         assertNull(RecordType.inferFromAction("ON"))
         assertNull(RecordType.inferFromAction("CHANGED"))
