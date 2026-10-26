@@ -277,6 +277,12 @@ dependencies {
     // Domain 模块
     implementation(project(":domain"))
 
+    // 桌面小组件（Glance 1.2.0）：6 个 App Widget 全部由 Glance 生成 RemoteViews，
+    // 与现有 Compose 同一心智（@Composable + 响应式尺寸 + 深浅色），不必回到 XML 布局。
+    // 代价是 AAR 会带入 work-runtime / datastore（Glance 的 update 走 WorkManager session），
+    // 选型与实测依赖树见 docs/小组件/调研.md；放在 BOM 之前只是阅读顺序，platform 约束对整个模块生效。
+    implementation("androidx.glance:glance-appwidget:1.2.0")
+
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)

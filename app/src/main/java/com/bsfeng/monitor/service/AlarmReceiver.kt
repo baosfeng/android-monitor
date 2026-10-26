@@ -14,6 +14,7 @@ import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,9 @@ class AlarmReceiver : BroadcastReceiver() {
         QuotaScheduler.ensureScheduled(context)
 
         HealthChecker.checkAndRestore(context)
+        // 桌面小组件跟着这条 60 秒心跳刷新：不新增唤醒源与权限，30 秒节流在 WidgetRefresher 内，
+        // 没添加到桌面的组件会被跳过（连库都不读）。放在 action 校验之后，外部伪造广播进不来。
+        WidgetRefresher.refreshAll(context)
 
         // 检查 AccessibilityService 是否存活，如果不在且 App 不在前台才尝试唤醒进程。
         // 注意：不再无条件 startActivity + CLEAR_TOP —— 那会每分钟把正在使用的页面

@@ -12,7 +12,10 @@ import com.bsfeng.monitor.autobook.AutoBookConfig
 import com.bsfeng.monitor.backup.BackupManager
 import com.bsfeng.monitor.backup.HealOutcome
 import com.bsfeng.monitor.core.di.ServiceContainer
+import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.quota.QuotaScheduler
+import com.bsfeng.monitor.widget.WidgetRefresher
+import kotlinx.coroutines.flow.drop
 import com.bsfeng.monitor.record.RecordReceiver
 import com.bsfeng.monitor.service.scheduleAlarmCheck
 import com.bsfeng.monitor.skip.GkdSubscription
@@ -50,6 +53,7 @@ class MonitorApp : Application() {
         // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
         scheduleAlarmCheck(this)
         QuotaScheduler.reschedule(this)
+        registerFinanceWidgetRefresh()
         checkSubscriptionUpdate()
     }
 
@@ -67,6 +71,25 @@ class MonitorApp : Application() {
                 HealOutcome.NothingToDo -> Unit
             }
         }.onFailure { Log.w(TAG, "还原自愈检查失败", it) }
+    }
+
+    /**
+     * 记账写操作后立即刷桌面记账组件。
+     *
+     * 进程内信号不持久化、冷启动从 0 开始，所以它只是「更快」的通道；
+     * 进程被杀后的恢复仍靠 AlarmReceiver 的 60 秒心跳（refreshAll）兜底。
+     * 订阅挂在 appScope：AppWidgetProvider 是短命对象，不能在里面长期 collect。
+     */
+    private fun registerFinanceWidgetRefresh() {
+        appScope.launch {
+            try {
+                FinanceManager.getInstance(this@MonitorApp).changeVersion.drop(1).collect {
+                    WidgetRefresher.refreshFinance(this@MonitorApp)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "订阅记账变更信号失败（组件改由心跳兜底刷新）", e)
+            }
+        }
     }
 
     /** 启动时后台检查一次规则订阅更新（未订阅或未到周期时立即返回，不发请求） */

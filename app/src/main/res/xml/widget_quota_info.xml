@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    额度见底：桌面占格以 targetCell* 为请求值、以 minWidth/minHeight 为下限。
+    initialLayout 用 Glance 自带的 loading 布局：真布局由 Glance 在首次刷新时写入 RemoteViews，
+    这里只是组件刚加到桌面、Glance 还没跑完那一刻的占位。
+    minResize 给到 1×1（40dp，= 1×70-30）：用户缩到最小也允许，具体放几行内容由 WidgetLayoutPolicy 判档。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_quota_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minHeight="110dp"
+    android:minResizeHeight="40dp"
+    android:minResizeWidth="40dp"
+    android:minWidth="250dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="4"
+    android:widgetCategory="home_screen" />

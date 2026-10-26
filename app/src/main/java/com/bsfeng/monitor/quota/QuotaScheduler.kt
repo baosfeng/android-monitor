@@ -8,6 +8,7 @@ import android.content.Intent
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
+import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -94,6 +95,8 @@ class QuotaRefreshReceiver : BroadcastReceiver() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope.launch {
             runCatching { app.container.quotaRepository.refreshAll() }
+            // 刷新完顺手重画额度组件：桌面上的百分比要跟这次拉到的快照一致（30 秒节流）
+            WidgetRefresher.refreshAll(context)
             pending.finish()
         }
     }

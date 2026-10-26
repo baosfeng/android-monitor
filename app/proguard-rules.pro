@@ -31,3 +31,24 @@
 # ========== Kotlin 协程（防止挂起函数被裁剪） ==========
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+
+# ========== WorkManager + Room（Glance 的小组件更新调度依赖） ==========
+# WorkDatabase_Impl 由 Room 通过反射按类名创建，R8 看不到这条引用；
+# 缺了 keep，App 会在 Application 启动阶段（InitializationProvider）直接崩：
+#   Failed to create an instance of androidx.work.impl.WorkDatabase
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keepclassmembers class * extends androidx.room.RoomDatabase { *; }
+-dontwarn androidx.work.**
+
+# WorkManager 还会按类名反射创建 InputMerger 与 Worker（如 OverwritingInputMerger），
+# R8 看不到引用 → 缺规则时输入合并器实例化失败，Glance 的更新永远停在加载圈。
+-keep class androidx.work.*InputMerger { *; }
+-keep class * extends androidx.work.ListenableWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}
+-keep class * implements androidx.work.WorkerFactory { *; }
+
+# Glance 的组件更新走内部 session（动态创建 RemoteViews 与状态读写）
+-keep class androidx.glance.appwidget.** { *; }
+-dontwarn androidx.glance.**

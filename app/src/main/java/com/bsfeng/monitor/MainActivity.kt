@@ -101,11 +101,27 @@ class MainActivity : ComponentActivity() {
     /** 自增序号：同一条通知再点一次也要重新落点（只对比下标会漏掉「已在同一 Tab」的情况）。 */
     private var startTabRequest by mutableIntStateOf(0)
 
+    /** 「快捷记一笔」直达序号：0 = 无待处理请求；连点同一个组件也重新打开表单。 */
+    private var openAddTransactionRequest by mutableIntStateOf(0)
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         startTab = intent.getIntExtra(EXTRA_START_TAB, startTab)
         startTabRequest++
+        if (consumeOpenAddTransaction(intent)) openAddTransactionRequest++
+    }
+
+    /**
+     * 读一次「直达记一笔」标记并就地消费掉。
+     *
+     * 消费是必须的：同一份 Intent 在旋转 / 进程重建后会被系统原样再交给新实例，
+     * 不删 extra 就会每次转屏都重新弹出一次表单（见 onCreate 的 [savedInstanceState] 判断）。
+     */
+    private fun consumeOpenAddTransaction(intent: Intent?): Boolean {
+        val requested = intent?.getBooleanExtra(EXTRA_OPEN_ADD_TRANSACTION, false) ?: false
+        if (requested) intent?.removeExtra(EXTRA_OPEN_ADD_TRANSACTION)
+        return requested
     }
 
     private sealed class FinanceRoute {
@@ -144,6 +160,10 @@ class MainActivity : ComponentActivity() {
         MonitorEdgeToEdge.apply(this)
 
         startTab = intent?.getIntExtra(EXTRA_START_TAB, 0) ?: 0
+        // 小组件「快捷记一笔」冷启动直达：只在**首次**创建时消费，旋转重建沿用旧 Intent 不该再弹一次
+        if (savedInstanceState == null && consumeOpenAddTransaction(intent)) {
+            openAddTransactionRequest = 1
+        }
 
         // 主题持久化：必须在 setContent 之前读，保证首帧就是用户选定的主题
         ThemeRepository.init(applicationContext)
@@ -166,6 +186,7 @@ class MainActivity : ComponentActivity() {
             MainContent(
                 startTab = startTab,
                 startTabRequest = startTabRequest,
+                openAddTransactionRequest = openAddTransactionRequest,
                 applicationContext = applicationContext,
             )
         }
@@ -174,6 +195,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** 启动/通知点击时指定目标 Tab 的 Intent extra。 */
         const val EXTRA_START_TAB = "com.bsfeng.monitor.EXTRA_START_TAB"
+
+        /** 小组件「快捷记一笔」用：true = 打开记账 Tab 并直接进入「记一笔」表单。 */
+        const val EXTRA_OPEN_ADD_TRANSACTION = "com.bsfeng.monitor.EXTRA_OPEN_ADD_TRANSACTION"
 
         // 历史下标（= AppTab 枚举顺序）：通知里仍按 int 传，落点由 FeatureCatalog 转成 AppTab。
         // 顺序不要改（旧通知的 int 会错位），新增 Tab 追加在末尾。
@@ -189,6 +213,14 @@ class MainActivity : ComponentActivity() {
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(EXTRA_START_TAB, QUOTA_TAB)
+            }
+
+        /** 「快捷记一笔」组件 / 其它入口的落点：记账 Tab + 直达新增页（当月）。 */
+        fun addTransactionIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_START_TAB, FINANCE_TAB)
+                putExtra(EXTRA_OPEN_ADD_TRANSACTION, true)
             }
 
         /** 旋转 / 进程重建后仍停留在原子页：把路由编码成可保存的原语列表。 */

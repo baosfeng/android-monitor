@@ -73,6 +73,27 @@ class RecordStore(private val db: DatabaseHelper) {
             arrayOf(typeName, action, dateStart.toString(), dateEnd.toString()))
     }
 
+    /**
+     * 区间内的记录条数（只 COUNT，不把行读回内存）。
+     *
+     * 为什么不复用 [queryByDate]：那里每行都要反序列化 detail 的 JSON；桌面组件每次刷新都走这条路径，
+     * 事件表上万行时耗时从毫秒级涨到百毫秒级，直接体现在「组件刷新要顿一下」。
+     */
+    fun countByDate(dateStart: Long, dateEnd: Long): Int = countWhere(
+        "timestamp >= ? AND timestamp <= ?",
+        arrayOf(dateStart.toString(), dateEnd.toString()),
+    )
+
+    /** 类型 + action 的区间计数（AD_SKIPPED 这类高频定向统计）。 */
+    fun countByTypeAndAction(type: RecordType, action: String, dateStart: Long, dateEnd: Long): Int = countWhere(
+        "type = ? AND action = ? AND timestamp >= ? AND timestamp <= ?",
+        arrayOf(RecordType.Companion.toString(type), action, dateStart.toString(), dateEnd.toString()),
+    )
+
+    private fun countWhere(selection: String, args: Array<String>): Int =
+        db.readableDatabase.rawQuery("SELECT COUNT(*) FROM records WHERE " + selection, args)
+            .use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+
     fun getDailySummary(dateStart: Long, dateEnd: Long): DailySummary {
         val db = db.readableDatabase
         // 亮屏时长:UNLOCKED→OFF 配对计算,无配对时按 5 分钟估算

@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">行为记录</string>
+
+    <!-- 桌面小组件：label = 组件选择器里的名字，description = 选择器里的一行说明（保持一句） -->
+    <string name="widget_finance_label">记账月度</string>
+    <string name="widget_finance_description">本月支出、收入与预算剩余</string>
+    <string name="widget_health_label">监控健康</string>
+    <string name="widget_health_description">监控是否在跑，含今日事件与跳过</string>
+    <string name="widget_quota_label">额度见底</string>
+    <string name="widget_quota_description">谁最先见底，含最近更新时间</string>
+    <string name="widget_adskip_label">跳过战报</string>
+    <string name="widget_adskip_description">今日、近 7 天与累计的跳过数</string>
+    <string name="widget_quickadd_label">快捷记一笔</string>
+    <string name="widget_quickadd_description">一键直达记一笔</string>
+    <string name="widget_transfer_label">传送状态</string>
+    <string name="widget_transfer_description">接收状态与在线设备数</string>
 </resources>
