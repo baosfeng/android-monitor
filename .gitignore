@@ -103,3 +103,11 @@ tools/
 .open-design/reviews/
 .open-design/shots/r2-*.jpg
 .open-design/shots/trips-*.jpg
+# 小组件三轮迭代与设备实拍截图（结论已提炼进 docs/小组件/ 与踩坑，原文按取证产物处理）
+.open-design/shots/widget-*
+.open-design/shots/widgets-*
+.open-design/shots/impl-*
+.open-design/shots/quota-*
+.open-design/shots/s18-*
+.open-design/shots/s20-*
+.open-design/shots/s21-*
