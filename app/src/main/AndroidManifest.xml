@@ -127,6 +127,86 @@
             </intent-filter>
         </receiver>
 
+        <!--
+            桌面小组件（6 个）：Glance 的 receiver，**必须 exported=true** —— 桌面 launcher 跨应用广播
+            APPWIDGET_UPDATE，exported=false 会让 provider 根本不被系统注册（桌面小组件列表里看不到）。
+            meta-data 指向各自的 info。
+            intent-filter 只留 APPWIDGET_UPDATE：多一个 action 就多一条外部可伪造广播的入口。
+            不设 updatePeriodMillis：刷新全由 AlarmReceiver 的 60 秒心跳 + 记账/额度信号推送驱动，
+            系统的周期刷新最小间隔是 30 分钟，留着只是一批无意义的唤醒。
+        -->
+        <receiver
+            android:name=".widget.FinanceWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_finance_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_finance_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.HealthWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_health_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_health_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.QuotaWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_quota_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quota_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.AdSkipWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_adskip_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_adskip_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.QuickAddWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_quickadd_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quickadd_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TransferWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_transfer_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_transfer_info" />
+        </receiver>
+
         <!-- 应用内更新：下载的 APK 通过 FileProvider 交给系统安装器 -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -105,12 +105,14 @@ import com.bsfeng.monitor.ui.trip.TripScreen
  *
  * @param startTab 通知点进来的目标 Tab 下标
  * @param startTabRequest 深链请求序号（同一 Tab 连点也生效）
+ * @param openAddTransactionRequest 「快捷记一笔」直达序号（0 = 无请求）：命中后落点从记账首页换成新增页
  */
 @Composable
 internal fun MainContent(
     startTab: Int,
     startTabRequest: Int,
     applicationContext: android.content.Context,
+    openAddTransactionRequest: Int = 0,
 ) {
     MonitorTheme {
             val viewModel: MainViewModel = viewModel()
@@ -217,6 +219,21 @@ internal fun MainContent(
                         FeatureCatalog.tabOfIndex(startTab),
                     ) { feature -> enabledFeatures[feature] == true }
                 }
+            }
+
+            // 小组件「快捷记一笔」：记账 Tab + 直接进当月的新增页。
+            // 与上面的 startTab 深链分开成两个 effect：目标 Tab 由 startTab 决定，
+            // 这里只负责把记账 Tab 的子页换成 AddTransaction，两者互不覆盖。
+            LaunchedEffect(openAddTransactionRequest) {
+                if (openAddTransactionRequest <= 0) return@LaunchedEffect
+                val target = FeatureCatalog.resolveTab(
+                    FeatureCatalog.tabOfIndex(MainActivity.FINANCE_TAB),
+                ) { feature -> enabledFeatures[feature] == true }
+                // 记账功能被关掉时 resolveTab 回退概览：此时按普通深链走，不留一张空表单
+                if (target != AppTab.FINANCE) return@LaunchedEffect
+                settingsSubPageName = ""
+                selectedTab = target
+                financeRoute = FinanceRoute.AddTransaction(FinanceViewModel.currentMonthStr())
             }
 
             Box(Modifier.fillMaxSize().pageBackdrop()) {

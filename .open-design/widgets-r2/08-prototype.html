@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>小组件 r2 · C 柔和品牌色（定稿原型）</title>
+<style>:root{
+  --palette-01: #07090d;
+  --palette-02: #17334e;
+  --palette-03: #0c1c2e;
+  --palette-04: #060d17;
+  --palette-05: #02050a;
+  --palette-06: #fff;
+  --palette-07: #3a4450;
+  --palette-08: #46515f;
+  --palette-09: #171c24;
+  --palette-10: #252c36;
+  --palette-11: #5b636f;
+  --palette-12: #e6ebf2;
+  --palette-13: #c9d2de;
+  --palette-14: #ffffff;
+  --palette-15: #6b7791;
+  --palette-16: #0e1a2e;
+  --palette-17: #5c6b85;
+  --palette-18: #dfe6f2;
+  --palette-19: #0b7a3b;
+  --palette-20: #bf3a2e;
+  --palette-21: #a9601f;
+  --palette-22: #2f6bff;
+  --palette-23: #a2b1cb;
+  --palette-24: #2b3550;
+  --palette-25: #4ade9b;
+  --palette-26: #ff7a70;
+  --palette-27: #ffbe6b;
+  --palette-28: #6f9dff;
+  --palette-29: #16203a;
+  --palette-30: #f4f8ff;
+  --palette-31: #e2ecfd;
+  --palette-32: #dde7fa;
+  --palette-33: #6a93f0;
+  --palette-34: #d9e5fa;
+  --palette-35: #f7f4ff;
+  --palette-36: #e7dffc;
+  --palette-37: #e2daf8;
+  --palette-38: #5b4be0;
+  --palette-39: #8d7ae8;
+  --palette-40: #e3dbf8;
+  --palette-41: #f2fbf5;
+  --palette-42: #daf2e4;
+  --palette-43: #d5eddf;
+  --palette-44: #0e9f5b;
+  --palette-45: #4fbf8b;
+  --palette-46: #d3eddf;
+  --palette-47: #fff8f0;
+  --palette-48: #fce2cd;
+  --palette-49: #f7dfc9;
+  --palette-50: #cf5f25;
+  --palette-51: #e29160;
+  --palette-52: #f8e0cb;
+  --palette-53: #f1fbfc;
+  --palette-54: #d8eff2;
+  --palette-55: #d2ebef;
+  --palette-56: #0f97ac;
+  --palette-57: #40b3c2;
+  --palette-58: #d2edf1;
+  --palette-59: #16223a;
+  --palette-60: #1d2c49;
+  --palette-61: #27385a;
+  --palette-62: #3d78ff;
+  --palette-63: #5285f0;
+  --palette-64: #22314f;
+  --palette-65: #1e1934;
+  --palette-66: #2a2247;
+  --palette-67: #382e5c;
+  --palette-68: #6b58e8;
+  --palette-69: #7a68ea;
+  --palette-70: #2b2447;
+  --palette-71: #13281f;
+  --palette-72: #1a382c;
+  --palette-73: #234638;
+  --palette-74: #12a862;
+  --palette-75: #33ab74;
+  --palette-76: #1b382c;
+  --palette-77: #2a1f13;
+  --palette-78: #3a2a1b;
+  --palette-79: #4a3624;
+  --palette-80: #d9691f;
+  --palette-81: #cc7d43;
+  --palette-82: #3b2b1d;
+  --palette-83: #122730;
+  --palette-84: #193a44;
+  --palette-85: #22474f;
+  --palette-86: #11a2b8;
+  --palette-87: #33a2b6;
+  --palette-88: #173740;
+  --palette-89: #007aff;
+  --bg: var(--palette-01);
+  --surface: var(--palette-02);
+  --border: var(--palette-03);
+  --accent: var(--palette-04);
+  --fg: --palette-16;
+  --muted: --palette-17;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--palette-01)}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC",sans-serif;-webkit-font-smoothing:antialiased}
+.screen{position:relative;width:390px;height:844px;overflow:hidden}
+.screen+.screen{margin-top:24px}
+.wp{position:absolute;inset:0;background:radial-gradient(140% 95% at 76% 2%,var(--palette-02) 0%,var(--palette-03) 34%,var(--palette-04) 66%,var(--palette-05) 100%)}
+.statusbar{position:relative;display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 26px;color:var(--palette-06)}
+.sb-time{font-size:15px;font-weight:700}
+.sb-right{display:flex;align-items:flex-end;gap:5px}
+.sig{width:3px;border-radius:1px;background:var(--palette-06);display:block;margin-bottom:1px}
+.sig:nth-child(1){height:4px}.sig:nth-child(2){height:6px}.sig:nth-child(3){height:8px}.sig:nth-child(4){height:10px}
+.sb-5g{font-size:10px;font-weight:700;margin-left:3px;margin-bottom:1px}
+.batt{position:relative;width:22px;height:11px;border:1.4px solid var(--palette-06);border-radius:3.5px;display:block;margin-bottom:1px}
+.batt b{position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:68%;background:var(--palette-06);border-radius:1.6px}
+.desk{position:absolute;inset:44px 0 0 0;padding:0 20px}
+.w{border-radius:24px;position:relative;display:flex;flex-direction:column;overflow:hidden}
+.w4x2{width:350px;height:200px;padding:14px 16px;margin-bottom:6px;justify-content:space-between}
+.w2x1{width:170px;height:100px;padding:11px 13px}
+.w1x1{width:80px;height:80px;padding:9px 10px}
+.wrow{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px}
+.cell{width:80px;height:80px;display:flex;align-items:center;justify-content:center}
+.appicon{width:56px;height:56px;border-radius:13px;background:var(--palette-07);border:1px solid var(--palette-08)}
+.dock{width:350px;height:62px;border-radius:22px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;margin-top:10px;background:var(--palette-09);border:1px solid var(--palette-10)}
+.dock .appicon{width:48px;height:48px;border-radius:11px}
+.dots{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:8px;height:8px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--palette-11);display:block}
+.dots i.on{background:var(--palette-12)}
+.homebar{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;width:134px;height:4px;border-radius:2px;background:var(--palette-13)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.head-left{display:flex;align-items:center;gap:7px;min-width:0}
+.icro{width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.icro.sm{width:20px;height:20px;border-radius:7px}
+.eyebrow{font-size:12px;font-weight:600;white-space:nowrap}
+.eyebrow.sm{font-size:11px}
+.hero{display:flex}
+.big{display:flex;align-items:baseline;font-size:72px;font-weight:800;line-height:74px}
+.big .cur{font-style:normal;font-size:24px;font-weight:700;margin-right:3px;align-self:flex-start;margin-top:10px}
+.big .dec{font-style:normal;font-size:32px;font-weight:800}
+.prog{height:10px;border-radius:5px;position:relative;overflow:hidden}
+.prog i{position:absolute;left:0;top:0;height:100%;border-radius:5px;display:block}
+.foot{display:flex;gap:8px}
+.seg{flex:1;border-radius:14px;padding:6px 10px 7px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.seg-l{font-size:10px;font-weight:600;line-height:12px}
+.seg-v{font-size:15px;font-weight:700;line-height:19px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.q-list{display:flex;flex-direction:column;gap:4px}
+.q-row{padding:5px 10px 6px;display:flex;flex-direction:column;gap:4px}
+.q-top{display:flex;align-items:baseline;justify-content:space-between}
+.q-name{font-size:13px;font-weight:600}
+.q-pct{font-size:21px;font-weight:800;line-height:22px}
+.q-row .prog{height:8px;border-radius:4px}
+.q-row .prog i{border-radius:4px}
+.cols3{display:flex;margin-top:auto;padding-top:7px}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding-left:10px;padding-right:4px}
+.col:first-child{padding-left:0}
+.col+.col{border-left:1px solid var(--hair)}
+.col-n{font-size:24px;font-weight:800;line-height:25px;white-space:nowrap}
+.col-n.sm{font-size:15px;line-height:25px}
+.col-n .pct{font-size:11px;font-weight:700;font-style:normal}
+.col-l{font-size:9px;font-weight:700;line-height:11px;white-space:nowrap}
+.meter{display:flex;margin-top:auto;padding-top:9px}
+.m{flex:1;min-width:0;display:flex;align-items:baseline;justify-content:space-between;gap:4px;padding-left:10px}
+.m:first-child{padding-left:0}
+.m+.m{border-left:1px solid var(--hair)}
+.m-l{font-size:9px;font-weight:700;white-space:nowrap}
+.m-n{font-size:23px;font-weight:800;line-height:23px;white-space:nowrap}
+.m-n .unit{font-size:11px;font-weight:700;font-style:normal;margin-left:2px}
+.big.sm{font-size:33px;line-height:35px}
+.big.sm .cur{font-size:14px;margin-top:5px}
+.big.sm .dec{font-size:16px}
+.e-n.sm{font-size:15px;line-height:17px}
+.mini-row{display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;padding-bottom:2px}
+.q-pct.sm{font-size:15px;line-height:16px}
+.faint{color:var(--muted);font-weight:600}
+.board{background:var(--palette-14)}
+.board .desk{inset:10px 0 0 0}
+.board .w4x2{margin-bottom:4px}
+.board .wrow{margin-bottom:4px}
+.filler{flex:1 1 auto}
+.tag.tiny{font-size:9px;padding:2px 6px;border-radius:7px}
+.tag.muted-tag{background:transparent;color:var(--muted);border:1px solid var(--hair)}
+.e-l.last{margin-top:auto;font-size:10px;white-space:nowrap}
+.board .desk{padding:0 20px}
+.board-h{font-size:11px;font-weight:700;color:var(--palette-15);padding:12px 0 6px}
+.board .w{border:1px solid var(--w-edge)}
+.empty-note{font-size:13px;font-weight:700;color:var(--muted)}
+.empty-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:8px}
+.stat-row{display:flex;align-items:baseline;gap:14px;margin-top:auto;padding-bottom:1px}
+.stat{display:flex;align-items:baseline;gap:4px}
+.stat-n{font-size:26px;font-weight:800;line-height:26px}
+.stat-n.sm{font-size:21px}
+.stat-l{font-size:10px;font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;display:block;flex:0 0 auto}
+.status{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;white-space:nowrap}
+.e-head{display:flex;align-items:center;justify-content:space-between}
+.e-n{font-size:20px;font-weight:800;line-height:20px}
+.e-l{font-size:9.5px;font-weight:700;line-height:11px;margin-top:auto;display:block;white-space:nowrap}
+.chev{font-size:15px;font-weight:700;margin-left:auto;opacity:.75}
+.qa-plus{display:flex;align-items:center;justify-content:center}
+.qa-l{font-size:11px;font-weight:700;margin-top:auto;line-height:12px}
+.w-quickadd{justify-content:flex-start;gap:5px;align-items:flex-start}
+.v-c .w-empty{border-style:dashed;border-color:var(--w-edge)}
+/* C · 柔和品牌色（收敛版）：每卡一个色相 + 极浅 tint 卡底 + 实色图标块 + 白色图标 */
+.v-c .t-light{--fg:var(--palette-16);--muted:var(--palette-17);--hair:var(--palette-18);--ok:var(--palette-19);--bad:var(--palette-20);--warn:var(--palette-21);--accent:var(--palette-22);--tag-bg:var(--palette-14);--chip:var(--palette-14)}
+.v-c .t-dark{--fg:var(--palette-14);--muted:var(--palette-23);--hair:var(--palette-24);--ok:var(--palette-25);--bad:var(--palette-26);--warn:var(--palette-27);--accent:var(--palette-28);--tag-bg:var(--palette-29);--chip:var(--palette-29)}
+.v-c .w-finance{--w-surface:var(--palette-30);--w-seg:var(--palette-31);--w-edge:var(--palette-32);--w-hue:var(--palette-22);--w-fill:var(--palette-33);--w-track:var(--palette-34)}
+.v-c .w-quota{--w-surface:var(--palette-35);--w-seg:var(--palette-36);--w-edge:var(--palette-37);--w-hue:var(--palette-38);--w-fill:var(--palette-39);--w-track:var(--palette-40)}
+.v-c .w-health{--w-surface:var(--palette-41);--w-seg:var(--palette-42);--w-edge:var(--palette-43);--w-hue:var(--palette-44);--w-fill:var(--palette-45);--w-track:var(--palette-46)}
+.v-c .w-adskip{--w-surface:var(--palette-47);--w-seg:var(--palette-48);--w-edge:var(--palette-49);--w-hue:var(--palette-50);--w-fill:var(--palette-51);--w-track:var(--palette-52)}
+.v-c .w-transfer{--w-surface:var(--palette-53);--w-seg:var(--palette-54);--w-edge:var(--palette-55);--w-hue:var(--palette-56);--w-fill:var(--palette-57);--w-track:var(--palette-58)}
+.v-c .t-dark .w-finance{--w-surface:var(--palette-59);--w-seg:var(--palette-60);--w-edge:var(--palette-61);--w-hue:var(--palette-62);--w-fill:var(--palette-63);--w-track:var(--palette-64)}
+.v-c .t-dark .w-quota{--w-surface:var(--palette-65);--w-seg:var(--palette-66);--w-edge:var(--palette-67);--w-hue:var(--palette-68);--w-fill:var(--palette-69);--w-track:var(--palette-70)}
+.v-c .t-dark .w-health{--w-surface:var(--palette-71);--w-seg:var(--palette-72);--w-edge:var(--palette-73);--w-hue:var(--palette-74);--w-fill:var(--palette-75);--w-track:var(--palette-76)}
+.v-c .t-dark .w-adskip{--w-surface:var(--palette-77);--w-seg:var(--palette-78);--w-edge:var(--palette-79);--w-hue:var(--palette-80);--w-fill:var(--palette-81);--w-track:var(--palette-82)}
+.v-c .t-dark .w-transfer{--w-surface:var(--palette-83);--w-seg:var(--palette-84);--w-edge:var(--palette-85);--w-hue:var(--palette-86);--w-fill:var(--palette-87);--w-track:var(--palette-88)}
+.v-c .w{background:var(--w-surface);border:1px solid var(--w-edge)}
+.v-c .icro{background:var(--w-hue);color:var(--palette-14);border-radius:10px}
+.v-c .icro.sm{border-radius:8px}
+.v-c .eyebrow{color:var(--muted);font-weight:700}
+.v-c .tag{background:var(--tag-bg);color:var(--w-hue);font-size:11px;font-weight:700;padding:3px 9px;border-radius:9px;white-space:nowrap}
+.v-c .big,.v-c .seg-v,.v-c .col-n,.v-c .m-n,.v-c .q-pct,.v-c .e-n{color:var(--fg)}
+.v-c .seg,.v-c .q-row{background:var(--w-seg)}
+.v-c .seg-l,.v-c .col-l,.v-c .m-l,.v-c .e-l{color:var(--muted)}
+.v-c .seg-v.ok{color:var(--ok)}
+.v-c .q-name{color:var(--fg);font-weight:600}
+.v-c .q-row.hot .q-pct,.v-c .q-row.hot .q-name{color:var(--warn)}
+.v-c .prog{background:var(--w-track)}
+.v-c .prog i{background:var(--w-fill)}
+.v-c .col+.col,.v-c .m+.m{border-left:1px solid var(--w-edge)}
+.v-c .dot{background:var(--ok)}
+.v-c .dot.bad{background:var(--bad)}
+.v-c .dot.idle{background:var(--muted)}
+.v-c .status{color:var(--fg)}
+.v-c .w-quickadd{background:var(--palette-89);border:0;justify-content:center;align-items:center;gap:4px;padding:0}
+.v-c .w-quickadd .qa-plus{color:var(--palette-14)}
+.v-c .w-quickadd .qa-l{color:var(--palette-14);font-size:12px;margin:0}
+.v-c .empty-note{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="v-c"><div class="screen t-light" data-od-id="light-screen">
+  <div class="wp"></div>
+  <div class="statusbar"><span class="sb-time">9:41</span><span class="sb-right"><i class="sig"></i><i class="sig"></i><i class="sig"></i><i class="sig"></i><span class="sb-5g">5G</span><span class="batt"><b></b></span></span></div>
+  <div class="desk">
+    <div class="w w4x2 w-finance" data-od-id="light-finance-4x2">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow">本月支出 · 10 月</span></div>
+        <span class="tag">已用 71%</span>
+      </div>
+      <div class="hero"><span class="big"><i class="cur">¥</i>4,286<i class="dec">.50</i></span></div>
+      <div class="prog"><i style="width:71%"></i></div>
+      <div class="foot">
+        <div class="seg"><span class="seg-l">收入</span><span class="seg-v ok">¥8,920.00</span></div>
+        <div class="seg"><span class="seg-l">预算剩余</span><span class="seg-v">¥1,713.50</span></div>
+      </div>
+    </div>
+
+    <div class="w w4x2 w-quota" data-od-id="light-quota-4x2">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.4a5.2 5.2 0 1 1 10 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.2 12.2 10.8 8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow">额度剩余 · 3 分钟前</span></div>
+      </div>
+      <div class="q-list">
+        <div class="seg q-row hot"><div class="q-top"><span class="q-name">DeepSeek</span><span class="q-pct">12%</span></div><div class="prog"><i style="width:12%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">OpenAI</span><span class="q-pct">34%</span></div><div class="prog"><i style="width:34%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">Claude</span><span class="q-pct">61%</span></div><div class="prog"><i style="width:61%"></i></div></div>
+      </div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w2x1 w-health" data-od-id="light-health-2x1">
+        <div class="card-head">
+          <div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8h2.8l1.5-4.3 2.2 8.6 1.7-5.5 1.1 1.2h2.9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>监控中</span></div>
+        </div>
+        <div class="cols3">
+          <div class="col"><span class="col-l">今日事件</span><span class="col-n">24</span></div>
+          <div class="col"><span class="col-l">跳过</span><span class="col-n">12</span></div>
+        </div>
+      </div>
+      <div class="w w2x1 w-adskip" data-od-id="light-adskip-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow sm">跳过战报</span></div></div>
+        <div class="cols3">
+          <div class="col"><span class="col-l">今日</span><span class="col-n">12</span></div>
+          <div class="col"><span class="col-l">累计</span><span class="col-n sm">1,284</span></div>
+          <div class="col"><span class="col-l">确认率</span><span class="col-n sm">98<i class="pct">%</i></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w2x1 w-transfer" data-od-id="light-transfer-2x1">
+        <div class="card-head">
+          <div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 8h8.6M7.3 4.7 10.9 8l-3.6 3.3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>接收中</span></div>
+        </div>
+        <div class="meter">
+          <div class="m"><span class="m-l">在线</span><span class="m-n">2<i class="unit">台</i></span></div>
+        </div>
+      </div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w1x1 w-quickadd" data-od-id="light-quickadd">
+        <span class="qa-plus"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        <span class="qa-l">记一笔</span>
+      </div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+    </div>
+
+    <div class="dots"><i class="on"></i><i></i><i></i></div>
+    <div class="dock"><div class="appicon"></div><div class="appicon"></div><div class="appicon"></div><div class="appicon"></div></div>
+    <div class="homebar"></div>
+  </div>
+</div>
+<div class="screen t-dark" data-od-id="dark-screen">
+  <div class="wp"></div>
+  <div class="statusbar"><span class="sb-time">9:41</span><span class="sb-right"><i class="sig"></i><i class="sig"></i><i class="sig"></i><i class="sig"></i><span class="sb-5g">5G</span><span class="batt"><b></b></span></span></div>
+  <div class="desk">
+    <div class="w w4x2 w-finance" data-od-id="dark-finance-4x2">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow">本月支出 · 10 月</span></div>
+        <span class="tag">已用 71%</span>
+      </div>
+      <div class="hero"><span class="big"><i class="cur">¥</i>4,286<i class="dec">.50</i></span></div>
+      <div class="prog"><i style="width:71%"></i></div>
+      <div class="foot">
+        <div class="seg"><span class="seg-l">收入</span><span class="seg-v ok">¥8,920.00</span></div>
+        <div class="seg"><span class="seg-l">预算剩余</span><span class="seg-v">¥1,713.50</span></div>
+      </div>
+    </div>
+
+    <div class="w w4x2 w-quota" data-od-id="dark-quota-4x2">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.4a5.2 5.2 0 1 1 10 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.2 12.2 10.8 8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow">额度剩余 · 3 分钟前</span></div>
+      </div>
+      <div class="q-list">
+        <div class="seg q-row hot"><div class="q-top"><span class="q-name">DeepSeek</span><span class="q-pct">12%</span></div><div class="prog"><i style="width:12%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">OpenAI</span><span class="q-pct">34%</span></div><div class="prog"><i style="width:34%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">Claude</span><span class="q-pct">61%</span></div><div class="prog"><i style="width:61%"></i></div></div>
+      </div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w2x1 w-health" data-od-id="dark-health-2x1">
+        <div class="card-head">
+          <div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8h2.8l1.5-4.3 2.2 8.6 1.7-5.5 1.1 1.2h2.9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>监控中</span></div>
+        </div>
+        <div class="cols3">
+          <div class="col"><span class="col-l">今日事件</span><span class="col-n">24</span></div>
+          <div class="col"><span class="col-l">跳过</span><span class="col-n">12</span></div>
+        </div>
+      </div>
+      <div class="w w2x1 w-adskip" data-od-id="dark-adskip-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow sm">跳过战报</span></div></div>
+        <div class="cols3">
+          <div class="col"><span class="col-l">今日</span><span class="col-n">12</span></div>
+          <div class="col"><span class="col-l">累计</span><span class="col-n sm">1,284</span></div>
+          <div class="col"><span class="col-l">确认率</span><span class="col-n sm">98<i class="pct">%</i></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w2x1 w-transfer" data-od-id="dark-transfer-2x1">
+        <div class="card-head">
+          <div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 8h8.6M7.3 4.7 10.9 8l-3.6 3.3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>接收中</span></div>
+        </div>
+        <div class="meter">
+          <div class="m"><span class="m-l">在线</span><span class="m-n">2<i class="unit">台</i></span></div>
+        </div>
+      </div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+    </div>
+
+    <div class="wrow">
+      <div class="w w1x1 w-quickadd" data-od-id="dark-quickadd">
+        <span class="qa-plus"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        <span class="qa-l">记一笔</span>
+      </div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+      <div class="cell"><div class="appicon"></div></div>
+    </div>
+
+    <div class="dots"><i class="on"></i><i></i><i></i></div>
+    <div class="dock"><div class="appicon"></div><div class="appicon"></div><div class="appicon"></div><div class="appicon"></div></div>
+    <div class="homebar"></div>
+  </div>
+</div>
+<div class="screen board t-light" data-od-id="screen-showcase">
+  <div class="desk">
+    <div class="w w4x2 w-finance" data-od-id="SCID-finance-4x2">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow">本月支出 · 10 月</span></div>
+        <span class="tag">已用 71%</span>
+      </div>
+      <div class="hero"><span class="big"><i class="cur">¥</i>4,286<i class="dec">.50</i></span></div>
+      <div class="prog"><i style="width:71%"></i></div>
+      <div class="foot">
+        <div class="seg"><span class="seg-l">收入</span><span class="seg-v ok">¥8,920.00</span></div>
+        <div class="seg"><span class="seg-l">预算剩余</span><span class="seg-v">¥1,713.50</span></div>
+      </div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-finance" data-od-id="sc-finance-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow sm">本月支出</span></div><span class="tag tiny">已用 71%</span></div>
+        <div class="hero"><span class="big sm"><i class="cur">¥</i>4,286<i class="dec">.50</i></span></div>
+        <div class="prog"><i style="width:71%"></i></div>
+      </div>
+      <div class="w w1x1 w-finance" data-od-id="sc-finance-1x1">
+        <div class="e-head"><span class="icro sm"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span></div>
+        <span class="e-n sm">¥4,286</span>
+        <span class="e-l">本月支出</span>
+      </div>
+      <div class="filler"></div>
+    </div>
+    <div class="w w4x2 w-quota" data-od-id="SCID-quota-4x2">
+      <div class="card-head"><div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.4a5.2 5.2 0 1 1 10 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.2 12.2 10.8 8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow">额度剩余 · 3 分钟前</span></div></div>
+      <div class="q-list">
+        <div class="seg q-row hot"><div class="q-top"><span class="q-name">DeepSeek</span><span class="q-pct">12%</span></div><div class="prog"><i style="width:12%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">OpenAI</span><span class="q-pct">34%</span></div><div class="prog"><i style="width:34%"></i></div></div>
+        <div class="seg q-row"><div class="q-top"><span class="q-name">Claude</span><span class="q-pct">61%</span></div><div class="prog"><i style="width:61%"></i></div></div>
+      </div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-quota" data-od-id="sc-quota-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.4a5.2 5.2 0 1 1 10 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.2 12.2 10.8 8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow sm">额度剩余</span></div><span class="eyebrow sm faint">3 分钟前</span></div>
+        <div class="mini-row"><span class="q-name">DeepSeek</span><span class="q-pct sm">12%</span></div>
+        <div class="prog"><i style="width:12%"></i></div>
+      </div>
+      <div class="w w1x1 w-health" data-od-id="sc-health-1x1">
+        <div class="e-head"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8h2.8l1.5-4.3 2.2 8.6 1.7-5.5 1.1 1.2h2.9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="dot"></span></div>
+        <span class="e-l last">监控中</span>
+      </div>
+      <div class="w w1x1 w-adskip" data-od-id="sc-adskip-1x1">
+        <div class="e-head"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span></div>
+        <span class="e-n sm">12</span>
+        <span class="e-l">今日跳过</span>
+      </div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-health" data-od-id="sc-health-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8h2.8l1.5-4.3 2.2 8.6 1.7-5.5 1.1 1.2h2.9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>监控中</span></div></div>
+        <div class="cols3"><div class="col"><span class="col-l">今日事件</span><span class="col-n">24</span></div><div class="col"><span class="col-l">跳过</span><span class="col-n">12</span></div></div>
+      </div>
+      <div class="w w2x1 w-adskip" data-od-id="sc-adskip-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow sm">跳过战报</span></div></div>
+        <div class="cols3">
+          <div class="col"><span class="col-l">今日</span><span class="col-n">12</span></div>
+          <div class="col"><span class="col-l">累计</span><span class="col-n sm">1,284</span></div>
+          <div class="col"><span class="col-l">确认率</span><span class="col-n sm">98<i class="pct">%</i></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-transfer" data-od-id="sc-transfer-2x1">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 8h8.6M7.3 4.7 10.9 8l-3.6 3.3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot"></i>接收中</span></div></div>
+        <div class="meter"><div class="m"><span class="m-l">在线</span><span class="m-n">2<i class="unit">台</i></span></div></div>
+      </div>
+      <div class="w w1x1 w-quickadd" data-od-id="sc-quickadd">
+        <span class="qa-plus"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        <span class="qa-l">记一笔</span>
+      </div>
+      <div class="filler"></div>
+    </div>
+  </div>
+</div>
+<div class="screen board t-light" data-od-id="screen-states">
+  <div class="desk">
+    <div class="w w4x2 w-finance" data-od-id="st-finance-nobudget">
+      <div class="card-head">
+        <div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow">本月支出 · 10 月</span></div>
+        <span class="tag muted-tag">未设预算</span>
+      </div>
+      <div class="hero"><span class="big"><i class="cur">¥</i>4,286<i class="dec">.50</i></span></div>
+      <div class="prog"><i style="width:0%"></i></div>
+      <div class="foot">
+        <div class="seg"><span class="seg-l">收入</span><span class="seg-v ok">¥8,920.00</span></div>
+        <div class="seg"><span class="seg-l">预算剩余</span><span class="seg-v">未设预算</span></div>
+      </div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-finance" data-od-id="st-finance-hidden">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="4.1" width="11.6" height="7.8" rx="2.1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M10.3 8h1.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span class="eyebrow sm">本月支出</span></div><span class="tag tiny">已隐藏</span></div>
+        <div class="hero"><span class="big sm"><i class="cur">¥</i>••••</span></div>
+      </div>
+      <div class="filler"></div>
+    </div>
+    <div class="w w4x2 w-quota" data-od-id="st-quota-empty">
+      <div class="card-head"><div class="head-left"><span class="icro"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.4a5.2 5.2 0 1 1 10 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M8.2 12.2 10.8 8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow">额度剩余</span></div></div>
+      <div class="empty-wrap"><span class="empty-note">未配置额度</span></div>
+    </div>
+    <div class="wrow">
+      <div class="w w2x1 w-adskip" data-od-id="st-adskip-empty">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="eyebrow sm">跳过战报</span></div></div>
+        <div class="meter"><div class="m"><span class="m-l">今天还没跳过 · 今日</span><span class="m-n">0</span></div></div>
+      </div>
+      <div class="filler"></div>
+    </div>
+    <div class="wrow">
+      <div class="w w1x1 w-health w-empty" data-od-id="st-health-empty">
+        <div class="e-head"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8h2.8l1.5-4.3 2.2 8.6 1.7-5.5 1.1 1.2h2.9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="dot bad"></span></div>
+        <span class="e-l">未运行</span>
+      </div>
+      <div class="w w1x1 w-adskip w-empty" data-od-id="st-adskip-1x1-empty">
+        <div class="e-head"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.1 8.6 8l-5.4 3.9V4.1Z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M11.1 4.3v7.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="e-n">0</span></div>
+        <span class="e-l">今日跳过</span>
+      </div>
+      <div class="w w2x1 w-transfer" data-od-id="st-transfer-empty">
+        <div class="card-head"><div class="head-left"><span class="icro sm"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 8h8.6M7.3 4.7 10.9 8l-3.6 3.3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status"><i class="dot idle"></i>未运行</span></div></div>
+        <div class="meter"><div class="m"><span class="m-l">在线</span><span class="m-n">0<i class="unit">台</i></span></div></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</body>
+</html>

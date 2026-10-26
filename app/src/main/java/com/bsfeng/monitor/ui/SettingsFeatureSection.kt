@@ -158,4 +158,12 @@ internal fun SettingsFeatureSection(
         setFeature = setFeature,
         openLocationAppSettings = openLocationAppSettings,
     )
+
+    // 桌面小组件（隐藏金额 + 6 个添加到桌面）：不占 Tab、无功能开关，放在功能页最末
+    SettingsWidgetSection(
+        t = t,
+        context = context,
+        toast = toast,
+        scope = scope,
+    )
 }
