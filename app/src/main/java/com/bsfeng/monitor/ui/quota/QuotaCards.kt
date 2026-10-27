@@ -1,35 +1,17 @@
 package com.bsfeng.monitor.ui.quota
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaKind
@@ -38,98 +20,73 @@ import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
-import com.bsfeng.monitor.ui.foundation.HapticTone
-import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
-import com.bsfeng.monitor.ui.theme.dotDiameter
-import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.monitorMonoNumber
 import java.math.BigDecimal
 
 /**
- * 额度页的实体卡片：provider chip、额度卡（百分比型 / 金额型）。
+ * 额度页的实体卡片：额度卡（百分比型 / 金额型）。
  *
  * 用量卡在 `QuotaUsageCard.kt`，五态（未配置 / 失败 / 未接入）在 `QuotaStateViews.kt`
  * —— 单文件超过 300 行会触发项目规范里的拆文件要求。
  */
 
-/** provider 横向 chip 行（原型 .s18-chips：可横滑、已配置带绿点）。 */
-@Composable
-fun ProviderChipRow(
-    providers: List<QuotaProviderInfo>,
-    selectedId: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val t = LocalDesignTokens.current
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = t.space4),
-        horizontalArrangement = Arrangement.spacedBy(t.space2),
-    ) {
-        items(providers, key = { it.id }) { info ->
-            ProviderChip(
-                info = info,
-                selected = info.id == selectedId,
-                onClick = { onSelect(info.id) },
-            )
-        }
-    }
-}
+/** 额度卡排版：百分比限额（会话 / 每周 / 每月窗口）或金额（内含 / 已购 / 余额）。 */
+internal enum class QuotaCardLayout { PERCENT, MONEY }
 
-@Composable
-private fun ProviderChip(
-    info: QuotaProviderInfo,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    val haptic = rememberHaptic()
-    // provider 切换等价于 Tab 切换：用中触（KEYBOARD_TAP 档），与列表点击的轻触区分
-    val bg by animateColorAsState(
-        targetValue = if (selected) t.fgFade(7) else Color.Transparent,
-        animationSpec = tween(t.durState),
-        label = "providerChipBg",
-    )
-    val stroke by animateColorAsState(
-        targetValue = if (selected) t.fgFade(24) else t.border,
-        animationSpec = tween(t.durState),
-        label = "providerChipStroke",
-    )
-    Row(
-        modifier = Modifier
-            .height(t.tapMin)
-            .clip(RoundedCornerShape(t.radiusPill))
-            .background(bg)
-            .border(1.dp, stroke, RoundedCornerShape(t.radiusPill))
-            .clickable {
-                haptic(HapticTone.MEDIUM)
-                onClick()
-            }
-            .padding(horizontal = t.space4),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(t.space2),
-    ) {
-        // 绿点只表示「已配置凭据且能拉数据」，未接入的 provider 恒为灰点
-        Box(
-            Modifier
-                .size(t.dotDiameter)
-                .clip(CircleShape)
-                .background(if (info.connected) t.success else t.fgFade(30)),
-        )
-        Text(
-            info.displayName,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) t.fg else t.fg2,
-        )
+/**
+ * 选哪一版卡片：Ollama 先认用户选的计费模式，返回结构里没有该口径时回落实际结构。
+ *
+ * 为什么先认选择而不是先认结构：计费模式条是用户手选的（Ollama 两种计划凭据相同、无法自动判别），
+ * 只落盘不换面板等于「点了没反应 + toast 报了一个没发生的结果」。选择与返回结构不符时按实际结构
+ * 展示，差异由卡头「?」（[QuotaFormat.planMismatchNote]）说明 —— 既不撒谎也不给空卡。
+ *
+ * 非 Ollama 的返回结构由各自接口固定（opencode-go 恒百分比、DeepSeek 恒用量、open-design 恒单窗口），
+ * Ollama 的计划选择不参与它们的分流。
+ */
+internal fun quotaCardLayout(
+    providerId: String,
+    plan: OllamaPlanMode,
+    items: List<QuotaItem>,
+): QuotaCardLayout? {
+    val hasPercent = items.any { it.kind == QuotaKind.PERCENT }
+    val hasMoney = items.any { it.kind == QuotaKind.MONEY }
+    val byPlan = if (providerId == OLLAMA_ID) {
+        when (plan) {
+            OllamaPlanMode.PERCENT -> if (hasPercent) QuotaCardLayout.PERCENT else null
+            OllamaPlanMode.USD -> if (hasMoney) QuotaCardLayout.MONEY else null
+        }
+    } else {
+        null
+    }
+    return byPlan ?: when {
+        hasPercent -> QuotaCardLayout.PERCENT
+        hasMoney -> QuotaCardLayout.MONEY
+        else -> null
     }
 }
 
 /**
- * 额度卡入口：按返回结构选排版，不按 provider id 选。
+ * 计费模式条的 toast：面板真的换了才说「已切换」，回落时如实报「按实际结构展示」。
  *
- * Ollama 新旧计划、DeepSeek 余额都可能返回两种结构中的一种，用结构分流比用 id
- * 分流更耐改（新增 provider 时不用动这里）。
+ * [layout] 为 null = 还没有数据，没有面板可换，只说选择已记住。
+ */
+internal fun planSwitchToast(plan: OllamaPlanMode, layout: QuotaCardLayout?): String {
+    val label = if (plan == OllamaPlanMode.PERCENT) "按百分比展示" else "按金额展示"
+    val applied = when (plan) {
+        OllamaPlanMode.PERCENT -> layout == QuotaCardLayout.PERCENT
+        OllamaPlanMode.USD -> layout == QuotaCardLayout.MONEY
+    }
+    val actualStructure = if (plan == OllamaPlanMode.PERCENT) "金额结构" else "百分比限额结构"
+    return when {
+        layout == null -> "Ollama · 已记住「$label」，拉到数据后生效"
+        applied -> "Ollama · 已切换为$label"
+        else -> "Ollama · 返回的是" + actualStructure + "，卡片按实际结构展示"
+    }
+}
+
+/**
+ * 额度卡入口：先按计费模式选排版（见 [quotaCardLayout]），没有对应口径时按返回结构。
  */
 @Composable
 fun QuotaCard(
@@ -140,11 +97,10 @@ fun QuotaCard(
     modifier: Modifier = Modifier,
 ) {
     val items = state.items
-    if (items.isEmpty()) return
-    if (items.any { it.kind == QuotaKind.PERCENT }) {
-        PercentQuotaCard(providerId, items, plan, nowEpochSecond, modifier)
-    } else {
-        MoneyQuotaCard(providerId, items, plan, nowEpochSecond, modifier)
+    when (quotaCardLayout(providerId, plan, items)) {
+        QuotaCardLayout.PERCENT -> PercentQuotaCard(providerId, items, plan, nowEpochSecond, modifier)
+        QuotaCardLayout.MONEY -> MoneyQuotaCard(providerId, items, plan, nowEpochSecond, modifier)
+        null -> Unit
     }
 }
 
@@ -158,7 +114,10 @@ private fun PercentQuotaCard(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
-    val primary = items.firstOrNull { it.primary } ?: items.first()
+    // hero 必须是百分比项：按计划选的百分比面板里也允许夹带金额项（如已购余额），
+    // 直接取 items.first() 会把 $0.002 当成百分比主值显示成「剩余 0.2%」。
+    val percentItems = items.filter { it.kind == QuotaKind.PERCENT }
+    val primary = percentItems.firstOrNull { it.primary } ?: percentItems.firstOrNull() ?: return
     val mismatch = QuotaFormat.planMismatchNote(plan, items, providerId)
     AppCard(modifier = modifier.then(percentCardTagOf(providerId))) {
         Row(verticalAlignment = Alignment.CenterVertically) {

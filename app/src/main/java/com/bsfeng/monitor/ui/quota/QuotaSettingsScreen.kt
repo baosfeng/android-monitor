@@ -1,7 +1,9 @@
 package com.bsfeng.monitor.ui.quota
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -84,6 +87,7 @@ fun QuotaSettingsScreen(
     // 弹窗关闭后焦点回「低余额提醒」行（契约「弹窗关闭后焦点回本行」）
     var returnFocusToList by remember { mutableStateOf(false) }
     val lowBalanceFocus = remember { FocusRequester() }
+    val titleFocus = remember { FocusRequester() }
     val toast = rememberToastHostState()
 
     LaunchedEffect(thresholdOpen) {
@@ -93,9 +97,48 @@ fun QuotaSettingsScreen(
         }
     }
 
+    // 进入子页焦点落标题（契约 s18-settings · 键盘「进入子页后焦点落在子页标题」）；
+    // 覆盖层里本页每次打开都会重新组合，LaunchedEffect(Unit) 正好一次
+    LaunchedEffect(Unit) {
+        runCatching { titleFocus.requestFocus() }
+    }
+
+    /**
+     * 退出额度设置：先登记「焦点回额度页齿轮」的一次性信号，再退页。
+     * 返回键 / 系统返回 / 手势都走这里（覆盖层里的 BackHandler 也交给同一条路径）。
+     */
+    val requestBack: () -> Unit = {
+        QuotaSettingsFocusReturn.request()
+        onBack()
+    }
+    // 覆盖层里本页先于 AnimatedScreenOverlay 的 BackHandler 接管返回（与 AppearanceScreen 同口径）
+    BackHandler { requestBack() }
+
+    // 保存结果决定这一行收不收起：在途等、失败留展开（就地提示 + 保留输入）、成功收起
+    val savingProviderId by viewModel.savingProviderId.collectAsStateWithLifecycle()
+    val saveErrors by viewModel.saveErrors.collectAsStateWithLifecycle()
+    var pendingCollapseId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(savingProviderId, saveErrors, pendingCollapseId) {
+        val id = pendingCollapseId ?: return@LaunchedEffect
+        when (saveRowState(savingProviderId, id, saveErrors[id])) {
+            QuotaSaveRowState.WAIT -> Unit
+            // 失败：留展开 + 保留输入，就地提示由行本体显示
+            QuotaSaveRowState.KEEP_OPEN -> pendingCollapseId = null
+            QuotaSaveRowState.COLLAPSE -> {
+                pendingCollapseId = null
+                expandedId = null
+            }
+        }
+    }
+
     Box(modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize().testTag("screen-s19")) {
-            IOSNavigationBar(title = "额度设置", onBack = onBack)
+            IOSNavigationBar(
+                title = "额度设置",
+                onBack = requestBack,
+                // 标题接住进入子页的焦点（IOSNavigationBar 的唯一调用点，见其形参说明）
+                titleModifier = Modifier.focusRequester(titleFocus).focusable(),
+            )
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -124,9 +167,12 @@ fun QuotaSettingsScreen(
                                     expandedId = if (expandedId == info.id) null else info.id
                                 },
                                 onSave = { balance, usage ->
+                                    // 不在这里立即收行：等保存 + 查询有结果再决定（失败要留展开就地提示）
+                                    pendingCollapseId = info.id
                                     viewModel.onSaveCredentialsFor(info.id, balance, usage)
-                                    expandedId = null
                                 },
+                                saving = savingProviderId == info.id,
+                                saveError = saveErrors[info.id],
                                 intervalMinutes = intervalOf(info.id),
                                 onIntervalChange = { minutes ->
                                     setInterval(info.id, minutes)

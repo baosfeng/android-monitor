@@ -34,10 +34,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -47,7 +52,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
-import com.bsfeng.monitor.domain.quota.QuotaKind
 import com.bsfeng.monitor.domain.quota.QuotaRange
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaRepository
@@ -97,6 +101,40 @@ fun QuotaScreen(
     val toast = rememberToastHostState()
     val listState = rememberLazyListState()
     val info = providers.firstOrNull { it.id == selectedId }
+    // 两个回焦点（契约 s18-retry 移除后 / s18-settings 键盘）：页头是这两条回位信号的终点
+    val refreshFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    // 点过「重试」后等错误条真正收起再回焦：错误条还在时刷新按钮不该抢走焦点；
+    // 重试仍失败就作废这次回焦（否则下一次无关的定时刷新成功也会把焦点抢走）
+    var retryArmed by remember(selectedId) { mutableStateOf(false) }
+    var retrySawLoading by remember(selectedId) { mutableStateOf(false) }
+    LaunchedEffect(retryArmed, state.loading, state.errorMessage) {
+        when (
+            retryFocusAction(
+                armed = retryArmed,
+                loading = state.loading,
+                sawLoading = retrySawLoading,
+                hasError = state.errorMessage != null,
+            )
+        ) {
+            QuotaFocusAction.IDLE, QuotaFocusAction.WAIT -> Unit
+            QuotaFocusAction.REQUEST -> {
+                retryArmed = false
+                runCatching { refreshFocus.requestFocus() }
+            }
+            QuotaFocusAction.DROP -> retryArmed = false
+        }
+        if (state.loading) retrySawLoading = true
+    }
+    // 从额度设置返回：齿轮接回焦点（跨覆盖层信号，见 [QuotaSettingsFocusReturn]）
+    val settingsReturnGeneration = QuotaSettingsFocusReturn.generation
+    var seenReturnGeneration by remember { mutableIntStateOf(settingsReturnGeneration) }
+    LaunchedEffect(settingsReturnGeneration) {
+        if (quotaReturnFocusPending(settingsReturnGeneration, seenReturnGeneration)) {
+            seenReturnGeneration = settingsReturnGeneration
+            runCatching { settingsFocus.requestFocus() }
+        }
+    }
     // 聚合视图的 meta 复用原型的「N 家参与排序 · 更新于 9:41」：
     // 页头已经显示时间，聚合视图再在下面单独排一行同样的时间是重复信息
     val updatedMeta = updatedMetaText(
@@ -127,6 +165,8 @@ fun QuotaScreen(
                 refreshing = state.loading,
                 onRefresh = viewModel::onRefresh,
                 onOpenSettings = onOpenSettings,
+                refreshFocus = refreshFocus,
+                settingsFocus = settingsFocus,
             )
             LazyColumn(
                 state = listState,
@@ -179,12 +219,9 @@ fun QuotaScreen(
                                 plan = plan,
                                 onSelect = { mode ->
                                     viewModel.onOllamaPlanChange(mode)
-                                    toast.show(
-                                        when (mode) {
-                                            OllamaPlanMode.PERCENT -> "Ollama · 已切换为按百分比展示"
-                                            OllamaPlanMode.USD -> "Ollama · 已切换为按金额展示"
-                                        }
-                                    )
+                                    // toast 与面板必须说同一件事：返回结构撑不起所选口径时如实报
+                                    // 「按实际结构展示」，否则又是「点了没换、提示说换了」的假反馈
+                                    toast.show(planSwitchToast(mode, quotaCardLayout(OLLAMA_ID, mode, state.items)))
                                 },
                             )
                         }
@@ -195,7 +232,12 @@ fun QuotaScreen(
                             state = state,
                             plan = plan,
                             onOpenSettings = onOpenSettings,
-                            onRetry = viewModel::onRefresh,
+                            onRetry = {
+                                // 先登记「错误条收起后回刷新按钮」，再下发请求（契约 s18-retry 移除后）
+                                retryArmed = true
+                                retrySawLoading = false
+                                viewModel.onRefresh()
+                            },
                             onSaveCredentials = viewModel::onSaveCredentials,
                             onRangeChange = viewModel::onRangeChange,
                             onSaved = { toast.show("已保存，正在查询") },
@@ -239,6 +281,8 @@ private fun QuotaHead(
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
+    refreshFocus: FocusRequester,
+    settingsFocus: FocusRequester,
 ) {
     val t = LocalDesignTokens.current
     Row(
@@ -262,7 +306,8 @@ private fun QuotaHead(
         QuotaHeadIcon(
             icon = Icons.Outlined.Refresh,
             contentDescription = "刷新额度",
-            tagModifier = Modifier.testTag("s18-refresh"),
+            // 错误条收起后的回焦点落在这里（契约 s18-retry 移除后）
+            tagModifier = Modifier.testTag("s18-refresh").focusRequester(refreshFocus),
             tone = HapticTone.MEDIUM,
             rotating = refreshing,
             onClick = onRefresh,
@@ -271,7 +316,8 @@ private fun QuotaHead(
         QuotaHeadIcon(
             icon = Icons.Outlined.Settings,
             contentDescription = "额度设置",
-            tagModifier = Modifier.testTag("s18-settings"),
+            // 从额度设置返回后的回焦点落在这里（契约 s18-settings 键盘行）
+            tagModifier = Modifier.testTag("s18-settings").focusRequester(settingsFocus),
             tone = HapticTone.LIGHT,
             onClick = onOpenSettings,
         )
@@ -385,30 +431,58 @@ private fun QuotaBody(
     val error = state.errorMessage
     val hasData = state.items.isNotEmpty() || state.usage != null
     val now = System.currentTimeMillis() / 1000L
+    // 凭据输入提到卡片外面：保存失败后配置卡随状态一起卸载，再回来时已输入的 Key 不能丢
+    // （契约 s18-save 边界「Key 无效时已输入的 Key 不清空」）。
+    var balanceInput by remember(info?.id) { mutableStateOf("") }
+    var usageInput by remember(info?.id) { mutableStateOf("") }
+    // 错误态里点过「修改 Key」：只回配置卡（保留输入 + 就地提示），不与错误块并列成两个入口
+    var editingKey by remember(info?.id) { mutableStateOf(false) }
+    LaunchedEffect(hasData) { if (hasData) editingKey = false }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = t.space4),
         verticalArrangement = Arrangement.spacedBy(t.space3),
     ) {
-        when {
-            info == null -> QuotaLoading()
-            // 只在首次取数（无缓存）时出现；有旧数据时刷新不切骨架
-            state.loading && !hasData -> QuotaLoading()
-            !state.balanceConfigured && !state.usageConfigured -> QuotaConfigCard(
-                info = info,
+        when (quotaBodyMode(
+            hasProvider = info != null,
+            loading = state.loading,
+            hasData = hasData,
+            editingKey = editingKey,
+            credentialsConfigured = state.balanceConfigured || state.usageConfigured,
+            hasError = error != null,
+        )) {
+            QuotaBodyMode.NO_PROVIDER, QuotaBodyMode.LOADING -> QuotaLoading()
+            // 「修改 Key」之后只出配置卡：错误原因就地提示、重试入口在提示行里，不再并排出错误块
+            QuotaBodyMode.EDIT_KEY -> QuotaConfigCard(
+                info = requireNotNull(info),
+                balance = balanceInput,
+                usage = usageInput,
+                onBalanceChange = { balanceInput = it },
+                onUsageChange = { usageInput = it },
+                notice = error,
+                onRetry = onRetry,
                 onSave = { balance, usage ->
                     onSaveCredentials(balance, usage)
                     onSaved()
                 },
             )
-            error != null && !hasData -> ErrorState(
-                text = error,
-                title = "查询失败",
-                onRetry = onRetry,
-                modifier = Modifier.testTag("s18-error"),
-                actionModifier = Modifier.testTag("s18-retry"),
+            QuotaBodyMode.CONFIG -> QuotaConfigCard(
+                info = requireNotNull(info),
+                balance = balanceInput,
+                usage = usageInput,
+                onBalanceChange = { balanceInput = it },
+                onUsageChange = { usageInput = it },
+                onSave = { balance, usage ->
+                    onSaveCredentials(balance, usage)
+                    onSaved()
+                },
             )
-            else -> QuotaDataBody(
-                info = info,
+            QuotaBodyMode.ERROR -> QuotaErrorBlock(
+                error = requireNotNull(error),
+                onRetry = onRetry,
+                onEditKey = { editingKey = true },
+            )
+            QuotaBodyMode.DATA -> QuotaDataBody(
+                info = requireNotNull(info),
                 state = state,
                 plan = plan,
                 error = error,
@@ -439,7 +513,9 @@ private fun QuotaDataBody(
     onRangeChange: (QuotaRange) -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    val hasPercent = state.items.any { it.kind == QuotaKind.PERCENT }
+    // 面板 / 用量卡跟着「实际渲染的那一版额度卡」走：计费模式撑得起时就是所选口径，
+    // 否则回落实际结构 —— 与 QuotaCard 的分流同源，避免面板锚点与卡片各说各的（P1-2）。
+    val hasPercent = quotaCardLayout(info.id, plan, state.items) == QuotaCardLayout.PERCENT
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -480,18 +556,113 @@ private fun QuotaDataBody(
                 modifier = Modifier.staggerEnterAt(0),
             )
         }
-        if (state.usage != null) {
-            UsageCard(
-                usage = state.usage,
+        // 用量区四种落点分开判：凭据已配但请求失败时，不能再引导「再填一条用量凭据」（假提示）
+        when (
+            quotaUsageSlot(
+                hasUsage = state.usage != null,
+                supportsUsage = info.supportsUsage,
+                usageConfigured = state.usageConfigured,
+                hasError = error != null,
+            )
+        ) {
+            QuotaUsageSlot.DATA -> UsageCard(
+                usage = checkNotNull(state.usage),
                 range = state.range,
                 costUnit = costUnitOf(state),
                 variant = usageVariantOf(info.id, hasPercent),
                 onRangeChange = onRangeChange,
                 modifier = Modifier.staggerEnterAt(1),
             )
-        } else if (info.supportsUsage) {
-            QuotaUsageUnavailableCard(onOpenSettings)
+            QuotaUsageSlot.LOADING -> QuotaUsageLoadingCard(Modifier.staggerEnterAt(1))
+            QuotaUsageSlot.FAILED -> QuotaUsageFailedCard(
+                message = error ?: "查询失败",
+                onRetry = onRetry,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.staggerEnterAt(1),
+            )
+            QuotaUsageSlot.MISSING_CREDENTIAL -> QuotaUsageUnavailableCard(onOpenSettings)
+            QuotaUsageSlot.NONE -> Unit
         }
+    }
+}
+
+/** 一次「重试」结束后焦点该怎么处置。 */
+internal enum class QuotaFocusAction { IDLE, WAIT, REQUEST, DROP }
+
+/**
+ * 点过错误条的「重试」后，焦点什么时候回「刷新额度」（契约 s18-retry · 移除/关闭后）。
+ *
+ * 必须等这一次请求真的跑完：
+ * - 还没登记 → 不管；
+ * - 请求在途 / 请求还没起来 → 等（此刻回焦会把焦点从「重试」上抢走）；
+ * - 跑完且没有错误 → 错误条已收起，回焦刷新按钮；
+ * - 跑完仍有错误 → 错误条还在，作废这次回焦（下一次无关的成功刷新不该抢焦点）。
+ */
+internal fun retryFocusAction(
+    armed: Boolean,
+    loading: Boolean,
+    sawLoading: Boolean,
+    hasError: Boolean,
+): QuotaFocusAction = when {
+    !armed -> QuotaFocusAction.IDLE
+    loading -> QuotaFocusAction.WAIT
+    !sawLoading -> QuotaFocusAction.WAIT
+    hasError -> QuotaFocusAction.DROP
+    else -> QuotaFocusAction.REQUEST
+}
+
+/** 主面板该渲染哪一态（四态互斥 + 「修改 Key」这一支）。 */
+internal enum class QuotaBodyMode { NO_PROVIDER, LOADING, EDIT_KEY, CONFIG, ERROR, DATA }
+
+/**
+ * 主面板状态判定（契约 s18-content「四个状态互斥渲染」）。
+ *
+ * 「修改 Key」优先于错误态：进编辑后只留配置卡一个入口（错误原因就地提示、重试在提示行），
+ * 不允许错误块与配置卡并列——那等于同一件事给两个入口，还会让人以为配置卡是新的一次配置
+ * （第 4 批走查 P1-5）。
+ */
+internal fun quotaBodyMode(
+    hasProvider: Boolean,
+    loading: Boolean,
+    hasData: Boolean,
+    editingKey: Boolean,
+    credentialsConfigured: Boolean,
+    hasError: Boolean,
+): QuotaBodyMode = when {
+    !hasProvider -> QuotaBodyMode.NO_PROVIDER
+    // 只在首次取数（无缓存）时切骨架；有旧数据时刷新不切骨架
+    loading && !hasData -> QuotaBodyMode.LOADING
+    editingKey -> QuotaBodyMode.EDIT_KEY
+    !credentialsConfigured -> QuotaBodyMode.CONFIG
+    hasError && !hasData -> QuotaBodyMode.ERROR
+    else -> QuotaBodyMode.DATA
+}
+
+/**
+ * 无数据失败态：错误块 + 「修改 Key」。
+ *
+ * 契约只给了「查询失败 + 重试」；没有「修改 Key」时，保存时输入的 Key 随配置卡一起卸载，
+ * 用户只能对着错误块发呆（第 4 批走查 P1-5）。两个动作互斥可选：进配置卡就不再并排出错误块。
+ */
+@Composable
+private fun QuotaErrorBlock(
+    error: String,
+    onRetry: () -> Unit,
+    onEditKey: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        ErrorState(
+            text = error,
+            title = "查询失败",
+            onRetry = onRetry,
+            modifier = Modifier.testTag("s18-error"),
+            actionModifier = Modifier.testTag("s18-retry"),
+        )
+        QuotaInlineAction(label = "修改 Key", tone = t.accent, onClick = onEditKey)
     }
 }
 
@@ -527,3 +698,27 @@ private fun costUnitOf(state: QuotaRepository.ProviderState): QuotaUnit {
 
 /** open-design 的 provider id（契约里写作 open-design，注册 id 是 opendesign）。 */
 private const val OPEN_DESIGN_ID = "opendesign"
+
+/**
+ * 额度设置退出后「焦点回齿轮」的一次性信号（契约 s18-settings · 键盘行）。
+ *
+ * 为什么需要跨文件信号：额度设置是宿主导航用覆盖层打开的（MainOverlays.kt:94-99），
+ * 额度页拿不到「覆盖层已关闭」的回调；两端都在本批写区内，用最小代次信号衔接，不动共享导航件
+ * （同一套写法的先例见 AppearanceScreen.kt 的 AppearanceFocusReturn）。
+ *
+ * 用代次（Int）而不是布尔：额度页只在**自己组合期间**观察到新代次才回焦，
+ * 进页面前的旧代次不抢焦点。
+ */
+internal object QuotaSettingsFocusReturn {
+    private var generationState by mutableIntStateOf(0)
+    val generation: Int get() = generationState
+
+    /** 额度设置退页时调用一次（导航栏返回键与系统返回 / 手势共用）。 */
+    fun request() {
+        generationState += 1
+    }
+}
+
+/** 代次有变化才需要回焦；同一代次重复重组不抢焦点。 */
+internal fun quotaReturnFocusPending(currentGeneration: Int, seenGeneration: Int): Boolean =
+    currentGeneration != seenGeneration

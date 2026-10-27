@@ -2,11 +2,20 @@ package com.bsfeng.monitor.ui.quota
 
 // 从 ui/quota/QuotaSettingsProviders.kt 拆出：provider 行 —— ProviderSettingsRow（名称 + 状态 + 凭据填写）、SaveButton、IntervalChips（刷新间隔选项）。负责「一行内完成 provider 配置」。
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +64,11 @@ import com.bsfeng.monitor.ui.theme.fgFade
  * 一行 provider：名称 / 连接状态 / 已配置凭据类型；点开在两行内完成填写。
  *
  * 展开态不做二级页面：凭据只有 1～2 条，push 一层反而让「改一条 Key」变成三次导航。
+ *
+ * 交互口径（契约 s19-provider-*）：
+ * - 整行按下 120ms 缩到 0.96（--dur-press）+ LIGHT；展开 220ms / 收起 150ms（--dur-overlay-in / out）；
+ * - 收起后焦点回本行：展开区卸载会把焦点一起带走，走 pendingFocus 等重组收起后再请求；
+ * - 保存期间按钮锁一次（连点只存一次），失败保留输入并就地提示（见 [saveRowState]）。
  */
 @Composable
 internal fun ProviderSettingsRow(
@@ -64,17 +78,38 @@ internal fun ProviderSettingsRow(
     onSave: (balance: String, usage: String) -> Unit,
     intervalMinutes: Int = QuotaSettings.defaultMinutesFor(info.id),
     onIntervalChange: (Int) -> Unit = {},
+    /** 保存 + 查询在途（设置页把 ViewModel 的在途锁下传）。 */
+    saving: Boolean = false,
+    /** 上次保存后的失败原因；非空时在按钮下就地提示，且输入不清空。 */
+    saveError: String? = null,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val rowShape = RoundedCornerShape(t.radiusMd)
+    val rowFocus = remember { FocusRequester() }
     var balance by remember(info.id, expanded) { mutableStateOf("") }
     var usage by remember(info.id, expanded) { mutableStateOf("") }
     val needsUsageRow = info.usageKind != null && info.usageKind != info.balanceKind
+    // 收起后才把焦点送回本行：此刻展开区还在树里，零帧请求会落到即将卸载的节点上
+    // （写法照 Chips.kt:179-185 的 pendingFocus）
+    var pendingRowFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingRowFocus, expanded) {
+        if (pendingRowFocus && !expanded) {
+            pendingRowFocus = false
+            runCatching { rowFocus.requestFocus() }
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable {
+            .clip(rowShape)
+            .pressFeedback(interaction)
+            .keyboardFocusRing(rowShape)
+            .focusRequester(rowFocus)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 haptic(HapticTone.LIGHT)
+                if (expanded) pendingRowFocus = true
                 onToggle()
             }
             .padding(t.space3),
@@ -102,82 +137,109 @@ internal fun ProviderSettingsRow(
                 modifier = Modifier.padding(start = t.space1),
             )
         }
-        if (expanded) {
-            Spacer(Modifier.height(t.space3))
-            Text(
-                "余额 · ${kindLabel(info.balanceKind)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = t.fg2,
-            )
-            Spacer(Modifier.height(t.space1))
-            QuotaTextField(
-                value = balance,
-                onValueChange = { balance = it },
-                placeholder = info.credentialHint.ifBlank { "API Key" },
-            )
-            if (info.credentialHelp.isNotBlank()) {
-                Spacer(Modifier.height(t.space1))
-                Text(info.credentialHelp, style = MaterialTheme.typography.bodySmall, color = t.muted)
-            }
-            if (needsUsageRow) {
+        // 展开 220ms / 收起 150ms（--dur-overlay-in / out，契约 s19 头部时长口径）。
+        // 不用 foundation 的 expandEnter()：那个角色取 --dur-page（340ms），与本页契约不一致。
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(t.durOverlayIn, easing = t.easeOut)) +
+                fadeIn(tween(t.durOverlayIn, easing = t.easeOut)),
+            exit = shrinkVertically(tween(t.durOverlayOut, easing = t.easeIn)) +
+                fadeOut(tween(t.durOverlayOut, easing = t.easeIn)),
+        ) {
+            Column {
                 Spacer(Modifier.height(t.space3))
                 Text(
-                    "用量 · ${kindLabel(info.usageKind)}",
+                    "余额 · ${kindLabel(info.balanceKind)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = t.fg2,
                 )
                 Spacer(Modifier.height(t.space1))
                 QuotaTextField(
-                    value = usage,
-                    onValueChange = { usage = it },
-                    placeholder = info.usageCredentialHint ?: "平台登录令牌",
+                    value = balance,
+                    onValueChange = { balance = it },
+                    placeholder = info.credentialHint.ifBlank { "API Key" },
                 )
+                if (info.credentialHelp.isNotBlank()) {
+                    Spacer(Modifier.height(t.space1))
+                    Text(info.credentialHelp, style = MaterialTheme.typography.bodySmall, color = t.muted)
+                }
+                if (needsUsageRow) {
+                    Spacer(Modifier.height(t.space3))
+                    Text(
+                        "用量 · ${kindLabel(info.usageKind)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = t.fg2,
+                    )
+                    Spacer(Modifier.height(t.space1))
+                    QuotaTextField(
+                        value = usage,
+                        onValueChange = { usage = it },
+                        placeholder = info.usageCredentialHint ?: "平台登录令牌",
+                    )
+                    Spacer(Modifier.height(t.space1))
+                    Text(
+                        info.usageCredentialHelp ?: "用量接口要平台登录令牌，与余额 Key 不通用；只填一个也能用。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                    )
+                }
+                Spacer(Modifier.height(t.space3))
+                SaveButton(
+                    enabled = !saving && (balance.isNotBlank() || (needsUsageRow && usage.isNotBlank())),
+                    onClick = {
+                        haptic(HapticTone.SUCCESS)
+                        onSave(balance.trim(), usage.trim())
+                    },
+                )
+                if (saveError != null) {
+                    Spacer(Modifier.height(t.space2))
+                    // 就地提示：保存 / 查询失败时输入保留，改一改再点保存即可（契约 s19 边界）
+                    Text(
+                        "保存后查询失败：" + saveError + " · 输入已保留，可修改后重试",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.dangerText,
+                    )
+                }
+                Spacer(Modifier.height(t.space4))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "刷新间隔",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = t.fg2,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IntervalChips(selected = intervalMinutes, onSelect = onIntervalChange)
+                }
                 Spacer(Modifier.height(t.space1))
                 Text(
-                    info.usageCredentialHelp ?: "用量接口要平台登录令牌，与余额 Key 不通用；只填一个也能用。",
+                    "前台停留在额度页时按这个间隔刷新；Ollama 限流 10 次/分钟（跨设备共享），别调太小。",
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                 )
             }
-            Spacer(Modifier.height(t.space3))
-            SaveButton(
-                enabled = balance.isNotBlank() || (needsUsageRow && usage.isNotBlank()),
-                onClick = {
-                    haptic(HapticTone.SUCCESS)
-                    onSave(balance.trim(), usage.trim())
-                },
-            )
-            Spacer(Modifier.height(t.space4))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "刷新间隔",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = t.fg2,
-                    modifier = Modifier.weight(1f),
-                )
-                IntervalChips(selected = intervalMinutes, onSelect = onIntervalChange)
-            }
-            Spacer(Modifier.height(t.space1))
-            Text(
-                "前台停留在额度页时按这个间隔刷新；Ollama 限流 10 次/分钟（跨设备共享），别调太小。",
-                style = MaterialTheme.typography.bodySmall,
-                color = t.muted,
-            )
         }
     }
 }
 
-/** 保存按钮（主色 + 卡片内宽度；命中成功档触觉）。 */
+/** 保存按钮（主色 + 卡片内宽度；按下 0.96 + SUCCESS 触觉，在途 / 空输入时禁用）。 */
 @Composable
 private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(t.radiusMd)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(t.tapMin)
-            .clip(RoundedCornerShape(t.radiusMd))
+            .clip(shape)
             .background(if (enabled) t.accent else t.fgFade(10))
-            .clickable(enabled = enabled, onClick = onClick),
+            .pressFeedback(interaction, enabled = enabled)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -188,7 +250,12 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 刷新间隔小 chip（1 / 3 / 5 / 10 / 15 分钟）。 */
+/**
+ * 刷新间隔小 chip（1 / 3 / 5 / 10 / 15 分钟）。
+ *
+ * 三处口径（契约 s19-provider-* · 刷新间隔）：选中底 120ms 过渡（--dur-state）、点击区 ≥44dp、
+ * 点已选中的 chip 不重复落盘也不发请求。
+ */
 @Composable
 private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
     val t = LocalDesignTokens.current
@@ -196,15 +263,30 @@ private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(t.space1)) {
         QuotaSettings.MINUTE_OPTIONS.forEach { minutes ->
             val on = minutes == selected
+            val interaction = remember { MutableInteractionSource() }
+            val bg by animateColorAsState(
+                targetValue = if (on) t.fgFade(10) else Color.Transparent,
+                animationSpec = tween(t.durState),
+                label = "quotaIntervalChipBg",
+            )
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(t.radiusSm))
-                    .background(if (on) t.fgFade(10) else Color.Transparent)
-                    .clickable {
+                    .background(bg)
+                    .pressFeedback(interaction)
+                    .clickable(
+                        interactionSource = interaction,
+                        indication = LocalIndication.current,
+                    ) {
+                        // 已是该间隔时不落盘、不重排闹钟、不重复震动
+                        if (!intervalSelectionChanged(minutes, selected)) return@clickable
                         haptic(HapticTone.LIGHT)
                         onSelect(minutes)
                     }
-                    .padding(horizontal = t.space2, vertical = t.space1),
+                    // 点击区 44dp：纵向内边距补到下限
+                    .heightIn(min = t.tapMin)
+                    .padding(horizontal = t.space2),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "${minutes} 分钟",
@@ -214,6 +296,34 @@ private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * 点刷新间隔 chip 是否算一次真实改动。
+ *
+ * 点已选中的 chip 不重复落盘（契约 s19-provider-* · 刷新间隔边界）：不算改动 → 不写盘、不震、
+ * 不重排闹钟。
+ */
+internal fun intervalSelectionChanged(minutes: Int, selected: Int): Boolean = minutes != selected
+
+/** 保存结束后这一行的处置。 */
+internal enum class QuotaSaveRowState { WAIT, KEEP_OPEN, COLLAPSE }
+
+/**
+ * 保存结束后收不收起这一行（契约 s19 · 「保存并查询」移除后 / 边界）。
+ *
+ * - 在途：等（连点只存一次，不重复收起）；
+ * - 失败：留展开并保留输入（就地提示在按钮下方），不能把错误吞掉还收行；
+ * - 成功：收起（收起后的焦点回本行由行本体负责）。
+ */
+internal fun saveRowState(
+    savingProviderId: String?,
+    providerId: String,
+    saveError: String?,
+): QuotaSaveRowState = when {
+    savingProviderId == providerId -> QuotaSaveRowState.WAIT
+    saveError != null -> QuotaSaveRowState.KEEP_OPEN
+    else -> QuotaSaveRowState.COLLAPSE
 }
 // ───────────────────── 单家态 · provider chip 行 ─────────────────────
 // 从 QuotaCards.kt 迁来并补契约锚点：共享件只给容器 modifier，chip 级 testTag 落不下去，

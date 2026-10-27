@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 
@@ -101,6 +102,19 @@ class QuotaViewModel(
     val refreshMinutes: StateFlow<Int> = _refreshMinutes.asStateFlow()
     val refreshHours: StateFlow<Int> = _refreshHours.asStateFlow()
 
+    /**
+     * 正在保存凭据 / 查询的 provider（设置页据此把「保存并查询」锁一次）。
+     *
+     * 同一时刻只有一行展开，所以用单值而不是集合：在途期间不再接受任何一行的保存请求
+     * （契约 s19 · 连点只存一次）。
+     */
+    private val _savingProviderId = MutableStateFlow<String?>(null)
+    val savingProviderId: StateFlow<String?> = _savingProviderId.asStateFlow()
+
+    /** 上次保存后就地提示的失败原因（按 provider）；重新保存或保存成功时清掉。 */
+    private val _saveErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val saveErrors: StateFlow<Map<String, String>> = _saveErrors.asStateFlow()
+
     /** 进页面时拉一次（repository 内部 60 秒节流，切 Tab 不会打满限流）。 */
     fun onProviderVisible() {
         val id = _selectedProviderId.value
@@ -148,9 +162,15 @@ class QuotaViewModel(
 
     /** 修改某个 provider 的刷新间隔（分钟）；同时刷新 repository 的节流基准。 */
     fun onRefreshIntervalChange(providerId: String, minutes: Int) {
+        // 点已选中的 chip 不重复落盘（契约 s19 · 点已选中的 chip 不重复落盘也不发请求）
+        if (settings.refreshIntervalMinutes(providerId) == minutes) return
         settings.setRefreshIntervalMinutes(providerId, minutes)
         repository.intervalSeconds = { id -> settings.refreshIntervalMinutes(id) * 60L }
-        _refreshMinutes.value = settings.refreshIntervalMinutes(providerId)
+        // 只同步「当前选中家」的前台定时器：改了别家的间隔不该重置当前家的节奏
+        // （节奏由 QuotaScreen 的 LaunchedEffect 按 refreshMinutes 重启，见 shouldSyncRefreshMinutes）
+        if (shouldSyncRefreshMinutes(providerId, _selectedProviderId.value)) {
+            _refreshMinutes.value = settings.refreshIntervalMinutes(providerId)
+        }
     }
 
     fun onSelectProvider(id: String) {
@@ -180,11 +200,35 @@ class QuotaViewModel(
         }
     }
 
-    /** 设置页保存某个 provider 的两个凭据（不改当前选中项）。 */
+    /**
+     * 设置页保存某个 provider 的两个凭据（不改当前选中项）。
+     *
+     * 三件事都要给设置页一个可观察的结果：在途锁（连点只存一次）、失败原因（就地提示）、
+     * 完成信号（成功后收起展开行，失败则留展开并保留输入，见 [saveRowState]）。
+     */
     fun onSaveCredentialsFor(providerId: String, balanceValue: String?, usageValue: String?) {
+        if (_savingProviderId.value != null) return
+        _savingProviderId.value = providerId
+        _saveErrors.update { it - providerId }
         viewModelScope.launch(Dispatchers.IO) {
-            val provider = repository.provider(providerId) ?: return@launch
-            saveFor(provider, balanceValue, usageValue)
+            try {
+                val provider = repository.provider(providerId)
+                if (provider == null) {
+                    _saveErrors.update { it + (providerId to "provider 未接入") }
+                    return@launch
+                }
+                val failure = runCatching { saveFor(provider, balanceValue, usageValue) }.exceptionOrNull()
+                if (failure != null) {
+                    _saveErrors.update { it + (providerId to (failure.message ?: "保存失败")) }
+                    return@launch
+                }
+                // 凭据写成功但随后的查询失败（如 Key 无效）：数据层的结论就是这一行的结论
+                repository.state(providerId).errorMessage?.let { message ->
+                    _saveErrors.update { it + (providerId to message) }
+                }
+            } finally {
+                _savingProviderId.value = null
+            }
         }
     }
 
@@ -259,6 +303,16 @@ class QuotaViewModel(
             )
         }
 }
+
+/**
+ * 改了某家的刷新间隔后，是否同步「当前选中家」的前台定时器。
+ *
+ * 额度页只有一个前台定时器（QuotaScreen 的 LaunchedEffect 读 [QuotaViewModel.refreshMinutes]），
+ * 它代表的是**当前选中家**的节奏：在设置页调了别家的间隔却去改写它，会让当前家按别家的频率刷
+ * （第 4 批走查 P1-9：串改选中家）。
+ */
+internal fun shouldSyncRefreshMinutes(changedProviderId: String, selectedProviderId: String): Boolean =
+    changedProviderId == selectedProviderId
 
 /**
  * ViewModel 工厂：从 `ServiceContainer` 取已装配的 [QuotaRepository]。
