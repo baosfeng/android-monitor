@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
+import com.bsfeng.monitor.transfer.service.RESEND_BLOCK_SOURCE_GONE
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.live.ScreenHead
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -308,6 +309,24 @@ fun TransferScreen(
         is TransferSheet.Actions -> ActionsSheet(
             task = sheet.task,
             batchCount = tasks.count { it.sessionId == sheet.task.sessionId },
+            // 源文件是否还可读要问 ContentResolver，每次打开面板取一次（不跟着重组反复问）
+            resend = remember(sheet.task, devices) {
+                viewModel.resendAvailability(sheet.task)
+            },
+            onResend = {
+                val target = sheet.task
+                viewModel.resendTask(target) { result ->
+                    page.dismissSheet()
+                    result.onSuccess {
+                        // 契约 C-17：1:1 新批次卡片立即出现在「进行中」顶部，焦点落到新批次卡
+                        page.showToast("已重新发送")
+                        page.requestScroll("hint-active")
+                    }.onFailure { error ->
+                        // 拿不回源 / 对方离线：明确告诉用户，不静默
+                        page.showToast(error.message ?: RESEND_BLOCK_SOURCE_GONE)
+                    }
+                }
+            },
             onDelete = {
                 requestDelete(
                     page = page,

@@ -5,6 +5,7 @@ package com.bsfeng.monitor.transfer.service
 
 import android.util.Log
 import androidx.core.net.toUri
+import com.bsfeng.monitor.domain.transfer.TransferDirection
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.transfer.data.TransferTaskStore
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +57,23 @@ private fun TransferEngine.maybePersist(previous: TransferTask?, updated: Transf
     val firstSeen = previous == null
     val becameTerminal = updated.status.isTerminal && (previous == null || !previous.status.isTerminal)
     if (!firstSeen && !becameTerminal) return
-    val uri = publishedFiles[taskKey(updated.sessionId, updated.file.fileId)]?.toString()
-    persistTask(updated, uri)
+    persistTask(updated, uriForPersist(updated))
+}
+
+/**
+ * 这一行要落库的 Uri：**按方向**取，别再把两侧混成一份。
+ *
+ * 进程内曾只取 [TransferEngine.publishedFiles]（接收落盘产物），于是发送任务的 Uri 恒为 null：
+ * 发送时源 Uri 只活在 sendFiles 的协程里，一次用完就没了 ——「重新发送」（C-17）与
+ * 「重试失败项」（C-08）因此只能恒不渲染。现在发送方向落 [TransferEngine.sourceFiles]。
+ */
+internal fun TransferEngine.uriForPersist(task: TransferTask): String? {
+    val key = taskKey(task.sessionId, task.file.fileId)
+    return if (task.direction == TransferDirection.SEND) {
+        sourceFiles[key]?.toString()
+    } else {
+        publishedFiles[key]?.toString()
+    }
 }
 
 internal fun TransferEngine.persistTask(task: TransferTask, fileUri: String?) {
@@ -82,7 +98,14 @@ internal suspend fun TransferEngine.loadPersistedHistory() {
     val restored = TransferHistoryRestore.restore(entries, now, confirmTimeoutMs, noProgressTimeoutMs)
     _tasks.update { current -> TransferHistoryRestore.merge(restored, current) }
     entries.forEach { entry ->
-        val uri = entry.fileUri?.let { runCatching { it.toUri() }.getOrNull() }
-        if (uri != null) publishedFiles[taskKey(entry.task.sessionId, entry.task.file.fileId)] = uri
+        val uri = entry.fileUri?.let { runCatching { it.toUri() }.getOrNull() } ?: return@forEach
+        val key = taskKey(entry.task.sessionId, entry.task.file.fileId)
+        // 按方向回填：发送任务落 sourceFiles（重发要用），接收任务落 publishedFiles（删除要用）。
+        // 混着放会让「删除接收任务时删掉源文件」这类越界操作成为可能。
+        if (entry.task.direction == TransferDirection.SEND) {
+            sourceFiles[key] = uri
+        } else {
+            publishedFiles[key] = uri
+        }
     }
 }

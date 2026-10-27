@@ -48,12 +48,16 @@ internal class TransferSendCoordinator(private val engine: TransferEngine) {
         }
         val sessionId = UUID.randomUUID().toString()
         sources.forEachIndexed { index, source ->
+            val fileId = "f${index + 1}"
+            // 先登记源 Uri 再建任务行：upsertTask 会立刻落库（首次出现），落库时按方向取
+            // sourceFiles —— 顺序反了就会把发送任务的 Uri 存成 null，重发能力当场丢失。
+            engine.sourceFiles[engine.taskKey(sessionId, fileId)] = source.uri
             engine.upsertTask(
                 com.bsfeng.monitor.domain.transfer.TransferTask(
                     sessionId = sessionId,
                     peer = peer,
                     direction = TransferDirection.SEND,
-                    file = TransferFile("f${index + 1}", source.name, source.size, source.sha256, source.mime),
+                    file = TransferFile(fileId, source.name, source.size, source.sha256, source.mime),
                     status = TransferStatus.OFFERED,
                     updatedAtMs = System.currentTimeMillis(),
                     createdAtMs = System.currentTimeMillis(),

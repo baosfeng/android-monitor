@@ -11,7 +11,10 @@ import com.bsfeng.monitor.domain.transfer.PairingPolicy
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
+import com.bsfeng.monitor.transfer.service.ResendAvailability
 import com.bsfeng.monitor.transfer.service.TransferEngine
+import com.bsfeng.monitor.transfer.service.TransferSourceProbe
+import com.bsfeng.monitor.transfer.service.resendAvailabilityOf
 import com.bsfeng.monitor.transfer.transport.DownloadsSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -199,6 +202,33 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     /** 取消任务。 */
     fun cancelTask(sessionId: String) {
         engine.cancelTask(sessionId)
+    }
+
+    /**
+     * C-17 / C-08：按原文件与原目标重发一条终态发送任务（旧记录保留在「最近完成」）。
+     *
+     * @param onResult 真实结果；失败时 message 已是契约逐字口径（源文件已不在本机 / 对方不在线）。
+     */
+    fun resendTask(task: TransferTask, onResult: (Result<Unit>) -> Unit = {}) {
+        engine.resendTask(task, onResult)
+    }
+
+    /**
+     * C-17 / C-08 的可用性：这条任务的「重新发送 / 重试」该渲染成什么。
+     *
+     * 源文件能否读到要问一次 ContentResolver，所以放在 VM 里算（每帧重组都问会很贵；
+     * UI 只在打开面板 / 展开明细时取一次）。
+     */
+    internal fun resendAvailability(task: TransferTask): ResendAvailability {
+        val sourceUri = engine.sourceUriOf(task)
+        return resendAvailabilityOf(
+            direction = task.direction,
+            isTerminal = task.status.isTerminal,
+            hasReadableSource = sourceUri != null &&
+                TransferSourceProbe.canRead(getApplication(), sourceUri),
+            peerOnline = devices.value.any { it.deviceId == task.peer.deviceId && it.online } ||
+                task.peer.online,
+        )
     }
 
     /** 删除一条已终结任务（记录 + 已落盘接收文件）；进行中任务会被引擎拒绝。 */

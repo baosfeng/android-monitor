@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.transfer.TransferDirection
 import com.bsfeng.monitor.domain.transfer.TransferTask
+import com.bsfeng.monitor.transfer.service.ResendAvailability
 import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
 import com.bsfeng.monitor.ui.components.BottomSheet
 import com.bsfeng.monitor.ui.components.ConfirmDialog
@@ -92,8 +94,8 @@ internal fun CancelSheet(
  * C-04：动作面板（终态任务）。
  *
  * 菜单顺序按契约：重新发送 → 删除记录 → 取消。
- * **C-17「重新发送」当前不渲染**：service 层没有 resend API（源 Uri 未留存），
- * 渲染一个点了没反应或永远置灰的项等于让 UI 撒谎；锚点与所需接口见 [canResend]。
+ * 「重新发送」按 [ResendAvailability] 渲染三态：不渲染（接收方向 / 未终态）、
+ * 置灰并说明原因（源文件已不在本机 / 对方不在线）、可点。
  */
 @Composable
 internal fun ActionsSheet(
@@ -101,6 +103,8 @@ internal fun ActionsSheet(
     batchCount: Int,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
+    resend: ResendAvailability = ResendAvailability.Ready,
+    onResend: () -> Unit = {},
 ) {
     val t = LocalDesignTokens.current
     val peerAlias = task.peer.alias.trim().ifBlank { UNKNOWN_PEER_ALIAS }
@@ -120,12 +124,20 @@ internal fun ActionsSheet(
             color = t.muted,
         )
         Spacer(Modifier.height(t.space4))
-        if (canResend(task)) {
+        // 三态：Hidden 不渲染；Blocked 置灰 + 说明原因（不给假入口，也不把入口藏掉）；
+        // Ready 真重发。原因文案逐字取契约 s22 C-17 边界。
+        if (resend != ResendAvailability.Hidden) {
+            val enabled = resend is ResendAvailability.Ready
             MenuRow(
                 label = "重新发送",
                 danger = false,
+                enabled = enabled,
+                hint = (resend as? ResendAvailability.Blocked)?.reason,
                 modifier = Modifier.testTag("C-17"),
-                onClick = onDismiss,
+                onClick = {
+                    if (!enabled) return@MenuRow
+                    onResend()
+                },
             )
         }
         MenuRow(
@@ -137,15 +149,6 @@ internal fun ActionsSheet(
         MenuRow(label = "取消", danger = false, onClick = onDismiss)
     }
 }
-
-/**
- * C-17 是否可用。
- *
- * 现在恒为 false：`TransferEngine` 没有重新发送入口，发送时的源 `Uri` 也不在任务里留存。
- * 接线需要：`TransferEngine.resend(sessionId: String, fileId: String): Result<Unit>`
- * （或保留源 Uri 映射），属于 service 层新能力，不在本轮范围 —— 见交接文档「需要什么接口」。
- */
-internal fun canResend(task: TransferTask): Boolean = false
 
 /** 二次确认框（不可撤销的操作才走到这里）。 */
 @Composable
@@ -277,12 +280,19 @@ internal fun TransferSheetButton(
     }
 }
 
-/** 动作面板的一行菜单：min-height 52、--surface 底、危险项用 --danger；锚点由调用方显式给出。 */
+/**
+ * 动作面板的一行菜单：min-height 52、--surface 底、危险项用 --danger；锚点由调用方显式给出。
+ *
+ * @param enabled false = 禁用（点击区保留但无反馈、不震）；[hint] 是禁用原因，
+ *   渲染在标签下方 —— 契约要求「置灰并说明」而不是只置灰。
+ */
 @Composable
 private fun MenuRow(
     label: String,
     danger: Boolean,
     modifier: Modifier = Modifier,
+    hint: String? = null,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
@@ -296,8 +306,13 @@ private fun MenuRow(
             .heightIn(min = t.rowMinH)
             .clip(shape)
             .background(t.surface)
+            // clickable 禁用时 interaction 不会发按压事件，rowPressFeedback 自然不动
             .rowPressFeedback(interaction)
-            .clickable(interactionSource = interaction, indication = null) {
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+            ) {
                 haptic(if (danger) HapticTone.REJECT else HapticTone.LIGHT)
                 onClick()
             }
@@ -305,10 +320,21 @@ private fun MenuRow(
             .padding(horizontal = t.space4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (danger) t.dangerText else t.fg,
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                color = when {
+                    !enabled -> t.muted
+                    danger -> t.dangerText
+                    else -> t.fg
+                },
+            )
+            if (!enabled && hint != null) {
+                Spacer(Modifier.height(t.space1))
+                // 契约 s22 C-17 边界：置灰时必须说明为什么（源文件已不在本机 / 对方不在线）
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = t.meta)
+            }
+        }
     }
 }
