@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>「传送」Tab 交互原型 · 390×844</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f5f5f7;--surface-warm:#fbfbfd;--panel:#ffffff;
+  --fg:#1d1d1f;--fg-2:#424245;--muted:#6e6e73;--meta:#86868b;
+  --border:#d2d2d7;--border-soft:#e8e8ed;
+  --accent:#0071e3;--accent-ink:#0058b0;--accent-on:#ffffff;--accent-wash:rgba(0,113,227,.10);
+  --danger:#dc2626;--danger-wash:rgba(220,38,38,.10);
+  --success:#16a34a;--success-wash:rgba(22,163,74,.10);--warn:#eab308;
+  --radius-sm:8px;--radius-md:12px;--radius-lg:18px;--radius-pill:980px;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;
+  --tap-min:44px;
+  --dur-press:120ms;--dur-state:120ms;--dur-overlay-in:220ms;--dur-overlay-out:150ms;--dur-page:340ms;
+  --ease-standard:cubic-bezier(.28,0,.22,1);--ease-out:cubic-bezier(.2,0,0,1);--ease-in:cubic-bezier(.4,0,1,1);
+  --elev-1:0 1px 2px rgba(29,29,31,.07);--elev-2:0 10px 28px -10px rgba(29,29,31,.22);--elev-3:0 22px 56px -18px rgba(29,29,31,.34);
+  --font:-apple-system,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  --stage:#eceef1;--stage-ink:#5b6069;--white:#ffffff;--black:#000000;--on-dark:#ffffff;
+  --accent-hover:#0077ed;--accent-active:#0066cc;--danger-on:#ffffff;
+  --swipe-on:#ffffff;--scrim:rgba(20,20,22,.38);--toast-bg:rgba(29,29,31,.94);--nav-bg:rgba(255,255,255,.96);
+  --text-xs:12px;--text-sm:14px;--text-base:17px;--text-xl:28px;
+  --warn-ink:#8a6400;--success-ink:#0f7a37;--skel-mid:#ececf0;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--stage);font-family:var(--font);color:var(--fg)}
+.stage{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px 12px 48px}
+.stage-head{font-size:14px;color:var(--stage-ink);text-align:center;line-height:1.6;max-width:520px}
+.stage-head b{color:var(--fg)}
+.devbar{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:520px}
+.demo-btn{min-height:var(--tap-min);padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--border);background:var(--panel);font-size:14px;color:var(--fg-2);cursor:pointer;font-family:var(--font)}
+.demo-btn.is-on{background:var(--fg);border-color:var(--fg);color:var(--on-dark)}
+.demo-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.phone{width:390px;height:844px;border-radius:44px;background:var(--black);padding:10px;box-shadow:0 30px 80px -30px rgba(0,0,0,.5)}
+.screen{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.statusbar{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto}
+.statusbar .dot{width:6px;height:6px;border-radius:50%;background:var(--fg);opacity:.7}
+.pagehead{flex:0 0 auto;padding:4px 16px 10px;border-bottom:1px solid var(--border-soft);background:var(--bg)}
+.pagehead h1{margin:0;font-size:28px;line-height:1.15;letter-spacing:-.015em;font-weight:700}
+.pagehead .meta{margin-top:4px;font-size:13px;color:var(--muted)}
+.scroll{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:12px 16px 120px;scroll-behavior:smooth}
+.scroll::-webkit-scrollbar{width:0}
+.card{background:var(--panel);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--elev-1)}
+.card + .card{margin-top:10px}
+.row{display:flex;align-items:center;gap:12px}
+.grow{flex:1 1 auto;min-width:0}
+.t-title{font-size:16px;font-weight:600;line-height:1.3;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.devname{font-size:15px;font-weight:600;line-height:1.3;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-body{font-size:14px;color:var(--muted);line-height:1.45}
+.t-meta{font-size:12px;color:var(--muted);line-height:1.4}
+.t-small{font-size:13px;color:var(--muted)}
+.label{font-size:14px;font-weight:600;color:var(--fg-2);margin:18px 2px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--tap-min);min-width:var(--tap-min);padding:0 16px;border-radius:var(--radius-md);border:1px solid transparent;font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;transition:transform var(--dur-press) var(--ease-standard),background var(--dur-state) var(--ease-standard)}
+.btn:active{transform:scale(.96)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn-primary{background:var(--accent);color:var(--accent-on)}
+.btn-primary:disabled{background:var(--border-soft);color:var(--meta);cursor:not-allowed;transform:none}
+.btn-ghost{background:var(--panel);border-color:var(--border);color:var(--fg)}
+.btn-danger{background:var(--danger);color:var(--danger-on)}
+.btn-block{display:flex;width:100%}
+.btn-soft{background:var(--surface);color:var(--fg);border-color:transparent}
+.linkbtn{min-height:var(--tap-min);min-width:var(--tap-min);display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:var(--accent);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;padding:0 8px;border-radius:var(--radius-sm)}
+.linkbtn.muted{color:var(--muted);white-space:nowrap;font-size:12px;padding:0 2px}
+.linkbtn.danger{color:var(--danger)}
+.linkbtn:active{opacity:.6}
+.linkbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.iconbtn{width:var(--tap-min);height:var(--tap-min);min-width:var(--tap-min);display:inline-flex;align-items:center;justify-content:center;background:var(--surface);border:0;border-radius:var(--radius-md);cursor:pointer;color:var(--fg-2)}
+.iconbtn:active{transform:scale(.96)}
+.iconbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.devwrap{display:flex;align-items:center;gap:8px}
+.dev{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:12px;min-height:64px;padding:12px;border-radius:var(--radius-lg);border:1px solid var(--border-soft);background:var(--panel);cursor:pointer;text-align:left;font-family:var(--font);transition:border-color var(--dur-state) var(--ease-standard),box-shadow var(--dur-state) var(--ease-standard)}
+.dev:active{background:var(--surface-warm)}
+.dev:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dev.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset,var(--elev-1)}
+.dev.offline{opacity:.45;cursor:not-allowed}
+.dev + .dev{margin-top:8px}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--accent-wash);display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto}
+.badge{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:var(--radius-pill);background:var(--accent-wash);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.02em;white-space:nowrap;flex:0 0 auto}
+.badge.warn{background:rgba(234,179,8,.14);color:var(--warn-ink)}
+.badge.gray{background:var(--surface);color:var(--muted)}
+.task{position:relative;background:var(--panel);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:14px;transition:transform var(--dur-state) var(--ease-standard)}
+.task + .task{margin-top:8px}
+.task .ttl{font-size:15px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.task .sub{font-size:13px;color:var(--muted);margin-top:3px}
+.task .sub.err{color:var(--danger)}
+.bar{height:4px;border-radius:var(--radius-pill);background:rgba(29,29,31,.10);margin-top:12px;overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--accent);transition:width var(--dur-state) var(--ease-standard)}
+.bar > i.ok{background:var(--success)}
+.bar > i.bad{background:var(--danger)}
+.receipt{width:100%;display:flex;align-items:center;gap:10px;min-height:var(--tap-min);padding:10px 14px;border-radius:var(--radius-md);background:var(--surface);border:0;font-family:var(--font);cursor:pointer;text-align:left}
+.receipt.done{background:var(--success-wash)}
+.receipt .rtx{flex:1 1 auto;font-size:13px;font-weight:600;color:var(--fg-2)}
+.receipt.done .rtx{color:var(--success-ink)}
+.receipt .chev{font-size:12px;color:var(--fg-2);transition:transform var(--dur-state) var(--ease-standard)}
+.receipt.open .chev{transform:rotate(180deg)}
+.receipt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.detail{margin-top:6px;border-radius:var(--radius-md);background:var(--surface-warm);border:1px solid var(--border-soft);padding:10px 14px}
+.detail div{font-size:13px;color:var(--fg-2);display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+.detail span:last-child{color:var(--meta);font-family:var(--font-mono);font-size:12px}
+.batch{margin-top:10px}
+.swipe{position:relative;margin-top:8px;border-radius:var(--radius-lg);overflow:hidden;touch-action:pan-y}
+.swipe:first-of-type{margin-top:0}
+.swipe .danger-bg{position:absolute;inset:0;display:flex;align-items:center;padding:0 20px;background:var(--danger);color:var(--swipe-on);font-size:13px;font-weight:600;gap:8px;opacity:0;transition:opacity var(--dur-state) var(--ease-standard)}
+.swipe.reveal .danger-bg{opacity:1}
+.swipe .task{margin:0;will-change:transform}
+.swipe.animating .task{transition:transform var(--dur-state) var(--ease-standard)}
+.empty{padding:26px 16px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius-lg);background:var(--surface-warm)}
+.empty .ico{font-size:26px;margin-bottom:6px}
+.empty .et{font-size:15px;font-weight:600;margin-bottom:4px}
+.empty .ed{font-size:13px;color:var(--muted);line-height:1.5}
+.hint{font-size:13px;color:var(--muted);padding:10px 2px}
+.skel{background:linear-gradient(90deg,var(--surface) 25%,var(--skel-mid) 37%,var(--surface) 63%);background-size:400% 100%;animation:sh 1.2s infinite linear;border-radius:var(--radius-lg);height:78px;margin-top:8px}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:0 0}}
+.mask{position:absolute;inset:0;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;animation:fade var(--dur-overlay-in) var(--ease-out);z-index:40}
+.mask.center{align-items:center}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet{width:100%;background:var(--panel);border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--elev-3);padding:20px 16px 28px;animation:up var(--dur-overlay-in) var(--ease-out)}
+@keyframes up{from{transform:translateY(16px);opacity:.6}to{transform:translateY(0);opacity:1}}
+.grip{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--border);margin:0 auto 16px}
+.sheet h2{margin:0 0 6px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.sheet p{margin:0 0 16px;font-size:14px;color:var(--muted);line-height:1.5}
+.sheet .acts{display:flex;flex-direction:column;gap:8px}
+.menu{width:100%;display:flex;align-items:center;min-height:52px;padding:0 14px;border-radius:var(--radius-md);background:var(--surface);border:0;font-family:var(--font);font-size:16px;font-weight:600;color:var(--fg);cursor:pointer;text-align:left}
+.menu.danger{color:var(--danger)}
+.menu:active{background:var(--border-soft)}
+.menu:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog{width:320px;max-width:88%;background:var(--panel);border-radius:var(--radius-lg);box-shadow:var(--elev-3);padding:20px;animation:pop var(--dur-overlay-in) var(--ease-out)}
+@keyframes pop{from{transform:scale(.96);opacity:.5}to{transform:scale(1);opacity:1}}
+.dialog h2{margin:0 0 8px;font-size:17px;font-weight:700}
+.dialog p{margin:0 0 18px;font-size:14px;color:var(--muted);line-height:1.5}
+.dialog .acts{display:flex;gap:8px}
+.dialog .acts .btn{flex:1 1 0;padding:0 10px;font-size:15px}
+.pinbox{display:flex;gap:8px;justify-content:center;margin:0 0 6px}
+.pinbox .d{width:44px;height:52px;border-radius:var(--radius-md);background:var(--accent-wash);border:1px solid rgba(0,113,227,.24);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--accent);font-family:var(--font-mono);transition:transform var(--dur-press) var(--ease-standard)}
+.pinbox .d.empty{color:var(--border);background:var(--surface);border-color:var(--border-soft)}
+.pinhint{font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px}
+.undobar{position:absolute;left:16px;right:16px;bottom:18px;z-index:50;background:var(--fg);color:var(--on-dark);border-radius:var(--radius-md);padding:10px 10px 0;box-shadow:var(--elev-2);animation:up var(--dur-overlay-in) var(--ease-out)}
+.undobar .urow{display:flex;align-items:center;gap:8px;padding-bottom:10px}
+.undobar .utx{flex:1 1 auto;font-size:13px;line-height:1.4}
+.undobar .ubtn{min-height:var(--tap-min);padding:0 14px;border-radius:var(--radius-sm);background:rgba(255,255,255,.14);color:var(--on-dark);border:0;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer}
+.undobar .ubtn:active{background:rgba(255,255,255,.24)}
+.undobar .ubtn:focus-visible{outline:2px solid var(--on-dark);outline-offset:2px}
+.uprog{height:3px;background:rgba(255,255,255,.2);border-radius:var(--radius-pill);overflow:hidden;margin-bottom:8px}
+.uprog > i{display:block;height:100%;background:var(--on-dark);width:100%}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:60;background:var(--toast-bg);color:var(--on-dark);font-size:14px;padding:10px 16px;border-radius:var(--radius-pill);box-shadow:var(--elev-2);white-space:nowrap;animation:up 160ms var(--ease-out)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:76px;background:var(--nav-bg);border-top:1px solid var(--border-soft);display:flex;align-items:flex-start;padding-top:8px;backdrop-filter:blur(12px)}
+.nav div{flex:1 1 0;text-align:center;font-size:11px;color:var(--fg-2)}
+.nav div .i{display:block;font-size:17px;margin-bottom:3px;line-height:1}
+.nav div.on{color:var(--accent);font-weight:700}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="stage-head"><b>「传送」Tab 交互原型</b><br>点卡片右侧「取消」看确认面板；点终态卡「⋯」看删除/重传；左右拖动终态卡看滑动删除；上方按钮切空/加载/错误态。</div>
+  <div class="devbar" role="group" aria-label="演示状态切换">
+    <button class="demo-btn is-on" data-od-id="demo-only:state-normal" onclick="setView('normal')">正常</button>
+    <button class="demo-btn" data-od-id="demo-only:state-empty" onclick="setView('empty')">空态</button>
+    <button class="demo-btn" data-od-id="demo-only:state-loading" onclick="setView('loading')">加载态</button>
+    <button class="demo-btn" data-od-id="demo-only:state-error" onclick="setView('error')">错误态</button>
+    <button class="demo-btn" data-od-id="demo-only:state-partial" onclick="setView('partial')">部分失败</button>
+    <button class="demo-btn" data-od-id="demo-only:pin" onclick="openPin()">演示 PIN 弹层</button>
+  </div>
+  <div class="phone"><div class="screen" id="screen" aria-label="传送页原型"></div></div>
+</div>
+<script>
+var MB = 1024 * 1024;
+var S = {
+  view: "normal", receiving: true, selected: "mac", pinOpen: false, pin: "", pinErr: false,
+  devices: [
+    { id: "mac", alias: "bsfeng 的 MacBook Pro", type: "mac", online: true, paired: true, host: "192.168.1.23", port: 53319, last: "14:02" },
+    { id: "px", alias: "小米 14", type: "phone", online: true, paired: false, host: "192.168.1.31", port: 53319, last: "14:31" },
+    { id: "old", alias: "旧平板", type: "phone", online: false, paired: false, host: "192.168.1.9", port: 53319, last: "13:41" }
+  ],
+  active: [], finished: [], expanded: {}, undo: null, sheet: null, dialog: null, toast: null, seq: 100
+};
+function b(id, dir, peer, at, files) { return { id: id, dir: dir, peer: peer, at: at, files: files }; }
+function f(name, size, recv, status) { return { name: name, size: size, recv: recv, status: status }; }
+S.active = [
+  b("b1", "send", "bsfeng 的 MacBook Pro", "14:28", [
+    f("设计稿-v3.final.sketch", 42.6 * MB, 42.6 * MB, "done"),
+    f("封面-4x.png", 8.4 * MB, 8.4 * MB, "done"),
+    f("视频素材.mov", 128 * MB, 37.2 * MB, "sending")
+  ]),
+  b("b2", "recv", "小米 14", "14:31", [ f("发票-2026-10.pdf", 1.2 * MB, 0.6 * MB, "sending") ])
+];
+S.finished = [
+  b("f1", "send", "bsfeng 的 MacBook Pro", "14:32", [ f("合影-原图.jpg", 12.4 * MB, 12.4 * MB, "done"), f("行程单.pdf", 0.8 * MB, 0.8 * MB, "done") ]),
+  b("f2", "recv", "小米 14", "14:05", [ f("报销材料.zip", 24.1 * MB, 24.1 * MB, "done") ]),
+  b("f3", "send", "bsfeng 的 MacBook Pro", "13:58", [ f("压测报告.docx", 3.2 * MB, 3.2 * MB, "done"), f("日志.log", 6.1 * MB, 6.1 * MB, "done"), f("数据库.dump", 512 * MB, 88.4 * MB, "failed") ])
+];
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function mb(n){ if (n >= 1024 * MB) return (n / (1024 * MB)).toFixed(1) + " GB"; if (n >= MB) return (n / MB).toFixed(1) + " MB"; return Math.round(n / 1024) + " KB"; }
+function allBatches(){ return S.active.concat(S.finished); }
+function findBatch(id){ var a = allBatches(); for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
+function batchStatus(x){
+  var total = x.files.length, done = 0, failed = 0, cancelled = 0;
+  x.files.forEach(function (it) { if (it.status === "done") done++; else if (it.status === "failed") failed++; else if (it.status === "cancelled") cancelled++; });
+  if (x.removed) return "removed";
+  if (failed > 0 && done + failed === total) return "partial";
+  if (cancelled === total) return "cancelled";
+  if (done === total) return "done";
+  return "active";
+}
+function receivingCard(){
+  var h = "";
+  h += '<div class="card">';
+  h += '<div class="row"><div class="grow"><div class="t-title">' + (S.receiving ? "接收已开启" : "未开启接收") + '</div>';
+  h += '<div class="t-body" style="margin-top:3px">' + (S.receiving ? "端口 53319 · 在线 2 台 · 后台常驻" : "同一 Wi-Fi 下开启后，对端就能发现本机 · 仅应用内") + '</div></div>';
+  h += '<button class="linkbtn" data-od-id="C-10" onclick="toggleReceiving()" aria-label="' + (S.receiving ? "关闭接收" : "开启接收") + '">' + (S.receiving ? "关闭" : "开启接收") + '</button></div>';
+  if (S.receiving) {
+    h += '<div class="row" style="margin-top:12px;gap:8px"><span class="badge warn">免配对 08:32</span><span class="t-small">未配对设备在窗口内免 PIN</span></div>';
+    h += '<div class="t-meta" style="margin-top:8px">12 分钟后自动关闭接收</div>';
+  }
+  h += '</div>';
+  return h;
+}
+function deviceRow(d){
+  var cls = "dev" + (S.selected === d.id ? " sel" : "") + (d.online ? "" : " offline");
+  var h = '<div class="devwrap">';
+  h += '<button class="' + cls + '" data-od-id="C-11" onclick="pickDevice(\'' + d.id + '\')" aria-pressed="' + (S.selected === d.id) + '" ' + (d.online ? "" : "disabled") + '>';
+  h += '<span class="avatar" aria-hidden="true">' + (d.type === "mac" ? "▭" : "▯") + '</span>';
+  h += '<span class="grow"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span class="devname">' + esc(d.alias) + '</span>' + (d.paired ? '<span class="badge">已配对</span>' : "") + '</span>';
+  h += '<span class="t-body" style="display:block;margin-top:2px">' + (d.online ? "在线" : "离线 · 上次 " + d.last) + " · " + d.host + ':' + d.port + '</span></span>';
+  h += S.selected === d.id ? '<span style="color:var(--accent-ink);font-size:18px" aria-label="已选中">✓</span>' : "";
+  h += '</button>';
+  if (d.paired) h += '<button class="linkbtn muted" data-od-id="C-12" onclick="askUnpair(\'' + d.id + '\')">移除配对</button>';
+  h += '</div>';
+  return h;
+}
+function toggleReceipt(id){
+  S.expanded = S.expanded || {};
+  S.expanded[id] = !S.expanded[id];
+  render();
+}
+
+function receiptBar(x){
+  var st = batchStatus(x), n = x.files.length;
+  if (n < 2) return "";
+  var done = x.files.filter(function (i) { return i.status === "done"; }).length;
+  var failed = x.files.filter(function (i) { return i.status === "failed"; }).length;
+  var tx, cls = "receipt";
+  if (st === "done") { cls += " done"; tx = n + " 个文件已全部送达 · " + x.at; }
+  else if (st === "partial") { cls += " done"; tx = "已送达 " + done + " / " + n + "，" + failed + " 个失败"; }
+  else { tx = n + " 个文件 · 已送达 " + done + " / " + n; }
+  if (S.expanded[x.id]) cls += " open";
+  var h = '<button class="' + cls + '" data-od-id="C-08" onclick="toggleReceipt(\'' + x.id + '\')" aria-expanded="' + (!!S.expanded[x.id]) + '">';
+  h += '<span style="color:' + (st === "done" ? "var(--success-ink)" : "var(--accent-ink)") + ';font-size:15px" aria-hidden="true">' + (st === "done" ? "✓" : "⇅") + '</span>';
+  h += '<span class="rtx">' + tx + '</span><span class="chev" aria-hidden="true">▾</span></button>';
+  if (S.expanded[x.id]) {
+    h += '<div class="detail" role="list">';
+    x.files.forEach(function (i) {
+      var s = i.status === "done" ? (x.dir === "send" ? "文件已收到" : "已保存到本地") : (i.status === "failed" ? "发送失败" : i.status === "cancelled" ? "已取消" : "传输中");
+      h += '<div role="listitem"><span>' + esc(i.name) + " · " + s + '</span><span>' + (i.status === "done" ? x.at : mb(i.recv) + " / " + mb(i.size)) + '</span></div>';
+    });
+    h += '</div>';
+  }
+  return h;
+}
+function activeCard(x){
+  var sending = x.files.filter(function (i) { return i.status === "sending"; });
+  var first = sending.length ? sending[0] : x.files[x.files.length - 1];
+  var pct = Math.min(100, Math.round(first.recv / first.size * 100));
+  var h = '<div class="task" data-od-id="C-07" data-batch="' + x.id + '">';
+  h += '<div class="row"><div class="grow"><div class="ttl">' + esc(first.name) + '</div>';
+  h += '<div class="sub">' + (x.dir === "send" ? "发送" : "接收") + " · " + (x.files.length > 1 ? x.files.length + " 个文件 · " : "") + "传输中 · " + mb(first.recv) + " / " + mb(first.size) + ' · 8.4 MB/s</div></div>';
+  h += '<button class="linkbtn danger" data-od-id="C-01" onclick="openCancel(\'' + x.id + '\')" aria-label="取消这次传输">取消</button></div>';
+  h += '<div class="bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + pct + '%"></i></div>';
+  h += '</div>';
+  return h;
+}
+function finishedCard(x){
+  var st = batchStatus(x);
+  var head = x.files[0];
+  var sub, cls = "sub", icon = "✓", tone = "var(--success-ink)";
+  if (st === "partial") {
+    var failed = x.files.filter(function (i) { return i.status === "failed"; }).length;
+    var done = x.files.filter(function (i) { return i.status === "done"; }).length;
+    sub = "已送达 " + done + " / " + x.files.length + "，" + failed + " 个失败 · " + x.at;
+    cls = "sub err"; icon = "!"; tone = "var(--danger)";
+  } else if (st === "cancelled") {
+    sub = "已取消 · " + x.at; icon = "⊘"; tone = "var(--meta)";
+  } else if (x.dir === "recv") {
+    sub = "已保存到 Downloads/局域网互传 · " + x.at;
+  } else {
+    sub = "对方已收到 · " + x.at;
+  }
+  if (x.files.length > 1 && st === "done") sub = x.files.length + " 个文件全部送达 · " + x.at;
+  var h = '<div class="swipe" data-od-id="C-07" data-batch="' + x.id + '">';
+  h += '<div class="danger-bg" aria-hidden="true"><span>✕</span><span>松手删除这条记录</span></div>';
+  h += '<div class="task"><div class="row"><div class="grow"><div class="ttl">' + esc(head.name) + (x.files.length > 1 ? " 等 " + x.files.length + " 个" : "") + '</div>';
+  h += '<div class="' + cls + '">' + sub + '</div></div>';
+  h += '<span style="color:' + tone + ';font-size:16px" aria-hidden="true">' + icon + '</span>';
+  h += '<button class="iconbtn" data-od-id="C-04" onclick="openActions(\'' + x.id + '\')" aria-label="更多操作" aria-haspopup="menu">⋯</button></div></div></div>';
+  return h;
+}
+function render(){
+  var sc = document.getElementById("screen");
+  var h = "";
+  h += '<div class="statusbar"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><span>▮▮▮</span><span style="font-size:11px">WiFi</span><span>100%</span></span></div>';
+  h += '<div class="pagehead"><h1>局域网互传</h1><div class="meta">' + (S.receiving ? "端口 53319 · 在线 2 台" : "未开启接收") + " · " + "bsfeng 的 Pixel" + '</div></div>';
+  h += '<div class="scroll" id="scroll">';
+  if (S.view === "loading") {
+    h += '<div class="skel" style="height:96px"></div>';
+    h += '<div class="label">附近设备</div><div class="skel"></div><div class="skel"></div>';
+    h += '<div class="label">进行中</div><div class="skel"></div><div class="skel"></div>';
+  } else if (S.view === "error") {
+    h += receivingCard();
+    h += '<div class="label">附近设备</div>';
+    h += '<div class="empty"><div class="ico">◎</div><div class="et">设备发现失败</div><div class="ed">检查是否与要传的设备连在同一个 Wi-Fi，或对方是否已开启接收</div><div style="margin-top:12px"><button class="btn btn-ghost" data-od-id="C-18" onclick="retryDiscover()">重试发现</button></div></div>';
+    h += '<div style="margin-top:16px"><button class="btn btn-primary btn-block" data-od-id="C-13" disabled>先选择一台设备</button></div>';
+    h += '<div class="label">进行中</div><div class="hint">暂无进行中的传输</div>';
+    h += '<div class="label">最近完成</div><div class="hint">完成的传输会留在这里</div>';
+  } else {
+    h += receivingCard();
+    h += '<div class="label">附近设备</div>';
+    if (S.view === "empty") {
+      h += '<div class="empty"><div class="ico">▯</div><div class="et">等待设备出现</div><div class="ed">同一 Wi-Fi 下打开 Mac 端「传送」即可互相发现</div></div>';
+    } else {
+      S.devices.forEach(function (d) { h += deviceRow(d); });
+    }
+    h += '<div style="margin-top:16px"><button class="btn btn-primary btn-block" data-od-id="C-13" ' + (S.selected ? "" : "disabled") + ' onclick="pickFiles()">' + (S.selected ? "选择文件发送" : "先选择一台设备") + '</button></div>';
+    var activeN = S.active.reduce(function (n, x) { return n + x.files.length; }, 0);
+    h += '<div class="label"><span>进行中' + (activeN ? " · " + activeN : "") + '</span>';
+    if (S.active.length >= 2) h += '<button class="linkbtn danger" data-od-id="C-09" onclick="openCancel(\'all\')">全部取消</button>';
+    h += '</div>';
+    if (S.view !== "empty" && S.active.length === 0) h += '<div class="hint">暂无进行中的传输</div>';
+    if (S.view === "empty") h += '<div class="hint">暂无进行中的传输</div>';
+    S.active.forEach(function (x) { h += '<div class="batch">' + receiptBar(x) + activeCard(x) + '</div>'; });
+    var finN = S.finished.length;
+    h += '<div class="label"><span>最近完成' + (finN ? " · " + finN : "") + '</span>';
+    if (finN >= 2) h += '<button class="linkbtn" data-od-id="C-16" onclick="askClearAll()">清空已结束</button>';
+    h += '</div>';
+    if (S.finished.length === 0) h += '<div class="hint">完成的传输会留在这里</div>';
+    S.finished.forEach(function (x) { h += receiptBar(x) + finishedCard(x); });
+  }
+  h += '</div>';
+  h += '<div class="nav" aria-hidden="true"><div><span class="i">◫</span>概览</div><div><span class="i">≋</span>实时</div><div><span class="i">◈</span>广告</div><div><span class="i">¥</span>记账</div><div class="on"><span class="i">⇅</span>传送</div><div><span class="i">⚙</span>设置</div></div>';
+  if (S.undo) {
+    h += '<div class="undobar" role="alert"><div class="urow"><span class="utx">已删除「' + esc(S.undo.name) + '」</span><button class="ubtn" data-od-id="C-06" onclick="undoDelete()">撤销</button></div><div class="uprog"><i id="uprog" style="width:100%"></i></div></div>';
+  }
+  if (S.toast) h += '<div class="toast" role="status" aria-live="polite">' + esc(S.toast) + '</div>';
+  if (S.sheet) h += S.sheet;
+  if (S.dialog) h += S.dialog;
+  var prevScroll = (document.getElementById("scroll") || {}).scrollTop || 0;
+  var focusId = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.odId : null;
+  sc.innerHTML = h;
+  var scroller = document.getElementById("scroll");
+  if (scroller) scroller.scrollTop = prevScroll;
+  if (focusId) {
+    var again = sc.querySelector('[data-od-id="' + focusId + '"]');
+    if (again && again.focus) again.focus({ preventScroll: true });
+  }
+  bindSwipe();
+  if (S.undo) runUndoBar();
+}
+function toast(msg, ms){ S.toast = msg; render(); clearTimeout(toast._t); toast._t = setTimeout(function(){ S.toast = null; render(); }, ms || 1800); }
+function setView(v){ S.view = v; S.sheet = null; S.dialog = null; var bs = document.querySelectorAll(".demo-btn"); for (var i = 0; i < bs.length; i++) bs[i].classList.remove("is-on"); var el = document.querySelector("[data-od-id='demo-only:state-" + v + "']"); if (el) el.classList.add("is-on"); render(); }
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Escape") return;
+  if (S.dialog) { S.dialog = null; render(); e.preventDefault(); return; }
+  if (S.sheet) { S.sheet = null; render(); e.preventDefault(); return; }
+});
+
+function toggleReceiving(){ S.receiving = !S.receiving; toast(S.receiving ? "接收已开启" : "已停止接收"); }
+function pickDevice(id){ var d = S.devices.filter(function(x){ return x.id === id; })[0]; if (!d || !d.online) return; S.selected = (S.selected === id) ? null : id; render(); }
+function askUnpair(id){ var d = S.devices.filter(function(x){ return x.id === id; })[0]; if (!d) return;
+  S.dialog = '<div class="mask center" onclick="if(event.target===this)closeDialog()"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgT"><h2 id="dlgT">解除与「' + esc(d.alias) + '」的配对？</h2><p>解除后再次发送需要输入 4 位 PIN 确认。进行中的传输不受影响。</p><div class="acts"><button class="btn btn-ghost" onclick="closeDialog()">保留配对</button><button class="btn btn-danger" onclick="doUnpair(\'' + id + '\')">解除配对</button></div></div></div>';
+  render(); }
+function doUnpair(id){ S.devices.forEach(function(d){ if (d.id === id) d.paired = false; }); S.dialog = null; toast("已解除配对"); }
+function closeDialog(){ S.dialog = null; render(); }
+function retryDiscover(){ S.view = "normal"; toast("正在重新发现设备…", 1400); render(); }
+function openCancel(id){
+  var list = id === "all" ? S.active.slice() : S.active.filter(function(x){ return x.id === id; });
+  var n = 0, recv = 0, size = 0;
+  list.forEach(function(x){ x.files.forEach(function(i){ n++; recv += i.recv; size += i.size; }); });
+  if (n === 0) return;
+  S.cancelTarget = id;
+  var ttl = id === "all" ? "取消全部 " + n + " 个传输？" : "取消 " + n + " 个传输？";
+  var body = "已传 " + mb(recv) + " / " + mb(size) + "，取消后需要重新发送。";
+  var label = id === "all" ? "取消全部 " + n + " 个文件" : (n === 1 ? "取消这个文件" : "取消 " + n + " 个文件");
+  S.sheet = '<div class="mask" onclick="if(event.target===this)closeSheet()"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shT"><div class="grip" aria-hidden="true"></div><h2 id="shT">' + ttl + '</h2><p>' + body + '</p><div class="acts"><button class="btn btn-danger btn-block" data-od-id="C-02" onclick="doCancel()">' + label + '</button><button class="btn btn-ghost btn-block" data-od-id="C-03" onclick="closeSheet()">继续传输</button></div></div></div>';
+  render();
+}
+function closeSheet(){ S.sheet = null; S.cancelTarget = null; render(); }
+function doCancel(){
+  var id = S.cancelTarget;
+  var list = id === "all" ? S.active.slice() : S.active.filter(function(x){ return x.id === id; });
+  var n = 0;
+  list.forEach(function(x){
+    x.files.forEach(function(i){ if (i.status === "sending") { i.status = "cancelled"; n++; } });
+    var idx = S.active.indexOf(x); if (idx >= 0) S.active.splice(idx, 1);
+    S.finished.unshift(x);
+  });
+  S.sheet = null; S.cancelTarget = null;
+  toast("已取消 " + n + " 个文件", 1800);
+  setTimeout(function(){ S.finished.forEach(function(x){ x.justMoved = true; }); }, 0);
+}
+function openActions(id){
+  var x = findBatch(id); if (!x) return;
+  S.actionTarget = id;
+  S.sheet = '<div class="mask" onclick="if(event.target===this)closeSheet()"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shT2"><div class="grip" aria-hidden="true"></div><h2 id="shT2">' + esc(x.files[0].name) + (x.files.length > 1 ? " 等 " + x.files.length + " 个文件" : "") + '</h2><p>' + (x.dir === "send" ? "发送给 " : "接收自 ") + esc(x.peer) + " · " + x.at + '</p><div class="acts"><button class="menu" data-od-id="C-17" onclick="resend()">重新发送</button><button class="menu danger" data-od-id="C-05" onclick="askDelete()">删除记录</button><button class="menu" onclick="closeSheet()">取消</button></div></div></div>';
+  render();
+}
+function resend(){ var x = findBatch(S.actionTarget); S.sheet = null; if (!x) return; S.active.unshift(x); S.finished = S.finished.filter(function(i){ return i.id !== x.id; }); x.files.forEach(function(i){ i.status = "sending"; i.recv = 0; }); toast("已重新加入发送队列"); }
+function askDelete(){
+  var x = findBatch(S.actionTarget); if (!x) return;
+  var recvDone = x.dir === "recv" && batchStatus(x) === "done";
+  S.sheet = null;
+  if (!recvDone) { doDelete(x.id); return; }
+  var name = x.files[0].name;
+  S.dialog = '<div class="mask center" onclick="if(event.target===this)closeDialog()"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgD"><h2 id="dlgD">删除「' + esc(name) + '」？</h2><p>同时会删除 Downloads/局域网互传/ 里的文件，撤销只能恢复记录。</p><div class="acts"><button class="btn btn-ghost" onclick="closeDialog()">保留</button><button class="btn btn-danger" onclick="doDelete(\'' + x.id + '\')">删除记录和文件</button></div></div></div>';
+  render();
+}
+function doDelete(id){
+  var idx = S.finished.findIndex(function(i){ return i.id === id; });
+  if (idx < 0) return;
+  var x = S.finished[idx];
+  S.finished.splice(idx, 1);
+  S.dialog = null; S.sheet = null;
+  S.undo = { id: id, batch: x, index: idx, name: x.files[0].name, fileDeleted: x.dir === "recv" && batchStatus(x) === "done", t: Date.now() };
+  render();
+}
+function undoDelete(){
+  if (!S.undo) return;
+  var u = S.undo;
+  S.finished.splice(Math.min(u.index, S.finished.length), 0, u.batch);
+  var extra = u.fileDeleted; S.undo = null;
+  if (extra) { toast("文件已删除，仅恢复记录", 2000); } else { toast("已撤销", 1500); }
+}
+function runUndoBar(){
+  var bar = document.getElementById("uprog"); if (!bar) return;
+  var start = S.undo.t, total = 5000;
+  clearInterval(runUndoBar._t);
+  runUndoBar._t = setInterval(function(){
+    var left = total - (Date.now() - start);
+    var el = document.getElementById("uprog");
+    if (left <= 0) { clearInterval(runUndoBar._t); S.undo = null; render(); return; }
+    if (el) el.style.width = (left / total * 100) + "%";
+  }, 100);
+}
+function askClearAll(){
+  var recvFiles = S.finished.filter(function(x){ return x.dir === "recv" && batchStatus(x) === "done"; });
+  var n = S.finished.length;
+  S.dialog = '<div class="mask center" onclick="if(event.target===this)closeDialog()"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgC"><h2 id="dlgC">清空 ' + n + ' 条记录？</h2><p>其中 ' + recvFiles.length + ' 条会同时删除 Downloads 里的文件，此操作不可撤销。</p><div class="acts"><button class="btn btn-ghost" onclick="closeDialog()">保留记录</button><button class="btn btn-danger" onclick="doClearAll()">清空 ' + n + ' 条</button></div></div></div>';
+  render();
+}
+function doClearAll(){ S.finished = []; S.dialog = null; toast("已清空记录"); }
+function pickFiles(){
+  if (!S.selected) return;
+  var id = "n" + (S.seq++);
+  S.active.unshift(b(id, "send", "bsfeng 的 MacBook Pro", "现在", [ f("新选的文件.pdf", 4.2 * MB, 0, "sending") ]));
+  toast("已加入发送队列", 1500);
+}
+function openPin(){ S.pinOpen = true; S.pin = ""; S.pinErr = false; renderPin(); }
+function renderPin(){
+  var digits = "";
+  for (var i = 0; i < 4; i++) digits += '<span class="d' + (i < S.pin.length ? "" : " empty") + '">' + (S.pin[i] || "•") + '</span>';
+  S.dialog = '<div class="mask center"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pinT"><h2 id="pinT">配对确认</h2><p>' + (S.pinErr ? "PIN 不正确，请重试" : "请输入「bsfeng 的 MacBook Pro」上显示的 4 位 PIN") + '</p><div class="pinbox" aria-hidden="true">' + digits + '</div><div class="pinhint">双方需在同一 Wi-Fi</div>' +
+    '<label class="sr" for="pinInput">4 位 PIN</label><input id="pinInput" data-od-id="C-14" inputmode="numeric" maxlength="4" value="' + S.pin + '" oninput="onPin(this.value)" style="width:100%;min-height:44px;border-radius:12px;border:1px solid var(--border);padding:0 14px;font-size:18px;letter-spacing:.4em;font-family:var(--font-mono);margin-bottom:14px" placeholder="">' +
+    '<div class="acts"><button class="btn btn-ghost" onclick="closePin()">稍后再传</button><button class="btn btn-primary" data-od-id="C-15" ' + (S.pin.length === 4 ? "" : "disabled") + ' onclick="submitPin()">验证并发送</button></div></div></div>';
+  render();
+  var inp = document.getElementById("pinInput");
+  if (inp) { inp.addEventListener("keydown", function(e){ if (e.key === "Enter") { e.preventDefault(); if (S.pin.length === 4) submitPin(); } }); inp.focus(); }
+}
+function onPin(v){ S.pin = v.replace(/[^0-9]/g, "").slice(0, 4); S.pinErr = false; renderPin(); }
+function submitPin(){ if (S.pin.length !== 4) return; S.dialog = null; toast("PIN 正确，开始传输", 1600); }
+function closePin(){ S.dialog = null; render(); }
+function bindSwipe(){
+  var els = document.querySelectorAll(".swipe");
+  Array.prototype.forEach.call(els, function (wrap) {
+    var card = wrap.querySelector(".task");
+    var startX = 0, dx = 0, active = false;
+    wrap.addEventListener("pointerdown", function (e) {
+      var t = e.target; while (t && t !== wrap) { if (t.tagName === "BUTTON") return; t = t.parentNode; }
+      active = true; startX = e.clientX; dx = 0; wrap.classList.add("animating"); wrap.classList.remove("reveal");
+    });
+    wrap.addEventListener("pointermove", function (e) {
+      if (!active) return;
+      dx = e.clientX - startX;
+      card.style.transform = "translateX(" + dx + "px)";
+      if (Math.abs(dx) > 8 && Math.abs(dx) / wrap.offsetWidth > 0.2) wrap.classList.add("reveal");
+      else wrap.classList.remove("reveal");
+    });
+    function end() {
+      if (!active) return; active = false;
+      var ratio = Math.abs(dx) / wrap.offsetWidth;
+      if (ratio >= 0.4) {
+        card.style.transform = "translateX(" + (dx > 0 ? 1 : -1) * wrap.offsetWidth + "px)";
+        var id = wrap.getAttribute("data-batch");
+        setTimeout(function () { S.actionTarget = id; deleteFromSwipe(id); }, 140);
+      } else {
+        card.style.transform = "translateX(0)";
+        wrap.classList.remove("reveal");
+      }
+      dx = 0;
+    }
+    wrap.addEventListener("pointerup", end);
+    wrap.addEventListener("pointercancel", end);
+    wrap.addEventListener("pointerleave", function () { if (active) end(); });
+  });
+}
+function deleteFromSwipe(id){
+  var x = findBatch(id); if (!x) return;
+  var recvDone = x.dir === "recv" && batchStatus(x) === "done";
+  if (recvDone) { askDelete(); return; }
+  doDelete(id);
+}
+var tick = setInterval(function () {
+  var changed = false;
+  S.active.forEach(function (x) { x.files.forEach(function (i) { if (i.status === "sending") { i.recv = Math.min(i.size, i.recv + i.size * 0.035); changed = true; if (i.recv >= i.size) { i.status = "done"; } } }); });
+  if (changed) {
+    S.active = S.active.filter(function (x) { return x.files.some(function (i) { return i.status === "sending"; }); });
+    if (!S.dialog && !S.sheet) render();
+  }
+}, 900);
+render();
+</script>
+</body>
+</html>
