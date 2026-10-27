@@ -45,6 +45,8 @@ internal class TransferDeletionCoordinator(private val engine: TransferEngine) {
             },
         ) ?: return null
         engine._tasks.update { TransferTaskDeletion.without(it, deleted) }
+        // 发送任务的源 Uri 是**引用**（用户自己的文件），删记录不删文件 → 这里**不清**登记：
+        // 撤销删除要按原 Uri 回写记录，清掉就再也补不回来。行没了自然也没有重发入口。
         engine.deletedSnapshots[deleted.deletionId] = deleted
         engine.scope.launch {
             runCatching {
@@ -63,7 +65,9 @@ internal class TransferDeletionCoordinator(private val engine: TransferEngine) {
     fun undoDelete(deletionId: String): DeletedTask? {
         val deleted = engine.deletedSnapshots.remove(deletionId) ?: return null
         engine._tasks.update { TransferTaskDeletion.restore(it, deleted) }
-        engine.persistTask(deleted.task, engine.publishedFiles[engine.taskKey(deleted.task.sessionId, deleted.task.file.fileId)]?.toString())
+        // 按方向回写：发送任务落 sourceFiles（重发要用），接收任务落 publishedFiles
+        // （文件已删时这里写回的是旧路径，persistTask 只存记录，不会把文件变回来）
+        engine.persistTask(deleted.task, engine.uriForPersist(deleted.task))
         return deleted
     }
 

@@ -230,6 +230,19 @@ class TransferEngine internal constructor(
     fun pairedDeviceIds(): Set<String> = settings.pairingKeys().keys
 
     // ───────── 删除 / 撤销（实现见 TransferDeletionTasks） ─────────
+    /**
+     * C-17 / C-08：按原文件与原目标重发一条终态发送任务（旧记录保留在「最近完成」）。
+     *
+     * 实现在 [TransferResend]：源文件已不在本机 / 对方不在线时给契约逐字口径的失败，
+     * 不会静默什么都不做。
+     */
+    fun resendTask(task: TransferTask, onResult: (Result<Unit>) -> Unit = {}) =
+        resendTaskImpl(task, onResult)
+
+    /** 某条任务登记过的源文件（发送方向才有；[resendTask] 与 UI 可用性判定共用）。 */
+    fun sourceUriOf(task: TransferTask): Uri? =
+        sourceFiles[taskKey(task.sessionId, task.file.fileId)]
+
     /** 删除一条已终结任务，完成后经 [deletedTasks] 通知 UI 展示撤销窗口。 */
     fun deleteTask(sessionId: String, fileId: String) = deleteTaskImpl(sessionId, fileId)
     /** 删除的同步实现（IO 线程；测试可直接调用不走 Flow）。 */
@@ -266,6 +279,14 @@ class TransferEngine internal constructor(
     internal val sessions = ConcurrentHashMap<String, IncomingSession>()
     internal val outgoing = ConcurrentHashMap<String, OutgoingSession>()
     internal val publishedFiles = ConcurrentHashMap<String, Uri>()
+    /**
+     * 发送任务的**源文件** Uri（键 = [taskKey]，与 [publishedFiles] 对称：那个记接收落盘产物）。
+     *
+     * 为什么要记：C-17「重新发送」与 C-08「重试失败项」都要按原文件重发，而 Uri 此前只活在
+     * sendFiles 的协程里，一次用完就没了 —— 于是「重新发送」只能恒不渲染。现在随任务落库
+     * （见 [com.bsfeng.monitor.transfer.data.TransferTaskStore]），重启后也能按方向回填。
+     */
+    internal val sourceFiles = ConcurrentHashMap<String, Uri>()
     @Volatile
     internal var pendingSend: PendingSend? = null
 

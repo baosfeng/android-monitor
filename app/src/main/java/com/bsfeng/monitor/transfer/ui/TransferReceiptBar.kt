@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.transfer.TransferFormat
 import com.bsfeng.monitor.domain.transfer.TransferTask
+import com.bsfeng.monitor.ui.components.rowPressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -58,6 +60,10 @@ internal fun BatchReceiptBar(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 本批次里可重试的失败项（发送方向且源文件仍可读）。 */
+    retryable: List<TransferTask> = emptyList(),
+    /** 点「重试失败项」：逐条重发，结果由调用方给 toast。 */
+    onRetryFailed: () -> Unit = {},
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
@@ -151,7 +157,56 @@ internal fun BatchReceiptBar(
                         }
                     }
                 }
+                // 契约 C-08 边界：部分失败时明细里给「重试失败项」—— 失败项必须有一个
+                // 可见可执行的出口，否则用户只能整批重来。
+                if (retryable.isNotEmpty()) {
+                    Spacer(Modifier.height(t.space2))
+                    ReceiptRetryRow(
+                        count = retryable.size,
+                        onClick = onRetryFailed,
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * 回执条展开明细里的「重试失败项」按钮（契约 C-08 边界）。
+ *
+ * 单独的可见出口而不是藏进每行的更多菜单：失败项在本屏原本没有任何可执行动作，
+ * 用户看到「2 个失败」却不知道能做什么，是这条契约要消掉的死路。
+ */
+@Composable
+private fun ReceiptRetryRow(count: Int, onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(t.radiusSm)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("C-08-retry")
+            .heightIn(min = t.tapMin)
+            .clip(shape)
+            .background(t.accent.copy(alpha = t.accent.alpha * 0.12f))
+            .border(1.dp, t.accent.copy(alpha = t.accent.alpha * 0.35f), shape)
+            .rowPressFeedback(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+            ) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
+            .padding(horizontal = t.space3),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "重试失败项（" + count + "）",
+            style = MaterialTheme.typography.labelLarge,
+            color = t.accent,
+        )
     }
 }

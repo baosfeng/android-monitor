@@ -44,8 +44,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.transfer.PeerDevice
+import com.bsfeng.monitor.domain.transfer.TransferDirection
+import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
+import com.bsfeng.monitor.transfer.service.ResendAvailability
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
@@ -259,11 +262,42 @@ internal fun TransferContentList(
                     focusPending = page.focusRequest,
                     onFocusConsumed = page::consumeFocus,
                 )
-                TransferRow.Kind.RECEIPT -> BatchReceiptBar(
-                    tasks = row.tasks,
-                    expanded = expandedReceipts[row.key] == true,
-                    onToggle = { expandedReceipts[row.key] = expandedReceipts[row.key] != true },
-                )
+                TransferRow.Kind.RECEIPT -> {
+                    // 可重试的失败项：发送方向 + 终态非完成 + 源文件仍可读（契约 C-08 边界）
+                    val retryable = row.tasks.filter { task ->
+                        task.direction == TransferDirection.SEND &&
+                            task.status.isTerminal &&
+                            task.status != TransferStatus.COMPLETED &&
+                            viewModel.resendAvailability(task) is ResendAvailability.Ready
+                    }
+                    BatchReceiptBar(
+                        tasks = row.tasks,
+                        expanded = expandedReceipts[row.key] == true,
+                        onToggle = { expandedReceipts[row.key] = expandedReceipts[row.key] != true },
+                        retryable = retryable,
+                        onRetryFailed = {
+                            if (retryable.isEmpty()) return@BatchReceiptBar
+
+                            // 逐条重发：成功的自行出现在「进行中」，失败的按契约口径 toast 一次
+                            var failedReason: String? = null
+                            var started = 0
+                            retryable.forEach { task ->
+                                viewModel.resendTask(task) { result ->
+                                    if (result.isSuccess) started++
+                                    else failedReason = result.exceptionOrNull()?.message
+                                }
+                            }
+                            page.showToast(
+                                if (started > 0 || failedReason == null) {
+                                    "正在重试 " + retryable.size + " 个失败项"
+                                } else {
+                                    failedReason ?: "重试失败"
+                                },
+                            )
+                            page.requestScroll("hint-active")
+                        },
+                    )
+                }
                 TransferRow.Kind.TASK -> {
                     val task = row.task ?: return@items
                     if (task.isActive) {
