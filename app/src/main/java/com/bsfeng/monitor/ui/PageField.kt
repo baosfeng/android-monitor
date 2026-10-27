@@ -19,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,12 @@ internal fun AppField(
     warm: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     leading: (@Composable () -> Unit)? = null,
+    /**
+     * 可选焦点入口：传 null（默认）行为与原来完全一致。
+     * 需要「焦点回位」的调用点（弹窗关闭 / 清空搜索后）用 remember { FocusRequester() } 传入，
+     * 在合适的时机 requestFocus()。
+     */
+    focusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
     Row(
@@ -54,7 +62,9 @@ internal fun AppField(
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = t.fg),
             cursorBrush = SolidColor(t.accent),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty()) {

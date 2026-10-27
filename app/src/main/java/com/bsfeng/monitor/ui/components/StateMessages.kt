@@ -2,9 +2,11 @@ package com.bsfeng.monitor.ui.components
 
 // 从 ui/components/States.kt 拆出：空态 / 错态 / 边界态 —— EmptyState、ErrorState、EdgeState 与共用列布局 StateColumn、幽灵按钮 GhostButton（原型 .st-*）。负责「没数据 / 出错 / 极端值」时的说明与 CTA。
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +35,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
@@ -41,7 +47,14 @@ private val STATE_ICON = 44.dp
 /** 错态 CTA 默认文案（保持 W1–W5 既有 8 个调用点行为不变）。 */
 internal const val ERROR_ACTION_DEFAULT = "重试"
 
-/** 空态：居中列 + 44dp 图标 + 17sp 标题 + 14sp 描述 + 可选 CTA（原型 .st-empty）。 */
+/**
+ * 空态：居中列 + 44dp 图标 + 17sp 标题 + 14sp 描述 + 可选 CTA（原型 .st-empty）。
+ *
+ * @param modifier 块级锚点入口：调用方按契约传 `Modifier.testTag("sNN-empty")`，本组件不自带 tag。
+ * @param actionLabel CTA 文案；与 [onAction] 任一为 null 时整颗按钮不渲染（未接线不伪造跳转）。
+ * @param onAction CTA 回调；非 null 时按钮按契约给按下 0.96 + LIGHT 触感。
+ * @param actionModifier CTA 级锚点入口（如 `sNN-empty-cta`），只在按钮渲染时生效。
+ */
 @Composable
 fun EmptyState(
     text: String,
@@ -51,6 +64,7 @@ fun EmptyState(
     iconSize: Dp = STATE_ICON,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    actionModifier: Modifier = Modifier,
 ) {
     StateColumn(
         title = title,
@@ -60,11 +74,18 @@ fun EmptyState(
         danger = false,
         actionLabel = actionLabel,
         onAction = onAction,
+        actionModifier = actionModifier,
         modifier = modifier,
     )
 }
 
-/** 错态：同空态结构，图标/标题走 danger 色（原型 .st-error）。 */
+/**
+ * 错态：同空态结构，图标/标题走 danger 色（原型 .st-error）。
+ *
+ * @param modifier 块级锚点入口（`sNN-error`）；不自带 tag。
+ * @param onRetry 重试回调；为 null 时按钮不渲染（未接线不伪造重试）。
+ * @param actionModifier 重试按钮的锚点入口（`sNN-error-retry`），只在按钮渲染时生效。
+ */
 @Composable
 fun ErrorState(
     text: String,
@@ -74,6 +95,7 @@ fun ErrorState(
     icon: ImageVector = Icons.Filled.Warning,
     iconSize: Dp = STATE_ICON,
     actionLabel: String? = "重试",
+    actionModifier: Modifier = Modifier,
 ) {
     StateColumn(
         title = title,
@@ -83,11 +105,16 @@ fun ErrorState(
         danger = true,
         actionLabel = if (onRetry != null) actionLabel else null,
         onAction = onRetry,
+        actionModifier = actionModifier,
         modifier = modifier,
     )
 }
 
-/** 边界态：超长文案 + 10000+ 计数；[content] 可替换默认极值样例。 */
+/**
+ * 边界态：超长文案 + 10000+ 计数；[content] 可替换默认极值样例。
+ *
+ * 纯展示、无 CTA（契约里边界态不接点击）；[modifier] 是块级锚点入口（`sNN-edge`）。
+ */
 @Composable
 fun EdgeState(
     text: String,
@@ -132,6 +159,7 @@ private fun StateColumn(
     danger: Boolean,
     actionLabel: String?,
     onAction: (() -> Unit)?,
+    actionModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
@@ -161,23 +189,39 @@ private fun StateColumn(
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 240.dp),
         )
+        // 未接线（label 或回调为 null）时整颗按钮不渲染：不伪造跳转、不占位。
         if (actionLabel != null && onAction != null) {
-            GhostButton(actionLabel, onAction)
+            GhostButton(actionLabel, onAction, actionModifier)
         }
     }
 }
 
-/** 幽灵按钮（原型 .btn-ghost）：透明底 + 1px --border 描边 + min-height 48 + 17sp/600。 */
+/**
+ * 幽灵按钮（原型 .btn-ghost）：透明底 + 1px --border 描边 + min-height 48 + 17sp/600。
+ *
+ * 反馈按契约走现成基元：[pressFeedback] 按下 0.96（时长取 --dur-press、精简档自动省略）、
+ * 触发时 [HapticTone.LIGHT]；两者都不手写常量。
+ */
 @Composable
 private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .heightIn(min = 48.dp)
+            .pressFeedback(interaction)
+            // 键盘焦点环 2dp（契约头部通用口径）：放在剪裁之前，环不被圆角裁掉；
+            // 只在输入方式是键盘 / 遥控器时绘制，触屏点击视觉零变化。
+            .keyboardFocusRing(shape)
             .clip(shape)
             .border(1.dp, t.border, shape)
-            .clickable { onClick() }
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                // 普通按钮点击属轻触级：震动收敛在控件内，调用点不再各补一次
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
             .padding(horizontal = t.space5),
         contentAlignment = Alignment.Center,
     ) {
