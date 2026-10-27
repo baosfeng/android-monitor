@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
@@ -22,6 +26,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import kotlinx.coroutines.delay
 
 /**
  * 窗口级浮层基元：**所有**模态浮层（底部抽屉 / 居中弹窗 / 纯遮罩）的唯一承载方式。
@@ -73,8 +78,20 @@ fun WindowOverlay(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    if (!visible) return
     val t = LocalDesignTokens.current
+    // 退出动画期间保持渲染：visible 转 false 后等一个浮层退场时长再卸载窗口。
+    // 否则窗口在同帧销毁，内容里的 AnimatedVisibility(exit = …) 永远播不到——
+    // 契约 §7 要求「遮罩淡出 + 面板下滑 150ms」，这是它能生效的前提。
+    var rendered by remember { mutableStateOf(visible) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            rendered = true
+        } else if (rendered) {
+            delay(t.durOverlayOut.toLong())
+            rendered = false
+        }
+    }
+    if (!rendered) return
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
