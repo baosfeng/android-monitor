@@ -24,9 +24,12 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.finance.ui.restoreFocusAfterFrames
 import com.bsfeng.monitor.service.HeartbeatWatchdog
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
@@ -37,8 +40,11 @@ import com.bsfeng.monitor.ui.theme.ThemeRepository
 import android.content.Context
 import android.view.View
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -227,10 +233,27 @@ Column(Modifier.fillMaxWidth().testTag("s09-appearance")) {
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
         val themeInteraction = remember { MutableInteractionSource() }
         val haptic = rememberHaptic()
+        // 契约 s13-head · 退出后：焦点回本行、滚动位置保持。外观屏是覆盖层（设置页收不到关闭回调），
+        // 由 AppearanceFocusReturn 的代次信号衔接；代次在「本行组合期间」新增才回焦。
+        val rowFocus = remember { FocusRequester() }
+        val returnGeneration = AppearanceFocusReturn.generation
+        var seenGeneration by remember { mutableIntStateOf(returnGeneration) }
+        LaunchedEffect(returnGeneration) {
+            if (!appearanceReturnFocusPending(returnGeneration, seenGeneration)) return@LaunchedEffect
+            val generation = returnGeneration
+            // 等退场动画把覆盖层卸下再请求；请求在复位之前（见 restoreFocusAfterFrames）
+            restoreFocusAfterFrames(
+                frames = 2,
+                awaitFrame = { withFrameNanos { } },
+                requestFocus = { runCatching { rowFocus.requestFocus() }.isSuccess },
+                reset = { seenGeneration = generation },
+            )
+        }
         TokenRow(
             title = "外观与主题",
             modifier = Modifier
                 .testTag("s09-goto-theme")
+                .focusRequester(rowFocus)
                 .pressFeedback(themeInteraction)
                 .clickable(
                     interactionSource = themeInteraction,

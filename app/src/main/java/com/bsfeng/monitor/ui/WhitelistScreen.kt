@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -24,16 +25,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.finance.ui.restoreFocusAfterFrames
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.Chip
@@ -87,6 +95,68 @@ fun WhitelistScreen(
         else -> FiveState.POPULATED
     }
 
+    val context = LocalContext.current
+    // 三处焦点归位的落点（契约 s11-st-empty / s11-st-error / s11-none · 移除后）
+    val ctaFocus = remember { FocusRequester() }
+    val retryFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    var pendingCtaFocus by remember { mutableStateOf(false) }
+    var pendingRetryFocus by remember { mutableStateOf(false) }
+    var pendingSearchFocus by remember { mutableStateOf(false) }
+    // 是否刚离开本页去系统「使用情况访问」设置（只有这种返回才重扫，首帧不重扫）
+    var awaitingUsageAccessReturn by remember { mutableStateOf(false) }
+
+    // 契约 s11-st-empty · 结果：跳转系统「使用情况访问」设置页；返回后重新扫描一次。
+    LifecycleResumeEffect(Unit) {
+        if (awaitingUsageAccessReturn) {
+            awaitingUsageAccessReturn = false
+            viewModel.refresh()
+            pendingCtaFocus = true
+        }
+        onPauseOrDispose { }
+    }
+
+    // 空态「去授权」回位：重扫会先落 LOADING，等状态落定再请求（请求在复位之前，见 restoreFocusAfterFrames）。
+    LaunchedEffect(pendingCtaFocus, effective) {
+        if (!pendingCtaFocus) return@LaunchedEffect
+        when (emptyCtaFocusDecision(effective)) {
+            WhitelistFocusDecision.WAIT -> Unit
+            WhitelistFocusDecision.DROP -> pendingCtaFocus = false
+            WhitelistFocusDecision.REQUEST -> restoreFocusAfterFrames(
+                frames = 2,
+                awaitFrame = { withFrameNanos { } },
+                requestFocus = { runCatching { ctaFocus.requestFocus() }.isSuccess },
+                reset = { pendingCtaFocus = false },
+            )
+        }
+    }
+
+    // 错态「重新扫描」回位：仍失败 → 焦点回按钮；扫描成功后错态（连同按钮）卸载 → 信号作废。
+    LaunchedEffect(pendingRetryFocus, effective) {
+        if (!pendingRetryFocus) return@LaunchedEffect
+        when (retryFocusDecision(effective)) {
+            WhitelistFocusDecision.WAIT -> Unit
+            WhitelistFocusDecision.DROP -> pendingRetryFocus = false
+            WhitelistFocusDecision.REQUEST -> restoreFocusAfterFrames(
+                frames = 2,
+                awaitFrame = { withFrameNanos { } },
+                requestFocus = { runCatching { retryFocus.requestFocus() }.isSuccess },
+                reset = { pendingRetryFocus = false },
+            )
+        }
+    }
+
+    // 无结果卡「清空搜索」回位：等卡片 150ms 淡出，焦点回搜索框（契约 s11-none · 移除后）。
+    LaunchedEffect(pendingSearchFocus) {
+        if (!pendingSearchFocus) return@LaunchedEffect
+        restoreFocusAfterFrames(
+            frames = 2,
+            awaitFrame = { withFrameNanos { } },
+            requestFocus = { runCatching { searchFocus.requestFocus() }.isSuccess },
+            reset = { pendingSearchFocus = false },
+        )
+    }
+
     Box(Modifier.fillMaxSize().pageBackdrop().testTag("screen-s11")) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(
@@ -113,7 +183,21 @@ fun WhitelistScreen(
                             text = "授予使用情况访问权限后，这里会列出可加入白名单的应用。",
                             title = "还没有扫描到应用",
                             actionLabel = "去授权",
-                            onAction = { toast.show("已跳转系统「使用情况访问」设置") },
+                            // P0 修复：此前只有 toast、全文件无 Intent = 假跳转。现在真跳系统
+                            // 「使用情况访问」设置页（action 见 WhitelistViewModel 的常量），
+                            // 跳转成功才提示；失败给出可操作提示，不谎称已跳转。
+                            onAction = {
+                                val opened = runCatching {
+                                    context.startActivity(Intent(USAGE_ACCESS_SETTINGS_ACTION))
+                                }.isSuccess
+                                if (opened) {
+                                    awaitingUsageAccessReturn = true
+                                    toast.show("已跳转系统「使用情况访问」设置")
+                                } else {
+                                    toast.show("未找到系统「使用情况访问」设置页")
+                                }
+                            },
+                            actionModifier = Modifier.focusRequester(ctaFocus),
                             modifier = Modifier.testTag("s11-st-empty"),
                         )
 
@@ -123,10 +207,12 @@ fun WhitelistScreen(
                             // 原型 s11-whitelist.html:139 的错态 CTA 文案是「重新扫描」，非默认「重试」
                             actionLabel = "重新扫描",
                             onRetry = {
+                                pendingRetryFocus = true
                                 viewModel.clearError()
                                 viewModel.refresh()
                                 toast.show("正在重新扫描已安装应用…")
                             },
+                            actionModifier = Modifier.focusRequester(retryFocus),
                             modifier = Modifier.testTag("s11-st-error"),
                         )
 
@@ -153,6 +239,8 @@ fun WhitelistScreen(
                                         value = searchQuery,
                                         // 契约 s11-search：每字符即时回显，停手 300ms 后过滤（防抖在 VM 内）
                                         onValueChange = { viewModel.updateSearchQuery(it) },
+                                        // 无结果卡「清空搜索」后焦点回这里（契约 s11-none · 移除后）
+                                        focusRequester = searchFocus,
                                         placeholder = "搜索应用名或包名",
                                         leading = {
                                             Icon(
@@ -211,6 +299,7 @@ fun WhitelistScreen(
                                     total = allApps.size,
                                     onClear = {
                                         viewModel.clearSearch()
+                                        pendingSearchFocus = true
                                         scope.launch { listState.animateScrollToItem(0) }
                                     },
                                     modifier = Modifier

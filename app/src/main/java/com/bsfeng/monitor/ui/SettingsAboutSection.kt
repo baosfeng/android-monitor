@@ -135,8 +135,10 @@ if (debugUi) {
                     })
                 },
             )
-            // 组件与状态演示屏 = 演示件：debug 构建 + 已解锁 + 调试模式已开才出现
-            if (demoVisible) {
+            // 组件与状态演示屏：契约 s09-goto-demo · 边界「调试模式关闭时本行仍可进入」——
+            // 可见性只看 debug 构建 + 长按解锁（= debugUi），不再跟调试模式开关联动；
+            // release 构建 debugUi 恒 false，整行不渲染。
+            if (demoEntryVisible(debugUi = debugUi, debugOn = debugEnabled)) {
                 TokenDivider(first = false)
                 // 整行 0.96 + LIGHT（契约 s09-goto-demo）：锚点与按压落在同一节点
                 val demoInteraction = remember { MutableInteractionSource() }
@@ -181,3 +183,14 @@ if (debugUi) {
     }
 }
 }
+
+/**
+ * 「组件与状态演示」入口是否显示。
+ *
+ * 契约 s09-goto-demo · 边界：调试模式关闭时本行仍可进入 —— 判据只有「debug 构建 + 关于页长按解锁」
+ * （[debugUi]），[debugOn]（调试模式开关）**不参与**。显式保留 debugOn 参数是为了把这条边界写死在
+ * 签名里，防止以后又被顺手拼回条件；release 构建 debugUi 恒 false（见 ui/components/DebugGate.kt）。
+ *
+ * 调用方仍会传 demoVisible（= debug && unlocked && debugOn），本入口刻意不用它。
+ */
+internal fun demoEntryVisible(debugUi: Boolean, debugOn: Boolean): Boolean = debugUi
