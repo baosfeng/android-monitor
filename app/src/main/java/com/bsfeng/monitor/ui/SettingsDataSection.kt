@@ -28,6 +28,7 @@ import com.bsfeng.monitor.ui.components.ChipRow
 import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.SectionHeader
 import com.bsfeng.monitor.ui.components.performConfirmHaptic
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,7 +87,6 @@ Column(Modifier.fillMaxWidth()) {
                     onClick = {
                         if (!backupBusy) {
                             backupBusy = true
-                            view.performConfirmHaptic()
                             scope.launch {
                                 val outcome = withContext(Dispatchers.IO) {
                                     BackupManager(context).backupNow(BackupOrigin.MANUAL)
@@ -104,6 +104,7 @@ Column(Modifier.fillMaxWidth()) {
                     },
                     variant = AppButtonVariant.Ghost,
                     enabled = !backupBusy,
+                    tone = HapticTone.SUCCESS,
                 )
             },
         )

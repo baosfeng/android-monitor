@@ -3,26 +3,43 @@ package com.bsfeng.monitor.autobook
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.WindowManager
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.bsfeng.monitor.finance.CategoryTree
+import com.bsfeng.monitor.ui.components.rememberMotionTier
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.MotionTier
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
 
 // 从 autobook/AutoBookOverlay.kt 拆出：浮窗的展示 / 隐藏与 Compose 内容。
 // 窗口参数在 OverlayWindowConfig，宿主生命周期在 OverlayLifecycleOwner。
@@ -49,10 +66,11 @@ import com.bsfeng.monitor.ui.components.performConfirmHaptic
  * ## 关闭契约（2026-10-20，用户真机反馈后收紧）
  *
  * 浮窗**只能由「记一笔」或「忽略」关闭**（判定集中在 [AutoBookDismissPolicy]）：
- * 点遮罩只吞掉点击 + 轻震动，切到任何 App 都不收起，只有服务销毁（[hide]）才卸载。
- * 旧实现「点遮罩 = onDismiss」害用户误触一次就被记成忽略 7 天。
+ * 点遮罩只抖 150ms + 轻震（不关、不写忽略），点卡片内空白被吞掉，切到任何 App 都不收起，
+ * 只有服务销毁（[hide]）才卸载。旧实现「点遮罩 = onDismiss」害用户误触一次就被记成忽略 7 天。
  *
- * 入场：遮罩淡入 180ms + 卡片从底部滑入 220ms；关闭即时卸载（保持既有行为）。
+ * 动效（s15 契约）：入场首帧直接完整显示（真机反馈「浮窗出现仍慢」，不再加淡入/滑入）；
+ * 退场 150ms（`dur-overlay-out`）播完才真正卸载；遮罩点击的卡片抖动 150ms（精简动效档跳过）。
  */
 class AutoBookOverlay(private val service: AccessibilityService) {
 
@@ -195,8 +213,12 @@ class AutoBookOverlay(private val service: AccessibilityService) {
     /**
      * 浮窗内容：全屏遮罩 + 贴底确认卡。
      *
-     * 遮罩铺满整屏（含状态栏），**点遮罩只吞掉点击**：轻震动 + 回调诊断，浮窗继续显示；
-     * 确认卡本身也吞掉点击，避免误关（关闭只走卡片里的两个按钮）。
+     * 契约锚点（docs/交互设计/s15-自动记账浮窗-交互契约.md）：
+     * - `screen-s15` 整屏拦截；`s15-layer` 遮罩+卡片的容器；`s15-scrim` 卡片以外的遮罩；
+     * - `s15-sheet` 卡片本体（吞点击，不因点空白/拖拽关闭）。
+     *
+     * 关闭只有两条路（卡片里的两个按钮）：点下去先播 150ms 退场再回调，回调里才落库/写忽略；
+     * 遮罩点击只抖 + 轻震 + 每笔一次 toast，浮窗继续显示。
      */
     @Composable
     private fun AutoBookOverlayContent(
@@ -208,38 +230,107 @@ class AutoBookOverlay(private val service: AccessibilityService) {
         onImeFocusRequest: (Boolean) -> Unit,
     ) {
         val t = LocalDesignTokens.current
-        val view = LocalView.current
-        // 遮罩点击要不要震动也由关闭策略裁决（唯一裁决点，UI 不自己判断）
-        val scrimEffect = remember { AutoBookDismissPolicy.effectOf(AutoBookCloseSource.SCRIM_TAP) }
-        // 首帧直接完整显示：不做淡入/滑入动画。真机反馈「浮窗出现仍慢」——
-        // 80ms 淡入 + 100ms 滑入会让用户感觉又慢一截；识别链路已压到约 220ms，
-        // 这里不再额外加动画时间（2026-10-20）。
-        Box(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val haptic = rememberHaptic()
+        val motionEnabled = rememberMotionTier() != MotionTier.REDUCED
+
+        // ── 退场：先播 dur-overlay-out（150ms）再真正卸载窗口 ──────────────────
+        // 顺序很重要：退场动画期间只关入口、不落库；动画播完才回调（落库/写忽略）。
+        // 反过来「先落库再播动画」会让用户在动画里看到的还是旧数据，且崩溃点落在中间态。
+        var closing by remember { mutableStateOf(false) }
+        var closeAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+        val exit = remember { Animatable(0f) }
+        LaunchedEffect(closing) {
+            if (!closing) return@LaunchedEffect
+            if (motionEnabled) {
+                exit.animateTo(1f, tween(t.durOverlayOut, easing = t.easeOut))
+            } else {
+                exit.snapTo(1f)
+            }
+            val action = closeAction
+            closeAction = null
+            action?.invoke()
+        }
+        // 连点只生效一次：closing 置位后的第二次点击直接丢掉
+        val requestClose: (() -> Unit) -> Unit = { action ->
+            if (!closing) {
+                closeAction = action
+                closing = true
+            }
+        }
+
+        // ── 遮罩点击：卡片抖 150ms（±4dp）+ 轻震，浮窗不关 ────────────────────
+        val shake = remember { Animatable(0f) }
+        var shakeTick by remember { mutableIntStateOf(0) }
+        LaunchedEffect(shakeTick) {
+            if (shakeTick == 0 || !motionEnabled) return@LaunchedEffect
+            val amplitude = with(density) { SCRIM_SHAKE_AMPLITUDE.toPx() }
+            shake.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = SCRIM_SHAKE_MS
+                    -amplitude at 0
+                    -amplitude at SCRIM_SHAKE_MS * 3 / 10
+                    amplitude at SCRIM_SHAKE_MS * 13 / 20
+                    0f at SCRIM_SHAKE_MS
+                },
+            )
+        }
+
+        // 退场位移按卡片自身高度换算：卡片从底部滑出屏幕，不依赖屏幕高
+        var sheetHeightPx by remember { mutableStateOf(0f) }
+
+        Box(Modifier.fillMaxSize().testTag("screen-s15")) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    // 原型 scrim 0.34；遮罩叠两层 ≈ 0.56，与窗口级浮层（WindowOverlay）同一口径
-                    .background(t.scrim.compositeOver(t.scrim))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        // 吞掉点击：浮窗只能由「记一笔」/「忽略」关闭（2026-10-20 用户要求）
-                        if (scrimEffect.hapticFeedback) {
-                            view.performConfirmHaptic()
+                    .testTag("s15-layer")
+                    // 退场只淡出整层：卡片另有下滑位移（见 s15-sheet）
+                    .graphicsLayer { alpha = 1f - exit.value }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("s15-scrim")
+                        // 原型 scrim 0.34；遮罩叠两层 ≈ 0.56，与窗口级浮层（WindowOverlay）同一口径
+                        .background(t.scrim.compositeOver(t.scrim))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            // 吞掉点击：浮窗只能由「记一笔」/「忽略」关闭（2026-10-20 用户要求）
+                            haptic(HapticTone.LIGHT)
+                            shakeTick++
+                            onScrimTap()
                         }
-                        onScrimTap()
-                    }
-            )
-
-            Box(Modifier.align(Alignment.BottomCenter)) {
-                AutoBookConfirmSheet(
-                    draft = draft,
-                    categoryTree = categoryTree,
-                    onConfirm = onConfirm,
-                    onIgnore = onIgnore,
-                    onImeFocusRequest = onImeFocusRequest,
                 )
+
+                Box(Modifier.align(Alignment.BottomCenter)) {
+                    AutoBookConfirmSheet(
+                        draft = draft,
+                        categoryTree = categoryTree,
+                        onConfirm = { type, category, remark ->
+                            haptic(HapticTone.LIGHT)
+                            requestClose { onConfirm(type, category, remark) }
+                        },
+                        onIgnore = {
+                            haptic(HapticTone.LIGHT)
+                            requestClose(onIgnore)
+                        },
+                        onImeFocusRequest = onImeFocusRequest,
+                        dismissing = closing,
+                        modifier = Modifier
+                            .testTag("s15-sheet")
+                            .onSizeChanged { sheetHeightPx = it.height.toFloat() }
+                            .graphicsLayer {
+                                translationX = shake.value
+                                translationY = exit.value * sheetHeightPx
+                            }
+                            // 卡内点击一律吞掉（无高亮、不失焦、不关闭）；用 pointerInput 而不是
+                            // clickable —— clickable 会让 TalkBack 把整张卡读成按钮，而它不可点。
+                            .pointerInput(Unit) { detectTapGestures { } }
+                    )
+                }
             }
         }
     }
@@ -247,5 +338,11 @@ class AutoBookOverlay(private val service: AccessibilityService) {
     private companion object {
         /** 日志 tag 与引擎保持一致，方便 `adb logcat -s AutoBook` 一起看 */
         const val TAG = "AutoBook"
+
+        /** 遮罩点击的卡片抖动幅度（原型 @keyframes ab-shake：translateX ±4px） */
+        val SCRIM_SHAKE_AMPLITUDE = 4.dp
+
+        /** 遮罩点击的卡片抖动时长（契约：150ms；设计 token 里没有这一档，故就地定义） */
+        const val SCRIM_SHAKE_MS = 150
     }
 }

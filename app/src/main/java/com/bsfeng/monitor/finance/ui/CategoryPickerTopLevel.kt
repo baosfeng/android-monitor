@@ -26,12 +26,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.ui.components.CategoryIcon
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
@@ -40,21 +43,31 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
  * 记账抽屉里一级是「主入口」，要一眼看全；浮窗高度有限仍用 chips（[CategoryPickerTopStyle.CHIPS]）。
  */
 @Composable
-internal fun TopLevelGrid(state: CategoryPickerState, onSelectTop: (String) -> Unit) {
+internal fun TopLevelGrid(
+    state: CategoryPickerState,
+    onSelectTop: (String) -> Unit,
+    tagPrefix: String? = null,
+) {
     val t = LocalDesignTokens.current
     val rows = remember(state.topLevel) { state.topLevel.chunked(PICKER_COLUMNS) }
     Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
-        rows.forEach { row ->
+        rows.forEachIndexed { rowIndex, row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(t.space1),
             ) {
-                row.forEach { top ->
+                row.forEachIndexed { column, top ->
                     TopLevelCell(
                         name = top.name,
                         selected = top.name == state.activeTopName,
                         onClick = { onSelectTop(top.name) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            // 调用方要锚点时才贴 testTag（顺序 = 网格阅读顺序）；null 时不产生任何节点差异
+                            .then(
+                                if (tagPrefix == null) Modifier
+                                else Modifier.testTag(tagPrefix + (rowIndex * PICKER_COLUMNS + column))
+                            ),
                     )
                 }
                 repeat(PICKER_COLUMNS - row.size) {
@@ -73,6 +86,7 @@ private fun TopLevelCell(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
     val shape = RoundedCornerShape(t.radiusMd)
     // 旧版口径：分类格用各自分类色（12% 淡底 + 分类色线描），选中只加 2dp accent 描边
     val color = categoryColorOf(name)
@@ -82,7 +96,11 @@ private fun TopLevelCell(
             // 选中：2dp accent 描边 + 淡底（原型 .cat-l1[aria-pressed] 的 accent-text + outline）
             .background(if (selected) t.accent.copy(alpha = SELECTED_BG_ALPHA) else Color.Transparent)
             .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
-            .clickable { onClick() }
+            // 点一级只换网格：轻震一次（口径同全部格子点击；s15 契约 s15-l1-* 的「轻震」）
+            .clickable {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
             .padding(vertical = t.space1),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

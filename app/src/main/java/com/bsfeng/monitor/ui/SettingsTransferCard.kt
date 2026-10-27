@@ -162,7 +162,6 @@ internal fun TransferFeatureSettings(
                 AppButton(
                     text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "添加" else "说明",
                     onClick = {
-                        view.performConfirmHaptic()
                         requestTile()
                     },
                     variant = AppButtonVariant.Ghost,

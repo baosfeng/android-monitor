@@ -32,6 +32,7 @@ import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.SectionHeader
 import com.bsfeng.monitor.ui.components.ToastHostState
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.widget.AdSkipWidgetReceiver
 import com.bsfeng.monitor.widget.FinanceWidgetReceiver
@@ -142,6 +143,7 @@ internal fun SettingsWidgetSection(
                         text = if (pendingReceiver === entry.receiver) "添加中" else "添加",
                         variant = AppButtonVariant.Ghost,
                         enabled = pendingReceiver == null,
+                        tone = HapticTone.SUCCESS,
                         onClick = {
                             if (pendingReceiver == null) {
                                 pendingReceiver = entry.receiver

@@ -8,6 +8,7 @@ import com.bsfeng.monitor.domain.model.SkipRule
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** 规则组作用域与闸门摘要 */
 internal fun groupScopeText(group: RuleGroup): String {
@@ -53,6 +54,13 @@ internal fun selectorKindCount(rules: List<SkipRule>, pick: (MatchRule) -> Int):
 
 internal fun hostOf(url: String): String =
     url.substringAfter("://", url).substringBefore("/").ifEmpty { "未填写订阅源" }
+
+/** 订阅源卡底「镜像」段：URL 为空显示「—」（契约 s10-url 输入行边界）。 */
+internal fun mirrorHostOf(url: String): String =
+    url.substringAfter("://", url).substringBefore("/").ifEmpty { "—" }
+
+/** 千分位整数（契约 s10-summary：超 9,999 用千分位，字号不变）。 */
+internal fun formatRuleCount(value: Int): String = String.format(Locale.CHINA, "%,d", value)
 
 internal fun formatSyncTime(atMs: Long): String =
     if (atMs <= 0L) "尚未同步"

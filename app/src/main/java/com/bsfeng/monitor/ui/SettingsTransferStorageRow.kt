@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.bsfeng.monitor.domain.transfer.TransferFormat
 import com.bsfeng.monitor.ui.components.ConfirmDialog
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,7 +65,6 @@ internal fun SettingsTransferStorageRow(
             AppButton(
                 text = "清理",
                 onClick = {
-                    view.performConfirmHaptic()
                     // 没有文件时不弹「删除 0 个文件」的空确认，直接给一句提示
                     if (stats.isEmpty) {
                         toast.show("暂无可清理的接收文件")
@@ -74,6 +73,7 @@ internal fun SettingsTransferStorageRow(
                     }
                 },
                 variant = AppButtonVariant.Ghost,
+                tone = HapticTone.REJECT,
             )
         },
     )

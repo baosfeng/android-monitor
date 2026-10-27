@@ -139,6 +139,38 @@ internal fun MainContent(
             }
             // 每次切到记账 Tab 或从子页返回时自增，驱动记账首页把列表滚回顶部
             var financeEntryKey by remember { mutableIntStateOf(0) }
+            // 记账表单是从哪进来的：true = 统计页空态「新增一笔」，false = 记账主页（FAB / 空态 CTA / 小组件）。
+            // 之前所有子页返回都硬编码回「记账主页」，从统计空态点「新增一笔」再取消会掉回列表页，
+            // 焦点、滚动位置、「共 N 个分类」一起丢（契约 s07-empty-add · 移除后「空态卡原位保留」）。
+            var addReturnsToStats by rememberSaveable { mutableStateOf(false) }
+            // 返回统计页时自增：这一屏是「被表单返回」重新组合出来的，统计页据此把焦点放回空态 CTA
+            var statsReturnTick by remember { mutableIntStateOf(0) }
+
+            /** 打开记账表单并记住来源（页面路由集中在下面，本函数只做「记来源 + 改路由」一件事）。 */
+            fun openAddTransaction(fromMonth: String, returnToStats: Boolean) {
+                addReturnsToStats = returnToStats
+                financeRoute = FinanceRoute.AddTransaction(fromMonth)
+            }
+
+            /**
+             * 记账子页的统一返回落点：**从哪来回哪去**。
+             *
+             * 表单（AddTransaction）按登记过的来源回统计页或记账主页；统计 / 预算 / 导入等子页一律回主页。
+             * 表单从统计页返回时 +1 [statsReturnTick]，让统计页恢复「空态 CTA 焦点」——表单页会把
+             * 统计页整屏卸载，返回后是重新组合的一屏，焦点与滚动都不会自动回来。
+             */
+            fun backToFinanceSource() {
+                if (financeRoute is FinanceRoute.AddTransaction && addReturnsToStats) {
+                    financeRoute = FinanceRoute.Stats
+                    statsReturnTick++
+                } else {
+                    financeRoute = FinanceRoute.Main
+                    financeEntryKey++
+                    // 回主页 = 离开统计页：清掉一次性回焦信号，避免下次正常进统计页误抢焦点
+                    statsReturnTick = 0
+                }
+                addReturnsToStats = false
+            }
             var showSkipRuleScreen by remember { mutableStateOf(false) }
             var showWhitelistScreen by remember { mutableStateOf(false) }
             var showGallery by remember { mutableStateOf(false) }
@@ -203,10 +235,9 @@ internal fun MainContent(
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
             }
-            // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到记账首页
+            // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到**来源页**（表单来自统计空态时回统计页）
             BackHandler(enabled = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main) {
-                financeRoute = FinanceRoute.Main
-                financeEntryKey++
+                backToFinanceSource()
             }
 
             // 通知点击「直达传送页」：目标功能已关闭时回退概览（不崩溃、不留空 Tab）
@@ -233,7 +264,8 @@ internal fun MainContent(
                 if (target != AppTab.FINANCE) return@LaunchedEffect
                 settingsSubPageName = ""
                 selectedTab = target
-                financeRoute = FinanceRoute.AddTransaction(FinanceViewModel.currentMonthStr())
+                // 小组件直达：不是从统计空态进来的，返回一律回记账主页
+                openAddTransaction(FinanceViewModel.currentMonthStr(), returnToStats = false)
             }
 
             Box(Modifier.fillMaxSize().pageBackdrop()) {
@@ -254,6 +286,9 @@ internal fun MainContent(
                                     if (tab == AppTab.FINANCE) {
                                         financeRoute = FinanceRoute.Main
                                         financeEntryKey++
+                                        // 切 Tab 一律回一级页：之前登记的「表单来源」与回焦信号都不再有效
+                                        addReturnsToStats = false
+                                        statsReturnTick = 0
                                     }
                                 },
                                 onTapHaptic = {
@@ -279,11 +314,17 @@ internal fun MainContent(
                                 selectedTab = it
                                 settingsSubPageName = ""
                             },
-                            onFinanceRoute = { financeRoute = it },
-                            onBackToFinanceMain = {
-                                financeRoute = FinanceRoute.Main
-                                financeEntryKey++
+                            onFinanceRoute = { next ->
+                                financeRoute = next
+                                // 一次性信号（返回统计页回焦 CTA）只对「刚回来的那一屏」有效：
+                                // 任何不落在统计页的跳转都清掉它，否则下一次正常进统计页会误抢焦点。
+                                if (next !is FinanceRoute.Stats) statsReturnTick = 0
+                                // 「表单来源」由 openAddTransaction 登记；走别的路由说明这次表单已经结束
+                                if (next !is FinanceRoute.AddTransaction) addReturnsToStats = false
                             },
+                            onOpenAddTransaction = ::openAddTransaction,
+                            statsReturnTick = statsReturnTick,
+                            onBackToFinanceMain = ::backToFinanceSource,
                             onOpenTrip = { showTripScreen = true },
                             onOpenSkipRules = { showSkipRuleScreen = true },
                             onOpenWhitelist = { showWhitelistScreen = true },

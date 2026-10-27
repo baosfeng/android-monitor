@@ -165,24 +165,6 @@ class AdViewModel : ViewModel() {
         return buckets.toList()
     }
 
-    fun clearAll() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                store.deleteByAction(ACTION_AD_SKIPPED)
-                _skipRecords.value = emptyList()
-                _totalCount.value = 0
-                _confirmedCount.value = 0
-                _todayCount.value = 0
-                _lastSkipAt.value = 0L
-                _dailyCounts7.value = List(WINDOW_DAYS) { 0f }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w("AdViewModel", "清除跳过广告记录失败", e)
-            }
-        }
-    }
-
     private companion object {
         const val WINDOW_DAYS = 7
         const val REFRESH_MS = 3_000L

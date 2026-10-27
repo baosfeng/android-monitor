@@ -9,11 +9,17 @@ package com.bsfeng.monitor.ui
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,14 +31,21 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.BuildConfig
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.ui.components.AppCard
@@ -102,19 +115,38 @@ fun SettingsScreen(
     if (subPage != null) lastPage.value = subPage
     val openPage = subPage ?: lastPage.value
 
+    // 一级页滚动位置：五态切回有数据时要回到顶部（契约 s09-st-empty / -st-error「退出后滚动回顶部」）
+    val bodyScroll = rememberScrollState()
+    val headFocus = remember { FocusRequester() }
+    var sawState by remember { mutableStateOf(rt.effective) }
+    LaunchedEffect(rt.effective) {
+        if (sawState != FiveState.POPULATED && rt.effective == FiveState.POPULATED) {
+            bodyScroll.scrollTo(0)
+            // 页头标题接住焦点（键盘 / 无障碍焦点不落在已被移除的空态按钮上）
+            runCatching { headFocus.requestFocus() }
+        }
+        sawState = rt.effective
+    }
+
     // 沉浸式：底衬画在 inset 之外（内容才吃 Scaffold 的 padding），顶部与状态栏连成一片
     Box(
         modifier
             .fillMaxSize()
             .pageBackdrop()
+            .testTag("screen-s09")
     ) {
         Column(Modifier.fillMaxSize()) {
             ScreenHead(
                 title = "设置",
+                modifier = Modifier
+                    .testTag("s09-head")
+                    .focusRequester(headFocus)
+                    .focusable(),
                 meta = "行为记录 1.0.0 · 设备 " + viewModel.getDeviceId().take(8),
                 badge = {
                     Badge(
                         text = if (rt.isPaused) "已暂停" else "运行中",
+                        modifier = Modifier.testTag("s09-run-badge"),
                         tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
                     )
                 },
@@ -123,13 +155,15 @@ fun SettingsScreen(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .testTag("s09-body")
+                    .verticalScroll(bodyScroll),
                 verticalArrangement = Arrangement.spacedBy(t.space4),
             ) {
                 StateSwitchRow(state = demoState, onSelect = { rt.demoStateState.value = it })
 
-                // 五态容器 + 快捷项 + 四组入口（见 ui/SettingsSections.kt）
-                SettingsStateContainer(rt) {
+                // 五态容器 + 快捷项 + 四组入口（见 ui/SettingsSections.kt）；anchored 只在一级页
+                // 落五态锚点，覆盖层里的二级页不打同键（防同名节点）
+                SettingsStateContainer(rt, anchored = true) {
                     Column(
                         Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(t.space4),
@@ -138,6 +172,8 @@ fun SettingsScreen(
                         SettingsGroupIndex(rt, onOpenSubPage)
                     }
                 }
+                // 底部留白：导航条与悬浮操作避让（契约 screen-s09「底部留 96dp」）
+                Spacer(Modifier.height(96.dp))
             }
         }
 
@@ -214,9 +250,23 @@ private class LastOpenedPage(var value: SettingsSubPage? = null)
 private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
     val t = rt.t
     val state = rt.state
+    // 整行按压缩到 0.96 + LIGHT（契约 s09-a11y）：按压基元与 clickable 共用同一 interaction；
+    // 点击区仍是整行（TokenRow 不再传 onClick，避免内外两层点击各触发一次）
+    val a11yInteraction = remember { MutableInteractionSource() }
+    val haptic = rememberHaptic()
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
         TokenRow(
             title = "无障碍服务",
+            modifier = Modifier
+                .testTag("s09-a11y")
+                .pressFeedback(a11yInteraction)
+                .clickable(
+                    interactionSource = a11yInteraction,
+                    indication = LocalIndication.current,
+                ) {
+                    haptic(HapticTone.LIGHT)
+                    rt.context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                },
             // 两段式「已授权 · 已运行 X」由 ui/AccessibilityCopy.kt 统一产出，本屏只传时长文案
             subtitle = s09AccessibilityStatusText(
                 enabled = state.accessibilityEnabled,
@@ -225,7 +275,6 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
             ),
             subtitleColor = if (state.accessibilityEnabled) t.successText else t.dangerText,
             icon = Icons.Outlined.Accessibility,
-            onClick = { rt.context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
             trailing = { TailChevron() },
         )
         TokenDivider(first = false)

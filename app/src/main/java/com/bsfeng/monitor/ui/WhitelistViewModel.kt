@@ -9,6 +9,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,14 +55,35 @@ class WhitelistViewModel : ViewModel() {
         loadInstalledApps()
     }
 
+    /** 防抖中的过滤任务（每敲一个字就取消上一个，停手 [SEARCH_DEBOUNCE_MS] 才真正过滤）。 */
+    private var filterJob: Job? = null
+
+    /**
+     * 搜索框输入（契约 s11-search 输入行）：即时回显 + 停手 300ms 后过滤。
+     *
+     * 防抖期间列表保持上一次结果、不出 loading；关键词超 [SEARCH_MAX_CHARS] 截断不报错。
+     */
     fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
+        val clamped = query.take(SEARCH_MAX_CHARS)
+        if (clamped == _searchQuery.value) return
+        _searchQuery.value = clamped
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            filterApps()
+        }
+    }
+
+    /** 立即过滤（chip 快捷筛选 / 重置 / 清空搜索：契约要求点下去同帧生效，不等防抖）。 */
+    fun applySearchNow(query: String) {
+        filterJob?.cancel()
+        _searchQuery.value = query.take(SEARCH_MAX_CHARS)
         filterApps()
     }
 
-    /** 清空搜索（s11 无结果空态的「清空搜索」动作） */
+    /** 清空搜索（s11 无结果空态的「清空搜索」动作 / 快捷筛选「重置」） */
     fun clearSearch() {
-        updateSearchQuery("")
+        applySearchNow("")
     }
 
     fun clearError() {
@@ -142,5 +165,13 @@ class WhitelistViewModel : ViewModel() {
 
     fun refresh() {
         loadInstalledApps()
+    }
+
+    private companion object {
+        /** 搜索防抖窗口（契约 s11-search 输入行：停手 300ms 后过滤）。 */
+        const val SEARCH_DEBOUNCE_MS = 300L
+
+        /** 关键词上限（契约 s11-search 输入行边界：超 60 字符截断不报错）。 */
+        const val SEARCH_MAX_CHARS = 60
     }
 }

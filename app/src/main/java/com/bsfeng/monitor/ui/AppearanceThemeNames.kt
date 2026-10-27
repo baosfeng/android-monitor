@@ -39,6 +39,26 @@ internal fun themeNameEn(id: String): String = THEME_EN[id] ?: id
 internal fun themeLabel(id: String): String =
     if (id == ThemeRepository.DEFAULT_THEME) themeNameEn(id) else themeNameCn(id) + " " + themeNameEn(id)
 
+/**
+ * 主题 id → 契约锚点（原型 data-od-id）。
+ *
+ * 契约锚点按原型逐字沿用：glassmorphism 在契约里叫 `s13-theme-glass`（不是 s13-theme-glassmorphism），
+ * 其余 7 个与 id 同名。改号会断开与原型、评审、实现的对应链，故只在表里转写、不在调用点拼字符串。
+ */
+private val THEME_ANCHOR: Map<String, String> = mapOf(
+    "apple" to "s13-theme-apple",
+    "glassmorphism" to "s13-theme-glass",
+    "notion" to "s13-theme-notion",
+    "stripe" to "s13-theme-stripe",
+    "claude" to "s13-theme-claude",
+    "ibm" to "s13-theme-ibm",
+    "kami" to "s13-theme-kami",
+    "bento" to "s13-theme-bento",
+)
+
+/** 主题项锚点：未知 id 按 id 原样拼（与 [themeNameCn] 的 fail-open 口径一致）。 */
+internal fun themeAnchor(id: String): String = THEME_ANCHOR[id] ?: "s13-theme-" + id
+
 /** 颜色 → #RRGGBB（仅用于展示当前主题取值，不参与样式）。 */
 internal fun hex(color: androidx.compose.ui.graphics.Color): String {
     val argb = color.toArgb()

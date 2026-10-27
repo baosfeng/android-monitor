@@ -43,6 +43,17 @@ import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
+/** 二级网格第一格的固定文案：只用一级分类、不写入二级（契约 s14a-cat-grid） */
+private const val TOP_ONLY_LABEL = "不细分"
+
+/**
+ * 网格项：格子模型 + 是否「不细分」档。
+ *
+ * 「不细分」档的 name 取当前一级名（回传值就是一级名），label 写「不细分」；
+ * 因此它不能走 chooseChild（一级名不在 children 里），必须走 chooseTopOnly。
+ */
+private data class SecondaryCell(val model: PickerCellModel, val topOnly: Boolean)
+
 /**
  * 二级网格：第一格是「不细分」（直接把一级名当分类），后面是当前一级的二级。
  *
@@ -59,9 +70,18 @@ internal fun SecondaryGrid(
     onPick: (String) -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    // 二级网格只展示真实二级分类：不再有「不细分」伪分类，一级只是导航
+    // 第一格永远是「不细分」：一级格子只换网格，落值必须走它或二级格子，
+    // 否则「只记一级」的分类在 UI 上无处可选（chooseTopOnly 曾是无调用点的死代码）。
     val cells = remember(state.activeTopName, state.children) {
-        state.children.map { PickerCellModel(name = it, label = it) }
+        val list = mutableListOf<SecondaryCell>()
+        if (state.activeTopName.isNotBlank()) {
+            list += SecondaryCell(
+                model = PickerCellModel(name = state.activeTopName, label = TOP_ONLY_LABEL),
+                topOnly = true,
+            )
+        }
+        state.children.forEach { list += SecondaryCell(PickerCellModel(name = it, label = it), topOnly = false) }
+        list
     }
     val rows = remember(cells) { cells.chunked(PICKER_COLUMNS) }
     // 切换一级时回到顶部：上一级的滚动位置对新网格没有意义
@@ -73,7 +93,8 @@ internal fun SecondaryGrid(
     LaunchedEffect(state.activeTopName, recognizedName, rowHeightPx.floatValue) {
         val rowHeight = rowHeightPx.floatValue
         if (rowHeight <= 0f) return@LaunchedEffect
-        val index = cells.indexOfFirst { it.name == recognizedName }
+        // 「不细分」不参与识别定位：识别项一定是二级分类（一级名由 picker 自动展开一级）
+        val index = cells.indexOfFirst { !it.topOnly && it.model.name == recognizedName }
         if (index < 0) return@LaunchedEffect
         // 等一帧：maxValue 要按实际内容高度更新后才知道能滚多远
         withFrameNanos { }
@@ -103,12 +124,19 @@ internal fun SecondaryGrid(
             ) {
                 row.forEach { cell ->
                     PickerCell(
-                        cell = cell,
-                        selected = cell.name == state.selectedChildName,
-                        recognized = cell.name == recognizedName,
+                        cell = cell.model,
+                        // 「不细分」高亮 = 选中的正好是当前一级；二级格高亮 = 选中的是该二级
+                        selected = if (cell.topOnly) {
+                            state.isTopLevelOnlySelected
+                        } else {
+                            cell.model.name == state.selectedChildName
+                        },
+                        recognized = !cell.topOnly && cell.model.name == recognizedName,
                         iconSize = iconSize,
                         onClick = {
-                            val picked = state.chooseChild(cell.name)
+                            // 「不细分」→ 回传一级名（chooseTopOnly）；二级格 → 回传二级名。
+                            // 两者都只在拿到非空名时回传，调用方随即关抽屉。
+                            val picked = if (cell.topOnly) state.chooseTopOnly() else state.chooseChild(cell.model.name)
                             if (picked.isNotBlank()) onPick(picked)
                         },
                         modifier = Modifier.weight(1f),

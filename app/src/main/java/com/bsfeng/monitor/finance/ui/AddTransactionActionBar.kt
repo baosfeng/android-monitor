@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -27,6 +28,8 @@ internal fun AddTransactionActionBar(
     onSave: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 「删除这笔交易」的焦点落点（s05-del-dialog / s05-del-cancel 移除后回位）；null = 不复位。 */
+    deleteFocus: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
     Column(
@@ -56,6 +59,7 @@ internal fun AddTransactionActionBar(
                 textColor = t.expenseText,
                 background = t.danger.copy(alpha = 0.12f),
                 onClick = onDeleteClick,
+                focusRequester = deleteFocus,
             )
         }
     }

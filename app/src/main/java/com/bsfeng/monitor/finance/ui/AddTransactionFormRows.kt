@@ -2,8 +2,11 @@ package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/AddTransactionScreen.kt 的表单行；职责：字段行（标签 + 值 + ▸）、说明输入行、行分隔线。
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,15 +23,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.fgFade
 
 /** 字段行最小高度（原型 .s14-toggle min-height:44px = --tap-min） */
 internal val FIELD_ROW_MIN_H: Dp = 44.dp
@@ -36,21 +48,41 @@ internal val FIELD_ROW_MIN_H: Dp = 44.dp
 /** 标签列宽（原型 .screen.s14a .s14-label：flex 0 0 44px = --tap-min；两字中文放得下） */
 internal val FIELD_LABEL_W: Dp = 44.dp
 
-/** 一手可点：标签 + 值 + ▸（原型 .s14-toggle） */
+/**
+ * 一手可点：标签 + 值 + ▸（原型 .s14-toggle）。
+ *
+ * 契约 s14a-*-row：按住时整行底色转 fg 5%（120ms）、LIGHT 触感，抬指才开抽屉。
+ * [focusRequester] 用于抽屉关闭后把焦点送回本行（契约「移除/关闭后」列）。
+ */
 @Composable
 internal fun FieldRow(
     label: String,
     value: String,
     onClick: () -> Unit,
     placeholder: String = "",
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (pressed) t.fgFade(5) else Color.Transparent,
+        animationSpec = tween(t.durState),
+        label = "fieldRowBg",
+    )
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = FIELD_ROW_MIN_H)
             .clip(RoundedCornerShape(t.radiusMd))
-            .clickable { onClick() },
+            .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
+            .background(bg)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            },
         // 原型 .s14-toggle{padding:0} + min-height:44px：行自身零内边距。
         // 注意 modifier 链的顺序 —— heightIn 在 padding 之前时，44 约束的是**内容区**，
         // 总高会变成 44+padding（真机实测多出 8dp，四行累计就很明显了）
@@ -83,10 +115,10 @@ internal fun FieldRow(
 
 /** 说明行：与上面三行同构，但值是直接输入的（无 ▸，因为不需要再开一层） */
 @Composable
-internal fun NoteRow(value: String, onValueChange: (String) -> Unit) {
+internal fun NoteRow(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = FIELD_ROW_MIN_H),
         // 同上：说明行也是 .s14-toggle，零内边距 + min-height 44

@@ -27,6 +27,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
+/**
+ * 错态描述（契约 s01-error 逐字）：
+ * 「本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。」
+ *
+ * 异常原文（含 SQLite 错误码 / 表名）只进日志，上屏一律这句。
+ */
+internal const val LOAD_ERROR_DESC = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
+
 /** 一种事件类型 + 条数（环图 / 图例 / 排行用）。 */
 data class TypeSlice(val label: String, val count: Int)
 
@@ -66,6 +74,14 @@ data class OverviewState(
     val monthIncome: Double = 0.0,
     val dailyActiveMinutes30: List<Float> = List(30) { 0f },
     val typeSlices30: List<TypeSlice> = emptyList(),
+    // ── 上周 / 上月：紧邻当前窗口的同长度区间（近 7 天 → 再往前 7 天；近 30 天 → 再往前 30 天） ──
+    /** 上周事件数（副行「较上周 +6.2%」的对比基数）。 */
+    val prevWeekEventCount: Int = 0,
+    val prevWeekSkipCount: Int = 0,
+    val prevMonthEventCount: Int = 0,
+    val prevMonthSkipCount: Int = 0,
+    /** 边界态内容：今日标题最长的那条事件（真实记录，不编造）；今日无记录时为 null。 */
+    val longestEvent: Record? = null,
     /** 今日行程时间轴（概览「今日行程」卡用）；零点整点等窗口为 0 的情况下为 null。 */
     val trip: DayTimeline? = null,
     val tripDayStart: Long = 0L,
@@ -102,8 +118,18 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * 错态「重试」：**先回到骨架态**再拉数据（契约 s01-error-retry「整块换成加载骨架」）。
+     *
+     * 只调 [load] 是不够的：错态块会原地留着、按钮还能连点。置 isLoading=true 的那一刻
+     * 错态块连同按钮一起卸载，物理上无法连点；再失败时 [load] 的 catch 落回错态。
+     */
     fun retry() {
-        viewModelScope.launch { load() }
+        if (_state.value.isLoading) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, loadError = null)
+            load()
+        }
     }
 
     private suspend fun load() {
@@ -112,11 +138,10 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            // 异常原文只进日志：e.message 是内部实现细节（SQLite 错误码 / 表名 / 路径），
+            // 直接上屏既泄漏实现细节、又和契约写死的错态文案对不上。
             Log.w("OverviewViewModel", "加载概览数据失败", e)
-            _state.value = _state.value.copy(
-                isLoading = false,
-                loadError = e.message ?: "统计加载失败（本地数据库暂时不可用）",
-            )
+            _state.value = _state.value.copy(isLoading = false, loadError = LOAD_ERROR_DESC)
         }
     }
 
@@ -137,6 +162,19 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         val transactions = finance.getRecentTransactions(TRANSACTION_LIMIT)
 
         val weekSkips = week.filter { it.action == ACTION_AD_SKIPPED }
+
+        // 上周 / 上月：紧邻当前窗口的同长度区间（近 7 天 → 再往前 7 天；近 30 天 → 再往前 30 天）。
+        // 只走 COUNT，不把上万行读回内存；AD_SKIPPED 落库口径与桌面小组件一致（SCREEN + AD_SKIPPED）。
+        val weekPrevStart = weekStart - 7 * DAY_MS
+        val monthPrevStart = monthStart - 30 * DAY_MS
+        val prevWeekEvents = store.countByDate(weekPrevStart, weekStart - 1)
+        val prevWeekSkips = store.countByTypeAndAction(
+            RecordType.SCREEN, ACTION_AD_SKIPPED, weekPrevStart, weekStart - 1,
+        )
+        val prevMonthEvents = store.countByDate(monthPrevStart, monthStart - 1)
+        val prevMonthSkips = store.countByTypeAndAction(
+            RecordType.SCREEN, ACTION_AD_SKIPPED, monthPrevStart, monthStart - 1,
+        )
 
         // 今日行程：复用本轮已查到的今日记录现算（不额外查库、不建表）；
         // 窗口为 0（零点整点那一瞬）时聚合器会拒绝非法区间，这里按「暂无行程」处理。
@@ -180,6 +218,12 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             monthIncome = sumBy(transactions, monthStr, todayStr, false),
             dailyActiveMinutes30 = dailyUsageMinutes(month, monthStart, 30),
             typeSlices30 = slices(month),
+            prevWeekEventCount = prevWeekEvents,
+            prevWeekSkipCount = prevWeekSkips,
+            prevMonthEventCount = prevMonthEvents,
+            prevMonthSkipCount = prevMonthSkips,
+            // 边界态要展示「最长的那条真实记录」：取今日标题最长的一条，没有记录就不编一条。
+            longestEvent = today.maxByOrNull { it.label.length },
             trip = trip,
             tripDayStart = todayStart,
             lastUpdatedAt = now,
