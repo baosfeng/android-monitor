@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.gpuSlideX
@@ -40,6 +42,14 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
+
+/**
+ * 开关外层触达尺寸（纯函数，便于单测）：视觉轨道尺寸不动，点击域取 max(视觉, tapMin)。
+ *
+ * 结果再经 material3 `minimumInteractiveComponentSize()` 托底到 48dp；契约下限是 44×44。
+ */
+internal fun switchTouchSize(trackW: Dp, trackH: Dp, tapMin: Dp): Pair<Dp, Dp> =
+    trackW.coerceAtLeast(tapMin) to trackH.coerceAtLeast(tapMin)
 
 /** 开关（自绘，规格来自 --switch-* / --knob-size）。 */
 @Composable
@@ -64,25 +74,36 @@ fun AppSwitch(
         animationSpec = tween(t.durState),
         label = "swKnob",
     )
+    // 触达口径（契约 §二「可点元素点击区 ≥ 44×44dp」）：视觉轨道保持 52×32 不变，
+    // 点击域由外层撑开——minimumInteractiveComponentSize 兜住 Material 的 48dp 下限，
+    // 外层 size 取 max(视觉, tapMin)；视觉轨道另画在内层，尺寸与轨道动画完全不动。
+    val (touchW, touchH) = switchTouchSize(t.switchTrackW, t.switchTrackH, t.tapMin)
     Box(
         modifier = modifier
-            .size(width = t.switchTrackW, height = t.switchTrackH)
-            .clip(RoundedCornerShape(t.switchTrackH / 2))
-            .background(trackColor)
+            .minimumInteractiveComponentSize()
+            .size(width = touchW, height = touchH)
             .clickable {
                 // 开关切换是轻触级；调用点此前各自补 performConfirmHaptic，现收敛到控件内
                 haptic(HapticTone.LIGHT)
                 onCheckedChange(!checked)
             },
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier
-                .gpuSlideX { knobOffset.value }
-                .size(t.knobSize)
-                .clip(CircleShape)
-                .background(t.accentOn)
-        )
+            modifier = Modifier
+                .size(width = t.switchTrackW, height = t.switchTrackH)
+                .clip(RoundedCornerShape(t.switchTrackH / 2))
+                .background(trackColor),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier
+                    .gpuSlideX { knobOffset.value }
+                    .size(t.knobSize)
+                    .clip(CircleShape)
+                    .background(t.accentOn)
+            )
+        }
     }
 }
 
