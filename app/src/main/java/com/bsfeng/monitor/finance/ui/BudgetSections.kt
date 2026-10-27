@@ -115,7 +115,11 @@ internal fun BudgetCategoryRowsSection(
     onRefocused: () -> Unit = {},
 ) {
     val t = LocalDesignTokens.current
-    val requesters = remember { List(ROW_TARGET) { FocusRequester() } }
+    // 焦点落点按**实际行数**分配，不按 ROW_TARGET 定长：有预算的分类 ≥ ROW_TARGET 时
+    // budgetRowsFor 不截断（支出一级分类默认 18 个），行数可以是 7、8…
+    // 此前 List(ROW_TARGET) + requesters[index] 让第 7 行在**组合期**直接抛
+    // IndexOutOfBoundsException 崩页。行数变了就按新行数重建。
+    val requesters = remember(rows.size) { List(focusSlotCountFor(rows.size)) { FocusRequester() } }
     LaunchedEffect(refocusIndex) {
         val index = refocusIndex ?: return@LaunchedEffect
         requesters.getOrNull(index)?.requestFocus()
@@ -135,7 +139,8 @@ internal fun BudgetCategoryRowsSection(
                     enterIndex = enterIndex,
                     onClick = { onEditCategory(category, budget) },
                     modifier = budgetRowAnchor(index),
-                    focusRequester = requesters[index],
+                    // 双保险：即使将来有人把 requesters 换成定长列表，越界也只是「不回位」而不是崩页
+                    focusRequester = requesterSlotFor(index, requesters.size)?.let { requesters[it] },
                 )
             }
         }
