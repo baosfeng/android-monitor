@@ -101,15 +101,22 @@ class QuotaRepository(
         refresh(providerId, force = true)
     }
 
-    /** 切换用量范围：只重拉用量，避免打满限流。 */
+    /**
+     * 切换用量范围：只重拉用量，避免打满限流。
+     *
+     * 失败回滚范围：用量数据仍是旧范围的，选中态必须跟着数据走 —— 否则会出现「近 30 天」的
+     * 分段配着 24 小时的数字（第 4 批走查 P1-4）。失败原因写进 errorMessage，UI 的错误条
+     * 同时说明「数据停在 HH:mm」。
+     */
     suspend fun setRange(providerId: String, range: QuotaRange) {
         val provider = registry.byId(providerId) ?: return
         val current = state(providerId)
         if (current.range == range) return
         update(providerId) { it.copy(range = range) }
-        if (provider.supportsUsage && current.usageConfigured) {
-            fetchUsageOnly(provider, range)
-        }
+        if (!provider.supportsUsage || !current.usageConfigured) return
+        val succeeded = fetchUsageOnly(provider, range)
+        val settled = rangeAfterUsageAttempt(previous = current.range, requested = range, succeeded = succeeded)
+        if (settled != range) update(providerId) { it.copy(range = settled) }
     }
 
     /**
@@ -217,11 +224,16 @@ class QuotaRepository(
         }
     }
 
-    private suspend fun fetchUsageOnly(provider: QuotaProvider, range: QuotaRange) {
-        val kind = provider.usageCredentialKind ?: return
-        val key = credentials.load(provider.id, kind) ?: return
+    /**
+     * 只重拉用量（范围切换用）。
+     *
+     * @return 是否成功；调用方据此回滚范围（见 [rangeAfterUsageAttempt] 与 [setRange]）
+     */
+    private suspend fun fetchUsageOnly(provider: QuotaProvider, range: QuotaRange): Boolean {
+        val kind = provider.usageCredentialKind ?: return false
+        val key = credentials.load(provider.id, kind) ?: return false
         update(provider.id) { it.copy(loading = true) }
-        runCatching { provider.fetchUsage(key, range) }
+        return runCatching { provider.fetchUsage(key, range) }
             .onSuccess { usage ->
                 update(provider.id) {
                     it.copy(
@@ -241,6 +253,7 @@ class QuotaRepository(
                 }
                 handleRetry(provider.id, error)
             }
+            .isSuccess
     }
 
     private fun handleRetry(providerId: String, error: Throwable) {
@@ -263,6 +276,18 @@ class QuotaRepository(
         const val retryDefaultSeconds = 60L
     }
 }
+
+/**
+ * 范围切换请求结束后 state 里的范围该是哪一个。
+ *
+ * 成功 = 新范围；失败 = 旧范围（数据没换成新的，选中态也不能换）。
+ * 纯函数，便于把「失败必须回滚」直接单测钉死，而不依赖 Android 的凭据存储。
+ */
+internal fun rangeAfterUsageAttempt(
+    previous: QuotaRange,
+    requested: QuotaRange,
+    succeeded: Boolean,
+): QuotaRange = if (succeeded) requested else previous
 
 /** 日志用摘要：带上错误种类与原始消息（消息里不含凭据，QuotaHttp 已保证）。 */
 private fun Throwable.summaryForLog(): String =

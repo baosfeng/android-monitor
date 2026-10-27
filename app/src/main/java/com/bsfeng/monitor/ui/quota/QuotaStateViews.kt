@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -93,12 +95,18 @@ private const val OLLAMA_KEY_URL = "https://ollama.com/settings/keys"
 @Composable
 fun QuotaConfigCard(
     info: QuotaProviderInfo,
+    balance: String,
+    usage: String,
+    onBalanceChange: (String) -> Unit,
+    onUsageChange: (String) -> Unit,
     onSave: (balance: String, usage: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** 就地提示（上次保存的 Key 被服务端拒绝等）；为空不占位。 */
+    notice: String? = null,
+    /** 有 [notice] 时给出的重试入口；为空则不渲染。 */
+    onRetry: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
-    var balance by remember(info.id) { mutableStateOf("") }
-    var usage by remember(info.id) { mutableStateOf("") }
     val needsUsageRow = info.usageKind != null && info.usageKind != info.balanceKind
     val canSubmit = balance.isNotBlank() || (needsUsageRow && usage.isNotBlank())
     // 卡片空白处点击不保存、不发请求 → 卡容器本身不挂 clickable
@@ -110,10 +118,26 @@ fun QuotaConfigCard(
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
         )
+        if (notice != null) {
+            Spacer(Modifier.height(t.space2))
+            // 就地提示：保存失败时错误只说一句，不再单独切到错误态（否则与配置卡两个入口打架）
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "上次查询失败：" + notice,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.dangerText,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onRetry != null) {
+                    Spacer(Modifier.width(t.space1))
+                    QuotaInlineAction("重试", t.dangerText, onRetry)
+                }
+            }
+        }
         Spacer(Modifier.height(t.space3))
         QuotaTextField(
             value = balance,
-            onValueChange = { balance = it },
+            onValueChange = onBalanceChange,
             placeholder = info.credentialHint.ifBlank { "sk-****" },
             label = info.displayName + " API Key",
             modifier = Modifier.testTag("s18-key"),
@@ -126,7 +150,7 @@ fun QuotaConfigCard(
             Spacer(Modifier.height(t.space3))
             QuotaTextField(
                 value = usage,
-                onValueChange = { usage = it },
+                onValueChange = onUsageChange,
                 placeholder = info.usageCredentialHint ?: "平台登录令牌",
                 label = info.displayName + " 用量凭据",
             )
@@ -317,6 +341,100 @@ fun QuotaUsageUnavailableCard(
                 .clickable(onClick = onOpenSettings)
                 .padding(horizontal = t.space2, vertical = t.space1),
         )
+    }
+}
+
+/** 用量区该渲染哪一块：契约里「有用量数据」才出用量卡，其余落点各有各的说法。 */
+internal enum class QuotaUsageSlot { DATA, LOADING, FAILED, MISSING_CREDENTIAL, NONE }
+
+/**
+ * 用量区的落点判定。
+ *
+ * 只看「supportsUsage && usage == null」就引导「再填一条用量凭据」是假的：凭据早就配好、
+ * 只是这次请求失败时，那句引导会把人送去重填一个本来没问题的令牌（第 4 批走查 P1-3）。
+ * 已配置凭据但没数据时，先按「查询中 / 查询失败」处理，绝不再引导重填。
+ */
+internal fun quotaUsageSlot(
+    hasUsage: Boolean,
+    supportsUsage: Boolean,
+    usageConfigured: Boolean,
+    hasError: Boolean,
+): QuotaUsageSlot = when {
+    hasUsage -> QuotaUsageSlot.DATA
+    !supportsUsage -> QuotaUsageSlot.NONE
+    !usageConfigured -> QuotaUsageSlot.MISSING_CREDENTIAL
+    hasError -> QuotaUsageSlot.FAILED
+    else -> QuotaUsageSlot.LOADING
+}
+
+/** 用量查询中：紧凑骨架（余额卡已有数据，这里只缺用量，不整屏切骨架）。 */
+@Composable
+fun QuotaUsageLoadingCard(modifier: Modifier = Modifier) {
+    AppCard(modifier) {
+        StateSkeleton(rows = 2)
+    }
+}
+
+/**
+ * 用量查询失败：凭据已配置、请求失败时的错误态。
+ *
+ * 与「未配置凭据」的提示卡分开：这里主操作是重试（错误只是一次性的），换令牌是次级选择。
+ */
+@Composable
+fun QuotaUsageFailedCard(
+    message: String,
+    onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    AppCard(modifier) {
+        Text("用量查询失败", style = MaterialTheme.typography.titleMedium, color = t.dangerText)
+        Spacer(Modifier.height(t.space2))
+        Text(
+            "用量凭据已配置，但这次没查到数据：" + message + "。额度数据不受影响。",
+            style = MaterialTheme.typography.bodySmall,
+            color = t.muted,
+        )
+        Spacer(Modifier.height(t.space3))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(t.space2),
+        ) {
+            QuotaInlineAction("重试", t.dangerText, onRetry)
+            QuotaInlineAction("去额度设置", t.accent, onOpenSettings)
+        }
+    }
+}
+
+/**
+ * 卡内 / 错态里的次级文字动作：44dp 点击区 + 按压反馈 + LIGHT 触感。
+ *
+ * 契约没给这类新增动作锚点，按「不新增 testTag」的口径处理（锚点集合要与契约逐字对账）。
+ */
+@Composable
+internal fun QuotaInlineAction(
+    label: String,
+    tone: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(t.radiusSm))
+            .pressFeedback(interaction)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
+            .heightIn(min = t.tapMin)
+            .padding(horizontal = t.space2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = tone)
     }
 }
 
