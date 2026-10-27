@@ -230,31 +230,70 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // 这里保留写后显式 loadMonth 作为兜底（即使通知订阅出问题，自己的改动也立刻可见）；
     // 通知链路同时会触发一次加载，两者被 [loadMonth] 的 job 取消 + token 合并成一次结果。
 
-    fun addTransaction(tx: Transaction) {
+    /**
+     * 新增一笔交易。
+     *
+     * 写库异常此前会直接抛穿 viewModelScope（协程里的未捕获异常会崩进程）：用户刚填的
+     * 金额 / 分类 / 说明全丢，而且零提示。契约 s14a-save 的失败路径在实现里根本不存在。
+     * 现在失败落到 [actionNotice]（1.6s toast），表单的输入随组合卸载由路由保留，
+     * 进程不崩、用户知道「没存上、可以再点一次」。
+     *
+     * @param onResult 本次写入的**真实结果**。默认空实现，既有调用方行为不变；
+     *   需要「失败就停在表单、成功才返回」的调用方（s14a）据此分流。
+     */
+    fun addTransaction(tx: Transaction, onResult: (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            val id = manager.addTransaction(tx)
-            // 契约 s14a-save / s05-save：手动保存的新行也要「就地出现并高亮 1.6s」。
-            // 与自动记账共用同一条「刚落库」一次性信号（lead 裁定：契约优先于旧 KDoc），
-            // 列表侧消费一次即清；编辑 / 切 Tab / 回前台重载都不点亮。
-            FinanceInsertSignal.mark(id)
-            _actionNotice.value = FinanceActionNotice(savedNoticeMessage(tx), deleted = false)
-            loadMonth(_currentMonth.value)
+            val result = runFinanceWrite { manager.addTransaction(tx) }
+            result.onSuccess { id ->
+                // 契约 s14a-save / s05-save：手动保存的新行也要「就地出现并高亮 1.6s」。
+                // 与自动记账共用同一条「刚落库」一次性信号（lead 裁定：契约优先于旧 KDoc），
+                // 列表侧消费一次即清；编辑 / 切 Tab / 回前台重载都不点亮。
+                FinanceInsertSignal.mark(id)
+                _actionNotice.value = FinanceActionNotice(savedNoticeMessage(tx), deleted = false)
+                loadMonth(_currentMonth.value)
+            }.onFailure { e ->
+                Log.w("FinanceViewModel", "新增交易写库失败", e)
+                _actionNotice.value = FinanceActionNotice(SAVE_FAILED_NOTICE, deleted = false)
+            }
+            onResult(result.map { Unit })
         }
     }
 
-    fun deleteTransaction(id: Long) {
+    /**
+     * 删除一笔交易。失败不再打穿协程，给用户一句「没删掉」而不是整页崩掉。
+     *
+     * @param onResult 本次删除的真实结果（见 [addTransaction]）。
+     */
+    fun deleteTransaction(id: Long, onResult: (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            manager.deleteTransaction(id)
-            _actionNotice.value = FinanceActionNotice(DELETE_NOTICE, deleted = true)
-            loadMonth(_currentMonth.value)
+            val result = runFinanceWrite { manager.deleteTransaction(id) }
+            result.onSuccess {
+                _actionNotice.value = FinanceActionNotice(DELETE_NOTICE, deleted = true)
+                loadMonth(_currentMonth.value)
+            }.onFailure { e ->
+                Log.w("FinanceViewModel", "删除交易写库失败", e)
+                _actionNotice.value = FinanceActionNotice(DELETE_FAILED_NOTICE, deleted = false)
+            }
+            onResult(result)
         }
     }
 
-    fun updateTransaction(tx: Transaction) {
+    /**
+     * 更新一笔交易。失败同样是可见提示 + 回执，不打穿 viewModelScope。
+     *
+     * @param onResult 本次更新的真实结果（见 [addTransaction]）。
+     */
+    fun updateTransaction(tx: Transaction, onResult: (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
-            manager.updateTransaction(tx)
-            _actionNotice.value = FinanceActionNotice(savedNoticeMessage(tx), deleted = false)
-            loadMonth(_currentMonth.value)
+            val result = runFinanceWrite { manager.updateTransaction(tx) }
+            result.onSuccess {
+                _actionNotice.value = FinanceActionNotice(savedNoticeMessage(tx), deleted = false)
+                loadMonth(_currentMonth.value)
+            }.onFailure { e ->
+                Log.w("FinanceViewModel", "更新交易写库失败", e)
+                _actionNotice.value = FinanceActionNotice(UPDATE_FAILED_NOTICE, deleted = false)
+            }
+            onResult(result)
         }
     }
 
@@ -356,6 +395,25 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 }
 
 /**
+ * 把一次写库动作收成 [Result]，并**只吞 Exception、绝不吞取消**。
+ *
+ * 为什么不用裸 runCatching：协程取消是 CancellationException（Exception 的子类），
+ * runCatching 会把它一起捕获 —— 于是一次「切换月份导致的取消」会被当成写失败，
+ * 弹一句「保存失败」给用户。这里显式重抛取消（与 [FinanceViewModel.loadMonth] /
+ * [FinanceViewModel.setBudget] 的既有口径一致），其余异常落成 failure。
+ *
+ * 抽成独立函数是为了可单测：写库抛异常时返回失败、不向上抛（此前会打穿 viewModelScope 崩进程）。
+ */
+internal suspend fun <T> runFinanceWrite(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+/**
  * 一次写操作的成功提示：文案 + 触感类别（删除 = REJECT，保存 = SUCCESS）。
  *
  * 为什么由 ViewModel 出文案：它手里有交易本身的类型 / 分类 / 金额；列表页只负责把它渲染成
@@ -368,6 +426,16 @@ data class FinanceActionNotice(
 
 /** 删除成功文案（s05-del-confirm 逐字）。 */
 private const val DELETE_NOTICE: String = "已删除这笔交易"
+
+/**
+ * 写库失败的三句文案：告诉用户「没成功」+「重试不会写重 / 不会删错」。
+ *
+ * 不说「请重试」之外的细节（异常类型对用户无意义），也不说「已保存」——失败的路径
+ * 绝不能复用成功文案，否则用户以为存上了。
+ */
+internal const val SAVE_FAILED_NOTICE: String = "保存失败 · 未写入，请重试"
+internal const val DELETE_FAILED_NOTICE: String = "删除失败 · 记录还在，请重试"
+internal const val UPDATE_FAILED_NOTICE: String = "保存失败 · 修改未写入，请重试"
 
 /**
  * 保存成功文案（s05-save 逐字）：「已保存 · 支出 餐饮 ¥38.00」= 已保存 · 类型 分类 ¥金额。

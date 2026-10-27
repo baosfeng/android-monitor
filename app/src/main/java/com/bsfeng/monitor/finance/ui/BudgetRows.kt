@@ -61,6 +61,26 @@ internal fun budgetRowsFor(
     return if (withBudget.size >= ROW_TARGET) withBudget else (withBudget + others).take(ROW_TARGET)
 }
 
+/**
+ * 该建多少个焦点落点槽位：**等于实际行数**。
+ *
+ * 这是预算页越界崩溃的唯一分配口径（[BudgetSections] 与单测共用它）：
+ * 曾经固定按 [ROW_TARGET] 建 6 个槽、再按行下标直取，第 7 行组合期就抛
+ * IndexOutOfBoundsException。改这里必须同步 [com.bsfeng.monitor.finance.ui.BudgetRowFocusSlotsTest]。
+ */
+internal fun focusSlotCountFor(rowCount: Int): Int = rowCount.coerceAtLeast(0)
+
+/**
+ * 第 [index] 行取哪个焦点落点槽位的下标；越界返回 null（调用方按「不挂 requester」处理）。
+ *
+ * 为什么需要它：行数并不恒定 —— 有预算的分类 ≥ [ROW_TARGET] 时 [budgetRowsFor] **不截断**
+ * （支出一级分类默认 18 个，给第 7 个分类设预算就会出现 7 行）。此前预算页按 ROW_TARGET 建
+ * 定长 requester 列表、再按下标直取，第 7 行起就是在组合期抛 IndexOutOfBoundsException 崩页。
+ * 现在槽位数按实际行数分配，取用一律走这里（getOrNull 语义），行数再涨也不会越界。
+ */
+internal fun requesterSlotFor(index: Int, slotCount: Int): Int? =
+    if (index >= 0 && index < slotCount) index else null
+
 /** 金额格式化（两位小数，与其余记账页面一致）。 */
 internal fun formatAmount(value: Double): String =
     String.format(java.util.Locale.CHINA, "%.2f", value)
