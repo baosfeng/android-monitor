@@ -128,8 +128,6 @@ internal fun MainContent(
                 if (featureOn(Feature.TRANSPORT)) viewModel() else null
             val financeViewModel: FinanceViewModel? =
                 if (featureOn(Feature.FINANCE)) viewModel() else null
-            val skipRuleViewModel: SkipRuleViewModel? = if (adSkipOn) viewModel() else null
-            val whitelistViewModel: WhitelistViewModel? = if (adSkipOn) viewModel() else null
             val tokens = LocalDesignTokens.current
             // 6 Tab：概览(s01) / 实时(s02) / 广告(s03) / 记账(s04) / 传送(局域网互传) / 设置(s09)
             // 动态列表见 tabs：关闭的功能不生成 Tab，选中项被关闭时回退概览
@@ -184,6 +182,12 @@ internal fun MainContent(
             // s16 每日行程（从概览「今日行程」卡 push）
             var showTripScreen by remember { mutableStateOf(false) }
             var showSplash by remember { mutableStateOf(true) }
+            // 跳过引擎关闭时仍允许「只读查看」规则与白名单（契约 s09:37「组内两行常驻」）：
+            // VM 的 init 只读本地库、不起服务，但也不该在关闭态无谓创建——首次打开覆盖层时才建。
+            val skipRuleViewModel: SkipRuleViewModel? =
+                if (adSkipOn || showSkipRuleScreen) viewModel() else null
+            val whitelistViewModel: WhitelistViewModel? =
+                if (adSkipOn || showWhitelistScreen) viewModel() else null
             val view = LocalView.current
             val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery ||
                 showAppearance || showTripScreen || showQuotaSettings ||
@@ -361,6 +365,13 @@ internal fun MainContent(
                 onCloseQuotaSettings = { showQuotaSettings = false },
                 onCloseAppearance = { showAppearance = false },
                 onCloseTrip = { showTripScreen = false },
+                onOpenLocationSettings = {
+                    // s16-empty-cta / s16-goto-location：关覆盖层 → 切设置 Tab → 打开「功能」子页
+                    // （定位权限卡在该子页末位；契约只要求「跳到设置页定位权限项」，不额外做精确滚动）
+                    showTripScreen = false
+                    selectedTab = AppTab.SETTINGS
+                    settingsSubPageName = SettingsSubPage.FEATURE.name
+                },
                 onSplashFinished = { showSplash = false },
             )
             }

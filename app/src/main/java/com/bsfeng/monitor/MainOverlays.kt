@@ -38,6 +38,8 @@ internal fun MainOverlays(
     onCloseQuotaSettings: () -> Unit,
     onCloseAppearance: () -> Unit,
     onCloseTrip: () -> Unit,
+    /** s16 空态 CTA / 定位提示行：关掉行程覆盖层并跳到设置页定位项。null 时不渲染那两个锚点。 */
+    onOpenLocationSettings: (() -> Unit)? = null,
     onSplashFinished: () -> Unit,
 ) {
     // 整屏覆盖层：与 Scaffold 同级（不吃内容区 padding），遮罩与底衬铺到系统栏之下
@@ -108,7 +110,10 @@ internal fun MainOverlays(
         visible = showTripScreen,
         onBack = { onCloseTrip() },
     ) {
-        TripScreen(onBack = { onCloseTrip() })
+        TripScreen(
+            onBack = { onCloseTrip() },
+            onOpenLocationSettings = onOpenLocationSettings,
+        )
     }
 
     // 开屏：品牌 C2 动效，时序同原型 §8 —— 1600ms 起 240ms ease-in 淡出、1900ms 结束；

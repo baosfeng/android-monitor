@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +85,17 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
 
+    /**
+     * 退出外观屏：先登记「焦点回设置页『外观与主题』行」的一次性信号，再退页。
+     * 契约 s13-head · 退出后：退出后焦点回设置页「外观与主题」行（按钮 / 返回手势等效）。
+     */
+    val requestBack: () -> Unit = {
+        AppearanceFocusReturn.request()
+        onBack()
+    }
+    // 覆盖层里本页先于 AnimatedScreenOverlay 的 BackHandler 接管返回：手势退页也走同一条回位信号
+    BackHandler { requestBack() }
+
     val ids = remember { ThemeRepository.themeIds }
     val focusRequesters = remember(ids) { List(ids.size) { FocusRequester() } }
     var focusIndex by remember { mutableIntStateOf(ids.indexOf(current).coerceAtLeast(0)) }
@@ -155,7 +167,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             ScreenHead(
                 title = "外观",
                 meta = "切换即时生效，重启后保持",
-                onBack = onBack,
+                onBack = requestBack,
                 consumeTopInset = true,
                 modifier = Modifier.testTag("s13-head"),
             )
@@ -434,3 +446,27 @@ private fun EdgeSampleRow(title: String, subtitle: String, trailing: String) {
         )
     }
 }
+
+/**
+ * s13 退出后「焦点回设置页『外观与主题』行」的一次性信号（契约 s13-head · 退出后）。
+ *
+ * 为什么需要跨文件信号：外观屏由宿主导航以**覆盖层**打开（MainOverlays / SettingsScreen 的
+ * 兜底桥），设置页拿不到「外观屏已关闭」的回调；两个页面都在本批写区内，用最小的代次信号衔接，
+ * 不动共享导航件。
+ *
+ * 用代次（Int）而不是布尔：设置页只在**自己组合期间**观察到新代次才回焦。进入设置页之前遗留的
+ * 旧代次不抢占焦点（例如用户先在别处打开过外观屏，之后再进设置页）。
+ */
+internal object AppearanceFocusReturn {
+    private var generationState by mutableIntStateOf(0)
+    val generation: Int get() = generationState
+
+    /** 外观屏退出时调用一次（按钮返回与系统返回 / 手势共用）。 */
+    fun request() {
+        generationState += 1
+    }
+}
+
+/** 代次有变化才需要回焦；同一代次重复重组不抢焦点。 */
+internal fun appearanceReturnFocusPending(currentGeneration: Int, seenGeneration: Int): Boolean =
+    currentGeneration != seenGeneration

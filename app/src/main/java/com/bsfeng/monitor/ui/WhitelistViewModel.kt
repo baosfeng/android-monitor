@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.ui.components.FiveState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -174,4 +175,39 @@ class WhitelistViewModel : ViewModel() {
         /** 关键词上限（契约 s11-search 输入行边界：超 60 字符截断不报错）。 */
         const val SEARCH_MAX_CHARS = 60
     }
+}
+
+/**
+ * 系统「使用情况访问」设置页的 action。
+ *
+ * 契约 s11-st-empty：点「去授权」必须**真跳转**系统「使用情况访问」设置页（只弹 toast 不跳转 = 假跳转，
+ * 走查 P0）。常量放在 ViewModel 文件里而不是 WhitelistScreen.kt：后者是纯 Composable 文件
+ * （见 app/build.gradle.kts 的覆盖率排除清单），可单测的普通声明不放进去。
+ */
+internal val USAGE_ACCESS_SETTINGS_ACTION: String =
+    android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS
+
+/** s11 一次性焦点回位的决策：请求 / 等状态落定 / 作废。 */
+internal enum class WhitelistFocusDecision { REQUEST, WAIT, DROP }
+
+/**
+ * 空态「去授权」从系统设置返回后的焦点决策（契约 s11-st-empty · 返回本页时焦点回「去授权」）。
+ *
+ * 返回后会重扫一次：扫描中（LOADING）等待，仍落在空态才请求焦点；扫描出结果、空态不再呈现时
+ * 作废信号，避免在别的状态抢焦点。
+ */
+internal fun emptyCtaFocusDecision(state: FiveState): WhitelistFocusDecision = when (state) {
+    FiveState.EMPTY -> WhitelistFocusDecision.REQUEST
+    FiveState.LOADING -> WhitelistFocusDecision.WAIT
+    else -> WhitelistFocusDecision.DROP
+}
+
+/**
+ * 错态「重新扫描」后的焦点决策：仍失败（ERROR）→ 焦点回「重新扫描」按钮；扫描中等待；
+ * 成功退出错态（按钮随之卸载）→ 作废。
+ */
+internal fun retryFocusDecision(state: FiveState): WhitelistFocusDecision = when (state) {
+    FiveState.ERROR -> WhitelistFocusDecision.REQUEST
+    FiveState.LOADING -> WhitelistFocusDecision.WAIT
+    else -> WhitelistFocusDecision.DROP
 }
