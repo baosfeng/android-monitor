@@ -578,7 +578,7 @@ private fun QuotaDataBody(
                 message = error ?: "查询失败",
                 onRetry = onRetry,
                 onOpenSettings = onOpenSettings,
-                modifier = Modifier.staggerEnterAt(1),
+                modifier = Modifier.staggerEnterAt(1).testTag("s18-usage-error"),
             )
             QuotaUsageSlot.MISSING_CREDENTIAL -> QuotaUsageUnavailableCard(onOpenSettings)
             QuotaUsageSlot.NONE -> Unit
@@ -662,7 +662,12 @@ private fun QuotaErrorBlock(
             modifier = Modifier.testTag("s18-error"),
             actionModifier = Modifier.testTag("s18-retry"),
         )
-        QuotaInlineAction(label = "修改 Key", tone = t.accent, onClick = onEditKey)
+        QuotaInlineAction(
+            label = "修改 Key",
+            tone = t.accent,
+            onClick = onEditKey,
+            modifier = Modifier.testTag("s18-key-edit"),
+        )
     }
 }
 
