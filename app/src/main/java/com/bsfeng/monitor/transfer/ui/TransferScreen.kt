@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.live.ScreenHead
@@ -176,9 +177,13 @@ fun TransferScreen(
 
     /** C-16：清空已结束（不可撤销 → 立即 commit 抑制撤销条）。 */
     fun clearFinished() {
-        val terminal = TransferTaskGroups.finished(viewModel.tasks.value)
-        page.beginBulkDelete(terminal.size)
-        terminal.forEach { viewModel.deleteTask(it.sessionId, it.file.fileId) }
+        val plan = planClearFinished(viewModel.tasks.value, page.undo)
+        // 清空前先把仍在窗口内的单条撤销快照落定：否则清空后旧撤销条还在，
+        // 点「撤销」会把刚清空的行插回来，「分组变空态」就不成立（与连续删除分支同口径）。
+        plan.commitUndoId?.let(viewModel::commitDelete)
+        page.endUndo()
+        page.beginBulkDelete(plan.targets.size)
+        plan.targets.forEach { viewModel.deleteTask(it.sessionId, it.file.fileId) }
         page.dismissConfirm()
         page.requestFocus("title-finished")
         page.showToast("已清空记录")
@@ -367,3 +372,22 @@ fun TransferScreen(
         onTimeout = { page.showToast(PIN_TIMEOUT_TEXT) },
     )
 }
+
+/**
+ * C-16「清空已结束」的执行计划（纯函数，顺序与口径都可单测）。
+ *
+ * 两件事都必须在批量删除**之前**定下来：
+ * 1. [commitUndoId] —— 窗口内那张单条撤销快照要落定。否则「先删一条（撤销条还在）→ 5s 内清空」
+ *    之后旧撤销条仍可点，一撤销就把已清空的行插回来，C-16 的「分组变空态」不成立；
+ * 2. [targets] —— 只清终态记录（进行中任务不受影响，契约 C-16 边界）。
+ */
+internal data class ClearFinishedPlan(
+    val commitUndoId: String?,
+    val targets: List<TransferTask>,
+)
+
+internal fun planClearFinished(tasks: List<TransferTask>, pendingUndo: TransferUndo?): ClearFinishedPlan =
+    ClearFinishedPlan(
+        commitUndoId = pendingUndo?.deletion?.deletionId,
+        targets = TransferTaskGroups.finished(tasks),
+    )

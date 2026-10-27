@@ -8,8 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /** 1px 分隔线（原型 .row 的 border-top，首行不画）。 */
@@ -49,7 +54,22 @@ internal fun TokenDivider(first: Boolean) {
     Box(Modifier.fillMaxWidth().height(1.dp).background(t.borderSoft))
 }
 
-/** 列表行（原型 .row：左图标 + 标题 / 副标题 + 右侧尾部）。 */
+/**
+ * 该行是否参与按压反馈（纯函数，便于单测钉住「静态行不加反馈」）。
+ *
+ * 纯展示行（两个回调都为 null）不缩放、不发触感，也不进 Tab 顺序（s12-rows「静态行点按无变化」）；
+ * 只要可点或可长按，就按 s09-goto-* 的 0.96 + LIGHT 走。抽成纯函数是为了不用上设备就能反向验证。
+ */
+internal fun tokenRowPressFeedback(onClick: (() -> Unit)?, onLongClick: (() -> Unit)?): Boolean =
+    onClick != null || onLongClick != null
+
+/**
+ * 列表行（原型 .row：左图标 + 标题 / 副标题 + 右侧尾部）。
+ *
+ * 可点 / 可长按时整行按下缩到 0.96（[pressFeedback]，时长取 --dur-press）并触发 LIGHT
+ * ——契约 s09-goto-* 的「整行按压缩到 0.96（120ms，LIGHT）」。缩放只走绘制期，不改布局与点击语义；
+ * s12-rows 写的「按下底色转 fg 5%」不另做：共享行只有一套行为，s09 为主口径。
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun TokenRow(
@@ -64,16 +84,38 @@ internal fun TokenRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val pressModifier = if (tokenRowPressFeedback(onClick, onLongClick)) {
+        Modifier.pressFeedback(interaction)
+    } else {
+        Modifier
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(pressModifier)
             .then(
                 when {
                     onLongClick != null -> Modifier.combinedClickable(
-                        onClick = { onClick?.invoke() },
-                        onLongClick = onLongClick,
+                        interactionSource = interaction,
+                        indication = LocalIndication.current,
+                        onClick = {
+                            haptic(HapticTone.LIGHT)
+                            onClick?.invoke()
+                        },
+                        onLongClick = {
+                            haptic(HapticTone.LIGHT)
+                            onLongClick()
+                        },
                     )
-                    onClick != null -> Modifier.clickable { onClick() }
+                    onClick != null -> Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = LocalIndication.current,
+                    ) {
+                        haptic(HapticTone.LIGHT)
+                        onClick()
+                    }
                     else -> Modifier
                 }
             )

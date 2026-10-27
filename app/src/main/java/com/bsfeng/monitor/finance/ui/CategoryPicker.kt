@@ -28,8 +28,8 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
  * 数据来自 [CategoryTree]（分类表 parent_id 父子关系）；交易 `category_name` 存二级名
  * （有细分）或一级名（选「不细分」），所以选择器只回传名字，落库口径由调用方负责。
  *
- * 交互契约（见 docs/记账/分类体系设计.md「UI」）：
- * - 点一级 chip **只切换下方网格，不回调、不关闭**；
+ * 交互契约（见 docs/记账/分类体系设计.md「UI」、docs/交互设计/s15-自动记账浮窗-交互契约.md s15-l1-*）：
+ * - 点一级 chip / 格子 **只切换下方网格，不回调、不关闭**；点已展开的同一格收起面板、再点展开；
  * - 点二级或「不细分」才通过 [onPick] 回传最终分类名。
  *
  * @param recognizedName 自动记账识别出的分类（可能是二级）；命中的格子右上角标圆点
@@ -66,7 +66,7 @@ fun CategoryPicker(
             recognizedTop.ifBlank { CategoryPickerState(tree, type, selectedName).activeTopName }
         )
     }
-    // 默认只展示一级；**识别项自动展开它的一级**（原型 pkApplyRecognized 口径），点一级也展开
+    // 默认只展示一级；**识别项自动展开它的一级**（原型 pkApplyRecognized 口径），点新的一级也展开
     var expanded by remember(tree, type) { mutableStateOf(recognizedTop.isNotBlank()) }
     // 同一浮窗换了识别结果（下一笔账单）时重新定位回识别项
     var lastRecognizedTop by remember(tree, type) { mutableStateOf(recognizedTop) }
@@ -96,18 +96,18 @@ fun CategoryPicker(
             )
             return@Column
         }
+        // 点一级：新的一级切过去并展开；同一格再点收起、再点展开（契约 s15-l1-*「点同一格收起面板」）。
+        // chips 与网格共用同一口径，避免两种一级入口行为不同。
+        val onSelectTop: (String) -> Unit = { name ->
+            val next = topLevelTap(activeTopName, name, expanded)
+            activeTopName = next.activeTopName
+            expanded = next.expanded
+        }
         when (topStyle) {
-            CategoryPickerTopStyle.CHIPS -> TopLevelRow(
-                state = state,
-                onSelectTop = { name -> activeTopName = name; expanded = true },
-            )
+            CategoryPickerTopStyle.CHIPS -> TopLevelRow(state = state, onSelectTop = onSelectTop)
             CategoryPickerTopStyle.GRID -> {
                 SectionTitle("一级分类")
-                TopLevelGrid(
-                    state = state,
-                    onSelectTop = { name -> activeTopName = name; expanded = true },
-                    tagPrefix = topLevelTagPrefix,
-                )
+                TopLevelGrid(state = state, onSelectTop = onSelectTop, tagPrefix = topLevelTagPrefix)
             }
         }
         if (expanded) {
@@ -122,3 +122,15 @@ fun CategoryPicker(
         }
     }
 }
+
+/**
+ * 一级格子 / chip 的点击结果（纯函数；契约 s15-l1-0…17 的边界「点同一格收起面板；同级只展开一个」）。
+ *
+ * 点同一格 = 收起 / 再展开（选中值不动：面板收起后已选值不回退丢失）；点新的一级 = 切过去并展开。
+ *
+ * @return 新的 activeTopName 与二级面板是否展开
+ */
+internal data class TopLevelTap(val activeTopName: String, val expanded: Boolean)
+
+internal fun topLevelTap(current: String, tapped: String, expanded: Boolean): TopLevelTap =
+    if (tapped == current) TopLevelTap(current, !expanded) else TopLevelTap(tapped, true)
