@@ -12,6 +12,8 @@ import com.bsfeng.monitor.skip.SkipConfig
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.ui.live.hourlyIntensityOf
+import com.bsfeng.monitor.ui.live.startOfDay
+import com.bsfeng.monitor.record.MonitorPauseGate
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -37,7 +39,13 @@ class MainViewModel : ViewModel() {
     private val _lastUpdatedAt = MutableStateFlow(0L)
     val lastUpdatedAt: StateFlow<Long> = _lastUpdatedAt.asStateFlow()
 
-    private val _isPaused = MutableStateFlow(false)
+    /**
+     * 「前台应用监控」暂停态。
+     *
+     * 初值取 [MonitorPauseGate] 而不是 false：暂停态是落盘的，进程被系统杀掉重建后
+     * 开关仍须停在「已暂停」，否则页头徽标会显示「运行中」而采集侧其实还堵着。
+     */
+    private val _isPaused = MutableStateFlow(MonitorPauseGate.isPaused)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
     /**
@@ -117,7 +125,9 @@ class MainViewModel : ViewModel() {
         checkAccessibilityStatus()
         try {
             val now = System.currentTimeMillis()
-            val todayStart = now - (now % 86400000L)
+            // 今日窗口取本地 00:00：原式 now - (now % 86400000L) 算的是 UTC 零点，
+            // UTC+8 下窗口从「昨天 08:00」起算，实时页与概览的「今日」计数虚高。
+            val todayStart = startOfDay(now)
 
             // 数据库操作在 IO 线程
             val records = withContext(Dispatchers.IO) {
@@ -175,7 +185,8 @@ class MainViewModel : ViewModel() {
                 // 跨进程读设置 / 无障碍服务列表：留在 IO，且吃 30s TTL 缓存
                 checkAccessibilityStatus()
                 val now = System.currentTimeMillis()
-                val todayStart = now - (now % 86400000L)
+                // 同 loadDataInternal：本地零点，不走 UTC 取模。
+                val todayStart = startOfDay(now)
                 val records = store.queryByDate(todayStart, now)
                     .sortedByDescending { it.timestamp }
 
@@ -259,9 +270,19 @@ class MainViewModel : ViewModel() {
         )
     }
 
+    /**
+     * 切换「前台应用监控」暂停态（契约 s09-monitor）。
+     *
+     * 三件事必须一起做，缺一件就是假反馈：
+     * 1. 更新本屏状态 → 页头徽标与开关同帧换态；
+     * 2. 写 [MonitorPauseGate] → 落盘 + 采集侧（[com.bsfeng.monitor.record.RecordCollector]）
+     *    的写入口短路，暂停期间事件数与实时流都不再增长；
+     * 3. 恢复时立刻重载，把暂停期间错过的落库结果读回来。
+     */
     fun togglePause() {
         val newPaused = !_isPaused.value
         _isPaused.value = newPaused
+        MonitorPauseGate.setPaused(newPaused)
         if (!newPaused) {
             loadData()
         }
@@ -285,7 +306,8 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val now = System.currentTimeMillis()
-                val todayStart = now - (now % 86400000L)
+                // 「清空今日」的删除区间同样取本地零点：UTC 取模会把昨天的记录一起删掉（数据丢失级）。
+                val todayStart = startOfDay(now)
                 store.deleteByRange(todayStart, now)
                 cachedTodayRecords = emptyList()
                 loadedCount = 0

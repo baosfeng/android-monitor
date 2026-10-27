@@ -115,6 +115,19 @@ class UsageTracker(
     }
 
     /**
+     * 丢弃当前 session：清空状态但**不写记录**。
+     *
+     * 监控暂停时用（见 [MonitorPauseGate]）：不丢的话，恢复后的第一次 [tick] 会走
+     * `delta > 2s → flush` 分支，把整段暂停时间算成「这个 App 用了这么久」。
+     */
+    fun discard() {
+        currentPkg = null
+        currentAppName = null
+        accumulatedMs = 0L
+        lastTickTime = 0L
+    }
+
+    /**
      * 获取当前活跃 App 的 session 信息，供 UI 层展示"使用中 1分23秒"。
      */
     fun getActiveSession(): Pair<String, Long>? {
