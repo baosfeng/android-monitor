@@ -14,6 +14,28 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** 「新增订阅」的结果（契约 s10-source · 新增订阅行）。 */
+internal enum class LocalSubscriptionOutcome { ADDED, DUPLICATE, BLANK, NOT_HTTPS }
+
+/**
+ * 「新增订阅」的判据（纯函数，可单测）。
+ *
+ * 判重是契约明文要求（「URL 与已有源重复时不新增，toast『该订阅源已存在』，计数不变」），
+ * 且必须发生在任何写盘 / 联网之前 —— 原实现直接走 updateSubscription，
+ * 既没判重、又隐式发起了拉取。
+ */
+internal fun classifyLocalSubscription(
+    rawUrl: String,
+    existingUrls: List<String>,
+): LocalSubscriptionOutcome {
+    val target = rawUrl.trim()
+    if (target.isEmpty()) return LocalSubscriptionOutcome.BLANK
+    if (!target.startsWith("https://")) return LocalSubscriptionOutcome.NOT_HTTPS
+    // 按 trim 后的地址判重：同一地址多空格 / 多换行不该被当成新源
+    if (existingUrls.any { it.trim() == target }) return LocalSubscriptionOutcome.DUPLICATE
+    return LocalSubscriptionOutcome.ADDED
+}
+
 /** 一个订阅源的展示信息 */
 data class SubscriptionUi(
     val url: String,
@@ -156,6 +178,39 @@ class SkipRuleViewModel : ViewModel() {
                 _state.value = _state.value.copy(updatingUrl = null)
             }
         }
+    }
+
+    /**
+     * 「新增订阅」：以当前 URL **本地**新增一条订阅源，不发起网络拉取（契约 s10-source）。
+     *
+     * 与 [updateSubscription] 的分工是硬的：
+     * - 更新订阅 = 联网拉取 + 合并（契约 s10-confirm）；
+     * - 新增订阅 = 只在本地的订阅源清单里加一条 0 规则的源，「N 个源」+1，
+     *   之后用户仍要自己点「更新订阅」才会真正拉规则。
+     *
+     * 重复的 URL 不新增、计数不变，只出「该订阅源已存在」。
+     */
+    fun addSubscriptionLocally(url: String) {
+        val target = url.trim()
+        when (val outcome = classifyLocalSubscription(target, _state.value.subscriptions.map { it.url })) {
+            LocalSubscriptionOutcome.BLANK -> {
+                _state.value = _state.value.copy(message = "请在订阅源卡片填写 URL")
+                return
+            }
+            LocalSubscriptionOutcome.NOT_HTTPS -> {
+                _state.value = _state.value.copy(message = "订阅地址需以 https:// 开头：" + target.take(24))
+                return
+            }
+            LocalSubscriptionOutcome.DUPLICATE -> {
+                _state.value = _state.value.copy(message = "该订阅源已存在")
+                return
+            }
+            LocalSubscriptionOutcome.ADDED -> Unit
+        }
+        // 写一条 0 规则的源：清单 + 空规则文件都由 manager 落盘，重启后仍在
+        ruleManager.saveSubscription(target, version = 0L, rules = emptyList())
+        _state.value = _state.value.copy(message = "已新增订阅源：本地自定义")
+        refresh()
     }
 
     /** 删除指定订阅源（保留其它订阅源、自定义与内置规则） */

@@ -75,6 +75,10 @@ fun SkipRuleScreen(
     viewModel: SkipRuleViewModel = viewModel(),
 ) {
     val t = LocalDesignTokens.current
+    // s10 只有一个 toast 宿主（下方 AppToast 绑它）。页面级动作（开关 / 复制 / 新增 / 快照）
+    // 直接 toast.show(...)；ViewModel 侧的一次性结果（订阅更新 / 拉取失败）经 LaunchedEffect
+    // 搬进同一个宿主 —— 原实现把 AppToast 绑在 state.message 上，toast 状态永远没人渲染，
+    // 契约要求的四句提示一句都出不来。
     val toast = rememberToastHostState()
     val clipboard = LocalClipboardManager.current
     val haptic = rememberHaptic()
@@ -103,6 +107,15 @@ fun SkipRuleScreen(
         hasError = state.errorMessage != null,
         ruleCount = state.rules.size,
     )
+
+    // ViewModel 的一次性结果（订阅拉取成功 / 失败、地址非法）搬进页面 toast 宿主：
+    // 这些动作在 VM 里跑，屏幕层只能靠 state.message 收结果；把 AppToast 绑在 toast 上之后，
+    // 必须在这里做一次转投，否则「订阅已更新 / 订阅更新失败」照样看不见。
+    LaunchedEffect(state.message) {
+        val message = state.message ?: return@LaunchedEffect
+        toast.show(message)
+        viewModel.consumeMessage()
+    }
 
     // 更新中的订阅地址（null = 空闲）：按钮禁用态与规则列表骨架都读它
     val updatingUrl = state.updatingUrl
@@ -251,7 +264,9 @@ fun SkipRuleScreen(
                                         lastSyncAt = state.lastSyncAt,
                                         snapshotPath = state.snapshotPath,
                                         onRequestUpdate = { showConfirm = true },
-                                        onAddSubscription = { viewModel.updateSubscription(urlInput) },
+                                        // 新增订阅走本地语义（判重 + 清单 +1），不发起网络拉取；
+                                        // 需要拉规则时用户再点「更新订阅」（契约 s10-source · 新增订阅行）
+                                        onAddSubscription = { viewModel.addSubscriptionLocally(urlInput) },
                                         onRequestSnapshot = { viewModel.requestSnapshot() },
                                         urlFocusRequester = urlFocus,
                                         updateFocusRequester = updateFocus,
@@ -347,8 +362,8 @@ fun SkipRuleScreen(
         }
 
         AppToast(
-            message = state.message,
-            onDismiss = { viewModel.consumeMessage() },
+            message = toast.message,
+            onDismiss = { toast.clear() },
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = t.space12),
         )
 
