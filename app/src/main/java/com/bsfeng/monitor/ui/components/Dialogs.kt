@@ -2,6 +2,7 @@ package com.bsfeng.monitor.ui.components
 
 // 从 ui/components/Surfaces.kt 拆出：对话框 —— AppDialog、ConfirmDialog、DialogAction 按钮与 DIALOG_MAX_W 宽度常量。负责「覆盖在页面之上的确认/表单弹窗」。
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,8 +31,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.dialogEnter
 import com.bsfeng.monitor.ui.foundation.dialogExit
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.opaquePanel
 import androidx.compose.animation.AnimatedVisibility
@@ -137,13 +141,23 @@ private fun DialogAction(
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
+    // 弹窗按钮按压（契约 s12-dialog：0.96 + 120ms + LIGHT）
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .height(t.tapMin)
             .clip(shape)
             .background(if (primary) t.accent else Color.Transparent)
             .border(1.dp, if (primary) Color.Transparent else t.border, shape)
-            .clickable { onClick() },
+            .pressFeedback(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+            ) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = MaterialTheme.typography.titleMedium, color = if (primary) t.accentOn else t.fg)

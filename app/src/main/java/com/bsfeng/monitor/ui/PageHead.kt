@@ -3,8 +3,10 @@ package com.bsfeng.monitor.ui
 // 从 ui/ComponentGalleryScreen.kt 拆出：屏头与分级标题 —— ScreenHead（标题 + 副标题 + 徽标/动作）、GroupLabel（原型 .group-label）、SecHead（原型 .sec-head）。负责「一屏的分层标题」。
 // 这些件原本暂存在展厅文件里，现按职责拆出；仍是 ui 包内的共用件（internal）。
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,10 +24,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /** 屏头：可选返回按钮 + 标题 + 副标题 + 右侧徽标。
@@ -42,6 +48,9 @@ internal fun ScreenHead(
     consumeTopInset: Boolean = false,
 ) {
     val t = LocalDesignTokens.current
+    // 返回按钮的按压与触感（全站二级页口径：0.96 + 120ms + LIGHT）
+    val haptic = rememberHaptic()
+    val backInteraction = remember { MutableInteractionSource() }
     Column(
         modifier
             .fillMaxWidth()
@@ -54,7 +63,14 @@ internal fun ScreenHead(
                     .size(t.space8)
                     .clip(RoundedCornerShape(t.radiusPill))
                     .background(t.surfaceWarm)
-                    .clickable { onBack() },
+                    .pressFeedback(backInteraction)
+                    .clickable(
+                        interactionSource = backInteraction,
+                        indication = LocalIndication.current,
+                    ) {
+                        haptic(HapticTone.LIGHT)
+                        onBack()
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
