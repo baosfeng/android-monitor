@@ -122,11 +122,13 @@ fun transitionSpecFor(
     TransitionRole.DialogExit -> TransitionSpec(
         role, motionEnabled, tokens.durOverlayOut, SlideAxis.None, 0f, DIALOG_SCALE_FROM, TransitionEasing.In,
     )
+    // 展开/收起取浮层时长（220 / 150）：契约 s19 与 SkipRuleRuleRow 注释都写 220ms，
+    // 此前误用 --dur-page（340ms）——页面级转场的时长不该套在行内折叠上。
     TransitionRole.ExpandEnter -> TransitionSpec(
-        role, motionEnabled, tokens.durPage, SlideAxis.Vertical, 1f, 1f, TransitionEasing.Out,
+        role, motionEnabled, tokens.durOverlayIn, SlideAxis.Vertical, 1f, 1f, TransitionEasing.Out,
     )
     TransitionRole.ExpandExit -> TransitionSpec(
-        role, motionEnabled, tokens.durPage, SlideAxis.Vertical, 1f, 1f, TransitionEasing.In,
+        role, motionEnabled, tokens.durOverlayOut, SlideAxis.Vertical, 1f, 1f, TransitionEasing.In,
     )
 }
 

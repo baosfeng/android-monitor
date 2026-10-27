@@ -70,7 +70,7 @@ class TransitionsTest {
     fun `减弱动效时仍保留 token 时长便于展示与断言`() {
         // 不播动画 ≠ 时长丢失：spec 里的时长照旧取 token，设置页/调试可读
         assertEquals(apple.durOverlayIn, spec(TransitionRole.ScreenEnter, motionEnabled = false).durationMs)
-        assertEquals(apple.durPage, spec(TransitionRole.ExpandEnter, motionEnabled = false).durationMs)
+        assertEquals(apple.durOverlayIn, spec(TransitionRole.ExpandEnter, motionEnabled = false).durationMs)
     }
 
     @Test
@@ -96,9 +96,11 @@ class TransitionsTest {
     }
 
     @Test
-    fun `折叠展开进出都取 durPage`() {
-        assertEquals(apple.durPage, spec(TransitionRole.ExpandEnter).durationMs)
-        assertEquals(apple.durPage, spec(TransitionRole.ExpandExit).durationMs)
+    fun `折叠展开取 durOverlayIn_收起取 durOverlayOut`() {
+        // 契约 s19 与 SkipRuleRuleRow 注释都写「展开 220ms / 收起 150ms」；
+        // 早期误取 --dur-page（340ms），这里钉住正确口径防止回退。
+        assertEquals(apple.durOverlayIn, spec(TransitionRole.ExpandEnter).durationMs)
+        assertEquals(apple.durOverlayOut, spec(TransitionRole.ExpandExit).durationMs)
     }
 
     @Test
@@ -117,8 +119,8 @@ class TransitionsTest {
                 transitionSpecFor(TransitionRole.ScreenExit, true, tokens).durationMs,
             )
             assertEquals(
-                "$id 的折叠时长必须等于 --dur-page",
-                tokens.durPage,
+                "$id 的折叠展开时长必须等于 --dur-overlay-in",
+                tokens.durOverlayIn,
                 transitionSpecFor(TransitionRole.ExpandEnter, true, tokens).durationMs,
             )
             assertTrue("$id 的 token 时长必须为正", tokens.durOverlayIn > 0)
