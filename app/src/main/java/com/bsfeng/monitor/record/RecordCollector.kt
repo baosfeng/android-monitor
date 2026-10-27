@@ -50,7 +50,15 @@ class RecordCollector(
     /** 未充电时的电量缓存 — 避免 ACTION_BATTERY_CHANGED 粘性广播重复触发 */
     private var lastBatteryLevel: Int? = null
 
+    /**
+     * 落库前的暂停闸门（契约 s09-monitor「暂停后停止写新事件、实时流不再增长」）。
+     *
+     * 闸门放在本类而不是 [RecordStore]：定位采样、广播事件、广告跳过、使用时长全部经由
+     * [RecordCollector] 进入事件表，一处短路就覆盖全部采集源；放 Store 会把「用户暂停」和
+     * 「清库 / 还原备份」这类系统写操作混在一起。
+     */
     private fun emit(type: RecordType, action: String, timestamp: Long, duration: Long? = null, detail: Map<String, String>? = null) {
+        if (MonitorPauseGate.isPaused) return
         if (!handlerRegistry.validate(type, action, detail)) return
         val label = handlerRegistry.createLabel(type, action, detail)
         store.insert(Record(
@@ -65,6 +73,12 @@ class RecordCollector(
     }
 
     fun onScreenChanged(action: String, timestamp: Long) {
+        // 暂停中连「熄屏 flush」一起跳过：UsageTracker 的回调绕过 emit 直接写库，
+        // 这里不拦就会出现「暂停期间实时流还在长」——正是 s09-monitor 要修的那个假反馈。
+        if (MonitorPauseGate.isPaused) {
+            discardUsageSession()
+            return
+        }
         emit(RecordType.SCREEN, action, timestamp)
         if (action == "OFF") usageTracker.flush(timestamp)
     }
@@ -83,8 +97,21 @@ class RecordCollector(
      * @param timestamp 当前毫秒时间戳
      */
     fun onTick(packageName: String?, appName: String?, timestamp: Long) {
+        // [UsageTracker] 的落库回调不经 emit，闸门必须在这里单独拦一次。
+        if (MonitorPauseGate.isPaused) {
+            discardUsageSession()
+            return
+        }
         usageTracker.tick(packageName, appName, timestamp)
     }
+
+    /**
+     * 暂停期间丢弃用量 session（不写库）。
+     *
+     * 只 return 不清状态的话，恢复后第一次 tick 的 delta 会覆盖整段暂停时间，
+     * 于是「暂停了 10 分钟」被记成「这个 App 用了 10 分钟」。
+     */
+    private fun discardUsageSession() = usageTracker.discard()
 
     fun onWifiChanged(action: String, ssid: String?, timestamp: Long) {
         // 去重1：相同 action 跳过
