@@ -22,14 +22,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import java.time.LocalDate
@@ -42,20 +49,26 @@ private val CHIP_MIN_W: Dp = 48.dp
  *
  * 解决「想记昨天 10 点吃饭」——原 s05 只有一个「今天」日期列表，选不了时刻。
  * 秒不单独选：新增时沿用当前秒，编辑时沿用原记录的秒（[RecordForm.TimeParts]）。
+ *
+ * **草稿式抽屉**：chip 与滚轮只改本地草稿 [draft]，点「确定」才通过 [onConfirm] 回写表单；
+ * 点遮罩 / 返回键只调 [onDismiss]，抽屉卸载时草稿一起丢弃，时间行保持打开前的值。
  */
 @Composable
 internal fun BoxScope.TimeSheet(
     visible: Boolean,
     parts: RecordForm.TimeParts,
-    onDateChange: (String) -> Unit,
-    onHourMinuteChange: (Int, Int) -> Unit,
+    onConfirm: (RecordForm.TimeParts) -> Unit,
     onDismiss: () -> Unit,
 ) {
     if (!visible) return
     val t = LocalDesignTokens.current
     val today = LocalDate.now()
     val shortcuts = RecordForm.dateShortcuts(today)
+    // 初始值取打开抽屉那一刻的当前值；之后所有操作只动草稿（契约 s14a-time-sheet 边界）
+    var draft by remember { mutableStateOf(parts) }
     SheetShell(title = "选择时间", onDismiss = onDismiss) {
+        // 锚点 s14a-time-sheet（「选择时间」抽屉）：贴在面板内容根上，关闭即随抽屉卸载
+        Box(Modifier.fillMaxWidth().testTag("s14a-time-sheet")) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = t.space2),
             verticalAlignment = Alignment.CenterVertically,
@@ -69,28 +82,35 @@ internal fun BoxScope.TimeSheet(
             Row(
                 modifier = Modifier
                     .weight(1f)
+                    // 锚点 s14a-date-strip：日期快捷 chip 条（今天 / 昨天 / 前天 / 10 月 14 日 …）
+                    .testTag("s14a-date-strip")
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(t.space2),
             ) {
                 shortcuts.forEach { shortcut ->
                     DateChip(
                         label = shortcut.label,
-                        selected = shortcut.date == parts.date,
-                        onClick = { onDateChange(shortcut.date) },
+                        selected = shortcut.date == draft.date,
+                        // 只改草稿：预览行立即跟手，抽屉保持打开（契约 s14a-date-strip）
+                        onClick = { draft = draft.copy(date = shortcut.date) },
                     )
                 }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = t.space4),
+            // 锚点 s14a-timepick：时 / 分双滚轮容器（中间高亮带 + 冒号分隔）
+            modifier = Modifier.fillMaxWidth().padding(top = t.space4).testTag("s14a-timepick"),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            WheelColumn(
-                values = (0..23).map { twoDigits(it) },
-                selectedIndex = parts.hour,
-                onSelect = { onHourMinuteChange(it, parts.minute) },
-            )
+            // 锚点 s14a-wheel-hour：小时滚轮（00–23）
+            Box(Modifier.testTag("s14a-wheel-hour")) {
+                WheelColumn(
+                    values = (0..23).map { twoDigits(it) },
+                    selectedIndex = draft.hour,
+                    onSelect = { draft = draft.copy(hour = it) },
+                )
+            }
             Text(
                 ":",
                 // 原型 .s14a-colon：--text-xl(28px)/600/--muted
@@ -99,21 +119,32 @@ internal fun BoxScope.TimeSheet(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = t.space3),
             )
-            WheelColumn(
-                values = (0..59).map { twoDigits(it) },
-                selectedIndex = parts.minute,
-                onSelect = { onHourMinuteChange(parts.hour, it) },
-            )
+            // 锚点 s14a-wheel-minute：分钟滚轮（00–59）
+            Box(Modifier.testTag("s14a-wheel-minute")) {
+                WheelColumn(
+                    values = (0..59).map { twoDigits(it) },
+                    selectedIndex = draft.minute,
+                    onSelect = { draft = draft.copy(minute = it) },
+                )
+            }
         }
+        // 锚点 s14a-picked：预览行「今天 10:30:00」，自身无按下反馈、点击无响应
         Text(
-            RecordForm.timeRowText(parts, today),
+            RecordForm.timeRowText(draft, today),
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = t.space3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = t.space3)
+                .testTag("s14a-picked"),
         )
         Spacer(Modifier.height(t.space3))
-        SheetPrimaryButton(text = "确定", onClick = onDismiss)
+        // 锚点 s14a-time-ok：「确定」—— 唯一把草稿写回表单的出口；未改任何值时等价于确认原值并关闭
+        Box(Modifier.testTag("s14a-time-ok")) {
+            SheetPrimaryButton(text = "确定", onClick = { onConfirm(draft) })
+        }
+        }
     }
 }
 
@@ -121,6 +152,7 @@ internal fun BoxScope.TimeSheet(
 @Composable
 private fun DateChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
     val shape = RoundedCornerShape(t.radiusPill)
     // 原型 .chip：底透明 + 1px --border + --fg-2 字；
     // 选中 .chip.is-on = 底 color-mix(fg 7%) + 边 color-mix(fg 24%) + --fg 字 600（不是黑底白字）
@@ -131,7 +163,10 @@ private fun DateChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (selected) t.fgFade(7) else Color.Transparent)
             .border(1.dp, if (selected) t.fgFade(24) else t.border, shape)
-            .clickable { onClick() }
+            .clickable {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
             .padding(horizontal = t.space3),
         contentAlignment = Alignment.Center,
     ) {

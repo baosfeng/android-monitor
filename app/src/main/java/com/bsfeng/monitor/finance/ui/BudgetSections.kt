@@ -1,8 +1,10 @@
 package com.bsfeng.monitor.finance.ui
 
-// 来源：原 finance/ui/BudgetScreen.kt 的 KPI 卡与明细行块；职责：总预算/已支出/剩余 + 圆环、分类预算列表与操作提示。
+// 来源：原 finance/ui/BudgetScreen.kt 的 KPI 卡与明细行块；职责：总预算/已支出/剩余 + 圆环、分类预算列表、边界数据区与操作提示。
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,16 +15,32 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.animatedAmount
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 预算 KPI 卡 + 使用率圆环。 */
+/**
+ * 预算 KPI 卡 + 使用率圆环（锚点 s06-card / s06-ring）。
+ *
+ * 只有「总预算」这一行可点（s06-card · click / 键盘）；「已支出」「剩余」不可点；
+ * 圆环不吞点击、不可聚焦，读屏整体朗读「总预算使用率 N 百分比」。
+ */
 @Composable
 internal fun BudgetKpiSection(
     totalBudget: Double,
@@ -31,8 +49,10 @@ internal fun BudgetKpiSection(
     fraction: Float,
     onEditTotal: () -> Unit,
     modifier: Modifier = Modifier,
+    totalFocusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
+    val pct = fraction.coerceIn(0f, 9.99f).times(100).toInt()
     Column(modifier.padding(horizontal = t.space4, vertical = t.space2)) {
         GlassCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -45,6 +65,11 @@ internal fun BudgetKpiSection(
                         value = yen(animatedAmount(totalBudget.toFloat()).toDouble(), 0),
                         color = t.fg,
                         onClick = onEditTotal,
+                        modifier = if (totalFocusRequester != null) {
+                            Modifier.focusRequester(totalFocusRequester)
+                        } else {
+                            Modifier
+                        },
                     )
                     BudgetKpiLine(
                         label = "已支出",
@@ -60,35 +85,57 @@ internal fun BudgetKpiSection(
                 Spacer(Modifier.width(t.space3))
                 FinanceRingGauge(
                     fraction = fraction,
-                    big = ((fraction * 100).toInt()).toString() + "%",
+                    big = pct.toString() + "%",
                     small = "已用",
-                    // B1：超支只改文本色，环保持强调色
+                    // B1：超支只改文本色，环保持强调色（契约 s06-ring · 边界）
                     color = t.accent,
+                    modifier = Modifier
+                        .testTag("s06-ring")
+                        .semantics { contentDescription = "总预算使用率 " + pct + " 百分比" },
                 )
             }
         }
     }
 }
 
-/** 分类预算明细块（每行可点开编辑）+ 两条说明。 */
+/**
+ * 分类预算明细块（锚点 s06-list：标题「分类预算」+ 6 行 + 两条说明）。
+ *
+ * 每行可点开编辑；行入场 300ms 淡入上移、行间错峰 24ms，且**滚回时不重播**（[seenRows] 记账）。
+ * [refocusIndex] 用于弹窗关闭后把焦点送回触发它的那一行（移除后五问 · 焦点）。
+ */
 @Composable
 internal fun BudgetCategoryRowsSection(
     rows: List<Category>,
     budgetByCategory: Map<String, Budget>,
     onEditCategory: (Category, Budget?) -> Unit,
     modifier: Modifier = Modifier,
+    seenRows: MutableSet<Int> = remember { mutableSetOf() },
+    refocusIndex: Int? = null,
+    onRefocused: () -> Unit = {},
 ) {
     val t = LocalDesignTokens.current
+    val requesters = remember { List(ROW_TARGET) { FocusRequester() } }
+    LaunchedEffect(refocusIndex) {
+        val index = refocusIndex ?: return@LaunchedEffect
+        requesters.getOrNull(index)?.requestFocus()
+        onRefocused()
+    }
     Column(modifier.padding(horizontal = t.space4)) {
+        BudgetListHead()
         AppCard(padding = t.space1) {
             rows.forEachIndexed { index, category ->
                 val budget = budgetByCategory[category.name]
+                val enterIndex = if (index in seenRows) -1 else index
+                SideEffect { seenRows.add(index) }
                 BudgetRow(
                     title = category.name,
                     budgetAmount = budget?.budgetAmount ?: 0.0,
                     spentAmount = budget?.spentAmount ?: 0.0,
-                    enterIndex = index,
+                    enterIndex = enterIndex,
                     onClick = { onEditCategory(category, budget) },
+                    modifier = budgetRowAnchor(index),
+                    focusRequester = requesters[index],
                 )
             }
         }
@@ -116,7 +163,7 @@ internal fun BudgetListHead(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space4, vertical = t.space2),
+            .padding(vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -130,5 +177,58 @@ internal fun BudgetListHead(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelSmall,
             color = t.meta,
         )
+    }
+}
+
+/** 分类行锚点（契约 s06-brow-0…5，逐字对应原型 data-od-id）。 */
+private fun budgetRowAnchor(index: Int): Modifier = when (index) {
+    0 -> Modifier.testTag("s06-brow-0")
+    1 -> Modifier.testTag("s06-brow-1")
+    2 -> Modifier.testTag("s06-brow-2")
+    3 -> Modifier.testTag("s06-brow-3")
+    4 -> Modifier.testTag("s06-brow-4")
+    5 -> Modifier.testTag("s06-brow-5")
+    else -> Modifier.testTag("s06-brow-" + index)
+}
+
+/** 边界态占位数值（契约 s06-edge 写死；不读库，避免把真实账目写进代码）。 */
+internal const val EDGE_TOTAL_BUDGET = 999_999.0
+internal const val EDGE_SPENT = 1_280_000.0
+internal const val EDGE_ROW_BUDGET = 200.0
+internal const val EDGE_ROW_SPENT = 256.0
+internal const val EDGE_ROW_NAME = "人情往来 · 红白喜事与节日红包"
+
+/**
+ * 边界数据区（锚点 s06-edge）：超支 128% 的总预算卡 + 超长分类名分组标题。
+ * 金额单行右对齐、超支副行转红、环满格仍为强调色（正常卡的环不参与边界区）。
+ */
+@Composable
+internal fun BudgetEdgeSection(modifier: Modifier = Modifier) {
+    val t = LocalDesignTokens.current
+    Column(modifier.padding(horizontal = t.space4)) {
+        GlassCard {
+            BudgetKpiLine(
+                label = "总预算（超支 128%）",
+                value = yen(EDGE_TOTAL_BUDGET, 0),
+                color = t.expenseText,
+            )
+            Spacer(Modifier.height(t.space2))
+            // 超支进度条满格转深色（原型 s06:36 .s06-brow.is-over .s06-bar i）
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(t.space2)
+                    .clip(RoundedCornerShape(t.radiusPill))
+                    .background(t.chart1),
+            )
+            Spacer(Modifier.height(t.space2))
+            Text(
+                "已支出 " + yen(EDGE_SPENT, 0) + " · 超支 " + yen(EDGE_SPENT - EDGE_TOTAL_BUDGET, 0),
+                style = MaterialTheme.typography.bodySmall,
+                color = t.expenseText,
+            )
+        }
+        Spacer(Modifier.height(t.space3))
+        Text("超长分类名", style = MaterialTheme.typography.labelSmall, color = t.meta)
     }
 }

@@ -29,7 +29,13 @@ internal fun AutoBookEngine.display(
                     AutoBookEngine.TAG,
                     "用户确认记账: type=$type category=$categoryName amount=${draft.amount} 说明=$remark"
                 )
-                scope.launch { persist(draft, type, categoryName, remark, tree) }
+                scope.launch {
+                    persist(draft, type, categoryName, remark, tree)
+                    // 落库是异步的（persist 内部吞异常只写日志），浮窗场景最怕「用户以为记上了」。
+                    // 用同一套持久化去重口径回查一次，给成功 / 失败两条明确的提示。
+                    val booked = isAlreadyBooked(draft)
+                    toast(if (booked) "已自动记账" else "自动记账失败，请到记账页手动补记")
+                }
             },
             onIgnore = {
                 // **唯一**会写「忽略」记忆的地方：只有用户点「忽略」按钮才走到这里
@@ -39,6 +45,7 @@ internal fun AutoBookEngine.display(
                 }
                 if (effect.persistIgnored) ignoreStore.markIgnored(draft.sourceId)
                 Log.i(AutoBookEngine.TAG, "用户忽略: sourceId=${draft.sourceId}")
+                toast("已忽略，7 天内不再提示同笔")
             },
             onScrimTap = {
                 // 遮罩点击 = 吞掉点击：不关浮窗、不写 ignore、不写 DISMISSED（2026-10-20 用户要求）
@@ -46,13 +53,8 @@ internal fun AutoBookEngine.display(
                 Log.d(AutoBookEngine.TAG, "遮罩点击已吞掉（closeOverlay=${effect.closeOverlay}）")
                 if (!scrimHintShown) {
                     scrimHintShown = true
-                    service.mainExecutor.execute {
-                        Toast.makeText(
-                            service,
-                            "点「记一笔」或「忽略」才会关闭",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                    // 文案逐字取自 s15 契约 s15-scrim 行
+                    toast("点遮罩不会关闭，请选『记一笔』或『忽略』")
                 }
             }
         )
@@ -73,5 +75,17 @@ internal fun AutoBookEngine.display(
         Log.e(AutoBookEngine.TAG, "浮窗展示失败: ${e.message}", e)
     } finally {
         pendingOverlaySourceId = null
+    }
+}
+
+/**
+ * 浮窗里的轻提示。
+ *
+ * 走系统 Toast 而不是 [com.bsfeng.monitor.ui.components.ToastHost]：浮窗是无障碍叠加窗口，
+ * 不在本 App 的 Compose 树里，够不到 App 级 ToastHost；系统 Toast 在浮窗之上仍可见。
+ */
+private fun AutoBookEngine.toast(text: String) {
+    service.mainExecutor.execute {
+        Toast.makeText(service, text, Toast.LENGTH_SHORT).show()
     }
 }

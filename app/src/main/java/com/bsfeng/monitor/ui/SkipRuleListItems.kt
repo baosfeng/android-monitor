@@ -32,6 +32,7 @@ internal fun LazyListScope.skipRuleItems(
     expandedRuleIds: MutableMap<String, Boolean>,
     onToggleExpand: (SkipRule) -> Unit,
     onToggleEnabled: (SkipRule) -> Unit,
+    onCopySelector: (String) -> Unit,
 ) {
     itemsIndexed(
         items = rules,
@@ -50,6 +51,7 @@ internal fun LazyListScope.skipRuleItems(
                 expanded = expandedRuleIds[rule.id] == true,
                 onToggleExpand = { onToggleExpand(rule) },
                 onToggleEnabled = { onToggleEnabled(rule) },
+                onCopySelector = onCopySelector,
             )
         }
     }
@@ -64,29 +66,18 @@ internal fun LazyListScope.skipRuleItems(
 @androidx.compose.runtime.Composable
 internal fun SkipRuleLegend(rules: List<SkipRule>, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
-    val legendItems = remember(rules) {
+    val legendItems = remember(rules, t) {
         listOf(
-            LegendItem(
-                "全部匹配 matches",
-                selectorKindCount(rules) { it.matches.size }.toString(),
-                t.chartRamp[0],
-            ),
-            LegendItem(
-                "任选其一 anyMatches",
-                selectorKindCount(rules) { it.anyMatches.size }.toString(),
-                t.chartRamp[1],
-            ),
-            LegendItem(
-                "排除 excludeMatches",
-                selectorKindCount(rules) { it.excludeMatches.size }.toString(),
-                t.chartRamp[2],
-            ),
-            LegendItem(
-                "规则组 groups",
-                rules.sumOf { it.groups.size }.toString(),
-                t.chartRamp[3],
-            ),
+            Triple("全部匹配 matches", selectorKindCount(rules) { it.matches.size }, t.chartRamp[0]),
+            Triple("任选其一 anyMatches", selectorKindCount(rules) { it.anyMatches.size }, t.chartRamp[1]),
+            Triple("排除 excludeMatches", selectorKindCount(rules) { it.excludeMatches.size }, t.chartRamp[2]),
+            Triple("规则组 groups", rules.sumOf { it.groups.size }, t.chartRamp[3]),
         )
+            // 条数为 0 的类型整行隐藏（契约 s10-legend 边界：不出现 0 行）
+            .filter { it.second > 0 }
+            .map { LegendItem(it.first, it.second.toString(), it.third) }
     }
+    // 全部类型都为 0（空规则库）时整块图例不渲染
+    if (legendItems.isEmpty()) return
     Legend(items = legendItems, modifier = modifier)
 }

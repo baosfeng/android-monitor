@@ -14,8 +14,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.animatedCount
 import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.sparkHeight
@@ -29,6 +29,9 @@ import com.bsfeng.monitor.ui.theme.sparkHeight
 @Composable
 internal fun SkipRuleKpiRow(ruleCount: Int, hits: SkipHits, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
+    // 千分位 + 入屏从 0 滚到终值（契约 s10-summary）；时长取 --dur-chart（token 里最接近的原型 700/900ms）。
+    val shownRules = animatedCount(ruleCount)
+    val shownHits = animatedCount(hits.total)
     Row(
         modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(t.space2),
@@ -37,7 +40,11 @@ internal fun SkipRuleKpiRow(ruleCount: Int, hits: SkipHits, modifier: Modifier =
             Text("规则总数", style = MaterialTheme.typography.labelSmall, color = t.meta)
             Spacer(Modifier.height(t.space1))
             Row(verticalAlignment = Alignment.Bottom) {
-                AnimatedNumber(ruleCount, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                Text(
+                    formatRuleCount(shownRules),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                )
                 Spacer(Modifier.width(t.space1))
                 Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
             }
@@ -48,7 +55,11 @@ internal fun SkipRuleKpiRow(ruleCount: Int, hits: SkipHits, modifier: Modifier =
             Text("累计命中", style = MaterialTheme.typography.labelSmall, color = t.meta)
             Spacer(Modifier.height(t.space1))
             Row(verticalAlignment = Alignment.Bottom) {
-                AnimatedNumber(hits.total, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                Text(
+                    formatRuleCount(shownHits),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                )
                 Spacer(Modifier.width(t.space1))
                 Text("次", style = MaterialTheme.typography.labelMedium, color = t.muted)
             }

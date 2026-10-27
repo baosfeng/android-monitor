@@ -2,9 +2,11 @@ package com.bsfeng.monitor.ui.live
 
 // 从 ui/live/LiveCards.kt 拆出：列表行 —— TypeIconDot（类型圆点）、StackRow（多行堆叠行）、LiveEventRow（实时事件行）、HourGroupHead（按小时分组头）、DetailRow（键值行）。负责「一条一条往下排」。
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +34,8 @@ import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.Badge
+import com.bsfeng.monitor.ui.components.keyboardFocusRing
+import com.bsfeng.monitor.ui.components.rowPressFeedback
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.eventColor
 import com.bsfeng.monitor.ui.theme.monitorMonoMeta
@@ -103,11 +108,18 @@ fun LiveEventRow(
     onClick: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
+    // 契约 s01-recent-1..3 / s02 行：按下整行 0.99 + alpha .9（--dur-press），
+    // interaction 与 clickable 共用同一实例，否则收不到 Press 事件。
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(t.radiusLg)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = t.rowMinH)
-            .clickable { onClick() }
+            .rowPressFeedback(interaction)
+            // 键盘 / 遥控器聚焦时出 2dp 焦点环（触屏点按不出，见 FocusRing.kt）：此前只有 ripple 状态层
+            .keyboardFocusRing(shape)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) { onClick() }
             .padding(horizontal = t.space4, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {

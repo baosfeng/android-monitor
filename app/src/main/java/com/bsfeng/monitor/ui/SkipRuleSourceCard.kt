@@ -15,7 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,7 +24,7 @@ import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.StateSkeleton
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
@@ -47,8 +47,9 @@ internal fun SkipRuleSourceCard(
     onRequestSnapshot: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    val view = LocalView.current
-    GlassCard {
+    // 卡片容器锚点 s10-source：卡本身不可按压（原型 .src-card 无 :active），
+    // 卡内「更新订阅 / 新增订阅 / 页面快照」三颗按钮共用本锚点（契约 24 行 / 14 锚点）。
+    GlassCard(Modifier.testTag("s10-source")) {
         GroupLabel("订阅源 URL", Modifier.padding(start = 0.dp))
         AppField(
             value = urlInput,
@@ -56,6 +57,7 @@ internal fun SkipRuleSourceCard(
             warm = true,
             // URL 输入必须用 Uri 键盘：默认文本键盘会被中文输入法接管（见踩坑记录）
             keyboardType = KeyboardType.Uri,
+            modifier = Modifier.testTag("s10-url"),
         )
         Spacer(Modifier.height(t.space3))
         Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
@@ -69,6 +71,7 @@ internal fun SkipRuleSourceCard(
                 onClick = onRequestUpdate,
                 modifier = Modifier.weight(1f),
                 enabled = !updating,
+                tone = HapticTone.SUCCESS,
             )
             AppButton(
                 "新增订阅",
@@ -77,15 +80,18 @@ internal fun SkipRuleSourceCard(
                 variant = AppButtonVariant.Ghost,
                 enabled = !updating,
             )
-            AppButton("页面快照", onClick = {
-                onRequestSnapshot()
-                view.performConfirmHaptic()
-            }, modifier = Modifier.weight(1f), variant = AppButtonVariant.Ghost)
+            // 页面快照：AppButton 内部已发一次触感，这里不再叠加（契约「同一操作不重复震动」）
+            AppButton(
+                "页面快照",
+                onClick = onRequestSnapshot,
+                modifier = Modifier.weight(1f),
+                variant = AppButtonVariant.Ghost,
+            )
         }
         Spacer(Modifier.height(t.space3))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "上次同步 " + formatSyncTime(lastSyncAt) + " · 镜像 " + hostOf(urlInput),
+                "上次同步 " + formatSyncTime(lastSyncAt) + " · 镜像 " + mirrorHostOf(urlInput),
                 style = MaterialTheme.typography.bodySmall,
                 color = t.muted,
                 maxLines = 1,

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.bsfeng.monitor.domain.trip.Basis
@@ -33,7 +34,8 @@ internal fun TripSummaryCard(timeline: DayTimeline, modifier: Modifier = Modifie
     AppCard(modifier = modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             MetaText("今日结论", Modifier.weight(1f))
-            Badge(basisBadge(timeline.basis))
+            // 基准角标（契约 s16-source）：文案随 basis 变；不响应点按、不可点、不进 Tab 序
+            Badge(basisBadge(timeline.basis), modifier = Modifier.testTag("s16-source"))
         }
         Spacer(Modifier.height(t.space2))
         Text(
@@ -77,5 +79,3 @@ internal fun TripSummaryCard(timeline: DayTimeline, modifier: Modifier = Modifie
         }
     }
 }
-
-// ───────────────────────────── 日视图时间轴 ─────────────────────────────

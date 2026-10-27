@@ -94,6 +94,10 @@ import com.bsfeng.monitor.ui.theme.heatRamp
 import com.bsfeng.monitor.ui.theme.sparkHeight
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
 /**
  * s12 组件与五态展示厅（原型 s12-components.html）。
  * 新人开工的参照屏：全量组件陈列 + 五态同屏演示 + 弹窗 / 抽屉 / Toast。
@@ -109,13 +113,21 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var switchOff by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
     var showSheet by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    // 契约 screen-s12「状态切换后滚动位置回到该状态块顶部」：记五态区的纵向位置，切状态即滚过去。
+    var statesTop by remember { mutableIntStateOf(0) }
+    LaunchedEffect(state) {
+        if (statesTop > 0) scroll.animateScrollTo(statesTop)
+    }
 
-    Box(modifier.fillMaxSize().pageBackdrop()) {
+    Box(modifier.fillMaxSize().pageBackdrop().testTag("screen-s12")) {
         Column(Modifier.fillMaxSize()) {
+            // 页头只作说明：无按下态、无涟漪、不进 Tab 顺序（契约 s12-head）
             ScreenHead(
                 title = "组件与状态",
                 meta = "全量组件陈列 · 五种状态 · 弹窗 / 抽屉 / Toast",
                 onBack = onBack,
+                modifier = Modifier.testTag("s12-head"),
                 consumeTopInset = true,
             )
             Column(
@@ -123,14 +135,14 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .weight(1f)
                     .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(t.space4),
             ) {
                 StateSwitchRow(state = state, onSelect = { state = it })
 
                 if (state == FiveState.POPULATED) {
                     GalleryButtons(toast)
-                    GalleryChipsAndSegments(chipIndex, { chipIndex = it }, segIndex, { segIndex = it })
+                    GalleryChipsAndSegments(chipIndex, { chipIndex = it }, segIndex, { segIndex = it }, toast)
                     GallerySwitchesAndBadges(switchOn, { switchOn = it }, switchOff, { switchOff = it }, toast)
                     GalleryRows(toast)
                     GalleryProgress()
@@ -138,7 +150,12 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     GalleryCharts()
                 }
 
-                GalleryFiveStates(state, onSelect = { state = it }, toast = toast)
+                GalleryFiveStates(
+                    state = state,
+                    onSelect = { state = it },
+                    toast = toast,
+                    modifier = Modifier.onGloballyPositioned { statesTop = it.positionInParent().y.roundToInt() },
+                )
                 if (state == FiveState.POPULATED) {
                     GalleryDots()
                     GalleryMotion(toast)
@@ -161,6 +178,7 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         // 删除确认：统一走 ConfirmDialog（窗口级浮层基元 WindowOverlay），不再自绘遮罩 + 卡片
         ConfirmDialog(
             visible = showDialog,
+            modifier = Modifier.testTag("s12-dialog"),
             title = "删除这条记录？",
             message = "删除后无法恢复，本地统计会在下次汇总时更新。",
             confirmLabel = "删除",
@@ -175,7 +193,7 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 Column(Modifier.align(Alignment.BottomCenter)) {
                     BottomSheetCard(
                         onDismiss = { showSheet = false },
-                        onConfirm = { showSheet = false; toast.show("已选择：前台切换") },
+                        onConfirm = { types -> showSheet = false; toast.show(sheetConfirmToast(types)) },
                     )
                 }
             }

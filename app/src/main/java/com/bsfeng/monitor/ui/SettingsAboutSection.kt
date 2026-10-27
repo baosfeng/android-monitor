@@ -2,6 +2,9 @@ package com.bsfeng.monitor.ui
 
 // 从 ui/SettingsScreen.kt 拆出：设置「关于」分组 —— 版本（长按解锁调试）/ 检查更新 / 开源许可 / 调试模式 / 组件与状态演示入口。负责「这个 App 是什么版本、能自检什么」。
 
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.BuildConfig
@@ -22,6 +26,9 @@ import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.SectionHeader
 import com.bsfeng.monitor.ui.components.performConfirmHaptic
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.update.UpdateCheckResult
 import com.bsfeng.monitor.update.UpdateChecker
 import com.bsfeng.monitor.update.UpdateUiState
@@ -32,6 +39,7 @@ import kotlinx.coroutines.withContext
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.remember
 import com.bsfeng.monitor.ui.components.ToastHostState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,7 +70,7 @@ internal fun SettingsAboutSection(
 // ===== 关于：版本 / 更新 / 调试入口（调试入口受 DebugConfig 两层闸控制）=====
 SectionHeader("关于")
 // ⑩ 关于（分组标题已由上面的 SectionHeader 承担，卡内不再重复）
-Column(Modifier.fillMaxWidth()) {
+Column(Modifier.fillMaxWidth().testTag("s09-about")) {
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
         TokenRow(
             title = "版本",
@@ -112,7 +120,7 @@ Column(Modifier.fillMaxWidth()) {
 }
 // ⑨ 调试模式（默认不显示：仅 debug 构建 + 关于页长按版本解锁后出现）
 if (debugUi) {
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().testTag("s09-debug")) {
         GroupLabel("调试模式")
         AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
             TokenRow(
@@ -130,14 +138,24 @@ if (debugUi) {
             // 组件与状态演示屏 = 演示件：debug 构建 + 已解锁 + 调试模式已开才出现
             if (demoVisible) {
                 TokenDivider(first = false)
+                // 整行 0.96 + LIGHT（契约 s09-goto-demo）：锚点与按压落在同一节点
+                val demoInteraction = remember { MutableInteractionSource() }
+                val demoHaptic = rememberHaptic()
                 TokenRow(
                     title = "组件与状态演示",
+                    modifier = Modifier
+                        .testTag("s09-goto-demo")
+                        .pressFeedback(demoInteraction)
+                        .clickable(
+                            interactionSource = demoInteraction,
+                            indication = LocalIndication.current,
+                        ) {
+                            demoHaptic(HapticTone.LIGHT)
+                            val open = onNavigateToGallery
+                            if (open != null) open() else localGallery = true
+                        },
                     subtitle = "按钮 / 图表 / 骨架屏 / 空态 / 边界态",
                     icon = Icons.Outlined.Widgets,
-                    onClick = {
-                        val open = onNavigateToGallery
-                        if (open != null) open() else localGallery = true
-                    },
                     trailing = { TailChevron() },
                 )
             }

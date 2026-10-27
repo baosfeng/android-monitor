@@ -9,8 +9,10 @@ package com.bsfeng.monitor.ui.trip
 // 纯投影逻辑在 TileMath.kt / TripTrace.kt；本文件只做画布布局与绘制。
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +55,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
@@ -266,12 +272,23 @@ internal fun TripMapCard(
 @Composable
 private fun BasemapChip(enabled: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
+            // 点击区 ≥44dp（口径 §二）：视觉仍是胶囊，高度由最小点击区托底
+            .heightIn(min = t.tapMin)
+            .pressFeedback(interaction)
             .clip(RoundedCornerShape(t.radiusPill))
             .background(if (enabled) t.accent.copy(alpha = 0.12f) else t.fgFade(6))
-            .clickable { onClick() }
-            .padding(horizontal = t.space2, vertical = t.space1),
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+            ) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
+            .padding(horizontal = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -293,12 +310,23 @@ private fun BasemapChip(enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun TripExportChip(exporting: Boolean, onClick: () -> Unit) {
     val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
+            .heightIn(min = t.tapMin)
+            .pressFeedback(interaction, enabled = !exporting)
             .clip(RoundedCornerShape(t.radiusPill))
             .background(t.fgFade(6))
-            .clickable(enabled = !exporting) { onClick() }
-            .padding(horizontal = t.space2, vertical = t.space1),
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                enabled = !exporting,
+            ) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
+            .padding(horizontal = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(

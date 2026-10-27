@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaItem
@@ -159,7 +160,7 @@ private fun PercentQuotaCard(
     val t = LocalDesignTokens.current
     val primary = items.firstOrNull { it.primary } ?: items.first()
     val mismatch = QuotaFormat.planMismatchNote(plan, items, providerId)
-    AppCard(modifier = modifier) {
+    AppCard(modifier = modifier.then(percentCardTagOf(providerId))) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(primary.title + "剩余", style = MaterialTheme.typography.bodySmall, color = t.muted)
             primary.badge?.let { badge ->
@@ -187,11 +188,26 @@ private fun PercentQuotaCard(
                     fraction = item.remainingFraction,
                     meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
                     detail = item.detailText,
+                    modifier = meterTagOf(providerId, item, item == primary),
                 )
             } else {
                 // 百分比计划里也可能带回金额项（如已购余额）：按金额显示，
                 // 不能套百分比进度条 —— 否则 0.002 美元会被读成「剩余 0.2%」。
                 InfoLine(item.title, QuotaFormat.amount(item.remaining, item.unit))
+            }
+        }
+        // 契约 s18-opendesign-cred：凭据是浏览器会话令牌而不是 API Key，说明常驻在月度额度卡里
+        if (providerId == "opendesign") {
+            Spacer(Modifier.height(t.space3))
+            Column(Modifier.fillMaxWidth().testTag("s18-opendesign-cred")) {
+                Badge("浏览器会话令牌", tone = BadgeTone.Neutral)
+                Spacer(Modifier.height(t.space1))
+                Text(
+                    "open-design 只有控制台内部接口，需要填浏览器 Cookie 里的会话令牌（不是 API Key）。" +
+                        "令牌会过期，失效后需回控制台重新复制。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.muted,
+                )
             }
         }
     }
@@ -213,10 +229,12 @@ private fun MoneyQuotaCard(
     val groups = moneyItems.groupBy { it.unit }
     val primaryUnit = primary.unit
     val primaryItems = groups[primaryUnit].orEmpty().ifEmpty { listOf(primary) }
+    // DeepSeek 的赠金 / 充值：接口当前只给 total_balance，拆分行由数据层补齐后才出现（锚点按条件保留）
+    val splitItems = if (providerId == "deepseek") moneyItems.filter { isDeepseekSplit(it) } else emptyList()
     // hero 取主项余额本身，不做同币种求和：Ollama 的「已购余额」是叠加在「内含额度」之外的
     // 另一笔，求和会让 hero 与下面进度条的「剩余/总量」对不上（原型 hero 也是主项值）。
     val hero = primary.remaining
-    AppCard(modifier = modifier) {
+    AppCard(modifier = modifier.then(moneyCardTagOf(providerId))) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (providerId == "deepseek") "账户余额 · ${primaryUnit.name}" else "可用额度",
@@ -238,7 +256,19 @@ private fun MoneyQuotaCard(
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
         )
+        // 赠金 / 充值各一行：没有拆分字段时两条都不渲染（不显示编造的 0.00）
+        if (providerId == "deepseek") {
+            deepseekSplitItem(moneyItems, "赠金")?.let { item ->
+                Spacer(Modifier.height(t.space2))
+                InfoLine("赠金", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-grant"))
+            }
+            deepseekSplitItem(moneyItems, "充值")?.let { item ->
+                Spacer(Modifier.height(t.space2))
+                InfoLine("充值", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-topup"))
+            }
+        }
         primaryItems.forEach { item ->
+            if (item in splitItems) return@forEach
             val fraction = item.remainingFraction
             val total = item.total
             // 只有一条无总量的余额项时，hero 已经把它显示完了，再列一行就是重复
@@ -252,16 +282,21 @@ private fun MoneyQuotaCard(
                         " / " + QuotaFormat.amount(total, item.unit),
                     fraction = fraction,
                     meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
+                    modifier = meterTagOf(providerId, item, item == primary),
                 )
             } else {
-                InfoLine(item.title, QuotaFormat.amount(item.remaining, item.unit))
+                InfoLine(
+                    item.title,
+                    QuotaFormat.amount(item.remaining, item.unit),
+                    moneyInfoTagOf(providerId, item),
+                )
             }
         }
         // 其他币种逐行显示（同币种求和、不跨币种相加）：DeepSeek 的 CNY 与 USD 是两个独立账户
         groups.keys.filter { it != primaryUnit }.forEach { unit ->
             Spacer(Modifier.height(t.space2))
             val amount = groups[unit].orEmpty().fold(BigDecimal.ZERO) { acc, item -> acc + item.remaining }
-            InfoLine("${unit.name} 余额", QuotaFormat.amount(amount, unit))
+            InfoLine("${unit.name} 余额", QuotaFormat.amount(amount, unit), deepseekUsdTagOf(providerId, unit))
         }
         // 另一币种单独一行：DeepSeek 的 USD 账户没开通时显式标出来，
         // 避免用户把「没有这一行」误读成「已折算进上面」
@@ -271,7 +306,10 @@ private fun MoneyQuotaCard(
                 .filter { groups[it] == null }
                 .forEach { unit ->
                     Spacer(Modifier.height(t.space2))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = deepseekUsdTagOf(providerId, unit),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text("${unit.name} 余额", style = MaterialTheme.typography.bodySmall, color = t.muted, modifier = Modifier.weight(1f))
                         Badge("未开通", tone = BadgeTone.Neutral)
                     }
@@ -286,3 +324,56 @@ private fun heroSubtitle(providerId: String, items: List<QuotaItem>): String = w
     providerId == "deepseek" -> "余额来自 DeepSeek 账户"
     else -> "内含 + 已购"
 }
+
+/** 百分比卡锚点：Ollama 旧版 / opencode-go / open-design 各一张卡（契约 s18-legacy-* / s18-opencode-card / s18-opendesign-card）。 */
+private fun percentCardTagOf(providerId: String): Modifier = when (providerId) {
+    "ollama" -> Modifier.testTag("s18-legacy-quota")
+    "opencode-go" -> Modifier.testTag("s18-opencode-card")
+    "opendesign" -> Modifier.testTag("s18-opendesign-card")
+    else -> Modifier
+}
+
+/** 金额卡锚点：Ollama 按金额 / DeepSeek 余额。 */
+private fun moneyCardTagOf(providerId: String): Modifier = when (providerId) {
+    "ollama" -> Modifier.testTag("s18-ollama-quota")
+    "deepseek" -> Modifier.testTag("s18-deepseek-balance")
+    else -> Modifier
+}
+
+/**
+ * 卡片内部进度条锚点：契约按「哪一家的哪个窗口」逐条给了锚点。
+ *
+ * Ollama 旧版按条目的稳定 id（session / weekly）；opencode-go 按窗口短名（5 小时 / 每周 / 每月）；
+ * open-design 只有一个窗口，锚点落在主项上（credits 明细由 detailText 承担）。
+ */
+private fun meterTagOf(providerId: String, item: QuotaItem, primary: Boolean): Modifier = when (providerId) {
+    "ollama" -> when (item.id) {
+        "included" -> Modifier.testTag("s18-ollama-included")
+        "session" -> Modifier.testTag("s18-legacy-session")
+        "weekly" -> Modifier.testTag("s18-legacy-weekly")
+        else -> Modifier
+    }
+    "opencode-go" -> when (windowShortTitle(item.title)) {
+        "5 小时" -> Modifier.testTag("s18-opencode-session")
+        "每周" -> Modifier.testTag("s18-opencode-weekly")
+        "每月" -> Modifier.testTag("s18-opencode-monthly")
+        else -> Modifier
+    }
+    "opendesign" -> if (primary) Modifier.testTag("s18-opendesign-monthly") else Modifier
+    else -> Modifier
+}
+
+/** 金额卡里的信息行锚点：Ollama 的「已购余额」是契约里唯一一条固定信息行。 */
+private fun moneyInfoTagOf(providerId: String, item: QuotaItem): Modifier =
+    if (providerId == "ollama" && item.id == "purchased") Modifier.testTag("s18-ollama-purchased") else Modifier
+
+/** DeepSeek 的 USD 行：开通时显示数值、未开通时显示「未开通」角标，两种情况落同一锚点。 */
+private fun deepseekUsdTagOf(providerId: String, unit: QuotaUnit): Modifier =
+    if (providerId == "deepseek" && unit == QuotaUnit.USD) Modifier.testTag("s18-deepseek-usd") else Modifier
+
+/** DeepSeek 拆分项（赠金 / 充值）：接口没有这两列，按条目标题识别，缺了整行不渲染。 */
+private fun isDeepseekSplit(item: QuotaItem): Boolean =
+    item.title.startsWith("赠金") || item.title.startsWith("充值")
+
+private fun deepseekSplitItem(items: List<QuotaItem>, label: String): QuotaItem? =
+    items.firstOrNull { it.title.startsWith(label) }

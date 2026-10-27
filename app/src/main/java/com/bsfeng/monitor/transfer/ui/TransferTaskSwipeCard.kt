@@ -1,161 +1,122 @@
 package com.bsfeng.monitor.transfer.ui
 
-// 从 transfer/ui/TransferScreen.kt 拆出：任务卡片的滑动删除外壳（滑动阈值、背景动作、回弹）。
+// 任务卡片的滑动外壳（C-07）：左右两个方向一致，越过 20% 露红底、越过 40% 松手删除。
+//
+// 契约要点：
+//  - 进行中卡片左滑松手直接回弹 + REJECT 触感，**不显红底**（删除不是进行中卡片的动作）；
+//  - 终态卡片滑过 40% 松手走与 C-05 相同的删除路径（接收 + 已完成仍先二次确认，由页面处理）；
+//  - 滑动不是唯一入口：等效入口是 C-04 动作面板。
+//
+// 位移阈值不用手写像素：Compose 的触摸阈值（touch slop）本身就是「达到最小位移才判定为滑动」，
+// 契约里的 8px 是原型口径，这里按 dp 由平台折算。
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Cancel
-import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Upload
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.transfer.PeerDevice
-import com.bsfeng.monitor.domain.transfer.TransferDirection
-import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
-import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
-import com.bsfeng.monitor.domain.transfer.TransferFormat
-import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
-import com.bsfeng.monitor.transfer.service.ReceivingState
-import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
-import com.bsfeng.monitor.ui.components.AppCard
-import com.bsfeng.monitor.ui.components.Badge
-import com.bsfeng.monitor.ui.components.BadgeTone
-import com.bsfeng.monitor.ui.components.ConfirmDialog
-import com.bsfeng.monitor.ui.components.EmptyState
-import com.bsfeng.monitor.ui.components.MotionToken
-import com.bsfeng.monitor.ui.components.rememberMotionEnabled
-import com.bsfeng.monitor.ui.components.staggerEnterAt
-import com.bsfeng.monitor.ui.components.springOf
-import com.bsfeng.monitor.ui.components.tokenShadow
-import com.bsfeng.monitor.ui.live.ScreenHead
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
-import com.bsfeng.monitor.ui.theme.accentFade
-import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.opaquePanel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 internal fun SwipeableTaskCard(
     task: TransferTask,
-    index: Int,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    onMore: () -> Unit,
+    canDelete: Boolean,
+    requiresConfirm: Boolean,
+    highlight: Boolean,
+    onHighlightDone: () -> Unit,
+    focusPending: String?,
+    onFocusConsumed: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusLg)
-    val deletable = task.status.isTerminal
+    val haptic = rememberHaptic()
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when {
                 value == SwipeToDismissBoxValue.Settled -> true
-                !deletable -> false
+                // 进行中：回弹 + REJECT（契约 C-07「不显红底」）
+                !canDelete -> {
+                    haptic(HapticTone.REJECT)
+                    false
+                }
                 else -> {
+                    haptic(HapticTone.REJECT)
                     onDelete()
-                    true
+                    // 需要二次确认时不留在滑出位置：先回弹，确认后才由任务状态移除
+                    !requiresConfirm
                 }
             }
         },
+        // 越过 40% 才判定为删除（契约 C-07）
+        positionalThreshold = { totalDistance -> totalDistance * DELETE_THRESHOLD_PROGRESS },
     )
     // 撤销恢复的列表项可能复用同一 key 的保存态：从已滑出位置复位，否则卡片会停在屏外
     LaunchedEffect(Unit) {
         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) dismissState.reset()
     }
-    // 背景（danger + 垃圾桶）随滑动进度淡入：未滑动时 alpha=0，完全不可见，
-    // 避免「卡片粉色 / 图标从边角透出」（真机截图问题）；
-    // 滑到 35% 即达满不透明，否则拖到一半看到的仍是淡粉色而不是红底。
-    val reveal = (dismissState.progress / REVEAL_FULL_PROGRESS).coerceIn(0f, 1f)
+    // 红底只在「可删除 + 越过 20%」后淡入：进行中卡片永远不出现
+    val reveal = if (!canDelete) {
+        0f
+    } else {
+        ((dismissState.progress - REVEAL_START_PROGRESS) / (REVEAL_FULL_PROGRESS - REVEAL_START_PROGRESS))
+            .coerceIn(0f, 1f)
+    }
     SwipeToDismissBox(
         state = dismissState,
-        // 进行中任务也允许拖动：松手时 confirmValueChange 返回 false 回弹，
-        // 这样「滑不动」和「滑出去才知道不能删」两种手感都不会出现。
+        // 进行中任务也允许拖动：松手回弹，这样「滑不动」和「滑出去才知道不能删」两种手感都不会出现
         enableDismissFromStartToEnd = true,
         enableDismissFromEndToStart = true,
+        modifier = Modifier.testTag("C-07"),
         backgroundContent = {
             if (reveal > 0.01f) {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = reveal }
                         .clip(shape)
                         .background(t.danger)
                         .padding(horizontal = t.space4),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 左右各一个垃圾桶（对应两个滑动方向），垂直居中
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = "删除",
-                        tint = t.accentOn,
-                        modifier = Modifier.align(Alignment.CenterStart).size(t.space5),
-                    )
                     Icon(
                         Icons.Outlined.Delete,
                         contentDescription = null,
                         tint = t.accentOn,
-                        modifier = Modifier.align(Alignment.CenterEnd).size(t.space5),
+                        modifier = Modifier.size(t.space5),
+                    )
+                    Spacer(Modifier.width(t.space2))
+                    Text(
+                        "松手删除这条记录",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = t.accentOn,
                     )
                 }
             }
@@ -170,8 +131,12 @@ internal fun SwipeableTaskCard(
         ) {
             TaskCard(
                 task = task,
-                index = index,
+                highlight = highlight,
+                onHighlightDone = onHighlightDone,
                 onCancel = onCancel,
+                onMore = onMore,
+                focusPending = focusPending,
+                onFocusConsumed = onFocusConsumed,
             )
         }
     }

@@ -1,237 +1,543 @@
 package com.bsfeng.monitor.transfer.ui
 
-// 从 transfer/ui/TransferScreen.kt 拆出：传送页的滚动内容区
-// （接收卡 → 附近设备 → 发送按钮 → 进行中 → 最近完成）。
+// 传送页的滚动内容区：接收卡 → 附近设备 → 发送按钮 → 进行中 → 最近完成。
+//
+// 列表结构先摊平成 [TransferRow] 再交给 LazyColumn：这样「撤销后滚动到被恢复的行」
+// （契约 C-06）与「LazyColumn key 稳定」都能按行 key 直接定位，不靠 index 心算。
+// 行拼装是纯函数 [buildTransferRows]，单测直接覆盖分组 / 计数 / 回执条去留。
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Cancel
-import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Upload
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.transfer.PeerDevice
-import com.bsfeng.monitor.domain.transfer.TransferDirection
-import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.TransferTaskGroups
-import com.bsfeng.monitor.domain.transfer.TransferFormat
-import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
-import com.bsfeng.monitor.transfer.service.ReceivingState
-import com.bsfeng.monitor.domain.transfer.UNKNOWN_PEER_ALIAS
-import com.bsfeng.monitor.ui.components.AppCard
-import com.bsfeng.monitor.ui.components.Badge
-import com.bsfeng.monitor.ui.components.BadgeTone
-import com.bsfeng.monitor.ui.components.ConfirmDialog
 import com.bsfeng.monitor.ui.components.EmptyState
-import com.bsfeng.monitor.ui.components.MotionToken
-import com.bsfeng.monitor.ui.components.rememberMotionEnabled
-import com.bsfeng.monitor.ui.components.staggerEnterAt
-import com.bsfeng.monitor.ui.components.springOf
-import com.bsfeng.monitor.ui.components.tokenShadow
-import com.bsfeng.monitor.ui.live.ScreenHead
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
+import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
-import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.fgFade
-import com.bsfeng.monitor.ui.theme.opaquePanel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 
+/** 列表行类型。 */
+internal data class TransferRow(
+    val key: String,
+    val kind: Kind,
+    val title: String = "",
+    val titleAction: TitleAction? = null,
+    val device: PeerDevice? = null,
+    val deviceIndex: Int = 0,
+    val tasks: List<TransferTask> = emptyList(),
+    val task: TransferTask? = null,
+    val hint: String = "",
+) {
+    /** 行类型。 */
+    enum class Kind { RECEIVING, TITLE, DEVICES_EMPTY, DEVICE, SEND, RECEIPT, TASK, HINT }
+
+    /** 分组标题右侧的动作。 */
+    enum class TitleAction { CANCEL_ALL, CLEAR_FINISHED }
+}
+
+/** 「进行中 · N」之外的「最近完成」标题（契约 C-16 的 N 与展示条数一致）。 */
+internal fun finishedTitle(count: Int): String = if (count == 0) "最近完成" else "最近完成 · $count"
+
+/** 附近设备标题。 */
+internal const val DEVICES_TITLE: String = "附近设备"
+
+/** 空分组提示文案（逐字）。 */
+internal const val ACTIVE_EMPTY_HINT: String = "暂无进行中的传输"
+
+/** 最近完成空态文案（逐字）。 */
+internal const val FINISHED_EMPTY_HINT: String = "完成的传输会留在这里"
+
+/**
+ * 摊平列表行。
+ *
+ * 回执条（C-08）按 sessionId 分组后插在对应任务卡之前；单文件批次不出条。
+ * 「全部取消」（C-09）只在活跃会话 ≥ 2 时出现（避免与卡内 C-01 重复）；
+ * 「清空已结束」（C-16）只在终态记录 ≥ 2 时出现。
+ */
+internal fun buildTransferRows(
+    devices: List<PeerDevice>,
+    tasks: List<TransferTask>,
+): List<TransferRow> {
+    val rows = mutableListOf<TransferRow>()
+    rows += TransferRow("receiving", TransferRow.Kind.RECEIVING)
+    rows += TransferRow("title-devices", TransferRow.Kind.TITLE, title = DEVICES_TITLE)
+    if (devices.isEmpty()) {
+        rows += TransferRow("devices-empty", TransferRow.Kind.DEVICES_EMPTY)
+    } else {
+        devices.forEachIndexed { index, device ->
+            rows += TransferRow("device-${device.deviceId}", TransferRow.Kind.DEVICE, device = device, deviceIndex = index)
+        }
+    }
+    rows += TransferRow("send", TransferRow.Kind.SEND)
+
+    val active = TransferTaskGroups.active(tasks)
+    val finished = TransferTaskGroups.finished(tasks)
+    rows += TransferRow(
+        key = "title-active",
+        kind = TransferRow.Kind.TITLE,
+        title = TransferTaskGroups.activeTitle(tasks),
+        titleAction = if (active.map { it.sessionId }.distinct().size >= 2) {
+            TransferRow.TitleAction.CANCEL_ALL
+        } else {
+            null
+        },
+    )
+    if (active.isEmpty()) {
+        rows += TransferRow("hint-active", TransferRow.Kind.HINT, hint = ACTIVE_EMPTY_HINT)
+    } else {
+        appendTaskRows(rows, active, prefix = "active")
+    }
+
+    rows += TransferRow(
+        key = "title-finished",
+        kind = TransferRow.Kind.TITLE,
+        title = finishedTitle(finished.size),
+        titleAction = if (finished.size >= 2) TransferRow.TitleAction.CLEAR_FINISHED else null,
+    )
+    val shown = finished.take(MAX_FINISHED_TASKS)
+    if (shown.isEmpty()) {
+        rows += TransferRow("hint-finished", TransferRow.Kind.HINT, hint = FINISHED_EMPTY_HINT)
+    } else {
+        appendTaskRows(rows, shown, prefix = "finished")
+    }
+    return rows
+}
+
+/** 任务行：同 sessionId 且 ≥ 2 个文件时先插一条回执条。 */
+private fun appendTaskRows(rows: MutableList<TransferRow>, tasks: List<TransferTask>, prefix: String) {
+    tasks.groupBy { it.sessionId }.forEach { (sessionId, group) ->
+        if (showsReceipt(group)) {
+            rows += TransferRow("$prefix-receipt-$sessionId", TransferRow.Kind.RECEIPT, tasks = group)
+        }
+        group.forEach { task ->
+            rows += TransferRow("$prefix-task-" + taskKey(task), TransferRow.Kind.TASK, task = task)
+        }
+    }
+}
+
+/** 内容区。 */
 @Composable
 internal fun TransferContentList(
     viewModel: TransferViewModel,
-    t: com.bsfeng.monitor.ui.theme.DesignTokens,
-    devices: List<com.bsfeng.monitor.domain.transfer.PeerDevice>,
-    tasks: List<com.bsfeng.monitor.domain.transfer.TransferTask>,
+    page: TransferPageState,
+    t: DesignTokens,
+    listState: LazyListState,
+    devices: List<PeerDevice>,
+    tasks: List<TransferTask>,
     selected: String?,
     running: Boolean,
+    receivingBusy: Boolean,
     onlineCount: Int,
     backgroundReceive: Boolean,
     windowRemainingMs: Long,
     autoCloseRemainingMs: Long,
     thresholdMb: Int,
+    scanning: Boolean,
     onPickFiles: () -> Unit,
+    onScan: () -> Unit,
+    onStartReceiving: () -> Unit,
+    onStopReceiving: () -> Unit,
 ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = t.space4,
-                    end = t.space4,
-                    top = t.space2,
-                    bottom = t.space12,
-                ),
-                verticalArrangement = Arrangement.spacedBy(t.space3),
-            ) {
-                // 接收状态只留一张卡：服务开关（运行/停止）与「后台常驻」模式合并成一句话，
-                // 避免「后台接收已开启」和「未开启接收」两行并排出现时自相矛盾。
-                item {
-                    ReceivingCard(
-                        running = running,
-                        port = viewModel.localPort,
-                        onlineCount = onlineCount,
-                        backgroundReceive = backgroundReceive,
-                        windowRemainingMs = windowRemainingMs,
-                        autoCloseRemainingMs = autoCloseRemainingMs,
-                        thresholdMb = thresholdMb,
-                        onStart = { viewModel.startReceiving() },
-                        onStop = { viewModel.stopReceiving() },
-                    )
-                }
-                item {
-                    Text(
-                        "附近设备",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = t.fg2,
-                        modifier = Modifier.padding(top = t.space2),
-                    )
-                }
-                if (devices.isEmpty()) {
-                    item {
-                        EmptyState(
-                            text = "同一 Wi-Fi 下打开 Mac 端「传送」即可互相发现",
-                            title = "等待设备出现",
-                            icon = Icons.Outlined.Devices,
+    val rows = buildTransferRows(devices, tasks)
+    val expandedReceipts = remember { mutableStateMapOf<String, Boolean>() }
+    // C-06：撤销恢复后滚动到被恢复的行（行 key = 任务 key，直接按 key 找下标）
+    LaunchedEffect(page.scrollTarget, rows) {
+        val target = page.scrollTarget ?: return@LaunchedEffect
+        val index = rows.indexOfFirst { it.key == target || taskKeyOf(it) == target }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+            page.consumeScroll()
+        }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = t.space4,
+            end = t.space4,
+            top = t.space2,
+            bottom = t.space12,
+        ),
+        verticalArrangement = Arrangement.spacedBy(t.space3),
+    ) {
+        items(rows, key = { it.key }) { row ->
+            when (row.kind) {
+                TransferRow.Kind.RECEIVING -> ReceivingCard(
+                    running = running,
+                    port = viewModel.localPort,
+                    onlineCount = onlineCount,
+                    backgroundReceive = backgroundReceive,
+                    windowRemainingMs = windowRemainingMs,
+                    autoCloseRemainingMs = autoCloseRemainingMs,
+                    thresholdMb = thresholdMb,
+                    busy = receivingBusy,
+                    focusPending = page.focusRequest,
+                    onFocusConsumed = page::consumeFocus,
+                    onStart = onStartReceiving,
+                    onStop = onStopReceiving,
+                )
+                TransferRow.Kind.TITLE -> GroupTitleRow(
+                    text = row.title,
+                    action = row.titleAction,
+                    focusId = row.key,
+                    t = t,
+                    focusPending = page.focusRequest,
+                    onFocusConsumed = page::consumeFocus,
+                    onCancelAll = {
+                        val target = cancelTargetOf(tasks, sessionId = null) ?: return@GroupTitleRow
+                        page.openSheet(TransferSheet.Cancel(target, trigger = CANCEL_ALL_ID))
+                    },
+                    onClearFinished = {
+                        page.ask(
+                            TransferConfirm.ClearFinished(
+                                recordCount = TransferTaskGroups.finished(tasks).size,
+                                fileCount = receivedCompletedCount(tasks),
+                            ),
                         )
-                    }
-                } else {
-                    itemsIndexed(devices, key = { _, device -> device.deviceId }) { index, device ->
-                        DeviceRow(
-                            device = device,
-                            selected = selected == device.deviceId,
-                            paired = viewModel.pairedDeviceIds().contains(device.deviceId),
-                            index = index,
-                            onClick = { viewModel.selectDevice(device.deviceId) },
-                            onRemovePairing = { viewModel.removePairing(device.deviceId) },
-                        )
-                    }
-                }
-                item {
-                    Button(
-                        onClick = { onPickFiles() },
-                        enabled = selected != null,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = t.accent,
-                            contentColor = t.accentOn,
-                        ),
-                    ) {
-                        Icon(Icons.Outlined.Upload, contentDescription = null, modifier = Modifier.size(t.space5))
-                        Spacer(Modifier.width(t.space2))
-                        Text(
-                            if (selected == null) "先选择一台设备" else "选择文件发送",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-                val activeTasks = TransferTaskGroups.active(tasks)
-                val finishedTasks = TransferTaskGroups.finished(tasks).take(MAX_FINISHED_TASKS)
-                item {
-                    Text(
-                        TransferTaskGroups.activeTitle(tasks),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = t.fg2,
-                        modifier = Modifier.padding(top = t.space2),
-                    )
-                }
-                if (activeTasks.isEmpty()) {
-                    item { HintText("暂无进行中的传输") }
-                } else {
-                    itemsIndexed(
-                        activeTasks,
-                        key = { _, task -> task.sessionId + "#" + task.file.fileId },
-                    ) { index, task ->
+                    },
+                )
+                TransferRow.Kind.DEVICES_EMPTY -> DevicesEmptyBlock(
+                    scanning = scanning,
+                    onScan = onScan,
+                    focusPending = page.focusRequest,
+                    onFocusConsumed = page::consumeFocus,
+                )
+                TransferRow.Kind.DEVICE -> DeviceRow(
+                    device = row.device ?: return@items,
+                    selected = selected == row.device?.deviceId,
+                    paired = viewModel.pairedDeviceIds().contains(row.device?.deviceId),
+                    index = row.deviceIndex,
+                    focusPending = page.focusRequest,
+                    onFocusConsumed = page::consumeFocus,
+                    onClick = { viewModel.selectDevice(row.device?.deviceId) },
+                    onRemovePairing = {
+                        val device = row.device ?: return@DeviceRow
+                        page.ask(TransferConfirm.Unpair(device, device.alias.trim().ifBlank { "未知设备" }))
+                    },
+                )
+                TransferRow.Kind.SEND -> SendFilesButton(
+                    state = sendButtonState(devices, selected),
+                    onPickFiles = onPickFiles,
+                    focusPending = page.focusRequest,
+                    onFocusConsumed = page::consumeFocus,
+                )
+                TransferRow.Kind.RECEIPT -> BatchReceiptBar(
+                    tasks = row.tasks,
+                    expanded = expandedReceipts[row.key] == true,
+                    onToggle = { expandedReceipts[row.key] = expandedReceipts[row.key] != true },
+                )
+                TransferRow.Kind.TASK -> {
+                    val task = row.task ?: return@items
+                    if (task.isActive) {
                         SwipeableTaskCard(
                             task = task,
-                            index = index,
-                            onCancel = { viewModel.cancelTask(task.sessionId) },
-                            onDelete = { viewModel.deleteTask(task.sessionId, task.file.fileId) },
+                            onCancel = { page.openSheet(TransferSheet.Cancel(cancelTargetOf(tasks, task.sessionId) ?: return@SwipeableTaskCard, trigger = "C-01:" + taskKey(task))) },
+                            onDelete = {},
+                            onMore = {},
+                            canDelete = false,
+                            requiresConfirm = false,
+                            highlight = page.highlight == taskKey(task),
+                            onHighlightDone = { page.clearHighlight(taskKey(task)) },
+                            focusPending = page.focusRequest,
+                            onFocusConsumed = page::consumeFocus,
                         )
-                    }
-                }
-                item {
-                    Text(
-                        "最近完成",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = t.fg2,
-                        modifier = Modifier.padding(top = t.space2),
-                    )
-                }
-                if (finishedTasks.isEmpty()) {
-                    item { HintText("完成的传输会留在这里，左右滑动可删除") }
-                } else {
-                    itemsIndexed(
-                        finishedTasks,
-                        key = { _, task -> task.sessionId + "#" + task.file.fileId },
-                    ) { index, task ->
+                    } else {
                         SwipeableTaskCard(
                             task = task,
-                            index = index,
-                            onCancel = { viewModel.cancelTask(task.sessionId) },
-                            onDelete = { viewModel.deleteTask(task.sessionId, task.file.fileId) },
+                            onCancel = {},
+                            onDelete = {
+                                requestDelete(
+                                    page = page,
+                                    task = task,
+                                    nextFocus = nextFocusAfterDelete(tasks, task),
+                                    onDelete = { viewModel.deleteTask(it.sessionId, it.file.fileId) },
+                                )
+                            },
+                            onMore = { page.openSheet(TransferSheet.Actions(task, trigger = actionsTriggerOf(task))) },
+                            canDelete = true,
+                            requiresConfirm = needsDeleteConfirm(task),
+                            highlight = page.highlight == taskKey(task),
+                            onHighlightDone = { page.clearHighlight(taskKey(task)) },
+                            focusPending = page.focusRequest,
+                            onFocusConsumed = page::consumeFocus,
                         )
                     }
                 }
+                TransferRow.Kind.HINT -> HintText(row.hint)
             }
+        }
+    }
+}
+
+private fun taskKeyOf(row: TransferRow): String? = row.task?.let { taskKey(it) }
+
+/** 接收 + 已完成条数（C-16 确认框里「会删 Downloads 文件」的条数）。 */
+internal fun receivedCompletedCount(tasks: List<TransferTask>): Int = tasks.count {
+    it.direction == com.bsfeng.monitor.domain.transfer.TransferDirection.RECV &&
+        it.status == com.bsfeng.monitor.domain.transfer.TransferStatus.COMPLETED
+}
+
+/** 删除入口（C-05 / C-07 共用）：接收 + 已完成先二次确认，其余直接删。 */
+internal fun requestDelete(
+    page: TransferPageState,
+    task: TransferTask,
+    nextFocus: String?,
+    onDelete: (TransferTask) -> Unit,
+) {
+    page.dismissSheet()
+    // 面板关闭时置上的焦点回归标记先消费掉：本次是删除，行随即消失，不能让焦点闪回已删节点
+    page.consumeFocus()
+    if (needsDeleteConfirm(task)) {
+        // 先确认再删：焦点去向暂存，确认框关闭后落焦（契约 C-05「焦点落到下一条」）
+        page.stageDeleteFocus(nextFocus)
+        page.ask(TransferConfirm.DeleteReceived(task))
+        return
+    }
+    onDelete(task)
+    if (nextFocus != null) page.requestFocus(nextFocus)
+}
+
+/**
+ * 删除后焦点去向（契约 C-05「记录行移除后焦点落到下一条；最后一条落到分组标题」）。
+ *
+ * 按「最近完成」的展示顺序（与列表一致）取被删行的下一条；没有下一条时落到分组标题。
+ */
+internal fun nextFocusAfterDelete(tasks: List<TransferTask>, task: TransferTask): String {
+    val shown = TransferTaskGroups.finished(tasks).take(MAX_FINISHED_TASKS)
+    val index = shown.indexOfFirst { it.sessionId == task.sessionId && it.file.fileId == task.file.fileId }
+    val next = if (index >= 0) shown.drop(index + 1).firstOrNull() else null
+    return next?.let { taskFocusId(it) } ?: "title-finished"
+}
+
+/** 分组标题 + 右侧动作（C-09 / C-16）。 */
+@Composable
+private fun GroupTitleRow(
+    text: String,
+    action: TransferRow.TitleAction?,
+    focusId: String,
+    t: DesignTokens,
+    focusPending: String?,
+    onFocusConsumed: () -> Unit,
+    onCancelAll: () -> Unit,
+    onClearFinished: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = t.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmall,
+            color = t.fg2,
+            modifier = Modifier
+                .weight(1f)
+                .returnFocusWhen(focusId, focusPending, onFocusConsumed)
+                .focusable(),
+        )
+        when (action) {
+            TransferRow.TitleAction.CANCEL_ALL -> TitleActionButton(
+                label = "全部取消",
+                tag = CANCEL_ALL_ID,
+                danger = true,
+                focusPending = focusPending,
+                onFocusConsumed = onFocusConsumed,
+                tagModifier = Modifier.testTag("C-09"),
+                onClick = onCancelAll,
+            )
+            TransferRow.TitleAction.CLEAR_FINISHED -> TitleActionButton(
+                label = "清空已结束",
+                tag = CLEAR_FINISHED_ID,
+                danger = false,
+                focusPending = focusPending,
+                onFocusConsumed = onFocusConsumed,
+                tagModifier = Modifier.testTag("C-16"),
+                onClick = onClearFinished,
+            )
+            null -> Unit
+        }
+    }
+}
+
+/** 分组标题右侧文字动作：点击区 ≥ 44dp，按下 0.96。 */
+@Composable
+private fun TitleActionButton(
+    label: String,
+    tag: String,
+    danger: Boolean,
+    focusPending: String?,
+    onFocusConsumed: () -> Unit,
+    tagModifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val haptic = rememberHaptic()
+    Box(
+        modifier = Modifier
+            .height(t.tapMin)
+            .pressFeedback(interaction)
+            .clip(RoundedCornerShape(t.radiusSm))
+            .clickable(interactionSource = interaction, indication = null) {
+                haptic(if (danger) HapticTone.REJECT else HapticTone.LIGHT)
+                onClick()
+            }
+            .then(tagModifier)
+            .returnFocusWhen(tag, focusPending, onFocusConsumed)
+            .padding(horizontal = t.space2),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (danger) t.dangerText else t.accent,
+        )
+    }
+}
+
+/**
+ * 附近设备空态：C-18 降级口径 —— 源码没有「发现失败」信号，这里只表达「暂无设备」两态（空闲 / 扫描中），
+ * 按钮叫「重新扫描」而不是「重试发现」（没失败过，不能说重试）。
+ */
+@Composable
+private fun DevicesEmptyBlock(
+    scanning: Boolean,
+    onScan: () -> Unit,
+    focusPending: String?,
+    onFocusConsumed: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    Column(Modifier.fillMaxWidth()) {
+        EmptyState(
+            text = "同一 Wi-Fi 下打开 Mac 端「传送」即可互相发现",
+            title = "暂无设备",
+            icon = Icons.Outlined.Devices,
+            actionLabel = if (scanning) SCAN_BUSY_LABEL else SCAN_IDLE_LABEL,
+            onAction = { if (!scanning) onScan() },
+            actionModifier = Modifier
+                .testTag("C-18")
+                .returnFocusWhen("C-18", focusPending, onFocusConsumed),
+        )
+        if (scanning) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(t.space4),
+                    strokeWidth = 2.dp,
+                    color = t.accent,
+                )
+                Spacer(Modifier.width(t.space2))
+                Text("正在扫描附近设备…", style = MaterialTheme.typography.bodySmall, color = t.muted)
+            }
+        }
+    }
+}
+
+/** 发送按钮三态（契约 C-13 边界 + C-11 边界）。 */
+internal enum class SendButtonState { NO_DEVICE, OFFLINE, READY }
+
+/**
+ * 发送按钮状态：没选设备 → 先选；选中的设备离线 → 提示重新选；都在线 → 可选文件。
+ *
+ * C-11 边界：选中设备离线时发送按钮禁用并提示「对方已离线，请重新选择」。
+ */
+internal fun sendButtonState(devices: List<PeerDevice>, selectedId: String?): SendButtonState = when {
+    selectedId == null -> SendButtonState.NO_DEVICE
+    devices.firstOrNull { it.deviceId == selectedId }?.online != true -> SendButtonState.OFFLINE
+    else -> SendButtonState.READY
+}
+
+/** 发送按钮文案（逐字）。 */
+internal fun sendButtonLabel(state: SendButtonState): String = when (state) {
+    SendButtonState.NO_DEVICE -> "先选择一台设备"
+    SendButtonState.OFFLINE -> "对方已离线，请重新选择"
+    SendButtonState.READY -> "选择文件发送"
+}
+
+/** C-13 发送按钮：禁用态改文案；按下 0.96 + MEDIUM 触感。 */
+@Composable
+private fun SendFilesButton(
+    state: SendButtonState,
+    onPickFiles: () -> Unit,
+    focusPending: String?,
+    onFocusConsumed: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusMd)
+    val interaction = remember { MutableInteractionSource() }
+    val haptic = rememberHaptic()
+    val enabled = state == SendButtonState.READY
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(t.tapMin)
+            .pressFeedback(interaction, enabled = enabled)
+            .clip(shape)
+            .background(if (enabled) t.accent else t.fgFade(10))
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+            ) {
+                haptic(HapticTone.MEDIUM)
+                onPickFiles()
+            }
+            .testTag("C-13")
+            .returnFocusWhen("C-13", focusPending, onFocusConsumed),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Upload,
+            contentDescription = null,
+            tint = if (enabled) t.accentOn else t.meta,
+            modifier = Modifier.size(t.space5),
+        )
+        Spacer(Modifier.width(t.space2))
+        Text(
+            sendButtonLabel(state),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (enabled) t.accentOn else t.meta,
+        )
+    }
 }

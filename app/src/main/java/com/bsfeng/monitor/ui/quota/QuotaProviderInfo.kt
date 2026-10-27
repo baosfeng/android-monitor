@@ -2,6 +2,9 @@ package com.bsfeng.monitor.ui.quota
 
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
 
+/** Ollama 的稳定 id：多处按 id 分流（Key 管理页外链、计费模式条），只在这里写死一次。 */
+internal const val OLLAMA_ID = "ollama"
+
 /**
  * 额度页的 provider 展示模型。
  *

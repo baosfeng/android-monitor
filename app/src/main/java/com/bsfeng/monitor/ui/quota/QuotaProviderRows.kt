@@ -3,6 +3,21 @@ package com.bsfeng.monitor.ui.quota
 // 从 ui/quota/QuotaSettingsProviders.kt 拆出：provider 行 —— ProviderSettingsRow（名称 + 状态 + 凭据填写）、SaveButton、IntervalChips（刷新间隔选项）。负责「一行内完成 provider 配置」。
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.testTag
+import com.bsfeng.monitor.ui.components.keyboardFocusRing
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.theme.dotDiameter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -198,5 +213,104 @@ private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
                 )
             }
         }
+    }
+}
+// ───────────────────── 单家态 · provider chip 行 ─────────────────────
+// 从 QuotaCards.kt 迁来并补契约锚点：共享件只给容器 modifier，chip 级 testTag 落不下去，
+// 而 s18 契约要求 4 个 chip 各有锚点（s18-provider-ollama / -deepseek / -opencode / -opendesign）。
+
+/**
+ * provider 横向 chip 行（原型 .s18-providers）：可横滑、已配置带绿点、选中态互斥。
+ *
+ * 横滑只改变可视范围、不切换 provider：LazyRow 自带位移阈值，位移小于 8px 判为 click 不误触。
+ */
+@Composable
+internal fun QuotaProviderChips(
+    providers: List<QuotaProviderInfo>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    LazyRow(
+        modifier = modifier.fillMaxWidth().testTag("s18-providers"),
+        contentPadding = PaddingValues(horizontal = t.space4),
+        horizontalArrangement = Arrangement.spacedBy(t.space2),
+    ) {
+        items(providers, key = { it.id }) { info ->
+            QuotaProviderChip(
+                info = info,
+                selected = info.id == selectedId,
+                onClick = { onSelect(info.id) },
+            )
+        }
+    }
+}
+
+/** chip 锚点按 provider id 逐字映射到契约（不改号、不新增）；字面量落在这里才能被锚点对账扫到。 */
+private fun chipTagOf(providerId: String): Modifier = when (providerId) {
+    "ollama" -> Modifier.testTag("s18-provider-ollama")
+    "deepseek" -> Modifier.testTag("s18-provider-deepseek")
+    "opencode-go" -> Modifier.testTag("s18-provider-opencode")
+    "opendesign" -> Modifier.testTag("s18-provider-opendesign")
+    else -> Modifier
+}
+
+@Composable
+private fun QuotaProviderChip(
+    info: QuotaProviderInfo,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(t.radiusPill)
+    val bg by animateColorAsState(
+        targetValue = if (selected) t.fgFade(7) else Color.Transparent,
+        animationSpec = tween(t.durState),
+        label = "providerChipBg",
+    )
+    val stroke by animateColorAsState(
+        targetValue = if (selected) t.fgFade(24) else t.border,
+        animationSpec = tween(t.durState),
+        label = "providerChipStroke",
+    )
+    Row(
+        modifier = Modifier
+            .height(t.tapMin)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, stroke, shape)
+            .pressFeedback(interaction)
+            .keyboardFocusRing(shape)
+            .then(chipTagOf(info.id))
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+            ) {
+                // 已是当前 provider 时不重复震动、不重复 toast（口径：同一操作不重复震动）
+                if (selected) return@clickable
+                // provider 切换等价于 Tab 切换：用中触，与列表点击的轻触区分
+                haptic(HapticTone.MEDIUM)
+                onClick()
+            }
+            .padding(horizontal = t.space4),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(t.space2),
+    ) {
+        // 绿点只表示「已配置凭据且能拉数据」，未配置的家恒为灰点
+        Box(
+            Modifier
+                .size(t.dotDiameter)
+                .clip(CircleShape)
+                .background(if (info.connected) t.success else t.fgFade(30)),
+        )
+        Text(
+            info.displayName,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) t.fg else t.fg2,
+            maxLines = 1,
+        )
     }
 }

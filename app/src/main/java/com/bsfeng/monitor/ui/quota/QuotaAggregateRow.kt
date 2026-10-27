@@ -162,10 +162,10 @@ internal fun AggregateRankRow(
  * 但不在榜上」。不加 chevron，因为它没有可下钻的单家详情。
  */
 @Composable
-internal fun ExcludedRow(item: QuotaExcludedProvider) {
+internal fun ExcludedRow(item: QuotaExcludedProvider, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = t.space4, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,

@@ -47,6 +47,13 @@ fun CategoryPicker(
     gridMaxHeight: Dp = PICKER_DEFAULT_GRID_MAX_H,
     iconSize: Dp = PICKER_DEFAULT_ICON_SIZE,
     topStyle: CategoryPickerTopStyle = CategoryPickerTopStyle.CHIPS,
+    /**
+     * 一级格子的 testTag 前缀（不传 = 不贴锚点，节点与布局无差异）。
+     *
+     * 只有浮窗（s15）需要把契约锚点 s15-l1-0..17 逐字落到格子上；其余页面不传，
+     * 因此给测试 / 无障碍工具看到的树与改造前完全一致。
+     */
+    topLevelTagPrefix: String? = null,
 ) {
     val t = LocalDesignTokens.current
     // 识别到的名字属于哪个一级（空 = 没识别 / 不在本类型树里）
@@ -99,6 +106,7 @@ fun CategoryPicker(
                 TopLevelGrid(
                     state = state,
                     onSelectTop = { name -> activeTopName = name; expanded = true },
+                    tagPrefix = topLevelTagPrefix,
                 )
             }
         }

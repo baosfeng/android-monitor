@@ -1,8 +1,17 @@
 package com.bsfeng.monitor.ui.quota
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,8 +24,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,14 +35,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.FOCUS_RING_WIDTH
 import com.bsfeng.monitor.ui.components.StateSkeleton
 import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
@@ -45,18 +67,25 @@ import com.bsfeng.monitor.ui.theme.fgFade
  *
  * 失败条与数据卡分开：刷新失败时**保留上次成功数据**（数据层已把 stale 与 fetchedAt 标好），
  * 页面只负责在数据上方补一条「数据停在 HH:mm」，而不是把整屏换成错误页。
+ *
+ * 每个可交互节点都带契约锚点（`s18-*`）：契约的 82 行按锚点逐条对账，
+ * 锚点只在对应状态下渲染 —— 同一时刻只存在一份，不会出现同名节点。
  */
 
 /** 加载态：细行骨架，形状与真实卡片一致（先骨架后卡片，避免高度跳变）。 */
 @Composable
 fun QuotaLoading(modifier: Modifier = Modifier) {
-    AppCard(modifier) {
+    // 锚点打在卡片内部：加载态只有一个入口，调用点不必各自记得打标
+    AppCard(modifier.testTag("s18-loading")) {
         StateSkeleton(rows = 5)
     }
 }
 
+/** Ollama 的 Key 管理页（配置卡里那条外链的落点）。 */
+private const val OLLAMA_KEY_URL = "https://ollama.com/settings/keys"
+
 /**
- * 未配置凭据（empty 态）：输入框 + 保存并查询 + 帮助文案。
+ * 未配置凭据（empty 态）：输入框 + 保存并查询 + 外链 + 帮助文案。
  *
  * Ollama 只有一个凭据；DeepSeek 的余额（`sk-` Key）与用量（平台登录令牌）不通用，
  * 所以这里按 [QuotaProviderInfo] 的凭据类型决定显示一行还是两行。
@@ -70,10 +99,10 @@ fun QuotaConfigCard(
     val t = LocalDesignTokens.current
     var balance by remember(info.id) { mutableStateOf("") }
     var usage by remember(info.id) { mutableStateOf("") }
-    val haptic = rememberHaptic()
     val needsUsageRow = info.usageKind != null && info.usageKind != info.balanceKind
     val canSubmit = balance.isNotBlank() || (needsUsageRow && usage.isNotBlank())
-    AppCard(modifier) {
+    // 卡片空白处点击不保存、不发请求 → 卡容器本身不挂 clickable
+    AppCard(modifier.testTag("s18-config")) {
         Text("配置凭据后查看额度", style = MaterialTheme.typography.titleMedium, color = t.fg)
         Spacer(Modifier.height(t.space2))
         Text(
@@ -85,7 +114,9 @@ fun QuotaConfigCard(
         QuotaTextField(
             value = balance,
             onValueChange = { balance = it },
-            placeholder = info.credentialHint.ifBlank { "API Key" },
+            placeholder = info.credentialHint.ifBlank { "sk-****" },
+            label = info.displayName + " API Key",
+            modifier = Modifier.testTag("s18-key"),
         )
         if (info.credentialHelp.isNotBlank()) {
             Spacer(Modifier.height(t.space1))
@@ -97,6 +128,7 @@ fun QuotaConfigCard(
                 value = usage,
                 onValueChange = { usage = it },
                 placeholder = info.usageCredentialHint ?: "平台登录令牌",
+                label = info.displayName + " 用量凭据",
             )
             Spacer(Modifier.height(t.space1))
             Text(
@@ -106,28 +138,94 @@ fun QuotaConfigCard(
             )
         }
         Spacer(Modifier.height(t.space3))
-        Button(
-            onClick = {
-                haptic(HapticTone.SUCCESS)
-                onSave(balance.trim(), if (needsUsageRow) usage.trim() else "")
-            },
+        QuotaSaveButton(
             enabled = canSubmit,
-            modifier = Modifier.fillMaxWidth().height(t.tapMin),
-            shape = RoundedCornerShape(t.radiusMd),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = t.accent,
-                contentColor = t.accentOn,
-            ),
-        ) {
-            Text("保存并查询", style = MaterialTheme.typography.bodyMedium)
+            modifier = Modifier.testTag("s18-save"),
+            onClick = { onSave(balance.trim(), if (needsUsageRow) usage.trim() else "") },
+        )
+        // 只有 ollama 有公开的 Key 管理页；别家没有对应落地页，不摆死链
+        if (info.id == OLLAMA_ID) {
+            Spacer(Modifier.height(t.space1))
+            QuotaKeyLink()
         }
         Spacer(Modifier.height(t.space2))
         Text(
-            "凭据只保存在本机，使用 Android Keystore 加密；不写日志、不上传。",
+            "Key 只保存在本机，使用 Android Keystore 加密；不写日志、不上传。",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
         )
     }
+}
+
+/** 「保存并查询」：整行主色，按下 0.96 + SUCCESS 触感；空输入时禁用（fg 10% 底 + muted 文案）。 */
+@Composable
+private fun QuotaSaveButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(t.tapMin)
+            .clip(RoundedCornerShape(t.radiusMd))
+            .background(if (enabled) t.accent else t.fgFade(10))
+            .pressFeedback(interaction, enabled = enabled)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+            ) {
+                haptic(HapticTone.SUCCESS)
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "保存并查询",
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) t.accentOn else t.muted,
+        )
+    }
+}
+
+/** 「在 ollama.com 获取 API Key ↗」：常驻下划线（不靠 hover 才可见）+ 压底变深一档。 */
+@Composable
+private fun QuotaKeyLink() {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val context = LocalContext.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        targetValue = if (pressed) t.fgFade(5) else Color.Transparent,
+        animationSpec = tween(t.durPress),
+        label = "quotaKeyLinkBg",
+    )
+    Text(
+        "在 ollama.com 获取 API Key ↗",
+        style = MaterialTheme.typography.bodySmall,
+        color = t.accent,
+        textDecoration = TextDecoration.Underline,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("s18-key-link")
+            .clip(RoundedCornerShape(t.radiusSm))
+            .background(bg)
+            .pressFeedback(interaction)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                haptic(HapticTone.LIGHT)
+                // 无浏览器时只是留在原页（ActivityNotFound 吞掉，不弹错误）
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(OLLAMA_KEY_URL)))
+                }.onFailure { if (it !is ActivityNotFoundException) throw it }
+            }
+            // 点击区高 ≥44dp：文字本身只有一行，靠纵向内边距撑到点击区下限
+            .padding(vertical = t.space2),
+    )
 }
 
 /**
@@ -135,6 +233,7 @@ fun QuotaConfigCard(
  *
  * [staleAtEpochSecond] 来自数据层的 fetchedAt（失败时不会前移），
  * 显示成「数据停在 HH:mm」让用户知道看到的是旧数，而不是当前值。
+ * 读屏：一次性播报标题 + 副行（liveRegion），不抢走当前焦点。
  */
 @Composable
 fun QuotaErrorBar(
@@ -142,17 +241,27 @@ fun QuotaErrorBar(
     staleAtEpochSecond: Long,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    retrying: Boolean = false,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
     val haptic = rememberHaptic()
+    val detail = if (staleAtEpochSecond > 0L) {
+        "数据停在 " + QuotaFormat.clockOf(staleAtEpochSecond) + " · 刷新失败"
+    } else {
+        "刷新失败"
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(t.danger.copy(alpha = t.danger.alpha * 0.10f))
             .border(1.dp, t.danger.copy(alpha = t.danger.alpha * 0.34f), shape)
-            .padding(t.space3),
+            .padding(t.space3)
+            .semantics(mergeDescendants = true) {
+                contentDescription = message + "，" + detail
+                liveRegion = LiveRegionMode.Polite
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -164,24 +273,17 @@ fun QuotaErrorBar(
         Column(Modifier.weight(1f)) {
             Text(message, style = MaterialTheme.typography.bodySmall, color = t.dangerText)
             Spacer(Modifier.height(t.space1))
-            Text(
-                if (staleAtEpochSecond > 0L) {
-                    "数据停在 " + QuotaFormat.clockOf(staleAtEpochSecond) + " · 刷新失败"
-                } else {
-                    "刷新失败"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = t.fg2,
-            )
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = t.fg2)
         }
+        // 请求中置灰并吞掉点击：连点只发一次
         Text(
             "重试",
             style = MaterialTheme.typography.labelMedium,
-            color = t.dangerText,
+            color = if (retrying) t.muted else t.dangerText,
             modifier = Modifier
                 .clip(RoundedCornerShape(t.radiusSm))
                 .background(t.fgFade(6))
-                .clickable {
+                .clickable(enabled = !retrying) {
                     haptic(HapticTone.SUCCESS)
                     onRetry()
                 }
@@ -218,7 +320,12 @@ fun QuotaUsageUnavailableCard(
     }
 }
 
-/** 单行凭据输入（密码遮罩；明文只在内存里出现）。 */
+/**
+ * 单行凭据输入（密码遮罩；明文只在内存里出现）。
+ *
+ * 光标取主色、框底与描边不变；**键盘焦点**进来时换成 2dp 焦点环（触摸聚焦不画环，
+ * 与全站 keyboardFocusRing 口径一致）。占位符 s18 契约固定 `sk-****`。
+ */
 @Composable
 fun QuotaTextField(
     value: String,
@@ -227,16 +334,27 @@ fun QuotaTextField(
     modifier: Modifier = Modifier,
     /** 金额阈值等非敏感输入传 false（明文 + 数字键盘）；凭据保持遮罩。 */
     obscure: Boolean = true,
+    /** 读屏标签（如「Ollama API Key」）。 */
+    label: String? = null,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
+    var focused by remember { mutableStateOf(false) }
+    val keyboardMode = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    val ring = focused && keyboardMode
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(t.tapMin)
             .clip(shape)
             .background(t.surfaceWarm)
-            .border(1.dp, t.border, shape)
+            .then(
+                if (ring) {
+                    Modifier.border(FOCUS_RING_WIDTH, t.accent, shape)
+                } else {
+                    Modifier.border(1.dp, t.border, shape)
+                }
+            )
             .padding(horizontal = t.space3),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -249,7 +367,16 @@ fun QuotaTextField(
             singleLine = true,
             // 必须撑满整行：BasicTextField 的默认宽度随内容走，空值时点击区只剩光标那一小点，
             // 表现就是「输入框点不进去」。
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focused = it.isFocused }
+                .then(
+                    if (label == null) {
+                        Modifier
+                    } else {
+                        Modifier.semantics { contentDescription = label }
+                    }
+                ),
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = t.fg),
             cursorBrush = SolidColor(t.accent),
             // 凭据一律遮罩：两类令牌都可能被旁人看到，没有「短的就明文」的余地
@@ -260,6 +387,7 @@ fun QuotaTextField(
             },
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (obscure) KeyboardType.Password else KeyboardType.Decimal,
+                imeAction = ImeAction.Done,
             ),
         )
     }

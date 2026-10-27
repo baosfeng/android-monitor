@@ -40,6 +40,26 @@ class MainViewModel : ViewModel() {
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
+    /**
+     * 待聚焦的事件 id（s01-recent-1..3：概览点「最近事件」某行 → 切实时 Tab 并**把该条滚到可视区**）。
+     *
+     * 一次性事件：由概览页写入、MainScreen 消费后立即 [consumeLiveFocus]。用 StateFlow（而不是
+     * Channel）是因为请求发生在切 Tab 之前 —— MainScreen 尚未组合，StateFlow 能把它留到首次订阅，
+     * Channel 没有订阅者时也会留在缓冲里，但重进页面无法区分「新请求」与「上次没消费掉」。
+     */
+    private val _pendingLiveFocusId = MutableStateFlow<String?>(null)
+    val pendingLiveFocusId: StateFlow<String?> = _pendingLiveFocusId.asStateFlow()
+
+    /** 请求实时页聚焦某条事件（[Record.id] 是字符串主键；同一时刻只保留最后一次请求）。 */
+    fun requestLiveFocus(recordId: String) {
+        _pendingLiveFocusId.value = recordId
+    }
+
+    /** 消费聚焦请求：滚动与高亮已发生（或已判定无法定位），不再重复触发。 */
+    fun consumeLiveFocus() {
+        _pendingLiveFocusId.value = null
+    }
+
     private val _debugEnabled = MutableStateFlow(DebugConfig.enabled)
     val debugEnabled: StateFlow<Boolean> = _debugEnabled.asStateFlow()
 
@@ -285,9 +305,29 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    /** 五态 error 态的「重试」入口。 */
+    /**
+     * 「重新连接」一轮结束的信号（成功 / 失败都 +1）。
+     *
+     * 为什么需要它：失败时不推进 [lastUpdatedAt]（那是「最近一次成功刷新」的时刻），
+     * 骨架态若只按 lastUpdatedAt / isLoading 复位，**再失败就会永久卡在骨架、回不到错态**。
+     */
+    private val _reconnectTick = MutableStateFlow(0L)
+    val reconnectTick: StateFlow<Long> = _reconnectTick.asStateFlow()
+
+    /**
+     * 五态 error 态的「重新连接」入口。
+     *
+     * 一轮跑完（无论是拿到数据还是又失败）都发一次 [reconnectTick]：UI 据此退出骨架态 ——
+     * 失败时按 loadError 落回错态，成功时按新数据落到列表。
+     */
     fun retry() {
-        loadData()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                loadDataInternal()
+            } finally {
+                _reconnectTick.value += 1
+            }
+        }
     }
 
     fun getDeviceId(): String = AppUtils.getDeviceId()

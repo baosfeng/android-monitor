@@ -5,6 +5,9 @@ package com.bsfeng.monitor.ui
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.service.HeartbeatWatchdog
@@ -29,14 +33,17 @@ import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.SectionHeader
-import com.bsfeng.monitor.ui.components.performConfirmHaptic
 import com.bsfeng.monitor.ui.theme.ThemeRepository
 import android.content.Context
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.remember
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.ui.components.ToastHostState
+import com.bsfeng.monitor.ui.foundation.HapticTone
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.bsfeng.monitor.ui.theme.DesignTokens
@@ -107,11 +114,15 @@ Column(Modifier.fillMaxWidth()) {
             subtitle = "今日已记录 " + state.todayEventCount + " 条事件",
             icon = Icons.Outlined.Speed,
             trailing = {
-                AppSwitch(!isPaused, {
-                    viewModel.togglePause()
-                    view.performConfirmHaptic()
-                    toast.show(if (isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
-                })
+                AppSwitch(
+                    checked = !isPaused,
+                    onCheckedChange = {
+                        viewModel.togglePause()
+                        toast.show(if (isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
+                    },
+                    // 锚点落在开关本身：契约 s09-monitor 的触发是「拨开关」而不是点整行
+                    modifier = Modifier.testTag("s09-monitor"),
+                )
             },
         )
         TokenDivider(first = false)
@@ -201,6 +212,7 @@ Column(Modifier.fillMaxWidth()) {
                     onClick = {
                         context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                     },
+                    modifier = Modifier.testTag("s09-battery"),
                     variant = AppButtonVariant.Ghost,
                 )
             },
@@ -210,17 +222,26 @@ Column(Modifier.fillMaxWidth()) {
 }
 
 // ⑥ 外观（入口显示当前主题名）
-Column(Modifier.fillMaxWidth()) {
+Column(Modifier.fillMaxWidth().testTag("s09-appearance")) {
     GroupLabel("外观")
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
+        val themeInteraction = remember { MutableInteractionSource() }
+        val haptic = rememberHaptic()
         TokenRow(
             title = "外观与主题",
+            modifier = Modifier
+                .testTag("s09-goto-theme")
+                .pressFeedback(themeInteraction)
+                .clickable(
+                    interactionSource = themeInteraction,
+                    indication = LocalIndication.current,
+                ) {
+                    haptic(HapticTone.LIGHT)
+                    val open = onNavigateToAppearance
+                    if (open != null) open() else localAppearance = true
+                },
             subtitle = ThemeRepository.themeIds.size.toString() + " 套浅色主题 · 切换即时生效",
             icon = Icons.Outlined.Palette,
-            onClick = {
-                val open = onNavigateToAppearance
-                if (open != null) open() else localAppearance = true
-            },
             trailing = { TailNum(ThemeRepository.displayName(themeId)); TailChevron() },
         )
         Spacer(Modifier.height(t.space1))

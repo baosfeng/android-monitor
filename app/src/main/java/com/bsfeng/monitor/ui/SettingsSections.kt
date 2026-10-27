@@ -16,6 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 
@@ -42,11 +44,25 @@ enum class SettingsSubPage(val title: String, val meta: String) {
 @Composable
 internal fun SettingsStateContainer(
     rt: SettingsScreenRuntime,
+    anchored: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    // 五态锚点只落在锚点所属页（一级页）：二级页以覆盖层叠加、一级页不卸载，
+    // 两处都打同键会出现两个同名节点，机器对账选不中唯一目标。
+    val stateModifier = if (!anchored) {
+        Modifier
+    } else {
+        when (rt.effective) {
+            FiveState.LOADING -> Modifier.testTag("s09-st-loading")
+            FiveState.EMPTY -> Modifier.testTag("s09-st-empty")
+            FiveState.ERROR -> Modifier.testTag("s09-st-error")
+            FiveState.EDGE -> Modifier.testTag("s09-st-edge")
+            FiveState.POPULATED -> Modifier
+        }
+    }
     StateContainer(
         state = rt.effective,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(stateModifier),
         emptyTitle = "暂无可用设置项",
         emptyText = "无障碍服务尚未授权，开启后才能调整监控与开屏跳过选项。",
         emptyActionLabel = "前往系统设置",
@@ -152,7 +168,7 @@ private fun SettingsFeatureGroup(rt: SettingsScreenRuntime) {
         ruleCount = rt.ruleCount.value,
         subscriptionCount = rt.subscriptionCount.value,
         whitelistCount = rt.whitelistCount.value,
-        locationPermission = rt.locationPermission.value,
+        locationPermissionState = rt.locationPermission,
         locationLauncher = rt.locationLauncher,
         backgroundLauncher = rt.backgroundLauncher,
         setFeature = rt.setFeature,

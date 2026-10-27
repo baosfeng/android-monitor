@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.quota.QuotaAggregateRow
@@ -53,7 +54,8 @@ fun QuotaAggregateBody(
 ) {
     val t = LocalDesignTokens.current
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = t.space4),
+        // 契约 s18-agg：聚合态榜单区块；单家态整块不渲染
+        modifier = modifier.fillMaxWidth().testTag("s18-agg").padding(horizontal = t.space4),
         verticalArrangement = Arrangement.spacedBy(t.space1),
     ) {
         when (snapshot.status) {
@@ -113,10 +115,22 @@ fun QuotaAggregateBody(
             "余额型不进聚合 · 失败的家保留旧数据、照常排序 · 只读本地缓存",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
-            modifier = Modifier.padding(top = t.space2),
+            modifier = Modifier.padding(top = t.space2).testTag("s18-agg-spec"),
         )
     }
 }
+
+/** 榜单行的位次锚点：契约只给前 3 名各一条（顺序即位次，不按 provider 名钉）。 */
+private fun rankedRowTagOf(index: Int): Modifier = when (index) {
+    0 -> Modifier.testTag("s18-agg-row-1")
+    1 -> Modifier.testTag("s18-agg-row-2")
+    2 -> Modifier.testTag("s18-agg-row-3")
+    else -> Modifier
+}
+
+/** 灰行（不参与聚合）的锚点落在末行：契约 row-4 就是那条「deepseek —」。 */
+private fun excludedRowTagOf(index: Int): Modifier =
+    if (index == 0) Modifier.testTag("s18-agg-row-4") else Modifier
 
 /**
  * 结论条：一句话回答「哪家最先见底」。
@@ -127,7 +141,7 @@ fun QuotaAggregateBody(
 @Composable
 private fun AggregateHero(row: QuotaAggregateRow, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
-    AppCard(modifier = modifier, padding = 0.dp) {
+    AppCard(modifier = modifier.testTag("s18-agg-hero"), padding = 0.dp) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -196,7 +210,7 @@ private fun AggregateRankList(
     val t = LocalDesignTokens.current
     // 内边距留 0：原型 .s20-list 的上下 padding 为 0，行自己撑 padding；
     // 上下再各加 16 会让首末行被顶开，一屏就装不下了
-    AppCard(modifier = modifier, padding = 0.dp) {
+    AppCard(modifier = modifier.testTag("s18-agg-list"), padding = 0.dp) {
         rows.forEachIndexed { index, row ->
             if (index > 0) {
                 HorizontalDivider(
@@ -209,16 +223,16 @@ private fun AggregateRankList(
                 row = row,
                 onClick = { onOpenProvider(row.providerId) },
                 // 行内不再各自播入场：外层整块已经按 stagger 步骤一次起，逐行再 delay 会拖到 600ms+
-                modifier = Modifier.staggerEnterAt(-1),
+                modifier = Modifier.staggerEnterAt(-1).then(rankedRowTagOf(index)),
             )
         }
-        excluded.forEach { item ->
+        excluded.forEachIndexed { index, item ->
             HorizontalDivider(
                 thickness = 1.dp,
                 color = t.borderSoft,
                 modifier = Modifier.padding(horizontal = t.space4),
             )
-            ExcludedRow(item)
+            ExcludedRow(item, excludedRowTagOf(index))
         }
     }
 }

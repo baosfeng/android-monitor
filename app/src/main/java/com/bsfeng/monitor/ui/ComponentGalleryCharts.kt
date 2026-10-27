@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AreaChart
 import com.bsfeng.monitor.ui.components.BarChart
@@ -41,7 +42,7 @@ internal fun GalleryChartRamp() {
     //   ① chart-1..chart-16 是**分类色板**（彩色、跨主题固定），既不是中性灰阶，也不再是 7 槽；
     //   ② 趋势图用的序列色 chartSeq 跟随主题强调色，同一图表内所有数据点同色；
     //   ③ 热力条的强度阶 heatRamp 是序列色的 8–90% 透明阶梯，不单独占分类色板槽位。
-    DemoSection("分类色板 chart-1 – chart-16") {
+    DemoSection("分类色板 chart-1 – chart-16", Modifier.testTag("s12-scale")) {
         AppCard {
             // 16 槽分两行 × 8：单行 16 块在 360dp 屏上会压到约 15dp 宽，失去比色意义。
             Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
@@ -81,7 +82,7 @@ internal fun GalleryChartRamp() {
 @Composable
 internal fun GalleryCharts() {
     val t = LocalDesignTokens.current
-    DemoSection("图表基元 Chart primitives") {
+    DemoSection("图表基元 Chart primitives", Modifier.testTag("s12-charts")) {
         Column(verticalArrangement = Arrangement.spacedBy(t.space3)) {
             AppCard {
                 Text("面积曲线 area · 24h 事件量", style = MaterialTheme.typography.bodySmall, color = t.muted)

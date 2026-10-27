@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -52,15 +54,21 @@ import com.bsfeng.monitor.ui.theme.MonitorRadius
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.opaquePanel
 
+/**
+ * 来源胶囊（支付宝 / 微信）。
+ *
+ * [modifier] 供浮窗卡头把「长渠道名让位给固定提示」的权重传进来；文字恒单行，
+ * 超出省略 —— 卡头副行还有「点遮罩不会关闭」，不能被渠道名挤到第二行。
+ */
 @Composable
-internal fun SourceChip(label: String, channel: String) {
+internal fun SourceChip(label: String, channel: String, modifier: Modifier = Modifier) {
     val tokens = LocalDesignTokens.current
     val brandColor = when (channel) {
         AutoBookRules.CHANNEL_WECHAT -> tokens.success
         else -> tokens.accent
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(MonitorRadius.circle))
             .background(brandColor.copy(alpha = 0.14f))
             .padding(start = 4.dp, end = MonitorSpacing.sm, top = 3.dp, bottom = 3.dp),
@@ -85,7 +93,9 @@ internal fun SourceChip(label: String, channel: String) {
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = brandColor,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -210,6 +220,8 @@ internal fun RemarkRow(
                 }),
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 契约锚点 s15-note：输入框本体（点它才进编辑态；标签 s15-note-row 不单独响应）
+                    .testTag("s15-note")
                     .focusRequester(focusRequester)
                     .onFocusChanged { state ->
                         onFocusChange(state.isFocused)

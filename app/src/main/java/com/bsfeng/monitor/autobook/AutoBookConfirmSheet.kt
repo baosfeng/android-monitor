@@ -4,7 +4,6 @@ package com.bsfeng.monitor.autobook
 // 排版原子（来源胶囊 / 分段项 / 元信息行 / 说明行）在 AutoBookSheetParts.kt。
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,13 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -36,38 +31,43 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.CategoryTree
-import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.ui.CategoryPicker
+import com.bsfeng.monitor.ui.components.keyboardFocusRing
+import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorRadius
 import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.opaquePanel
 
 /**
+ * 一级分类格的契约锚点前缀：格子由共享 [CategoryPicker] 渲染，按阅读顺序贴
+ * `s15-l1-0` … `s15-l1-17`（契约 docs/交互设计/s15-自动记账浮窗-交互契约.md）。
+ *
+ * 传 null 的页面（老调用点）不产生任何 testTag 节点，因此叶子树的形状不变。
+ */
+internal const val AUTO_BOOK_L1_TAG_PREFIX: String = "s15-l1-"
+
+/**
  * 自动记账确认卡片（浮窗内容）。
  *
- * 信息层级与 `.open-design/23-autobook-styles.html` 的风格 1/4 一致：
- * 来源胶囊 → 金额 → 商户 → 类型 → 分类 → 账户/时间/说明 → 操作按钮。
- *
+ * 信息层级：来源胶囊 + 提示 → 金额 → 商户 → 只读字段（账户/支付方式/时间）→ 说明 → 分类 → 操作按钮。
  * 所有颜色 / 圆角 / 间距都走设计 token，因此 8 套主题下自动成立。
  *
  * **关闭契约（2026-10-20）**：卡片里只有「记一笔」和「忽略」两个按钮能让浮窗消失；
- * 说明行只进入编辑态，绝不关闭浮窗（点遮罩同样不关闭，见 [AutoBookDismissPolicy]）。
+ * 说明行只进入编辑态，绝不关闭浮窗；点卡片内的空白处由浮窗外层吞掉（不关、不失焦）。
+ *
+ * @param modifier 浮窗层传入的容器修饰（锚点 s15-sheet / 退场位移 / 抖动 / 吞点击都在那层）
+ * @param dismissing 退场动画进行中：两个按钮再点也不会重复触发（连点只生效一次）
  */
 @Composable
 fun AutoBookConfirmSheet(
@@ -75,6 +75,8 @@ fun AutoBookConfirmSheet(
     categoryTree: CategoryTree,
     onConfirm: (type: Int, categoryName: String, remark: String) -> Unit,
     onIgnore: () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissing: Boolean = false,
     onImeFocusRequest: (Boolean) -> Unit = {},
 ) {
     val tokens = LocalDesignTokens.current
@@ -124,8 +126,12 @@ fun AutoBookConfirmSheet(
 
     // 卡片高度上限 ≈ 82% 窗口高（原型 .ab-sheet max-height:82vh）：小屏上内容区先滚，按钮仍在屏内。
     val panelMaxHeight = rememberPanelMaxHeight()
+    val ignoreInteraction = remember { MutableInteractionSource() }
+    val confirmInteraction = remember { MutableInteractionSource() }
+    val buttonShape = RoundedCornerShape(MonitorRadius.md)
+
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             // 高度上限 + 内部滚动：卡片本身不再无限长，底部「记一笔 / 忽略」恒在屏幕内
             .heightIn(max = panelMaxHeight)
@@ -138,7 +144,7 @@ fun AutoBookConfirmSheet(
             .padding(horizontal = MonitorSpacing.lg)
             .padding(top = MonitorSpacing.md, bottom = MonitorSpacing.xl)
     ) {
-        // 顶部把手
+        // 顶部把手：只是视觉提示，拖动 / 点它都不关闭（没有关闭图标，也没有下滑关闭手势）
         Box(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
@@ -150,112 +156,136 @@ fun AutoBookConfirmSheet(
 
         Spacer(Modifier.height(MonitorSpacing.md))
 
-        // 标题行：识别结果 + 来源
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        // ── 卡头（s15-head）：标题 + 副行「来源胶囊 · 点遮罩不会关闭」 ──────────────
+        // 副行固定出现：用户第一次点遮罩就知道关不掉，不用等 toast。
+        Column(modifier = Modifier.fillMaxWidth().testTag("s15-head")) {
             Text(
                 text = "自动记账",
                 style = MaterialTheme.typography.titleSmall,
                 color = tokens.fg
             )
-            SourceChip(draft.channelLabel, draft.channel)
+            Spacer(Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SourceChip(
+                    label = draft.channelLabel,
+                    channel = draft.channel,
+                    // 长渠道名只占一行：胶囊让位给后面的固定提示，超长省略
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(MonitorSpacing.sm))
+                Text(
+                    text = "点遮罩不会关闭",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tokens.muted,
+                    maxLines = 1,
+                )
+            }
         }
 
         Spacer(Modifier.height(MonitorSpacing.sm))
 
-        // 金额
-        Text(
-            text = (if (isIncome) "+¥" else "-¥") + formatAmount(draft.amount),
-            style = MaterialTheme.typography.headlineLarge,
-            color = amountColor
-        )
-
-        // 商户
-        if (draft.merchant.isNotBlank()) {
-            Spacer(Modifier.height(MonitorSpacing.xs))
-            Text(
-                text = draft.merchant,
-                style = MaterialTheme.typography.bodySmall,
-                color = tokens.muted
-            )
-        }
-
-        // ── 内容区：可滚动（原型 .ab-body）—— 高度受限时只有这里滚，底部按钮固定 ──
+        // ── 内容区（s15-body）：可滚动 —— 高度受限时只有这里滚，底部按钮固定 ──────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .testTag("s15-body"),
         ) {
-        Divider()
-
-        // 说明：账本里唯一的自由文本，放在最上面（原型 .ab-sheet 的顺序）
-        Label("说明")
-        RemarkRow(
-            remark = remark,
-            onRemarkChange = { remark = it },
-            editing = editing,
-            onRequestEdit = { if (!editing) editing = true },
-            onFinishEdit = finishEdit,
-            onFocusChange = { remarkFocused = it },
-            focusRequester = remarkFocus,
-        )
-
-        Divider()
-
-        // 结构化单据字段：只读展示，占一行是一行
-        MetaRow("账户", draft.accountName)
-        if (draft.payMethod.isNotBlank()) {
-            MetaRow("支付方式", draft.payMethod)
-        }
-        if (draft.timeText.isNotBlank()) {
-            MetaRow("时间", draft.timeText)
-        }
-
-        Divider()
-
-        // 分类：两级同屏（一级 6×3 图标网格 + 二级 6 列网格），与「记一笔」共用 CategoryPicker。
-        // 识别到的分类默认选中（一级/二级都支持），命中的格子右上角标圆点；标题行再写明
-        // 「识别：xx」，用户一眼能确认系统猜的是哪个，改选后也还能对照。
-        // 点一级只切换网格、点二级才改选中 —— 浮窗仍然只能由「记一笔」/「忽略」关闭。
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = MonitorSpacing.md, bottom = MonitorSpacing.sm),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "分类",
-                style = MaterialTheme.typography.labelSmall,
-                color = tokens.muted,
-            )
-            if (draft.categoryName.isNotBlank()) {
+            // ── 只读字段区（s15-facts）：金额 / 商户 / 账户 / 支付方式 / 时间 ──────
+            // 缺字段整行不渲染，不留空行；点按无高亮、不可编辑（行内没有任何 pointerInput）。
+            Column(modifier = Modifier.fillMaxWidth().testTag("s15-facts")) {
                 Text(
-                    text = "识别：" + draft.categoryName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = tokens.accentText,
-                    fontWeight = FontWeight.SemiBold,
+                    text = (if (isIncome) "+¥" else "-¥") + formatAmount(draft.amount),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = amountColor
+                )
+                if (draft.merchant.isNotBlank()) {
+                    Spacer(Modifier.height(MonitorSpacing.xs))
+                    Text(
+                        text = draft.merchant,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(MonitorSpacing.sm))
+                if (draft.accountName.isNotBlank()) {
+                    MetaRow("账户", draft.accountName)
+                }
+                if (draft.payMethod.isNotBlank()) {
+                    MetaRow("支付方式", draft.payMethod)
+                }
+                if (draft.timeText.isNotBlank()) {
+                    MetaRow("时间", draft.timeText)
+                }
+            }
+
+            Divider()
+
+            // ── 说明（s15-note-row / s15-note）：唯一的自由文本，标签不单独响应 ────
+            Column(modifier = Modifier.fillMaxWidth().testTag("s15-note-row")) {
+                Label("说明")
+                RemarkRow(
+                    remark = remark,
+                    onRemarkChange = { remark = it },
+                    editing = editing,
+                    onRequestEdit = { if (!editing) editing = true },
+                    onFinishEdit = finishEdit,
+                    onFocusChange = { remarkFocused = it },
+                    focusRequester = remarkFocus,
+                )
+            }
+
+            Divider()
+
+            // ── 分类（s15-cat-picker）：两级同屏，一级 6×3 图标网格 + 二级 6 列网格 ──
+            // 识别到的分类默认选中（一级/二级都支持），命中的格子右上角标圆点；标题行再写明
+            // 「识别：xx」，用户一眼能确认系统猜的是哪个，改选后也还能对照。
+            // 点一级只切换网格、点二级才改选中 —— 浮窗仍然只能由「记一笔」/「忽略」关闭。
+            Column(modifier = Modifier.fillMaxWidth().testTag("s15-cat-picker")) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = MonitorSpacing.md, bottom = MonitorSpacing.sm),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "分类",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tokens.muted,
+                    )
+                    if (draft.categoryName.isNotBlank()) {
+                        Text(
+                            text = "识别：" + draft.categoryName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = tokens.accentText,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                CategoryPicker(
+                    tree = categoryTree,
+                    type = pickerType,
+                    selectedName = category,
+                    onPick = { category = it },
+                    recognizedName = draft.categoryName,
+                    gridMaxHeight = PANEL_GRID_MAX_H,
+                    iconSize = PANEL_CATEGORY_ICON_SIZE,
+                    // 浮窗也用 6 列 3 行的图标网格（与记账页一致），不再是一行横向 chips
+                    topStyle = com.bsfeng.monitor.finance.ui.CategoryPickerTopStyle.GRID,
+                    // 一级格子的契约锚点 s15-l1-0..17：由共享网格按阅读顺序贴 tag
+                    topLevelTagPrefix = AUTO_BOOK_L1_TAG_PREFIX,
                 )
             }
         }
-        CategoryPicker(
-            tree = categoryTree,
-            type = pickerType,
-            selectedName = category,
-            onPick = { category = it },
-            recognizedName = draft.categoryName,
-            gridMaxHeight = PANEL_GRID_MAX_H,
-            iconSize = PANEL_CATEGORY_ICON_SIZE,
-            // 浮窗也用 6 列 3 行的图标网格（与记账页一致），不再是一行横向 chips
-            topStyle = com.bsfeng.monitor.finance.ui.CategoryPickerTopStyle.GRID,
-        )
-        }
 
-        // ── 底部按钮：固定（原型 .ab-foot）—— 内容区再长也不把主操作挤出屏幕 ──
+        // ── 底部按钮（s15-foot）：固定贴底 —— 内容区再长也不把主操作挤出屏幕 ──────
         HorizontalDivider(
             modifier = Modifier.padding(top = MonitorSpacing.md),
             thickness = 1.dp,
@@ -264,17 +294,24 @@ fun AutoBookConfirmSheet(
         Spacer(Modifier.height(MonitorSpacing.md))
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("s15-foot"),
             horizontalArrangement = Arrangement.spacedBy(MonitorSpacing.sm)
         ) {
+            // 「忽略」：中性底、次要动作；按下 0.96（dur-press 120ms）+ 轻震
             Button(
                 onClick = {
-                    // 唯一的「忽略」入口：先收起编辑态，再交给引擎写忽略记忆
+                    // 唯一的「忽略」入口：先收起编辑态（编辑中点忽略先收键盘），再交给引擎写忽略记忆
+                    if (dismissing) return@Button
                     finishEdit()
                     onIgnore()
                 },
-                modifier = Modifier.height(48.dp),
-                shape = RoundedCornerShape(MonitorRadius.md),
+                modifier = Modifier
+                    .height(48.dp)
+                    .testTag("s15-ignore")
+                    .pressFeedback(ignoreInteraction)
+                    .keyboardFocusRing(buttonShape),
+                shape = buttonShape,
+                interactionSource = ignoreInteraction,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = tokens.fg.copy(alpha = 0.07f),
                     contentColor = tokens.fg
@@ -282,12 +319,22 @@ fun AutoBookConfirmSheet(
             ) {
                 Text("忽略", style = MaterialTheme.typography.bodyMedium)
             }
+            // 「记一笔」：强调色铺满剩余宽度、唯一的主动作；按下 0.96（dur-press 120ms）+ 轻震
             Button(
-                onClick = { onConfirm(type, category, AutoBookDraft.normalizeRemark(remark)) },
+                onClick = {
+                    if (dismissing) return@Button
+                    // 编辑态直接点「记一笔」：先收键盘并让窗口恢复不可聚焦，再走 150ms 退场 → 落库
+                    finishEdit()
+                    onConfirm(type, category, AutoBookDraft.normalizeRemark(remark))
+                },
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp),
-                shape = RoundedCornerShape(MonitorRadius.md),
+                    .height(48.dp)
+                    .testTag("s15-confirm")
+                    .pressFeedback(confirmInteraction)
+                    .keyboardFocusRing(buttonShape),
+                shape = buttonShape,
+                interactionSource = confirmInteraction,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = tokens.accent,
                     contentColor = tokens.accentOn

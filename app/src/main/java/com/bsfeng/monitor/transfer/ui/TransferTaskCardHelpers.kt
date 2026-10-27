@@ -96,6 +96,10 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.opaquePanel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -188,6 +192,18 @@ internal fun rememberSecondsUntil(deadlineMs: Long?): Int? {
 internal fun secondsUntil(deadlineMs: Long): Int {
     val left = (deadlineMs - System.currentTimeMillis()).coerceAtLeast(0L)
     return ((left + 999L) / 1_000L).toInt()
+}
+
+/**
+ * 本地时区 `HH:mm`（契约文案里的「14:32」）。
+ *
+ * @param zone 单测传固定时区，避免用例随宿主时区漂移。
+ */
+internal fun formatClock(atMs: Long, zone: TimeZone = TimeZone.getDefault()): String {
+    if (atMs <= 0L) return "--:--"
+    val format = SimpleDateFormat("HH:mm", Locale.US)
+    format.timeZone = zone
+    return format.format(Date(atMs))
 }
 
 /** 任务行副文案：进行中显示「已传 / 总量 · 速度」，已完成只显示总体积，失败/取消只保留已传/总量。 */
