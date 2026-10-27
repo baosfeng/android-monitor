@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.foundation.MotionTier
@@ -78,7 +79,8 @@ fun AppToast(
     val risePx = with(density) { TOAST_RISE.roundToPx() }
     val dropPx = with(density) { TOAST_DROP.roundToPx() }
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    // 契约 s21 §toast-host：全局 Toast 承载层锚点（常驻，toast 不可见时也在）
+    Box(modifier = modifier.testTag("toast-host"), contentAlignment = Alignment.Center) {
         AnimatedVisibility(
             visible = message != null,
             enter = if (motionEnabled) {
