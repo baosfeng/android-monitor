@@ -105,7 +105,7 @@ class QuotaRepository(
      * 切换用量范围：只重拉用量，避免打满限流。
      *
      * 失败回滚范围：用量数据仍是旧范围的，选中态必须跟着数据走 —— 否则会出现「近 30 天」的
-     * 分段配着 24 小时的数字（第 4 批走查 P1-4）。失败原因写进 errorMessage，UI 的错误条
+     * 分段配着 24 小时的数字。失败原因写进 errorMessage，UI 的错误条
      * 同时说明「数据停在 HH:mm」。
      */
     suspend fun setRange(providerId: String, range: QuotaRange) {

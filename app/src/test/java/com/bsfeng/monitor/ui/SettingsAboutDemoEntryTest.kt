@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * s09-goto-demo 入口可见性（第 3 批走查 P1-5）。
+ * s09-goto-demo 入口可见性。
  *
  * 契约 s09:43 · 边界：调试模式关闭时本行仍可进入 —— 因此判据只有 debug 构建 + 长按解锁。
  */

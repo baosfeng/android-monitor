@@ -93,7 +93,7 @@ private const val TAG = "LiveEventTimeline"
 
 /**
  * 一次性聚焦请求（[LiveEventTimeline] 的 focusRecordId）的推进阶段 —— 把「何时消费信号」
- * 从 Compose 协程里抽成可单测的纯状态（复走查 P1-02 的回归点，测试见 LiveFocusConsumeTimingTest）。
+ * 从 Compose 协程里抽成可单测的纯状态（回归点，测试见 LiveFocusConsumeTimingTest）。
  *
  * 约束：消费信号会把 `pendingLiveFocusId` 置空 → `focusRecordId` 变 null → 本页
  * `LaunchedEffect(focusRecordId, groups)` 的 key 变化 → 正在跑的滚动协程被取消
@@ -211,7 +211,7 @@ internal fun LiveEventTimeline(
     // 高亮只在「本次聚焦」这一行上点亮 1.6s + 240ms 淡出，到点自动卸掉（不常驻 remember 状态）
     var focusedRowId by remember { mutableStateOf<String?>(null) }
     // 自动卸高亮独立成 effect：消费聚焦信号会让下面那个 effect 的 key 变化并重启它，
-    // 复位若写在那里就会被连带取消，该行永远停在高亮态（复走查 P2-14）。
+    // 复位若写在那里就会被连带取消，该行永远停在高亮态。
     LaunchedEffect(focusedRowId) {
         val activeId = focusedRowId ?: return@LaunchedEffect
         delay(FOCUS_HIGHLIGHT_HOLD_MS + FOCUS_HIGHLIGHT_FADE_MS)
@@ -247,7 +247,7 @@ internal fun LiveEventTimeline(
             }
             stage = LiveFocusStage.SETTLED
         }
-        // 两步滚动之后才消费：先消费会改掉本 effect 的 key，把这次滚动自己取消掉（复走查 P1-02）。
+        // 两步滚动之后才消费：先消费会改掉本 effect 的 key，把这次滚动自己取消掉。
         if (liveFocusConsumesSignal(stage)) onFocusConsumed()
     }
     // 找不到目标的兜底：最多等 [FOCUS_LOOKUP_TIMEOUT_MS]，到点仍没有就消费掉，

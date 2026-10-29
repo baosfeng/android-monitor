@@ -180,8 +180,8 @@ class WhitelistViewModel : ViewModel() {
 /**
  * 系统「使用情况访问」设置页的 action。
  *
- * 契约 s11-st-empty：点「去授权」必须**真跳转**系统「使用情况访问」设置页（只弹 toast 不跳转 = 假跳转，
- * 走查 P0）。常量放在 ViewModel 文件里而不是 WhitelistScreen.kt：后者是纯 Composable 文件
+ * 契约 s11-st-empty：点「去授权」必须**真跳转**系统「使用情况访问」设置页（只弹 toast 不跳转 = 假跳转）。
+ * 常量放在 ViewModel 文件里而不是 WhitelistScreen.kt：后者是纯 Composable 文件，不会被 JVM 单测加载
  * （见 app/build.gradle.kts 的覆盖率排除清单），可单测的普通声明不放进去。
  */
 internal val USAGE_ACCESS_SETTINGS_ACTION: String =

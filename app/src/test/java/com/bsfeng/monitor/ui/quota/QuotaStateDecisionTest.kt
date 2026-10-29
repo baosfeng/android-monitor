@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * s18 主面板 / 用量区的状态判定（第 4 批走查 P1-3、P1-5）与 s19 保存行处置（P1-8）。
+ * s18 主面板 / 用量区的状态判定（含 s19 保存行处置的回归）。
  *
  * 这三条都是「状态说错话」类缺陷：用量卡让人去重填一个配好的令牌、错误态吞掉刚输入的 Key、
  * 保存失败还收起行。判据抽成纯函数后用单测钉死，避免以后再加状态时又散成一堆 if。
@@ -41,7 +41,7 @@ class QuotaStateDecisionTest {
 
     @Test
     fun `凭据已配置但请求失败时显示失败态而不是引导重填`() {
-        // 走查原缺陷：只看 usage == null 就报「再填一条用量凭据」，把用户送去重填一个没问题的令牌
+        // 原缺陷：只看 usage == null 就报「再填一条用量凭据」，把用户送去重填一个没问题的令牌
         assertEquals(
             QuotaUsageSlot.FAILED,
             quotaUsageSlot(hasUsage = false, supportsUsage = true, usageConfigured = true, hasError = true),

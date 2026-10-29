@@ -5,9 +5,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * s18 前台定时器只跟当前选中家（第 4 批走查 P1-9）。
+ * s18 前台定时器只跟当前选中家。
  *
- * 走查发现：设置页调别家的刷新间隔会把「当前选中家」的 refreshMinutes 一起改掉，
+ * 实测发现：设置页调别家的刷新间隔会把「当前选中家」的 refreshMinutes 一起改掉，
  * 额度页的前台定时器随即按别家的频率重启。修法是改谁只同步谁。
  */
 class QuotaRefreshMinutesTest {
