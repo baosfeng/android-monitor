@@ -10,7 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
- * N4 / P2① 回归（batch2 第三轮走查：确认框关闭回焦、重试成功回焦都是**死代码**）。
+ * N4 / P2① 回归（确认框关闭回焦、重试成功回焦都是**死代码**）。
  *
  * 缺陷模式（连续踩了两轮，batch1 P1-A 同型）：一次性回位写成「先复位自己的 key，再 withFrameNanos」。
  * 复位是快照写 → 下一次重组时 `LaunchedEffect(key)` 换实例 → 旧 job 被 forget（取消）；

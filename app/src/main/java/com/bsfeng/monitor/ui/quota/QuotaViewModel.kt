@@ -309,7 +309,7 @@ class QuotaViewModel(
  *
  * 额度页只有一个前台定时器（QuotaScreen 的 LaunchedEffect 读 [QuotaViewModel.refreshMinutes]），
  * 它代表的是**当前选中家**的节奏：在设置页调了别家的间隔却去改写它，会让当前家按别家的频率刷
- * （第 4 批走查 P1-9：串改选中家）。
+ * （回归：串改选中家）。
  */
 internal fun shouldSyncRefreshMinutes(changedProviderId: String, selectedProviderId: String): Boolean =
     changedProviderId == selectedProviderId

@@ -5,10 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * s11 白名单的状态与一次性回位判据（第 3 批走查 P0「去授权」假跳转 + P1 焦点归位）。
+ * s11 白名单的状态与一次性回位判据（「去授权」假跳转与焦点归位的回归）。
  *
  * 假跳转的回归用 action 字符串锁死：只要有人把真跳转换回「只 toast」，action 这条断言对应的
- * 常量就没人用了，走查时同样能看出来（跳转调用点见 WhitelistScreen.kt 的 onAction）。
+ * 常量就没人用了，静态检查同样能看出来（跳转调用点见 WhitelistScreen.kt 的 onAction）。
  */
 class WhitelistStateFocusTest {
 

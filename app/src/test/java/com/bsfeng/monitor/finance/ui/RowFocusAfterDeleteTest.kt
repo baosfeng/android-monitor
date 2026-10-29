@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * P1-6 回归（batch2 复走查 P1-6「删除后焦点没有落到相邻行」）。
+ * P1-6 回归（「删除后焦点没有落到相邻行」）。
  *
  * 契约 s05-del-confirm · 移除后：「焦点落在被删行的下一行，若为末行则落在上一行」。
  * 删除发生在编辑页、返回列表后才复位焦点，所以两件事必须先算准：

@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * s18 / s19 的跨页焦点回收（第 4 批走查 P1-6）。
+ * s18 / s19 的跨页焦点回收。
  *
  * 额度设置是宿主导航用覆盖层打开的，额度页收不到「覆盖层已关闭」的回调；
  * 用最小代次信号衔接（与 AppearanceScreen 的 AppearanceFocusReturn 同口径）。

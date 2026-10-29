@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * N5 / N6 回归（batch2 复走查：错误态既进不去也退不出、接上真实失败后把缓存值整块吞掉）。
+ * N5 / N6 回归（错误态既进不去也退不出、接上真实失败后把缓存值整块吞掉）。
  *
  * 两条判定都是「错误态跟缓存怎么共存」的问题，抽成纯函数以便 JVM 上锁住行为：
  * - [addTransactionState]（s05-error / s05-retry）：读库失败但两表都空 → 错态卡（可重试）；

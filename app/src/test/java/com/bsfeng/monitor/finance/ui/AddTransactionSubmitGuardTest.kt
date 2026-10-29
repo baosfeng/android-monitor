@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * P0 回归（batch2 走查 P0-1「s14a-save 连续点写两笔」）。
+ * P0 回归（「s14a-save 连续点写两笔」）。
  *
  * 场景：保存成功到路由返回之间有 260ms（MainTabContent.FINANCE_BACK_DELAY_MS），表单仍在组合、
  * 「保存」仍可点。两层闸门都必须拒绝第二次：

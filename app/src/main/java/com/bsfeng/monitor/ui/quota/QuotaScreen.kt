@@ -619,7 +619,7 @@ internal enum class QuotaBodyMode { NO_PROVIDER, LOADING, EDIT_KEY, CONFIG, ERRO
  *
  * 「修改 Key」优先于错误态：进编辑后只留配置卡一个入口（错误原因就地提示、重试在提示行），
  * 不允许错误块与配置卡并列——那等于同一件事给两个入口，还会让人以为配置卡是新的一次配置
- * （第 4 批走查 P1-5）。
+ * 只留配置卡一个入口，错误原因就地提示、重试在提示行。
  */
 internal fun quotaBodyMode(
     hasProvider: Boolean,
@@ -642,7 +642,7 @@ internal fun quotaBodyMode(
  * 无数据失败态：错误块 + 「修改 Key」。
  *
  * 契约只给了「查询失败 + 重试」；没有「修改 Key」时，保存时输入的 Key 随配置卡一起卸载，
- * 用户只能对着错误块发呆（第 4 批走查 P1-5）。两个动作互斥可选：进配置卡就不再并排出错误块。
+ * 用户只能对着错误块发呆。两个动作互斥可选：进配置卡就不再并排出错误块。
  */
 @Composable
 private fun QuotaErrorBlock(

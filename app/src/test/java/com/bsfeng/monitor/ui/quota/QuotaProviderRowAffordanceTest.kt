@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui.quota
 
 // P1-2 回归：额度设置页「未接入 provider 的假输入框」。
 //
-// 走查报告说 opencode-go / opendesign 是假能力、要按契约 s19:18/19 改成不可展开。
+// 曾误判 opencode-go / opendesign 是假能力、按契约 s19:18/19 应改成不可展开。
 // 核对结果是**误报**：两家在源码里都是真实 provider（ServiceContainer 注册 + 各自
 // fetchItems 实现 + OpencodeGoQuotaProviderTest / OpenDesignQuotaProviderTest），
 // 且 docs/交互设计/_口径/契约矛盾清单.md:44 已裁决「以源码为准，行可展开」。

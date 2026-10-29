@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * 「滚到这一条」一次性聚焦请求的消费时机（纯 JVM，无 Robolectric）。
  *
- * 回归的是返工引入的时序 bug（复走查 P1-02）：`onFocusConsumed()` 曾写在两步滚动之前 ——
+ * 回归的是返工引入的时序 bug：`onFocusConsumed()` 曾写在两步滚动之前 ——
  * 消费 → `pendingLiveFocusId` 置空 → `focusRecordId` 变 null → `LaunchedEffect` 的 key 变化 →
  * 正在跑的 `animateScrollToItem` 被取消，列表最多动一两帧、目标行进不了可视区。
  * 判据：**滚动没跑完就不得消费信号**。

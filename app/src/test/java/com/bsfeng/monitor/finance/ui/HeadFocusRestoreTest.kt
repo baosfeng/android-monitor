@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * N1 回归（batch2 复走查 N1「s04-head 长按两次标题直接崩」）。
+ * N1 回归（「s04-head 长按两次标题直接崩」）。
  *
  * 现场：页头的 focusRequester 只在演示件可见时才挂到节点上（FinanceMainScreen 的 head item），
  * 但「五态条收起 → 请求页头焦点」原来是无条件执行的。正式包 / 未解锁 debug 包上，用户在

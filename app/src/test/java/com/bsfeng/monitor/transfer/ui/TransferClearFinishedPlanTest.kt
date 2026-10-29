@@ -2,7 +2,7 @@ package com.bsfeng.monitor.transfer.ui
 
 // C-16「清空已结束」执行计划的自测（纯 JVM，不依赖 Compose 运行时）。
 //
-// 本批走查的 P1：先删一条（5s 撤销条还在）→ 5s 内清空已结束 → 旧撤销条仍在，
+// P1：先删一条（5s 撤销条还在）→ 5s 内清空已结束 → 旧撤销条仍在，
 // 点「撤销」会把已清空的行插回来，「分组变空态」不成立。修复口径 = 清空前先把窗口内快照
 // commit 掉（与连续删除分支一致）。这里锁住两件事：
 //  1. 清空前必须落定待撤销快照（commitUndoId）；
@@ -102,7 +102,7 @@ class TransferClearFinishedPlanTest {
 
     @Test
     fun `已删除的行不在清空目标里但仍要落定撤销快照`() {
-        // 复现走查场景：先删掉 completed 那条（列表里已没有它），撤销条还开着，
+        // 复现场景：先删掉 completed 那条（列表里已没有它），撤销条还开着，
         // 这时清空已结束 —— 目标只剩列表里的终态行，而快照必须先 commit，
         // 否则点「撤销」会把它插回刚清空的列表。
         val removed = task(fileId = "removed", status = TransferStatus.COMPLETED)

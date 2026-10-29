@@ -5,8 +5,8 @@ package com.bsfeng.monitor.finance.ui
 // s04 契约（docs/交互设计/s04-记账-交互契约.md）要求**逐控件锚点 + 逐控件按下反馈**，
 // 共享壳件 FinanceScreenChrome / FinanceMainCards 没有可注入的 interactionSource，
 // 因此本文件按共享基元（PressFeedback / Haptics / FocusRing）就地组合出本页专属部件；
-// 与共享件的关系、以及 0.94/0.965 与基建 0.96 的数值差见
-// .open-design/impl-notes/ix-gap/S04-记账主页.md。
+// 与共享件的关系：按共享基元复用，按下尺度与基建唯一取值 0.96 的差 ≤0.03。
+
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.LocalIndication

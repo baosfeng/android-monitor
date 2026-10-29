@@ -351,7 +351,7 @@ internal enum class QuotaUsageSlot { DATA, LOADING, FAILED, MISSING_CREDENTIAL, 
  * 用量区的落点判定。
  *
  * 只看「supportsUsage && usage == null」就引导「再填一条用量凭据」是假的：凭据早就配好、
- * 只是这次请求失败时，那句引导会把人送去重填一个本来没问题的令牌（第 4 批走查 P1-3）。
+ * 只是这次请求失败时，那句引导会把人送去重填一个本来没问题的令牌。
  * 已配置凭据但没数据时，先按「查询中 / 查询失败」处理，绝不再引导重填。
  */
 internal fun quotaUsageSlot(

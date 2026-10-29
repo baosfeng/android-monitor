@@ -6,9 +6,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * s18 用量范围切换失败后的落点（第 4 批走查 P1-4）。
+ * s18 用量范围切换失败后的落点。
  *
- * 走查发现：先改 range 再拉用量，失败只写错误文案不回滚 —— 结果「近 30 天」的分段配着
+ * 实测发现：先改 range 再拉用量，失败只写错误文案不回滚 —— 结果「近 30 天」的分段配着
  * 24 小时的数字。修法是把选中态绑到数据上：拉取失败就退回旧范围。
  */
 class QuotaRangeRollbackTest {
