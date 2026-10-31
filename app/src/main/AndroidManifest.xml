@@ -17,6 +17,8 @@
     <!-- 局域网互传：端口常驻前台服务（dataSync 类型，targetSdk 34 要求显式声明） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 定位前台服务（targetSdk 34+ 必须显式声明类型权限，否则 startForeground 抛异常） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!--
         定位采集（Feature.LOCATION，默认关闭）：设置页开启后按运动状态自适应采样 ——
@@ -35,6 +37,23 @@
         现有各屏 BackHandler 的触发条件与顺序不变；整屏覆盖层的转场与返回键统一收口在
         ui/foundation/Transitions.kt 的 AnimatedScreenOverlay。
     -->
+    <!--
+        地图入口（ui/maps）：Android 11+ 的包可见性。
+        「在地图中查看」用 geo: / 各家 scheme 唤起**已安装**的地图 App，不引入任何 SDK。
+        不声明这些包名时 queryIntentActivities / resolveActivity 一律看不到地图 App，
+        功能会静默退化成「只有浏览器」——所以这里必须列出来。
+
+        只列包名、不声明 <intent><data scheme="geo"> 通配：按包名精确可见，不会让本 App
+        顺带看到任意能响应 https 的应用（那会白扩包可见性面）。
+        浏览器兜底不绑包名，靠 https 的隐式 Intent 走系统选择器，因此不需要在这里声明。
+    -->
+    <queries>
+        <package android:name="com.autonavi.minimap" />
+        <package android:name="com.tencent.map" />
+        <package android:name="com.baidu.BaiduMap" />
+        <package android:name="com.google.android.apps.maps" />
+    </queries>
+
     <application
         android:name=".MonitorApp"
         android:allowBackup="false"
@@ -84,6 +103,16 @@
             android:name=".transfer.service.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+            定位采集前台服务（location 类型）：持续定位在 Android 上只能由前台服务承载。
+            真机实测后台进程被 Standby/Doze 降频，一天漏拍 43 次 >6 分钟；
+            没有它就无法把「移动 10 秒 / 静止 3 分钟」真正跑满。
+        -->
+        <service
+            android:name=".service.LocationForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- 局域网互传：下拉通知栏快捷开关（磁贴） -->
         <service

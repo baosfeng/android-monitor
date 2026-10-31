@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsTransferCard.kt 拆出：接收目录一行（占用 / 文件数 / 清理入口）与两个确认弹窗 ——
+// 接收目录一行（占用 / 文件数 / 清理入口）与两个确认弹窗 ——
 // 「本机名称」改名的输入框、清理接收目录的二次确认。负责「接收到的文件看得到、清得掉」。
 
 import androidx.compose.foundation.background

@@ -58,6 +58,18 @@ object TileMath {
     /** 正常情况下 360x180dp 的画布只需 3~8 张瓦片；超过这个数是参数算错了。 */
     const val MAX_TILES = 120
 
+    /** 轨迹跨度小于这个值（米）就当作「几乎没动」，按 [SINGLE_POINT_ZOOM] 固定级展示。 */
+    const val SINGLE_POINT_SPAN_METERS = 120.0
+
+    /** 几乎没动时的默认级别：街区级。给到 19 会贴脸到看不出周边路网。 */
+    const val SINGLE_POINT_ZOOM = 16
+
+    /** 分位数包围盒需要的最少点数；再少就退回 min/max（分位数在这时没有区分度）。 */
+    const val QUANTILE_MIN_SAMPLES = 8
+
+    /** IQR 剔除的围栏倍数（Tukey 的 1.5 倍；再小会误伤真实的长尾路径）。 */
+    const val IQR_FENCE_MULTIPLIER = 1.5
+
     private const val EPS = 1e-6
 
     /** 经度 → 世界像素 x。 */
@@ -122,12 +134,76 @@ object TileMath {
         val innerH = heightDp - 2.0 * pad
         if (innerW <= 0.0 || innerH <= 0.0) return null
 
-        val minLat = samples.minOf { it.lat }
-        val maxLat = samples.maxOf { it.lat }
-        val minLng = samples.minOf { it.lng }
-        val maxLng = samples.maxOf { it.lng }
+        // 包围盒先收缩一次：一天里偶尔一个 500m 漂移点会把整条轨迹缩成一个小团，
+        // 街景细节全丢。用 2%~98% 分位数，少数离群点不参与决定缩放。
+        val latRange = quantileRange(samples) { it.lat }
+        val lngRange = quantileRange(samples) { it.lng }
+        val minLat = latRange.first
+        val maxLat = latRange.second
+        val minLng = lngRange.first
+        val maxLng = lngRange.second
+        // 轨迹几乎不动（单点 / 几十米内）时，按包围盒选级会顶到 maxZoom 变成糊成一片的街景，
+        // 这时给一个「街区级」的固定级，既看得清周边路网，又不至于贴脸。
+        val spanMeters = maxOf(
+            TripTrace.meters(minLat, minLng, minLat, maxLng),
+            TripTrace.meters(minLat, minLng, maxLat, minLng),
+        )
+        if (spanMeters < SINGLE_POINT_SPAN_METERS) {
+            return fixedView(minLat, minLng, maxLat, maxLng, widthDp, heightDp, min(SINGLE_POINT_ZOOM, maxZoom))
+        }
         val zoom = pickZoom(minLat, maxLat, minLng, maxLng, innerW, innerH, MIN_ZOOM, maxZoom)
         val tileZoom = (zoom + RETINA_BOOST).coerceAtMost(maxZoom)
+        val scale = 2.0.pow((tileZoom - zoom).toDouble())
+        val centerX = (worldX(minLng, tileZoom) + worldX(maxLng, tileZoom)) / 2.0
+        val centerY = (worldY(minLat, tileZoom) + worldY(maxLat, tileZoom)) / 2.0
+        return TileView(
+            tileZoom = tileZoom,
+            tileSizeDp = TILE_PX / scale,
+            worldX0 = centerX - widthDp / 2.0 * scale,
+            worldY0 = centerY - heightDp / 2.0 * scale,
+            pixelScale = scale,
+        )
+    }
+
+    /**
+     * 从一堆采样里取某个维度的「抗离群包围盒」。
+     *
+     * 做法是 Tukey 的 IQR 剔除，而不是直接取 2%/98% 分位：分位数按「第几个点」切，
+     * 21 个点时 2% 分位仍然落在第 0 个，一个漂移点照样把包围盒撑大（实测级别掉 4 级）。
+     * IQR 按「数据自身的离散度」判断谁是离群，与样本量无关：
+     * 落在 [Q1 - 1.5·IQR, Q3 + 1.5·IQR] 之外的点不参与决定缩放。
+     *
+     * 正常轨迹的首尾点**不会**被裁掉 —— 它们通常就在 Q1..Q3 附近，只有真正跳出去的点才会被排除；
+     * 而且被排除的点只是不参与缩放，仍然照常绘制（画布外由绘制层夹住）。
+     *
+     * 点太少（< [QUANTILE_MIN_SAMPLES]）时四分位没有区分度，直接退回 min/max。
+     */
+    internal fun quantileRange(samples: List<TraceSample>, pick: (TraceSample) -> Double): Pair<Double, Double> {
+        if (samples.size < QUANTILE_MIN_SAMPLES) return samples.minOf(pick) to samples.maxOf(pick)
+        val sorted = samples.map(pick).sorted()
+        val q1 = sorted[floor((sorted.size - 1) * 0.25).toInt()]
+        val q3 = sorted[floor((sorted.size - 1) * 0.75).toInt()]
+        val iqr = q3 - q1
+        // IQR 为 0（大量点重合在一条纬线上）时没有离群判据，退回 min/max
+        if (iqr <= 0.0) return sorted.first() to sorted.last()
+        val lowFence = q1 - IQR_FENCE_MULTIPLIER * iqr
+        val highFence = q3 + IQR_FENCE_MULTIPLIER * iqr
+        val inliers = sorted.filter { it in lowFence..highFence }
+        if (inliers.isEmpty()) return sorted.first() to sorted.last()
+        return inliers.first() to inliers.last()
+    }
+
+    /** 固定级别下的视图：不按包围盒选级，直接把指定点居中（只用于「几乎没动」的轨迹）。 */
+    private fun fixedView(
+        minLat: Double,
+        minLng: Double,
+        maxLat: Double,
+        maxLng: Double,
+        widthDp: Double,
+        heightDp: Double,
+        zoom: Int,
+    ): TileView {
+        val tileZoom = (zoom + RETINA_BOOST).coerceAtMost(MAX_ZOOM)
         val scale = 2.0.pow((tileZoom - zoom).toDouble())
         val centerX = (worldX(minLng, tileZoom) + worldX(maxLng, tileZoom)) / 2.0
         val centerY = (worldY(minLat, tileZoom) + worldY(maxLat, tileZoom)) / 2.0

@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsFeatureSection.kt 拆出：设置「功能 · 额度监控」卡 —— 额度开关、provider 与凭据入口、预警通知、后台刷新。负责「额度页开不开、怎么配」。
+// 功能细则页「额度监控」的卡 —— 额度开关、provider 与凭据入口、预警通知、后台刷新。负责「额度页开不开、怎么配」。
 
 import android.provider.Settings
 import androidx.compose.foundation.LocalIndication

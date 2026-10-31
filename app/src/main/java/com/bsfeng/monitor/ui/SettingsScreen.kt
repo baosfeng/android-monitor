@@ -1,11 +1,14 @@
 package com.bsfeng.monitor.ui
 
-// 设置（原型 s09-settings.html）：一级页 = 常用快捷项 + 四组入口（功能 / 通用 / 数据与备份 /
-// 关于与调试），点进全屏二级页；二级页正文与五态容器见 ui/SettingsSections.kt。
+// 设置（原型 s09-settings.html）：一级页 = 快捷区（无障碍服务 / 前台应用监控）+ 六组入口，
+// 点进全屏二级页；二级页正文见 ui/SettingsSubPages.kt，页面清单见 ui/SettingsSubPage.kt。
 // 取数与状态在 ui/SettingsScreenRuntime.kt；本屏只做一级页渲染与覆盖层接线。
 //
 // 一级页始终留在组合树里、二级页以覆盖层叠加：返回时一级页的滚动位置天然保留。
 // 二级页状态由 MainContent 持有（rememberSaveable + 枚举名），旋转 / 进程重建可恢复。
+//
+// 信息架构口径（为什么这么分）：一级页只回答「去哪儿」，六组按「运行前提 / 功能 / 数据 /
+// 观感 / 关于 / 诊断」切；二级页内不再写与页头重复的小标题，分组靠卡间隙（契约 s09 页层级）。
 
 import android.content.Intent
 import android.provider.Settings
@@ -25,11 +28,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Accessibility
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,14 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.bsfeng.monitor.ui.foundation.HapticTone
-import com.bsfeng.monitor.ui.foundation.pressFeedback
-import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.BuildConfig
-import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
@@ -57,12 +50,15 @@ import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
+import com.bsfeng.monitor.ui.theme.ThemeRepository
 import com.bsfeng.monitor.update.ApkDownloader
 import com.bsfeng.monitor.update.InstallResult
 import com.bsfeng.monitor.update.UpdateChecker
 import com.bsfeng.monitor.update.UpdateInstaller
-import com.bsfeng.monitor.update.UpdateManifest
 import com.bsfeng.monitor.update.UpdateUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,8 +68,8 @@ import java.io.File
 /**
  * 设置一级页 + 二级页覆盖层。
  *
- * 一级页固定两块：常用快捷项（无障碍服务状态 / 开屏广告跳过开关）与四个入口分组。
- * 暂停状态徽标留在页头；无障碍摘要留在快捷项副标题（同一数据源，见 ui/AccessibilityCopy.kt）。
+ * 一级页两块：快捷区（点一次就要用的两件事：无障碍服务、前台应用监控）
+ * 与六组入口。两者的取舍见 [SettingsQuickAccess] / [SettingsGroupIndex] 的 KDoc。
  *
  * @param subPage 当前打开的二级页；null = 一级页。状态由 MainContent 持有，便于返回键与 Tab 切换重置
  * @param onOpenSubPage 打开二级页
@@ -159,10 +155,12 @@ fun SettingsScreen(
                     .verticalScroll(bodyScroll),
                 verticalArrangement = Arrangement.spacedBy(t.space4),
             ) {
+                // 演示件闸门统一走 rememberDemoVisible()（debug 构建 + 已解锁 + 调试模式已开），
+                // 与「组件与状态演示」「模拟自动记账浮窗」同一判据。
                 StateSwitchRow(state = demoState, onSelect = { rt.demoStateState.value = it })
 
-                // 五态容器 + 快捷项 + 四组入口（见 ui/SettingsSections.kt）；anchored 只在一级页
-                // 落五态锚点，覆盖层里的二级页不打同键（防同名节点）
+                // 五态容器 + 快捷区 + 六组入口（见下）；anchored 只在一级页落五态锚点，
+                // 覆盖层里的二级页不打同键（防同名节点）
                 SettingsStateContainer(rt, anchored = true) {
                     Column(
                         Modifier.fillMaxWidth(),
@@ -177,9 +175,22 @@ fun SettingsScreen(
             }
         }
 
+        // 返回：下钻页（功能开关 → 细则）先回父页，一级页入口才关覆盖层。
+        // 判据是页面关系（settingsParentOf），不是「上次打开过谁」——后者会跨分支串路径。
+        val backFromPage: () -> Unit = {
+            val parent = openPage?.let { settingsParentOf(it) }
+            if (parent != null) onOpenSubPage(parent) else onCloseSubPage()
+        }
         // 二级页覆盖层：一级页不卸载，返回时滚动位置保留
-        AnimatedScreenOverlay(visible = subPage != null, onBack = onCloseSubPage) {
-            openPage?.let { SettingsSubPageScreen(page = it, rt = rt, onBack = onCloseSubPage) }
+        AnimatedScreenOverlay(visible = subPage != null, onBack = backFromPage) {
+            openPage?.let {
+                SettingsSubPageScreen(
+                    page = it,
+                    rt = rt,
+                    onBack = backFromPage,
+                    onOpenSubPage = onOpenSubPage,
+                )
+            }
         }
 
         UpdateDialog(
@@ -242,9 +253,11 @@ fun SettingsScreen(
 private class LastOpenedPage(var value: SettingsSubPage? = null)
 
 /**
- * 一级页常用快捷项：无障碍服务状态（点进系统设置）与开屏广告跳过开关。
+ * 一级页快捷区：无障碍服务（点进系统设置）与前台应用监控开关。
  *
- * 这两项是设置页最高频的两个动作，留在二级页外可省一次跳转；其余配置项全部收进四组入口。
+ * 为什么只有这两项：它们是每次进设置页都要确认 / 拨一次的东西 —— 无障碍是全部采集的前提、
+ * 前台监控是最常用的总开关。其余配置一律收进六组入口，一级页不再平铺开关
+ * （广告跳过开关只留在「功能开关」页，不在这里重复第二处）。
  */
 @Composable
 private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
@@ -279,29 +292,39 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
         )
         TokenDivider(first = false)
         TokenRow(
-            title = "开屏广告跳过",
-            subtitle = if (rt.adSkipOn) "已开启 · 识别到开屏广告自动跳过" else "已关闭 · 不生成「广告」Tab",
-            icon = Icons.Outlined.PlayArrow,
+            title = "前台应用监控",
+            subtitle = "今日已记录 " + state.todayEventCount + " 条事件",
+            icon = settingsPageIcon(SettingsSubPage.GENERAL),
             trailing = {
+                // 锚点落在开关本身：契约 s09-monitor 的触发是「拨开关」而不是点整行
                 AppSwitch(
-                    checked = rt.adSkipOn,
-                    onCheckedChange = { rt.setFeature(Feature.AD_SKIP, it) },
+                    checked = !rt.isPaused,
+                    onCheckedChange = {
+                        rt.viewModel.togglePause()
+                        rt.toast.show(if (rt.isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
+                    },
+                    modifier = Modifier.testTag("s09-monitor"),
                 )
             },
         )
     }
 }
 
-/** 一级页四个入口：一行标题 + 一行摘要 + 右侧数量/状态，点进全屏二级页。 */
+/**
+ * 一级页六组入口：一行标题 + 一行摘要 + 右侧数量/状态，点进全屏二级页。
+ *
+ * 「调试与诊断」由 debugUi 闸决定是否出现（release 构建恒不出现）。
+ */
 @Composable
 private fun SettingsGroupIndex(rt: SettingsScreenRuntime, onOpen: (SettingsSubPage) -> Unit) {
     val t = rt.t
+    val entries = settingsIndexEntries(rt.debugUi)
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
-        SettingsSubPage.entries.forEachIndexed { index, page ->
+        entries.forEachIndexed { index, page ->
             TokenRow(
                 title = page.title,
                 subtitle = settingsGroupSummary(page, rt),
-                icon = settingsGroupIcon(page),
+                icon = settingsPageIcon(page),
                 onClick = { onOpen(page) },
                 trailing = {
                     SettingsGroupTrailing(page, rt)
@@ -313,21 +336,18 @@ private fun SettingsGroupIndex(rt: SettingsScreenRuntime, onOpen: (SettingsSubPa
     }
 }
 
-private fun settingsGroupIcon(page: SettingsSubPage): ImageVector = when (page) {
-    SettingsSubPage.FEATURE -> Icons.Outlined.Tune
-    SettingsSubPage.GENERAL -> Icons.Outlined.Settings
-    SettingsSubPage.DATA -> Icons.Outlined.Save
-    SettingsSubPage.ABOUT -> Icons.Outlined.Info
-}
-
 /** 摘要单行（TokenRow 的 subtitle 是 maxLines = 1），数量/状态放右侧尾部。 */
-private fun settingsGroupSummary(page: SettingsSubPage, rt: SettingsScreenRuntime): String = when (page) {
-    SettingsSubPage.FEATURE -> "实时 / 广告跳过 / 记账 / 传送 / 额度 / 页面轨迹 / 位置"
-    SettingsSubPage.GENERAL -> "无障碍 · 监控开关 · 电池优化 · 通知 · 外观与动效"
-    SettingsSubPage.DATA -> rt.lastBackup.value?.let { "最近备份 " + formatBackupTime(it.at) }
-        ?: "还没有备份 · 可立即备份或设自动频率"
-    SettingsSubPage.ABOUT -> "检查更新 · 开源许可 · 调试与组件库"
-}
+private fun settingsGroupSummary(page: SettingsSubPage, rt: SettingsScreenRuntime): String =
+    when (page) {
+        SettingsSubPage.GENERAL -> "前台监控 · 使用时长 · 事件上报 · 监控窗口 · 电池优化"
+        SettingsSubPage.FEATURE -> "实时 / 广告跳过 / 记账 / 传送 / 额度 / 位置"
+        SettingsSubPage.DATA -> rt.lastBackup.value?.let { "最近备份 " + formatBackupTime(it.at) }
+            ?: "还没有备份 · 可立即备份或设自动频率"
+        SettingsSubPage.APPEARANCE -> "主题 · 动效 · 触觉"
+        SettingsSubPage.ABOUT -> "检查更新 · 开源许可"
+        SettingsSubPage.DEBUG -> "调试模式 · 组件与状态演示 · 模拟自动记账浮窗"
+        else -> page.meta
+    }
 
 @Composable
 private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRuntime) {
@@ -344,6 +364,9 @@ private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRunti
             tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
         )
         SettingsSubPage.DATA -> TailNum("${rt.backupCount.value} 份")
+        // 状态值直接放行尾（契约 s09：二级页状态值不藏进副标题，一级页摘要同理）
+        SettingsSubPage.APPEARANCE -> TailNum(ThemeRepository.displayName(rt.themeId))
         SettingsSubPage.ABOUT -> TailNum(BuildConfig.VERSION_NAME)
+        else -> Unit
     }
 }

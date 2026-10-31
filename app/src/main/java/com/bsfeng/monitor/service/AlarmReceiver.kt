@@ -13,6 +13,7 @@ import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
@@ -81,8 +82,8 @@ class AlarmReceiver : BroadcastReceiver() {
      * 因此这里用一个独立的 `PendingResult` + `finishOnce` 守卫：
      * 成功 / 超时 / 未授权 / 节流 / 异常五条路径都会 `finish()`，不会让系统报广播超时。
      *
-     * 三重闸：功能开关关闭 / 未授权 / 过滤后无可用点 → 静默返回；任何异常都不上抛，
-     * 定位失败不能影响上报与保活。
+     * 四重闸：功能开关关闭 / 门禁 SLEEPING / 未授权 / 过滤后无可用点 → 静默返回；
+     * 任何异常都不上抛，定位失败不能影响上报与保活。
      */
     private fun sampleLocationIfEnabled(context: Context) {
         val enabled = try {
@@ -93,6 +94,16 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         // 开关关闭时不申请 PendingResult，避免无谓地延长广播生命周期
         if (!enabled) return
+
+        // 门禁 SLEEPING 时跳过定位采样：心跳若不看门禁，静止 8 小时会变成每分钟一次
+        // 高精度单点（模拟器实测 network/gps provider +registration），和用户抱怨的
+        // 「拿起手机定位一直开着」是同一类耗电 —— 门禁不能留这条后门。
+        // 其余心跳职责（上报 / 保活 / 唤醒 / 小组件）不受影响，照旧执行；
+        // 门禁为 null（前台服务没跑）时放行，保持原行为，不制造新的漏采。
+        if (!LocationGateState.allowsHeartbeatSample()) {
+            Log.d(TAG, "门禁 SLEEPING：心跳跳过定位采样")
+            return
+        }
 
         val pendingResult = goAsync()
         val finished = AtomicBoolean(false)

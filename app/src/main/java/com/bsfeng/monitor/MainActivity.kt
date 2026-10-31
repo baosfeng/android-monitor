@@ -147,6 +147,10 @@ class MainActivity : ComponentActivity() {
         // 不重置就永远用首次读到的值）
         MotionConfig.get(this).refreshSystemPolicy()
         jankMonitor.start()
+        // 定位前台服务只能在「App 可见」时启动（Android 12+ 后台启动 FGS 受限）。
+        // 每次回前台都拉一次：HyperOS 会把常驻服务一并回收，靠 START_STICKY 不一定回来。
+        // 服务内部自带「定位功能未开启」的判断，这里不必重复判断。
+        com.bsfeng.monitor.service.LocationForegroundService.start(this)
     }
 
     override fun onPause() {

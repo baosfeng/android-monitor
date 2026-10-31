@@ -162,6 +162,14 @@ internal fun rememberSettingsScreenRuntime(
         if (!featureFlags.setEnabled(feature, enabled)) return
         view.performConfirmHaptic()
         toast.show(if (enabled) "已开启「" + feature.title + "」" else "已关闭「" + feature.title + "」")
+        // 定位开关直接决定前台服务的生死：关掉还挂着常驻通知会让用户以为采集没停
+        if (feature == Feature.LOCATION) {
+            if (enabled) {
+                com.bsfeng.monitor.service.LocationForegroundService.start(context)
+            } else {
+                com.bsfeng.monitor.service.LocationForegroundService.stop(context)
+            }
+        }
     }
 
     /**

@@ -23,8 +23,8 @@ enum class Feature(
     FINANCE("记账", "手动记账、统计与自动记账", "finance"),
     TRANSPORT("传送", "局域网互发文件与后台接收", "transport"),
 
-    /** 定位采集（3 位小数的粗略坐标）。需要定位权限，默认关闭。 */
-    LOCATION("位置采集", "每 10 分钟记录一次粗略位置", "location"),
+    /** 定位采集（移动约 10 秒 / 静止约 3 分钟一个点）。需要定位权限，默认关闭。 */
+    LOCATION("位置采集", "按移动/静止节奏记录位置与轨迹", "location"),
 
     /** 多 provider 额度监控（余额 / 用量 / 阈值预警）。 */
     QUOTA("额度监控", "聚合 Ollama、DeepSeek 等服务的余额与用量", "quota"),

@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -54,13 +57,21 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.trip.DayTimeline
+import com.bsfeng.monitor.record.CoverageGap
+import com.bsfeng.monitor.record.CoverageKind
+import com.bsfeng.monitor.record.CoverageWindow
+import com.bsfeng.monitor.record.coverageGapHeadline
+import com.bsfeng.monitor.record.coverageGapNote
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.live.MetaText
+import com.bsfeng.monitor.ui.live.formatClock
+import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
+import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -77,6 +88,8 @@ private val TRACE_STROKE = 1.5.dp
  * @param samples 当天定位采样（已去重、升序，见 [TripTrace.samples]）
  * @param basemapEnabled 是否叠加底图（免费瓦片源，见 [TileSources]）
  * @param onToggleBasemap 切换底图；只在有采样时出现
+ * @param coverage 当天窗口的采集覆盖（null = 不渲染覆盖条，例如数据还没到）
+ * @param gaps 当天断档（升序、已截断），用于「今天断了 N 次」的副标题
  */
 @Composable
 internal fun TripMapCard(
@@ -88,6 +101,8 @@ internal fun TripMapCard(
     onExport: (() -> Unit)? = null,
     basemapEnabled: Boolean = false,
     onToggleBasemap: () -> Unit = {},
+    coverage: CoverageWindow? = null,
+    gaps: List<CoverageGap> = emptyList(),
 ) {
     val t = LocalDesignTokens.current
     val measurer = rememberTextMeasurer()
@@ -263,6 +278,10 @@ internal fun TripMapCard(
             Spacer(Modifier.height(t.space2))
             TraceLegend(basemapOn = basemapEnabled)
         }
+        // 当日采集覆盖条（契约 trip-cov）：没有样本时不画 —— 空条会被读成「一整天都没采到」
+        if (coverage != null && samples.isNotEmpty() && !coverage.isEmpty) {
+            TripCoverageFooter(window = coverage, gaps = gaps, isToday = isToday)
+        }
         Spacer(Modifier.height(t.space1))
         MetaText(traceNote(timeline, samples))
     }
@@ -402,4 +421,108 @@ private fun traceNote(timeline: DayTimeline, samples: List<TraceSample>): String
     } else {
         "停留圆按停留时长放大，名字超出画布或重叠时省略。"
     }
+}
+// ===== 当日覆盖条（契约锚点 trip-cov）=====
+//
+// 轨迹卡底部的 14dp 细覆盖条 + 「今天断了 N 次」行：与设置页「采集覆盖」卡同一套分段算法
+// （CoverageTimeline）与同一组配色占比，只把粗条压细、图例省掉 —— 行程页主角是轨迹，
+// 覆盖条只做背景说明。只在当天有定位样本时渲染（无样本由本卡既有空态承担，不画空条）。
+
+/** 细覆盖条高度：原型行程页 .cov-bar 的 14px。 */
+private val TRIP_BAR_HEIGHT = 14.dp
+
+/** 汇总行副标题最多列几条断档：再多一行放不下，超出折成「等 N 处」。 */
+private const val TRIP_GAP_PREVIEW = 3
+
+/**
+ * 轨迹卡底部覆盖条 + 断档汇总行（契约 trip-cov）。
+ *
+ * @param window 当天窗口的覆盖分段
+ * @param gaps 当天断档（已按时间升序、已截断）
+ * @param isToday 今天写「今天断了 N 次」，历史日期写「这一天断了 N 次」
+ */
+@Composable
+internal fun TripCoverageFooter(
+    window: CoverageWindow,
+    gaps: List<CoverageGap>,
+    isToday: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(top = t.space3)
+            .testTag("trip-cov"),
+    ) {
+        CoverageThinBar(window)
+        Row(
+            Modifier.fillMaxWidth().padding(top = t.space1),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            // 刻度标真实时刻而不是写死 0:00 / 12:00 / 24:00：今天这一天的窗口截到「此刻」，
+            // 右端写 24:00 而条其实只画到 14:20，刻度就指向了不存在的覆盖
+            listOf(window.startMs, window.startMs + window.totalMs / 2, window.endMs).forEach { at ->
+                Text(formatClock(at), style = monitorMonoMeta, color = t.muted)
+            }
+        }
+        // 汇总行：主句说清「断了几次」，副标题列出具体是哪几段（超出 3 条折成等 N 处）
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = t.space2),
+        ) {
+            Text(
+                // 主句按真实断档次数（window.breakCount），不按 gaps 列表长度：
+                // 列表最多只有 5 条，用它数次数会漏报
+                text = coverageGapHeadline(window.breakCount, isToday),
+                style = MaterialTheme.typography.bodySmall,
+                color = t.fg,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val note = coverageGapNote(gaps, window.breakCount, ::formatClock)
+            if (note.isNotEmpty()) MetaText(note)
+        }
+    }
+}
+
+/** 细覆盖条：14dp、圆角 4dp、段间 1px 缝（与设置页粗条同一套颜色占比）。 */
+@Composable
+private fun CoverageThinBar(window: CoverageWindow) {
+    val t = LocalDesignTokens.current
+    val segments = window.segments
+    val total = window.totalMs.coerceAtLeast(1L)
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(TRIP_BAR_HEIGHT)
+            .clip(RoundedCornerShape(4.dp))
+            .background(t.fgFade(6)),
+    ) {
+        if (segments.isEmpty()) return@Canvas
+        val gapPx = 1.dp.toPx()
+        var cursor = 0f
+        segments.forEachIndexed { index, segment ->
+            val width = size.width * (segment.durationMs.toFloat() / total)
+            val left = cursor
+            val right = if (index == segments.lastIndex) size.width else left + width - gapPx
+            if (right > left) {
+                drawRect(
+                    color = tripSegmentColor(t, segment.kind),
+                    topLeft = Offset(left, 0f),
+                    size = Size(right - left, size.height),
+                )
+            }
+            cursor = left + width
+        }
+    }
+}
+
+/** 段色：与设置页「采集覆盖」逐字同源，两处不得各写一套。 */
+private fun tripSegmentColor(t: DesignTokens, kind: CoverageKind): Color = when (kind) {
+    CoverageKind.COVERED -> t.success.copy(alpha = 0.62f)
+    CoverageKind.GAP -> t.warn.copy(alpha = 0.58f)
+    CoverageKind.DEEP -> t.danger.copy(alpha = 0.55f)
+    CoverageKind.OFF -> t.fg.copy(alpha = 0.14f)
 }
