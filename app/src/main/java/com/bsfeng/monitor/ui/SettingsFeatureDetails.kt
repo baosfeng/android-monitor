@@ -33,7 +33,11 @@ internal fun SettingsLiveDetail(rt: SettingsScreenRuntime) {
             },
             icon = settingsPageIcon(SettingsSubPage.LIVE_DETAIL),
             trailing = {
-                AppSwitch(rt.liveOn, { rt.setFeature(Feature.LIVE, it) })
+                AppSwitch(
+                    rt.liveOn,
+                    { rt.setFeature(Feature.LIVE, it) },
+                    contentDescription = "实时监控",
+                )
             },
         )
         TokenDivider(first = false)
@@ -103,7 +107,13 @@ internal fun SettingsTransportDetail(rt: SettingsScreenRuntime, onOpenSubPage: (
                 "已关闭：不启动传送服务、不占端口、不做设备发现"
             },
             icon = settingsPageIcon(SettingsSubPage.TRANSPORT_DETAIL),
-            trailing = { AppSwitch(rt.transportOn, { rt.setFeature(Feature.TRANSPORT, it) }) },
+            trailing = {
+                AppSwitch(
+                    rt.transportOn,
+                    { rt.setFeature(Feature.TRANSPORT, it) },
+                    contentDescription = "传送",
+                )
+            },
         )
         TokenDivider(first = false)
         TokenRow(

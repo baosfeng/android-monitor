@@ -170,7 +170,11 @@ internal fun RuleRow(
             }
             Spacer(Modifier.width(t.space2))
             // 开关自带 LIGHT 触感（Switches.kt:86），调用方不再补，避免一次操作震两下。
-            AppSwitch(rule.enabled, { onToggleEnabled() })
+            AppSwitch(
+                rule.enabled,
+                { onToggleEnabled() },
+                contentDescription = (rule.name.ifEmpty { rule.app }) + " 规则",
+            )
         }
         AnimatedVisibility(
             visible = expanded,

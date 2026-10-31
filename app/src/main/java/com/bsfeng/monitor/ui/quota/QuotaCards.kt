@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui.quota
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -119,56 +120,62 @@ private fun PercentQuotaCard(
     val percentItems = items.filter { it.kind == QuotaKind.PERCENT }
     val primary = percentItems.firstOrNull { it.primary } ?: percentItems.firstOrNull() ?: return
     val mismatch = QuotaFormat.planMismatchNote(plan, items, providerId)
-    AppCard(modifier = modifier.then(percentCardTagOf(providerId))) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(primary.title + "剩余", style = MaterialTheme.typography.bodySmall, color = t.muted)
-            primary.badge?.let { badge ->
-                Spacer(Modifier.width(t.space2))
-                Badge(badge, tone = BadgeTone.Neutral)
+    // 「?」的 48dp 触达层与卡片同层叠放（见 QuotaInfoTouch）：标题行只有 20dp 高，
+    // 把圆标撑到 48dp 会把整张卡顶高 28dp；叠层不动视觉，也不动卡片高度。
+    Box(Modifier.fillMaxWidth()) {
+        AppCard(modifier = modifier.then(percentCardTagOf(providerId))) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(primary.title + "剩余", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                primary.badge?.let { badge ->
+                    Spacer(Modifier.width(t.space2))
+                    Badge(badge, tone = BadgeTone.Neutral)
+                }
+                Spacer(Modifier.weight(1f))
+                QuotaInfoBadge()
             }
-            Spacer(Modifier.weight(1f))
-            QuotaInfoIcon(
-                title = "计费口径",
-                text = mismatch ?: "该计划按百分比限额计费，不提供金额明细；预警阈值按剩余百分比计算。",
+            Spacer(Modifier.height(t.space1))
+            Text(
+                QuotaFormat.percent(primary.remaining),
+                style = monitorMonoNumber,
+                color = t.fg,
             )
+            items.forEach { item ->
+                Spacer(Modifier.height(t.space3))
+                if (item.kind == QuotaKind.PERCENT) {
+                    QuotaMeter(
+                        title = item.title,
+                        valueText = "剩余 " + QuotaFormat.percent(item.remaining),
+                        fraction = item.remainingFraction,
+                        meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
+                        detail = item.detailText,
+                        modifier = meterTagOf(providerId, item, item == primary),
+                    )
+                } else {
+                    // 百分比计划里也可能带回金额项（如已购余额）：按金额显示，
+                    // 不能套百分比进度条 —— 否则 0.002 美元会被读成「剩余 0.2%」。
+                    InfoLine(item.title, QuotaFormat.amount(item.remaining, item.unit))
+                }
+            }
+            // 契约 s18-opendesign-cred：凭据是浏览器会话令牌而不是 API Key，说明常驻在月度额度卡里
+            if (providerId == "opendesign") {
+                Spacer(Modifier.height(t.space3))
+                Column(Modifier.fillMaxWidth().testTag("s18-opendesign-cred")) {
+                    Badge("浏览器会话令牌", tone = BadgeTone.Neutral)
+                    Spacer(Modifier.height(t.space1))
+                    Text(
+                        "open-design 只有控制台内部接口，需要填浏览器 Cookie 里的会话令牌（不是 API Key）。" +
+                            "令牌会过期，失效后需回控制台重新复制。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                    )
+                }
+            }
         }
-        Spacer(Modifier.height(t.space1))
-        Text(
-            QuotaFormat.percent(primary.remaining),
-            style = monitorMonoNumber,
-            color = t.fg,
+        QuotaInfoTouch(
+            title = "计费口径",
+            text = mismatch ?: "该计划按百分比限额计费，不提供金额明细；预警阈值按剩余百分比计算。",
+            modifier = Modifier.align(Alignment.TopEnd),
         )
-        items.forEach { item ->
-            Spacer(Modifier.height(t.space3))
-            if (item.kind == QuotaKind.PERCENT) {
-                QuotaMeter(
-                    title = item.title,
-                    valueText = "剩余 " + QuotaFormat.percent(item.remaining),
-                    fraction = item.remainingFraction,
-                    meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
-                    detail = item.detailText,
-                    modifier = meterTagOf(providerId, item, item == primary),
-                )
-            } else {
-                // 百分比计划里也可能带回金额项（如已购余额）：按金额显示，
-                // 不能套百分比进度条 —— 否则 0.002 美元会被读成「剩余 0.2%」。
-                InfoLine(item.title, QuotaFormat.amount(item.remaining, item.unit))
-            }
-        }
-        // 契约 s18-opendesign-cred：凭据是浏览器会话令牌而不是 API Key，说明常驻在月度额度卡里
-        if (providerId == "opendesign") {
-            Spacer(Modifier.height(t.space3))
-            Column(Modifier.fillMaxWidth().testTag("s18-opendesign-cred")) {
-                Badge("浏览器会话令牌", tone = BadgeTone.Neutral)
-                Spacer(Modifier.height(t.space1))
-                Text(
-                    "open-design 只有控制台内部接口，需要填浏览器 Cookie 里的会话令牌（不是 API Key）。" +
-                        "令牌会过期，失效后需回控制台重新复制。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                )
-            }
-        }
     }
 }
 
@@ -193,87 +200,93 @@ private fun MoneyQuotaCard(
     // hero 取主项余额本身，不做同币种求和：Ollama 的「已购余额」是叠加在「内含额度」之外的
     // 另一笔，求和会让 hero 与下面进度条的「剩余/总量」对不上（原型 hero 也是主项值）。
     val hero = primary.remaining
-    AppCard(modifier = modifier.then(moneyCardTagOf(providerId))) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    // 「?」的 48dp 触达层与卡片同层叠放（见 QuotaInfoTouch）：标题行只有 20dp 高，
+    // 把圆标撑到 48dp 会把整张卡顶高 28dp；叠层不动视觉，也不动卡片高度。
+    Box(Modifier.fillMaxWidth()) {
+        AppCard(modifier = modifier.then(moneyCardTagOf(providerId))) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (providerId == "deepseek") "账户余额 · ${primaryUnit.name}" else "可用额度",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.muted,
+                )
+                Spacer(Modifier.weight(1f))
+                QuotaInfoBadge()
+            }
+            Spacer(Modifier.height(t.space1))
+            Text(QuotaFormat.amount(hero, primaryUnit), style = monitorMonoNumber, color = t.fg)
+            Spacer(Modifier.height(t.space1))
             Text(
-                if (providerId == "deepseek") "账户余额 · ${primaryUnit.name}" else "可用额度",
+                heroSubtitle(providerId, primaryItems),
                 style = MaterialTheme.typography.bodySmall,
                 color = t.muted,
             )
-            Spacer(Modifier.weight(1f))
-            QuotaInfoIcon(
-                title = "额度口径",
-                text = QuotaFormat.planMismatchNote(plan, items, providerId)
-                    ?: "多币种分行展示，不做换算合并；余额型 provider 没有周期与总量。",
-            )
-        }
-        Spacer(Modifier.height(t.space1))
-        Text(QuotaFormat.amount(hero, primaryUnit), style = monitorMonoNumber, color = t.fg)
-        Spacer(Modifier.height(t.space1))
-        Text(
-            heroSubtitle(providerId, primaryItems),
-            style = MaterialTheme.typography.bodySmall,
-            color = t.muted,
-        )
-        // 赠金 / 充值各一行：没有拆分字段时两条都不渲染（不显示编造的 0.00）
-        if (providerId == "deepseek") {
-            deepseekSplitItem(moneyItems, "赠金")?.let { item ->
-                Spacer(Modifier.height(t.space2))
-                InfoLine("赠金", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-grant"))
-            }
-            deepseekSplitItem(moneyItems, "充值")?.let { item ->
-                Spacer(Modifier.height(t.space2))
-                InfoLine("充值", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-topup"))
-            }
-        }
-        primaryItems.forEach { item ->
-            if (item in splitItems) return@forEach
-            val fraction = item.remainingFraction
-            val total = item.total
-            // 只有一条无总量的余额项时，hero 已经把它显示完了，再列一行就是重复
-            val coveredByHero = primaryItems.size == 1 && total == null
-            if (coveredByHero) return@forEach
-            Spacer(Modifier.height(t.space3))
-            if (fraction != null && total != null) {
-                QuotaMeter(
-                    title = item.title,
-                    valueText = QuotaFormat.amount(item.remaining, item.unit) +
-                        " / " + QuotaFormat.amount(total, item.unit),
-                    fraction = fraction,
-                    meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
-                    modifier = meterTagOf(providerId, item, item == primary),
-                )
-            } else {
-                InfoLine(
-                    item.title,
-                    QuotaFormat.amount(item.remaining, item.unit),
-                    moneyInfoTagOf(providerId, item),
-                )
-            }
-        }
-        // 其他币种逐行显示（同币种求和、不跨币种相加）：DeepSeek 的 CNY 与 USD 是两个独立账户
-        groups.keys.filter { it != primaryUnit }.forEach { unit ->
-            Spacer(Modifier.height(t.space2))
-            val amount = groups[unit].orEmpty().fold(BigDecimal.ZERO) { acc, item -> acc + item.remaining }
-            InfoLine("${unit.name} 余额", QuotaFormat.amount(amount, unit), deepseekUsdTagOf(providerId, unit))
-        }
-        // 另一币种单独一行：DeepSeek 的 USD 账户没开通时显式标出来，
-        // 避免用户把「没有这一行」误读成「已折算进上面」
-        if (providerId == "deepseek") {
-            QuotaUnit.entries
-                .filter { it == QuotaUnit.CNY || it == QuotaUnit.USD }
-                .filter { groups[it] == null }
-                .forEach { unit ->
+            // 赠金 / 充值各一行：没有拆分字段时两条都不渲染（不显示编造的 0.00）
+            if (providerId == "deepseek") {
+                deepseekSplitItem(moneyItems, "赠金")?.let { item ->
                     Spacer(Modifier.height(t.space2))
-                    Row(
-                        modifier = deepseekUsdTagOf(providerId, unit),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("${unit.name} 余额", style = MaterialTheme.typography.bodySmall, color = t.muted, modifier = Modifier.weight(1f))
-                        Badge("未开通", tone = BadgeTone.Neutral)
-                    }
+                    InfoLine("赠金", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-grant"))
                 }
+                deepseekSplitItem(moneyItems, "充值")?.let { item ->
+                    Spacer(Modifier.height(t.space2))
+                    InfoLine("充值", QuotaFormat.amount(item.remaining, item.unit), Modifier.testTag("s18-deepseek-topup"))
+                }
+            }
+            primaryItems.forEach { item ->
+                if (item in splitItems) return@forEach
+                val fraction = item.remainingFraction
+                val total = item.total
+                // 只有一条无总量的余额项时，hero 已经把它显示完了，再列一行就是重复
+                val coveredByHero = primaryItems.size == 1 && total == null
+                if (coveredByHero) return@forEach
+                Spacer(Modifier.height(t.space3))
+                if (fraction != null && total != null) {
+                    QuotaMeter(
+                        title = item.title,
+                        valueText = QuotaFormat.amount(item.remaining, item.unit) +
+                            " / " + QuotaFormat.amount(total, item.unit),
+                        fraction = fraction,
+                        meta = QuotaFormat.resetText(item.period, item.resetsAtEpochSecond, nowEpochSecond),
+                        modifier = meterTagOf(providerId, item, item == primary),
+                    )
+                } else {
+                    InfoLine(
+                        item.title,
+                        QuotaFormat.amount(item.remaining, item.unit),
+                        moneyInfoTagOf(providerId, item),
+                    )
+                }
+            }
+            // 其他币种逐行显示（同币种求和、不跨币种相加）：DeepSeek 的 CNY 与 USD 是两个独立账户
+            groups.keys.filter { it != primaryUnit }.forEach { unit ->
+                Spacer(Modifier.height(t.space2))
+                val amount = groups[unit].orEmpty().fold(BigDecimal.ZERO) { acc, item -> acc + item.remaining }
+                InfoLine("${unit.name} 余额", QuotaFormat.amount(amount, unit), deepseekUsdTagOf(providerId, unit))
+            }
+            // 另一币种单独一行：DeepSeek 的 USD 账户没开通时显式标出来，
+            // 避免用户把「没有这一行」误读成「已折算进上面」
+            if (providerId == "deepseek") {
+                QuotaUnit.entries
+                    .filter { it == QuotaUnit.CNY || it == QuotaUnit.USD }
+                    .filter { groups[it] == null }
+                    .forEach { unit ->
+                        Spacer(Modifier.height(t.space2))
+                        Row(
+                            modifier = deepseekUsdTagOf(providerId, unit),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${unit.name} 余额", style = MaterialTheme.typography.bodySmall, color = t.muted, modifier = Modifier.weight(1f))
+                            Badge("未开通", tone = BadgeTone.Neutral)
+                        }
+                    }
+            }
         }
+        QuotaInfoTouch(
+            title = "额度口径",
+            text = QuotaFormat.planMismatchNote(plan, items, providerId)
+                ?: "多币种分行展示，不做换算合并；余额型 provider 没有周期与总量。",
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
     }
 }
 

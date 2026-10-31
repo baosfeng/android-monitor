@@ -50,7 +50,7 @@ internal fun SettingsDebugSection(rt: SettingsScreenRuntime) {
                     rt.toast.show(
                         "调试模式" + if (rt.debugEnabled) "已关闭" else "已开启，日志级别 DEBUG"
                     )
-                })
+                }, contentDescription = "调试模式")
             },
         )
         // 演示件闸门统一：rt.demoVisible = rememberDemoVisible()（debug + 已解锁 + 调试模式已开）。

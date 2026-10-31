@@ -154,7 +154,7 @@ internal fun SettingsLocationCard(
                             else -> setFeature(Feature.LOCATION, true)
                         }
                     }
-                })
+                }, contentDescription = "位置采集")
             },
         )
         TokenDivider(first = false)

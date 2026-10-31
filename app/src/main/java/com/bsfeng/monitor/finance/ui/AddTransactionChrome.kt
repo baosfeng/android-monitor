@@ -50,8 +50,8 @@ internal fun AddTransactionTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 原型顶栏按钮是 .icon-btn（44×44 圆底 + 描边），不是裸图标
-        FinanceIconButton(onClick = onDismiss, contentDescription = "取消") {
-            Icon(Icons.Filled.Close, contentDescription = null, tint = t.accent)
+        FinanceIconButton(onClick = onDismiss, contentDescription = "取消") { label ->
+            Icon(Icons.Filled.Close, contentDescription = label, tint = t.accent)
         }
         Text(
             if (isEditing) "编辑交易" else "记一笔",

@@ -67,7 +67,9 @@ TokenRow(
         "已关闭：切 App 后不扫描页面、不执行跳过规则"
     },
     icon = Icons.Outlined.PlayArrow,
-    trailing = { AppSwitch(adSkipOn, { setFeature(Feature.AD_SKIP, it) }) },
+    trailing = {
+        AppSwitch(adSkipOn, { setFeature(Feature.AD_SKIP, it) }, contentDescription = "广告跳过")
+    },
 )
 if (adSkipOn) {
     TokenDivider(first = false)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -51,15 +55,23 @@ import com.bsfeng.monitor.ui.theme.fgFade
 internal fun switchTouchSize(trackW: Dp, trackH: Dp, tapMin: Dp): Pair<Dp, Dp> =
     trackW.coerceAtLeast(tapMin) to trackH.coerceAtLeast(tapMin)
 
-/** 开关（自绘，规格来自 --switch-* / --knob-size）。 */
+/**
+ * 开关（自绘，规格来自 --switch-* / --knob-size）。
+ *
+ * 语义：交互走 [toggleable]（角色 Switch + 开/关状态），读屏念「<可读名>，开关，已开启」。
+ * 可读名由调用点经 [contentDescription] 传入——开关单独取焦点时，同行标题是兄弟节点、借不到。
+ */
 @Composable
 fun AppSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /** 读屏可读名（一般为同行标题）；null = 只念角色与状态，调用点按需补。 */
+    contentDescription: String? = null,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
     val trackColor by animateColorAsState(
         // 关闭态轨道用前景 18% 覆盖：border-soft 在浅色主题里只有 6% 透明度，
         // 白 knob 落在白卡片上几乎看不见（用户会以为这里没有开关）。
@@ -78,15 +90,32 @@ fun AppSwitch(
     // 点击域由外层撑开——minimumInteractiveComponentSize 兜住 Material 的 48dp 下限，
     // 外层 size 取 max(视觉, tapMin)；视觉轨道另画在内层，尺寸与轨道动画完全不动。
     val (touchW, touchH) = switchTouchSize(t.switchTrackW, t.switchTrackH, t.tapMin)
+    // 可读名先落成局部量：semantics 里的 contentDescription 是接收者扩展属性，
+    // 直接写 contentDescription = contentDescription 会命中它自己的 getter（读即抛）。
+    val label = contentDescription
     Box(
         modifier = modifier
             .minimumInteractiveComponentSize()
             .size(width = touchW, height = touchH)
-            .clickable {
-                // 开关切换是轻触级；调用点此前各自补 performConfirmHaptic，现收敛到控件内
-                haptic(HapticTone.LIGHT)
-                onCheckedChange(!checked)
-            },
+            // toggleable 自带重绘/涟漪与 InteractionSource：视觉轨道与滑块位移仍是唯一的表现层
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                role = Role.Switch,
+                onValueChange = {
+                    // 开关切换是轻触级；调用点此前各自补 performConfirmHaptic，现收敛到控件内
+                    haptic(HapticTone.LIGHT)
+                    onCheckedChange(it)
+                },
+            )
+            .then(
+                if (label != null) {
+                    Modifier.semantics { this.contentDescription = label }
+                } else {
+                    Modifier
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(

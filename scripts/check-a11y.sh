@@ -23,9 +23,7 @@
 #   并堵死构建，故降级为 WARN 4，并把判定收窄到「既无文本也无非空 contentDescription 也无
 #   clearAndSetSemantics」的形态：当前命中 0 处，作为新增代码的回归拦截。
 #
-# 豁免只针对存量，新增不许加：EXEMPT_* 里每条都必须是历史遗留，
-# 修掉后同步删除对应豁免（豁免不会自动过期，留着就是漏洞）。
-# 键格式：仓库相对路径:行号，同一处行号漂移时更新行号。
+# 没有豁免清单：ERROR 项要求全仓 0 处，命中就是真缺口，改代码而不是加白名单。
 #
 # 已知局限：按行 + 花括号深度判定，字符串/注释里的花括号可能影响函数结束位置；
 # 跨行书写的尺寸（.size( 换行 40.dp )）与写在 .clickable 之后的尺寸不在此判定范围内。
@@ -40,39 +38,6 @@ WARN_TOTAL=4
 WARN_HITS=0
 FAILED=0
 SUMMARY=()
-
-# ── 存量豁免（只针对存量，新增不许加） ────────────────────────────────
-# FinanceIconButton 收下 contentDescription 参数却没有把它落到 Box 的语义上，
-# 调用点传了中文标签、里面的 Icon 仍是 null —— 读屏只剩「按钮」。
-# 根因在 ui/finance/FinanceScreenChrome.kt 的实现里，修它属于存量修复任务，
-# 修完（参数真正生效）后把这 5 条一起删掉。
-EXEMPT_ERROR=(
-    "app/src/main/java/com/bsfeng/monitor/finance/ui/AddTransactionChrome.kt:53"
-    "app/src/main/java/com/bsfeng/monitor/finance/ui/BudgetScreen.kt:231"
-    "app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceScreenChrome.kt:221"
-    "app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceScreenChrome.kt:243"
-    "app/src/main/java/com/bsfeng/monitor/finance/ui/FinanceStatsScreen.kt:197"
-)
-EXEMPT_WARN=(
-)
-
-filter_exempt() {
-    local kind="$1" line key skip
-    while IFS= read -r line || [ -n "$line" ]; do
-        skip=0
-        if [ "$kind" = error ] && [ "${#EXEMPT_ERROR[@]}" -gt 0 ]; then
-            for key in "${EXEMPT_ERROR[@]}"; do
-                case "$line" in "$key":*) skip=1 ;; esac
-            done
-        fi
-        if [ "$kind" = warn ] && [ "${#EXEMPT_WARN[@]}" -gt 0 ]; then
-            for key in "${EXEMPT_WARN[@]}"; do
-                case "$line" in "$key":*) skip=1 ;; esac
-            done
-        fi
-        [ "$skip" -eq 0 ] && printf '%s\n' "$line"
-    done
-}
 
 count_lines() {
     if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi
@@ -97,7 +62,7 @@ scanner_error() {
 run_error() {
     local index="$1" title="$2" scanner="$3"
     local out hits
-    out="$("$scanner" 2>"$TMP_ERR" | filter_exempt error)"
+    out="$("$scanner" 2>"$TMP_ERR")"
     hits=$(count_lines "$out")
     echo "== ERROR ${index}/${ERROR_TOTAL} · ${title}（期望 0 处）=="
     if ! scanner_error; then
@@ -121,7 +86,7 @@ run_error() {
 run_warn() {
     local index="$1" title="$2" scanner="$3"
     local out hits
-    out="$("$scanner" 2>"$TMP_ERR" | filter_exempt warn)"
+    out="$("$scanner" 2>"$TMP_ERR")"
     hits=$(count_lines "$out")
     WARN_HITS=$((WARN_HITS + hits))
     echo "== WARN ${index}/${WARN_TOTAL} · ${title}（启发式，不阻断）=="

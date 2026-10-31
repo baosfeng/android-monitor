@@ -146,10 +146,14 @@ internal fun GallerySwitchesAndBadges(
                 title = "已开启",
                 subtitle = "aria-checked=true",
                 trailing = {
-                    AppSwitch(on, { next ->
-                        onOn(next)
-                        toast.show(if (next) "开关已开启" else "开关已关闭")
-                    })
+                    AppSwitch(
+                        on,
+                        { next ->
+                            onOn(next)
+                            toast.show(if (next) "开关已开启" else "开关已关闭")
+                        },
+                        contentDescription = "已开启",
+                    )
                 },
             )
             TokenDivider(first = false)
@@ -157,10 +161,14 @@ internal fun GallerySwitchesAndBadges(
                 title = "已关闭",
                 subtitle = "aria-checked=false",
                 trailing = {
-                    AppSwitch(off, { next ->
-                        onOff(next)
-                        toast.show(if (next) "开关已开启" else "开关已关闭")
-                    })
+                    AppSwitch(
+                        off,
+                        { next ->
+                            onOff(next)
+                            toast.show(if (next) "开关已开启" else "开关已关闭")
+                        },
+                        contentDescription = "已关闭",
+                    )
                 },
             )
             TokenDivider(first = false)

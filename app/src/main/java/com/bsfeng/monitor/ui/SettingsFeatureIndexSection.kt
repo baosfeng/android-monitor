@@ -42,6 +42,7 @@ internal fun SettingsFeatureIndexSection(
                     AppSwitch(
                         checked = row.enabled,
                         onCheckedChange = { rt.setFeature(row.feature, it) },
+                        contentDescription = row.feature.title,
                     )
                     TailChevron()
                 },

@@ -95,7 +95,7 @@ internal fun SettingsTransferReceivingRows(
                 toast.show(
                     if (enabled) "已开启后台接收（常驻通知）" else "已关闭后台接收（仅 App 内可见）"
                 )
-            })
+            }, contentDescription = "后台接收")
         },
     )
     TokenDivider(first = false)
