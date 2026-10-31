@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsFeatureSection.kt 拆出：设置「功能 · 记账」卡 —— 记账开关与「支付后弹窗确认」。负责「记账开不开、自动记账弹不弹窗」。
+// 功能细则页「记账」的卡 —— 记账开关与「支付后弹窗确认」。负责「记账开不开、自动记账弹不弹窗」。
 
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height

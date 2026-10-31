@@ -50,7 +50,7 @@ class AddressLruCache(private val capacity: Int = DEFAULT_CAPACITY) {
         const val DEFAULT_CAPACITY = 64
 
         fun key(latitude: Double, longitude: Double): String =
-            LocationPolicy.quantize(latitude) + "," + LocationPolicy.quantize(longitude)
+            LocationPolicy.quantizeCoarse(latitude) + "," + LocationPolicy.quantizeCoarse(longitude)
     }
 }
 
@@ -244,10 +244,11 @@ internal class NominatimGeocodeSource(
     override fun lookup(latitude: Double, longitude: Double, timeoutMs: Long): String? {
         val urlText = buildString {
             append(endpoint)
+            // 隐私口径不变：发给第三方的仍是 3 位小数（≈110m）的粗坐标
             append("?format=jsonv2&zoom=16&accept-language=zh-CN&lat=")
-            append(LocationPolicy.quantize(latitude))
+            append(LocationPolicy.quantizeCoarse(latitude))
             append("&lon=")
-            append(LocationPolicy.quantize(longitude))
+            append(LocationPolicy.quantizeCoarse(longitude))
         }
         val connection = try {
             (URL(urlText).openConnection() as HttpURLConnection).apply {

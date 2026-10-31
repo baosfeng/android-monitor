@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsTransferCard.kt 拆出：把「局域网互传」加进快捷设置磁贴（API 33+ 一键请求，低版本给文案引导）。
+// 把「局域网互传」加进快捷设置磁贴（API 33+ 一键请求，低版本给文案引导）。
 // 系统不允许静默添加，因此只有 API 33+ 会真正发起请求，其余版本只提示手动路径。
 
 import android.app.StatusBarManager

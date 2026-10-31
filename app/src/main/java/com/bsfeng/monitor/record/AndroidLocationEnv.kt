@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
@@ -32,13 +33,55 @@ internal class AndroidEnv(private val context: Context) : LocationCollector.Env 
         }
     }
 
+    /** 持续订阅通道（[LocationCollector] 建立 / 释放，本类只负责持有实例）。 */
+    private val subscriber: LocationSubscriptionSource by lazy { AndroidLocationSubscriber(context) }
+
+    override fun subscriptionSource(): LocationSubscriptionSource? =
+        if (manager == null) null else subscriber
+
+    /**
+     * 当前可用的 provider 列表（fused / gps / network）。
+     *
+     * isProviderEnabled 是受限调用，必须显式判权限（lint [MissingPermission] 只认方法内分支）；
+     * 逐个 runCatching：个别 ROM 上对未启用的 provider 会抛 IllegalArgumentException。
+     */
+    override fun availableProviders(): List<String> {
+        val lm = manager ?: return emptyList()
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return emptyList()
+        }
+        return SUBSCRIPTION_CANDIDATES.filter { provider ->
+            runCatching { lm.isProviderEnabled(provider) }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * 系统省电模式：开了就把静止的探测间隔从 30s 退回 180s（续航优先，模式判定变钝）。
+     *
+     * 读不到 BatteryManager（ROM 裁剪 / 抛异常）一律当「非省电」，不影响任何控制流：
+     * 这只是省电降级的钩子，不是功能前提。
+     */
+    override fun isPowerSaveMode(): Boolean = runCatching {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+        pm.isPowerSaveMode
+    }.getOrDefault(false)
+
     override fun log(message: String, warn: Boolean) {
         if (warn) Log.w(TAG, message) else Log.d(TAG, message)
     }
 
-    override fun isFineGranted(): Boolean =
-        hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ||
-            hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+    /**
+     * 只看「精确位置」本身。
+     *
+     * 旧实现写成 `FINE || COARSE`，于是 Android 12+ 只给「大致位置」时也被当成精确位置已授权，
+     * 设置页显示绿标「已就绪」而行程页永远空白（系统只派 network 点，全被精度闸丢掉）。
+     * 现在 COARSE 只算 [isCoarseGranted]，由 [LocationPermissionRules] 判成 COARSE_ONLY。
+     */
+    override fun isFineGranted(): Boolean = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+
+    override fun isCoarseGranted(): Boolean = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
 
     override fun isBackgroundGranted(): Boolean =
         hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -108,6 +151,13 @@ internal class AndroidEnv(private val context: Context) : LocationCollector.Env 
 
     private companion object {
         const val TAG = "LocationCollector"
+
+        /** 订阅候选 provider：fused 优先，不可用时退 gps + network（顺序见 LocationSubscriptionPlan）。 */
+        val SUBSCRIPTION_CANDIDATES = listOf(
+            LocationSubscriptionPlan.FUSED_PROVIDER,
+            "gps",
+            "network",
+        )
     }
 }
 
@@ -190,10 +240,3 @@ private class AndroidSingleFixSource(
     }
 }
 
-private fun sampleOf(provider: String, location: Location): LocationSample = LocationSample(
-    provider = provider,
-    latitude = location.latitude,
-    longitude = location.longitude,
-    accuracyMeters = location.accuracy,
-    timeMs = location.time,
-)

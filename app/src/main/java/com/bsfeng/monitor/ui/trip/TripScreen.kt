@@ -11,6 +11,11 @@ package com.bsfeng.monitor.ui.trip
 // s16-summary / s16-timeline / s16-rules / s16-goto-location。
 // 时间轴逐段锚点（s16-timeline-list / 9 个 s16-seg-*）落在 TripTimeline.kt，摘要角标（s16-source）落在
 // TripSummaryCard.kt，抽屉锚点（trip-detail-sheet/-2/-3）落在 TripStaySheet.kt。
+//
+// 「在地图中查看」入口（ui/maps/MapEntryCard.kt）挂在轨迹卡下方，只有当天有坐标时才渲染：
+// 恰好一个候选（典型 = 只装了高德）直接打开；多个候选弹选择；一个都没有 toast 说明。
+// 该入口**不新增锚点** —— 契约锚点集合要求逐字对账（scripts/check-anchors.mjs 的自增为硬错误），
+// 新锚点须先在 docs/交互设计/s16-每日行程-交互契约.md 登记，故交互由纯逻辑单测覆盖。
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -47,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -62,8 +68,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.trip.Basis
 import com.bsfeng.monitor.domain.trip.Stay
+import com.bsfeng.monitor.record.CoverageFailureLog
+import com.bsfeng.monitor.record.CoverageReader
+import com.bsfeng.monitor.record.CoverageSnapshot
+import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.SampleMode
+import com.bsfeng.monitor.record.StoreCoverageReader
 import com.bsfeng.monitor.ui.ScreenHead
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.EmptyState
@@ -77,9 +90,13 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.live.formatFullDate
 import com.bsfeng.monitor.ui.live.weekdayLabel
+import com.bsfeng.monitor.ui.maps.MapEntryCard
+import com.bsfeng.monitor.ui.maps.MapEntryPoint
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 空态说明：契约固定文案，不随数据变。 */
 private const val EMPTY_TEXT = "停留与移动由设备活动推算；采集中断的时间标成「未记录」，不做推断。"
@@ -164,6 +181,33 @@ fun TripScreen(
 
     val timeline = state.timeline
     val populated = timeline != null && (timeline.stays.isNotEmpty() || timeline.moves.isNotEmpty())
+    // 「在地图中查看」打开哪个点 / 用哪个名字：判定全在 MapEntryPoint（纯函数、有单测），
+    // 这里只做一次记忆化，避免每次重组重算两份列表遍历
+    val mapStays = timeline?.stays.orEmpty()
+    val mapPoint = remember(state.trace, mapStays) { MapEntryPoint.pick(state.trace, mapStays) }
+    val mapLabel = remember(state.trace, mapStays) { MapEntryPoint.label(state.trace, mapStays) }
+
+    // 当日采集覆盖（契约 trip-cov）：轨迹卡底部的细覆盖条 + 「今天断了 N 次」。
+    // 与设置页「采集覆盖」卡用同一个数据源与同一套分段算法（CoverageTimeline），
+    // 只是窗口换成「这一天」（历史日期整日，今天截到此刻）；进程内缓存按分钟键，不重复读库。
+    val coverageReader = rememberCoverageReader()
+    val hasSamples = state.trace.isNotEmpty()
+    val coverage by produceState<CoverageSnapshot?>(
+        initialValue = null,
+        coverageReader,
+        state.dayStart,
+        state.dayEnd,
+        hasSamples,
+    ) {
+        val reader = coverageReader
+        val start = state.dayStart
+        val end = state.dayEnd
+        if (reader == null || start <= 0L || end <= start || !hasSamples) {
+            value = null
+            return@produceState
+        }
+        value = withContext(Dispatchers.IO) { reader.readWindow(start, end) }
+    }
 
     /** 导出当前这一天的轨迹图：渲染在 Default 线程，写相册在 IO 线程，结果用 Toast 报。 */
     fun exportTrace() {
@@ -290,7 +334,19 @@ fun TripScreen(
                                     TripBasemap.setEnabled(context, next)
                                     haptic(HapticTone.LIGHT)
                                 },
+                                coverage = coverage?.window,
+                                gaps = coverage?.gaps.orEmpty(),
                             )
+                        }
+                        // 「在地图中查看」：只有当天有坐标才渲染（没坐标就没有可看的位置）
+                        if (mapPoint != null) {
+                            item(key = "trip-map-entry") {
+                                MapEntryCard(
+                                    point = mapPoint,
+                                    label = mapLabel,
+                                    onMessage = { toast.show(it) },
+                                )
+                            }
                         }
                         item(key = "trip-timeline") {
                             TripTimelineCard(
@@ -502,6 +558,26 @@ private fun TripLocationHint(onClick: () -> Unit) {
             contentDescription = null,
             tint = t.muted,
             modifier = Modifier.size(t.space5),
+        )
+    }
+}
+
+/**
+ * 当日覆盖的数据源：DI 容器里的记录库 + 全局失败日志。
+ *
+ * 与设置页的 StoreCoverageReader 是同一个类、同一个失败日志单例，所以
+ * 「断档原因」在两处口径一致；缓存也共用（按窗口与分钟键），切页不重复读库。
+ */
+@Composable
+private fun rememberCoverageReader(): CoverageReader? {
+    val context = LocalContext.current
+    return remember(context) {
+        val store = runCatching { MonitorApp.instance.container.recordStore }.getOrNull() ?: return@remember null
+        StoreCoverageReader(
+            store = store,
+            failures = CoverageFailureLog.shared,
+            modeOf = { runCatching { LocationCollector.get(context).mode }.getOrDefault(SampleMode.STILL) },
+            statusOf = { runCatching { LocationCollector.get(context).health() }.getOrNull() },
         )
     }
 }

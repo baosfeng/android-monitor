@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsFeatureSection.kt 拆出：设置「功能 · 广告跳过」卡 —— 跳过引擎开关、监控时长窗口 chip 组、规则与白名单入口。负责「广告跳过开不开、开多久、规则在哪改」。
+// 功能细则页「广告跳过」的卡 —— 跳过引擎开关、监控时长窗口 chip 组、规则与白名单入口。负责「广告跳过开不开、开多久、规则在哪改」。
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable

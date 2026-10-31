@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsFeatureSection.kt 拆出：设置「功能 · 位置采集」卡。
+// 功能细则页「位置采集」的卡：开关 + 三态权限引导。
 // 负责位置开关的三态权限引导：未申请先弹运行时权限、缺「始终允许」单独引导、少数 ROM 的兜底入口。
 // 引导卡（location-guide）按契约 s09 的 11 个锚点落地：摘要行可折叠、三步清单、自检行、
 // 「重新检测」「去系统设置」两个动作；三态文案与原型逐字一致。
@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.LocationOn
@@ -56,7 +57,6 @@ import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.Badge
-import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
@@ -87,7 +87,8 @@ internal fun SettingsLocationCard(
     openLocationAppSettings: () -> Unit,
 ) {
     val locationPermission = locationPermissionState.value
-    val copy = locationCopyOf(locationPermission)
+    // 文案由 LocationHealthText 统一生成（纯逻辑、纯 JVM 单测覆盖），这里只负责渲染
+    val copy = LocationHealthText.locationCopyOf(locationPermission)
     // 默认展开；折叠状态不持久化（契约 s09-loc-summary）
     var expanded by remember { mutableStateOf(true) }
     var rechecking by remember { mutableStateOf(false) }
@@ -110,7 +111,7 @@ internal fun SettingsLocationCard(
             result.fold(
                 onSuccess = { status ->
                     locationPermissionState.value = status
-                    toast.show("自检：" + locationCopyOf(status).badge)
+                    toast.show("自检：" + LocationHealthText.locationCopyOf(status).badge)
                 },
                 // 读取失败保持原状态，只提示（不把三处文案改成半新半旧）
                 onFailure = { toast.show("自检失败：系统未返回定位状态") },
@@ -129,7 +130,7 @@ internal fun SettingsLocationCard(
         TokenRow(
             title = "位置采集",
             subtitle = if (locationOn) {
-                "移动时约 10 秒、静止时约 3 分钟记录一次（3 位小数）"
+                "移动时约 10 秒、静止时约 3 分钟记录一次"
             } else {
                 "已关闭：不读位置、不落坐标"
             },
@@ -204,18 +205,42 @@ internal fun SettingsLocationCard(
                             .background(t.borderSoft)
                     )
                     Text(
-                        "三步就绪：开启定位 → 选「始终允许」→ 关掉省电限制",
+                        copy.stepsHint,
                         style = MaterialTheme.typography.bodySmall,
                         color = t.muted,
                     )
-                    // 三步清单（s09-loc-steps）：步骤本身不可点、不勾选
+                    // 只给大致位置时先解释后果：不是「掉线」，是权限口径不对（原型里那条 warn 底板）。
+                    if (locationPermission == LocationPermissionStatus.COARSE_ONLY) {
+                        CoarseLocationNotice(t)
+                    }
+                    // 三步清单（s09-loc-steps）：步骤本身不可点、不勾选；总数恒为 3
                     Column(
                         Modifier.fillMaxWidth().testTag("s09-loc-steps"),
                         verticalArrangement = Arrangement.spacedBy(t.space3),
                     ) {
                         LocationStep(1, "开启定位服务", "系统设置 › 位置信息 › 打开定位开关", copy.doneSteps >= 1)
-                        LocationStep(2, "选「始终允许」", "应用权限 › 位置信息 › 始终允许", copy.doneSteps >= 2)
-                        LocationStep(3, "关掉省电限制", "电池 › 应用省电策略 › 不限制", copy.doneSteps >= 3)
+                        LocationStep(2, copy.step2Title, copy.step2Desc, copy.doneSteps >= 2)
+                        LocationStep(3, copy.step3Title, copy.step3Desc, copy.doneSteps >= 3)
+                    }
+                    // 采集健康：答案「过一会就掉线」到底是不是在掉 —— 上次成功距今多久、订阅在不在、
+                    // 上一次失败是什么原因。文案由 LocationHealthText 统一生成（纯函数、有单测）。
+                    val health = remember(locationOn, rechecking, locationPermission) {
+                        runCatching { LocationCollector.get(context).health() }.getOrNull()
+                    }
+                    if (locationOn) {
+                        SettingsRow(
+                            title = "采集状态",
+                            modifier = Modifier.testTag("s09-loc-health"),
+                            subtitle = LocationHealthText.describe(health),
+                            subtitleModifier = Modifier.testTag("s09-loc-health-sub"),
+                            trailing = {
+                                Badge(
+                                    text = LocationHealthText.badge(health),
+                                    modifier = Modifier.widthIn(min = 64.dp),
+                                    tone = LocationHealthText.toneOf(health),
+                                )
+                            },
+                        )
                     }
                     // 自检行：不可点，只由「重新检测」刷新；与摘要行同源同色
                     SettingsRow(
@@ -245,10 +270,16 @@ internal fun SettingsLocationCard(
                             variant = AppButtonVariant.Ghost,
                         )
                         AppButton(
-                            text = "去系统设置",
+                            // 只给大致位置时按钮改成「去改权限」：目标是本应用权限页里的
+                            // 「使用精确位置」开关，不是后台定位那条路（锚点仍复用 s09-loc-open）。
+                            text = if (locationPermission == LocationPermissionStatus.COARSE_ONLY) {
+                                "去改权限"
+                            } else {
+                                "去系统设置"
+                            },
                             onClick = {
                                 // 缺后台定位时直达「允许在后台访问位置」页（才能选「始终允许」）；
-                                // 其余态走本应用权限页，失败由 openLocationAppSettings 兜底
+                                // 其余态（含 COARSE_ONLY）走本应用权限页，失败由 openLocationAppSettings 兜底
                                 if (locationPermission == LocationPermissionStatus.MISSING_BACKGROUND) {
                                     backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                                 } else {
@@ -275,37 +306,33 @@ internal fun SettingsLocationCard(
     }
 }
 
-/** 定位引导卡三态文案：徽标 / 摘要副标题 / 自检副标题 / 已完成步骤数（与原型逐字一致）。 */
-private data class LocationCopy(
-    val badge: String,
-    val tone: BadgeTone,
-    val summary: String,
-    val check: String,
-    val doneSteps: Int,
-)
-
-private fun locationCopyOf(status: LocationPermissionStatus): LocationCopy = when (status) {
-    LocationPermissionStatus.NOT_GRANTED -> LocationCopy(
-        badge = "未授权",
-        tone = BadgeTone.Neutral,
-        summary = "开启后可用 · 显示地址与距离",
-        check = "未授权 · 后台定位未开启",
-        doneSteps = 0,
-    )
-    LocationPermissionStatus.MISSING_BACKGROUND -> LocationCopy(
-        badge = "缺后台定位",
-        tone = BadgeTone.Warn,
-        summary = "已授权前台定位 · 后台仍被限制",
-        check = "缺后台定位 · 息屏后无法采样",
-        doneSteps = 1,
-    )
-    LocationPermissionStatus.GRANTED -> LocationCopy(
-        badge = "已就绪",
-        tone = BadgeTone.Success,
-        summary = "定位已就绪 · 行程按 10 分钟采样",
-        check = "已就绪 · 后台定位可用",
-        doneSteps = 3,
-    )
+/**
+ * 「仅大致位置」的说明底板（原型那条 warn 9% 底）。
+ *
+ * 必须说清因果：不是定位掉线，而是系统只肯给基站级位置 —— 用户才会照着第 2 步去开精确位置。
+ */
+@Composable
+private fun CoarseLocationNotice(t: DesignTokens) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(t.radiusMd))
+            .background(t.warn.copy(alpha = 0.09f))
+            .padding(t.space3),
+    ) {
+        Text(
+            "行程会很粗糙。",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = t.fg,
+        )
+        Text(
+            "系统只会返回基站级位置（通常 500 米以上），轨迹会大幅漂移，" +
+                "很多点还会因精度不足被丢弃。这不是定位掉线，是权限口径不对。",
+            style = MaterialTheme.typography.bodySmall,
+            color = t.fg2,
+        )
+    }
 }
 
 /** 三步清单的一步：序号圆 24dp，已完成的序号变 success 16% 底 + success 文字色。 */

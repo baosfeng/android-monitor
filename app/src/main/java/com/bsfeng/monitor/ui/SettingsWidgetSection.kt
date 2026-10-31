@@ -1,8 +1,8 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/SettingsFeatureSection.kt 接出的「功能 · 桌面小组件」卡：隐藏金额开关 + 6 个「添加到桌面」入口。
+// 功能细则页「桌面小组件」的卡：隐藏金额开关 + 6 个「添加到桌面」入口。
 // 负责「桌面上放哪几个组件、金额给不给看」。为什么独立成文件：6 行入口各带一次 requestPinAppWidget
-// 与结果校验，塞回 SettingsFeatureSection 会把已有功能卡挤到看不见。
+// 与结果校验，塞回一页里会把设置项挤到看不见（单页 ≤ 7 项）。
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
-import com.bsfeng.monitor.ui.components.SectionHeader
 import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.theme.DesignTokens
@@ -108,7 +107,8 @@ internal fun SettingsWidgetSection(
     // 一次只放一个：系统确认框还没答完时再点别的，两轮提示会互相盖掉
     var pendingReceiver by remember { mutableStateOf<Class<*>?>(null) }
 
-    SectionHeader("桌面小组件")
+    // 二级页内不再写与页头标题重复的 SectionHeader（页头已是「桌面小组件」），
+    // 说明文案留在卡内第一行，分组靠卡间隙。
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
         Text(
             "把监控、记账、额度放到桌面，点击直达",

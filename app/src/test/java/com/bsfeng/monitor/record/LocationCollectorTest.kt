@@ -2,10 +2,12 @@ package com.bsfeng.monitor.record
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 /**
  * 定位过滤/节流规则 + 「缓存空 → 单次主动定位」编排的用例。
@@ -94,17 +96,45 @@ class LocationCollectorTest {
     // ===== 坐标量化 =====
 
     @Test
-    fun `坐标保留三位小数`() {
-        assertEquals("31.230", LocationPolicy.quantize(31.2304))
-        assertEquals("121.474", LocationPolicy.quantize(121.4737))
-        assertEquals("-33.869", LocationPolicy.quantize(-33.8688))
+    fun `落库坐标保留六位小数`() {
+        assertEquals("31.230400", LocationPolicy.quantize(31.2304))
+        assertEquals("121.473700", LocationPolicy.quantize(121.4737))
+        assertEquals("-33.868800", LocationPolicy.quantize(-33.8688))
+    }
+
+    @Test
+    fun `六位小数能看出几十米的移动 三位不行`() {
+        // 原 bug：3 位小数（≈110m 一格）把 40m 的真实移动压成同一个点，轨迹是一级级阶梯
+        val from = LocationPolicy.quantize(31.2300)
+        val to = LocationPolicy.quantize(31.2304)
+        assertEquals("六位小数必须区分 40m 的位移", false, from == to)
+        assertEquals("三位小数会把它压成同一个点（这就是旧行为）", true, coarseOf(31.2300) == coarseOf(31.2304))
     }
 
     @Test
     fun `极小负坐标归一成零避免同一个点两种写法`() {
-        assertEquals("0.000", LocationPolicy.quantize(-0.0001))
-        assertEquals("0.000", LocationPolicy.quantize(0.0))
+        assertEquals("0", LocationPolicy.quantize(-0.0000001))
+        assertEquals("0", LocationPolicy.quantize(0.0))
     }
+
+    @Test
+    fun `对外粗坐标仍是三位小数 隐私口径不变`() {
+        assertEquals("31.230", LocationPolicy.quantizeCoarse(31.2304))
+        assertEquals("121.474", LocationPolicy.quantizeCoarse(121.4737))
+        assertEquals("0", LocationPolicy.quantizeCoarse(-0.0001))
+    }
+
+    @Test
+    fun `旧三位小数字符串仍能解析回接近的坐标`() {
+        // 向后兼容：库里历史记录的 lat/lng 是 3 位小数字符串，读回后必须能 toDouble
+        val legacy = "31.230"
+        val parsed = legacy.toDouble()
+        assertEquals(31.230, parsed, 1e-9)
+        assertTrue("量化为零后也必须可解析", LocationPolicy.quantize(0.0).toDouble() == 0.0)
+        assertEquals("再把 6 位版量化回去应等于原值", "31.230000", LocationPolicy.quantize(parsed))
+    }
+
+    private fun coarseOf(value: Double): String = String.format(Locale.US, "%.3f", value)
 
     // ===== 节流 =====
 
@@ -113,9 +143,9 @@ class LocationCollectorTest {
         val throttle = LocationThrottle()
         assertTrue(throttle.canAcquire(now))
         throttle.markAcquired(now)
-        // 移动：10 秒一个点
-        assertFalse("移动模式 9 秒还不够", throttle.canAcquire(now + 9_000L, LocationPace.MOVING_INTERVAL_MS))
-        assertTrue("移动模式满 10 秒可以再采", throttle.canAcquire(now + 10_000L, LocationPace.MOVING_INTERVAL_MS))
+        // 移动：30 秒一个点
+        assertFalse("移动模式 29 秒还不够", throttle.canAcquire(now + 29_000L, LocationPace.MOVING_INTERVAL_MS))
+        assertTrue("移动模式满 30 秒可以再采", throttle.canAcquire(now + 30_000L, LocationPace.MOVING_INTERVAL_MS))
         // 静止：3 分钟一个点
         assertFalse("静止模式 2 分钟内不能再采", throttle.canAcquire(now + 2 * 60_000L, LocationPace.STILL_INTERVAL_MS))
         assertTrue("静止模式满 3 分钟可以再采", throttle.canAcquire(now + 3 * 60_000L, LocationPace.STILL_INTERVAL_MS))
@@ -141,22 +171,85 @@ class LocationCollectorTest {
         assertTrue(throttle.canAcquire(now + 1_000L))
     }
 
-    // ===== 权限三态 =====
+    // ===== 权限四态 =====
 
     @Test
-    fun `定位权限三态`() {
+    fun `定位权限四态`() {
         assertEquals(
             LocationPermissionStatus.NOT_GRANTED,
-            LocationCollector.resolveStatus(fineGranted = false, backgroundGranted = false),
+            LocationCollector.resolveStatus(fineGranted = false, coarseGranted = false, backgroundGranted = false),
+        )
+        assertEquals(
+            LocationPermissionStatus.COARSE_ONLY,
+            LocationCollector.resolveStatus(fineGranted = false, coarseGranted = true, backgroundGranted = false),
         )
         assertEquals(
             LocationPermissionStatus.MISSING_BACKGROUND,
-            LocationCollector.resolveStatus(fineGranted = true, backgroundGranted = false),
+            LocationCollector.resolveStatus(fineGranted = true, coarseGranted = true, backgroundGranted = false),
         )
         assertEquals(
             LocationPermissionStatus.GRANTED,
-            LocationCollector.resolveStatus(fineGranted = true, backgroundGranted = true),
+            LocationCollector.resolveStatus(fineGranted = true, coarseGranted = true, backgroundGranted = true),
         )
+    }
+
+    @Test
+    fun `只给大致位置时 status 走 COARSE_ONLY 而不是已就绪`() {
+        // 缺陷回归锚点：修复前这里是 GRANTED（=已就绪），行程页却永远空白
+        val collector = LocationCollector(FakeEnv(fine = false, coarse = true, background = true))
+        assertEquals(LocationPermissionStatus.COARSE_ONLY, collector.status())
+    }
+
+    @Test
+    fun `精确位置加后台时 status 才是已就绪`() {
+        val collector = LocationCollector(FakeEnv(fine = true, coarse = true, background = true))
+        assertEquals(LocationPermissionStatus.GRANTED, collector.status())
+    }
+
+    @Test
+    fun `只给大致位置时仍会发起采集而不是误报未授权`() {
+        // 采集闸按「至少有一个位置权限」：只给大致位置也要采（点会被精度闸丢），
+        // 否则失败原因会误报成 PERMISSION，把用户引到「始终允许」这条错路上。
+        val fresh = LocationSample("network", 39.9042, 116.4074, 1200f, now)
+        val env = FakeEnv(
+            fine = false,
+            coarse = true,
+            background = true,
+            cached = listOf(fresh),
+        )
+        val collector = LocationCollector(env)
+        var result: LocationSample? = null
+        collector.collectThrottledAsync(now) { result = it }
+        assertNull("精度不足的点应被丢弃", result)
+        assertNotEquals(
+            "不该报成未授权",
+            LocationFailureReason.PERMISSION,
+            collector.health(now).lastFailure,
+        )
+    }
+
+    @Test
+    fun `两种位置权限都没有时不采集`() {
+        val env = FakeEnv(fine = false, coarse = false, background = false)
+        val collector = LocationCollector(env)
+        assertNull(collector.collect(now))
+        var called = false
+        collector.collectThrottledAsync(now) { called = true; assertNull(it) }
+        assertTrue("回调必须恰好一次", called)
+        assertEquals(LocationFailureReason.PERMISSION, collector.health(now).lastFailure)
+    }
+
+    @Test
+    fun `假 Env 不实现 isCoarseGranted 时默认跟随 isFineGranted`() {
+        // 默认实现的意义：既有假 Env 只写了 isFineGranted，不应被迫全量实现
+        val legacy = object : LocationCollector.Env {
+            override fun isFineGranted(): Boolean = true
+            override fun isBackgroundGranted(): Boolean = false
+            override fun readCached(): List<LocationSample> = emptyList()
+            override fun requestActiveFix(nowMs: Long, onResult: (LocationSample?) -> Unit) = onResult(null)
+        }
+        assertTrue("精确位置默认蕴含大致位置", legacy.isCoarseGranted())
+        assertEquals(LocationPermissionStatus.MISSING_BACKGROUND, LocationCollector(legacy).status())
     }
 
     // ===== 缓存空 → 单次主动定位（task-9 的核心回路） =====
@@ -165,6 +258,8 @@ class LocationCollectorTest {
     private class FakeEnv(
         var fine: Boolean = true,
         var background: Boolean = true,
+        /** 大致位置独立可配：默认跟随 fine（精确位置必然包含大致位置）。 */
+        var coarse: Boolean = fine,
         var cached: List<LocationSample> = emptyList(),
         var onActive: (Long, (LocationSample?) -> Unit) -> Unit = { _, callback -> callback(null) },
     ) : LocationCollector.Env {
@@ -172,6 +267,7 @@ class LocationCollectorTest {
         var lastRequestedAt = 0L
 
         override fun isFineGranted(): Boolean = fine
+        override fun isCoarseGranted(): Boolean = coarse
         override fun isBackgroundGranted(): Boolean = background
         override fun readCached(): List<LocationSample> = cached
         override fun requestActiveFix(nowMs: Long, onResult: (LocationSample?) -> Unit) {
@@ -233,9 +329,11 @@ class LocationCollectorTest {
     }
 
     @Test
-    fun `缓存只有 stale 或超精度点时才发起主动定位`() {
+    fun `缓存只有 stale 或超容差点时才发起主动定位`() {
         val stale = LocationSample("passive", 31.23, 121.47, 20f, now - LocationPolicy.MAX_AGE_MS - 1)
-        val coarse = LocationSample("network", 31.23, 121.47, LocationPolicy.MAX_ACCURACY_METERS + 100f, now)
+        // 精度按 provider 分级后，200m 的 NETWORK 点算低置信但仍可用（见 LocationQuality）；
+        // 「不可用」要过了 500m 的容差线。
+        val coarse = LocationSample("network", 31.23, 121.47, LocationQuality.NETWORK_LOW_LIMIT_METERS + 100f, now)
         val fresh = LocationSample("network", 39.9042, 116.4074, 18f, now)
         val env = FakeEnv(cached = listOf(stale, coarse), onActive = { _, callback -> callback(fresh) })
         val collector = LocationCollector(env)
@@ -269,8 +367,8 @@ class LocationCollectorTest {
     private fun north(lat: Double, meters: Double) = lat + meters / 111_000.0
 
     @Test
-    fun `间隔按模式取 移动10秒 静止3分钟`() {
-        assertEquals(10_000L, LocationPace.intervalOf(SampleMode.MOVING))
+    fun `间隔按模式取 移动30秒 静止3分钟`() {
+        assertEquals(30_000L, LocationPace.intervalOf(SampleMode.MOVING))
         assertEquals(180_000L, LocationPace.intervalOf(SampleMode.STILL))
         assertEquals(
             "静止间隔取 1–3 分钟区间的上限（省电优先）",
@@ -400,13 +498,13 @@ class LocationCollectorTest {
         assertEquals("初始按静止算", SampleMode.STILL, collector.mode)
         assertEquals(LocationPace.STILL_INTERVAL_MS, collector.samplingIntervalMs())
         collector.collectThrottledAsync(now) { }
-        // 3 分钟后再采到明显位移 → 切移动，间隔随之为 10 秒
+        // 3 分钟后再采到明显位移 → 切移动，间隔随之为 30 秒
         env.cached = listOf(moved)
         collector.collectThrottledAsync(now + LocationPace.STILL_INTERVAL_MS) { }
         assertEquals(SampleMode.MOVING, collector.mode)
         assertEquals(LocationPace.MOVING_INTERVAL_MS, collector.samplingIntervalMs())
-        assertTrue("移动模式下 10 秒即可再采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 10_000L))
-        assertFalse("不到 10 秒不采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 9_000L))
+        assertTrue("移动模式下 30 秒即可再采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 30_000L))
+        assertFalse("不到 30 秒不采", collector.shouldSampleNow(now + LocationPace.STILL_INTERVAL_MS + 29_000L))
     }
 
     // ===== 主动定位的 provider 编排 =====
@@ -452,11 +550,18 @@ class LocationCollectorTest {
     }
 
     @Test
-    fun `总预算按 provider 数均分到 5 秒`() {
+    fun `预算按 provider 独立计 不再均分`() {
         val resolver = ActiveFixResolver(object : SingleFixSource {
             override fun request(provider: String, timeoutMs: Long, onResult: (LocationSample?) -> Unit) = Unit
         })
-        assertEquals(LocationPolicy.ACTIVE_FIX_BUDGET_MS, resolver.timeoutPerProviderMs * resolver.providers.size)
+        // 均分会把 GPS 压到 2500ms（冷启动必然超时）；现在 GPS 单独拿 15 秒
+        assertEquals(15_000L, resolver.timeoutMsOf("gps"))
+        assertEquals(5_000L, resolver.timeoutMsOf("network"))
+        assertEquals(
+            "两个 provider 的预算不再相等",
+            false,
+            resolver.timeoutMsOf("gps") == resolver.timeoutMsOf("network"),
+        )
     }
 
     @Test

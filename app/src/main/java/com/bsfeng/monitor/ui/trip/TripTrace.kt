@@ -67,8 +67,23 @@ object TripTrace {
 
     private const val EARTH_METERS_PER_DEGREE = 111_320.0
 
-    /** 记录 → 采样点（升序、去重、抽稀）。 */
-    fun samples(records: List<Record>): List<TraceSample> = cap(dedupe(parse(records)))
+    /**
+     * 记录 → 采样点（升序 → 离群剔除 → 去重 → 几何抽稀 → 上限）。
+     *
+     * 为什么是这个顺序：
+     * - 先按时间升序，离群判据才有「上一点」可比；
+     * - 离群剔除要在去重之前：跳变点和上一点往往离得很远，先去重不会影响它、但先剔除能少算一遍；
+     * - 去重要在抽稀之前：重合点的垂距为 0，留着只会让抽稀多做无用的段判定；
+     * - 抽稀按几何误差（Douglas–Peucker）而不是等步长：等步长会把真实拐点抹掉、却保留直线上的冗余点。
+     */
+    fun samples(records: List<Record>): List<TraceSample> =
+        cap(TripDenoise.simplify(dedupe(TripDenoise.rejectOutliers(parse(records), accuracies(records)))))
+
+    /** 时间戳 → 精度（米）；只有带 accuracy_m 的记录才参与离群判定。 */
+    private fun accuracies(records: List<Record>): Map<Long, Float> = records.mapNotNull { record ->
+        val accuracy = record.detail?.get("accuracy_m")?.toFloatOrNull() ?: return@mapNotNull null
+        if (accuracy <= 0f) null else record.timestamp to accuracy
+    }.toMap()
 
     private fun parse(records: List<Record>): List<TraceSample> = records
         .mapNotNull { sampleOf(it) }
@@ -101,7 +116,12 @@ object TripTrace {
         return out
     }
 
-    /** 超过 [MAX_POINTS] 时按步长均匀抽稀，首尾必留。 */
+    /**
+     * 超过 [MAX_POINTS] 时按步长均匀抽稀，首尾必留。
+     *
+     * 这是**最后一道保险**，不是主抽稀手段：主抽稀是 [TripDenoise.simplify] 的几何抽稀，
+     * 正常一天的轨迹经它之后远小于 500 点；只有极端密集数据（如补采风暴）才会走到这里。
+     */
     internal fun cap(samples: List<TraceSample>): List<TraceSample> {
         if (samples.size <= MAX_POINTS) return samples
         val step = (samples.size - 1).toDouble() / (MAX_POINTS - 1)
