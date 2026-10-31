@@ -6,16 +6,22 @@ package com.bsfeng.monitor.ui
 // 授权正常不等于采得到点。这里把 LocationStatus 翻成三句话：上次成功多久以前、
 // 订阅在不在、上一次失败到底是什么原因。判定与措辞都是纯函数，可在 JVM 单测里钉死。
 //
+// 口径（待机 ≠ 断档）：功耗门禁 SLEEPING 时静止不采点是设计内行为，只按 30 分钟兜底采一点。
+// 所以「上一点在 30 分钟前」不代表掉线，判档必须先看门禁态 —— 见 [levelOf] 的 gate 参数。
+// 时间线（过去 24 小时的分段与断档列表）由 record 层的 CoverageTimeline 负责，本文件只管徽标与副标题。
+//
 // 权限口径（[LocationPermissionStatus]）也在这里翻译成可执行文案：只给「大致位置」时
 // 系统只派基站级点、全被精度闸丢掉，界面必须说清原因与下一步动作，不能报「已就绪」。
 
+import com.bsfeng.monitor.record.CoverageTimeline
 import com.bsfeng.monitor.record.LocationFailureReason
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.record.LocationStatus
+import com.bsfeng.monitor.record.MotionGate
 import com.bsfeng.monitor.ui.components.BadgeTone
 
-/** 采集健康度的四档；档位只影响徽标颜色，文案仍逐条说明。 */
-enum class LocationHealthLevel { GOOD, WAITING, STALE, OFF }
+/** 采集健康度的五档；档位只影响徽标颜色，文案仍逐条说明。 */
+enum class LocationHealthLevel { GOOD, DORMANT, WAITING, STALE, OFF }
 
 object LocationHealthText {
 
@@ -25,8 +31,25 @@ object LocationHealthText {
     /** 「刚启动、还没到第一次采样」的容忍窗口。 */
     const val WARMUP_WINDOW_MS = 5 * 60 * 1000L
 
-    /** 档位判定：没有状态（未开启/读取失败）→ OFF；从未成功且还在预热 → WAITING；超过新鲜窗口 → STALE。 */
-    fun levelOf(status: LocationStatus?): LocationHealthLevel {
+    /**
+     * 省电待机的容忍上限：与 record 层同源（30 分钟兜底 + 5 分钟调度余量）。
+     *
+     * 门禁 SLEEPING 时静止不采点，最后一点常停在 30 分钟前；拿 [FRESH_WINDOW_MS] 判
+     * 就会把「照常在待机」读成「已断档」，徽标常年红色。
+     */
+    const val DORMANT_WINDOW_MS = CoverageTimeline.DORMANT_CEILING_MS
+
+    /** 待机副标题：说清「为什么不采点」与「兜底节奏」，不出现失败原因。 */
+    private const val DORMANT_TEXT = "省电待机 · 静止时不采点，30 分钟兜底"
+
+    /**
+     * 档位判定：没有状态（未开启/读取失败）→ OFF；从未成功且还在预热 → WAITING；
+     * 门禁睡着且 35 分钟内有点 → DORMANT；超过新鲜窗口 → STALE。
+     *
+     * @param gate 当前功耗门禁态（[com.bsfeng.monitor.record.LocationGateState.state]）；
+     *   null = 未知/没在跑，按旧口径（只看新鲜窗口）判，老调用点与单测行为不变。
+     */
+    fun levelOf(status: LocationStatus?, gate: MotionGate.State? = null): LocationHealthLevel {
         if (status == null) return LocationHealthLevel.OFF
         val silent = status.msSinceLastSuccess
         val hasLast = status.lastSuccessAtMs != null
@@ -35,6 +58,10 @@ object LocationHealthText {
             return if (status.subscriptionActive) LocationHealthLevel.WAITING else LocationHealthLevel.OFF
         }
         val elapsed = silent ?: 0L
+        // 睡着时「有点」和「正在采」是两件事：待机窗口内一律算待机，超过才是断档
+        if (gate == MotionGate.State.SLEEPING && elapsed <= DORMANT_WINDOW_MS) {
+            return LocationHealthLevel.DORMANT
+        }
         return when {
             elapsed <= FRESH_WINDOW_MS -> LocationHealthLevel.GOOD
             elapsed <= FRESH_WINDOW_MS + WARMUP_WINDOW_MS -> LocationHealthLevel.WAITING
@@ -43,28 +70,38 @@ object LocationHealthText {
     }
 
     /** 徽标文案（≤4 字，与设置页其它徽标等宽）。 */
-    fun badge(status: LocationStatus?): String = when (levelOf(status)) {
-        LocationHealthLevel.GOOD -> "采集中"
-        LocationHealthLevel.WAITING -> "等待中"
-        LocationHealthLevel.STALE -> "已断档"
-        LocationHealthLevel.OFF -> "未运行"
-    }
+    fun badge(status: LocationStatus?, gate: MotionGate.State? = null): String =
+        when (levelOf(status, gate)) {
+            LocationHealthLevel.GOOD -> "采集中"
+            LocationHealthLevel.DORMANT -> "省电待机"
+            LocationHealthLevel.WAITING -> "等待中"
+            LocationHealthLevel.STALE -> "已断档"
+            LocationHealthLevel.OFF -> "未运行"
+        }
 
-    /** 徽标色调：正常用成功色，断档用警告色，未运行保持中性。 */
-    fun toneOf(status: LocationStatus?): BadgeTone = when (levelOf(status)) {
-        LocationHealthLevel.GOOD -> BadgeTone.Success
-        LocationHealthLevel.WAITING -> BadgeTone.Warn
-        LocationHealthLevel.STALE -> BadgeTone.Danger
-        LocationHealthLevel.OFF -> BadgeTone.Neutral
-    }
+    /** 徽标色调：正常用成功色，断档用警告色，待机与未运行保持中性（不是故障）。 */
+    fun toneOf(status: LocationStatus?, gate: MotionGate.State? = null): BadgeTone =
+        when (levelOf(status, gate)) {
+            LocationHealthLevel.GOOD -> BadgeTone.Success
+            LocationHealthLevel.DORMANT -> BadgeTone.Neutral
+            LocationHealthLevel.WAITING -> BadgeTone.Warn
+            LocationHealthLevel.STALE -> BadgeTone.Danger
+            LocationHealthLevel.OFF -> BadgeTone.Neutral
+        }
 
-    /** 副标题：一句话说清「上次成功多久以前 + 订阅状态」，断档时补失败原因。 */
-    fun describe(status: LocationStatus?): String {
+    /**
+     * 副标题：一句话说清「上次成功多久以前 + 订阅状态」，断档时补失败原因。
+     *
+     * 待机档只解释「静止不采点、30 分钟兜底」：待机不是故障，写失败原因会让用户去修一个没坏的东西。
+     */
+    fun describe(status: LocationStatus?, gate: MotionGate.State? = null): String {
         if (status == null) return "读取采集状态失败"
+        val level = levelOf(status, gate)
+        if (level == LocationHealthLevel.DORMANT) return DORMANT_TEXT
         val parts = ArrayList<String>(3)
         parts.add(lastSuccessText(status))
         parts.add(if (status.subscriptionActive) "持续订阅在跑" else "持续订阅未建立")
-        if (levelOf(status) != LocationHealthLevel.GOOD) parts.add(reasonText(status.lastFailure))
+        if (level != LocationHealthLevel.GOOD) parts.add(reasonText(status.lastFailure))
         return parts.joinToString(" · ")
     }
 

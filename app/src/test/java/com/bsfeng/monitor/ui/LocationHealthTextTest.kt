@@ -1,8 +1,10 @@
 package com.bsfeng.monitor.ui
 
+import com.bsfeng.monitor.record.CoverageTimeline
 import com.bsfeng.monitor.record.LocationFailureReason
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.record.LocationStatus
+import com.bsfeng.monitor.record.MotionGate
 import com.bsfeng.monitor.ui.components.BadgeTone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -198,6 +200,52 @@ class LocationHealthTextTest {
                 LocationHealthText.locationCopyOf(status).step2Title,
             )
         }
+    }
+
+    // ===== 省电待机（待机 ≠ 断档） =====
+
+    @Test
+    fun `门禁睡着且最后一点在待机窗口内判省电待机`() {
+        val s = status(sinceLastSuccess = 20 * 60_000L)
+        assertEquals(LocationHealthLevel.DORMANT, LocationHealthText.levelOf(s, MotionGate.State.SLEEPING))
+        assertEquals("省电待机", LocationHealthText.badge(s, MotionGate.State.SLEEPING))
+        assertEquals("待机不是故障，不能报危险色", BadgeTone.Neutral, LocationHealthText.toneOf(s, MotionGate.State.SLEEPING))
+        assertEquals(
+            "省电待机 · 静止时不采点，30 分钟兜底",
+            LocationHealthText.describe(s, MotionGate.State.SLEEPING),
+        )
+    }
+
+    @Test
+    fun `待机副标题不带失败原因`() {
+        val s = status(sinceLastSuccess = 20 * 60_000L, failure = LocationFailureReason.PERMISSION)
+        val text = LocationHealthText.describe(s, MotionGate.State.SLEEPING)
+        assertFalse("待机不是故障，写失败原因会让人去修一个没坏的东西：" + text, text.contains("始终允许"))
+    }
+
+    @Test
+    fun `门禁睡着但超过待机窗口仍判断档`() {
+        val s = status(sinceLastSuccess = 36 * 60_000L, failure = LocationFailureReason.ACTIVE_FIX_TIMEOUT)
+        assertEquals("越过 35 分钟兜底上限就是真断档", LocationHealthLevel.STALE, LocationHealthText.levelOf(s, MotionGate.State.SLEEPING))
+        assertEquals("已断档", LocationHealthText.badge(s, MotionGate.State.SLEEPING))
+        assertEquals(BadgeTone.Danger, LocationHealthText.toneOf(s, MotionGate.State.SLEEPING))
+    }
+
+    @Test
+    fun `待机档只在门禁明确睡着时生效`() {
+        val s = status(sinceLastSuccess = 20 * 60_000L)
+        assertEquals("门禁未知时按旧口径判", LocationHealthLevel.STALE, LocationHealthText.levelOf(s, null))
+        assertEquals(LocationHealthLevel.STALE, LocationHealthText.levelOf(s, MotionGate.State.PROBING))
+        assertEquals(LocationHealthLevel.STALE, LocationHealthText.levelOf(s, MotionGate.State.MOVING))
+    }
+
+    @Test
+    fun `待机窗口与覆盖时间线同源`() {
+        assertEquals(
+            "徽标与覆盖条必须用同一个待机上限，否则同一屏会给出两个「多久算断档」",
+            CoverageTimeline.DORMANT_CEILING_MS,
+            LocationHealthText.DORMANT_WINDOW_MS,
+        )
     }
 
     @Test
