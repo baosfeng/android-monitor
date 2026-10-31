@@ -15,6 +15,7 @@ import com.bsfeng.monitor.service.MonitorAccessibilityService
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.ui.live.DAY_MS
 import com.bsfeng.monitor.ui.live.hourlyIntensityOf
+import com.bsfeng.monitor.ui.live.rollingHourIntensityOf
 import com.bsfeng.monitor.ui.live.recordTypeLabel
 import com.bsfeng.monitor.ui.live.startOfDay
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,10 @@ data class OverviewState(
     val accessibilityEnabled: Boolean = false,
     val accessibilityServiceRunning: Boolean = false,
     val hourlyIntensity: List<Float> = List(24) { 0f },
+    /** 滚动 24 小时逐时强度：下标 0 = 最早那一小时、23 = 当前小时（「最近 24 小时活跃」卡用它）。 */
+    val last24hIntensity: List<Float> = List(24) { 0f },
+    /** 滚动 24 小时的活跃分钟数（卡头「合计 N 分钟」）。 */
+    val last24hActiveMinutes: Long = 0,
     val typeSlicesToday: List<TypeSlice> = emptyList(),
     val recentEvents: List<Record> = emptyList(),
     // ── 近 7 天 ──
@@ -152,6 +157,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         val monthStart = todayStart - 29 * DAY_MS
 
         val today = store.queryByDate(todayStart, now)
+        // 滚动窗口跨自然日：凌晨打开时必须是「昨天此刻 → 现在」，不能只查今天
+        val last24h = store.queryByDate(now - DAY_MS, now)
         val yesterday = store.queryByDate(todayStart - DAY_MS, todayStart - 1)
         val week = store.queryByDate(weekStart, now)
         val month = store.queryByDate(monthStart, now)
@@ -198,6 +205,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             accessibilityEnabled = accessibilityEnabled(),
             accessibilityServiceRunning = MonitorAccessibilityService.isRunning,
             hourlyIntensity = hourlyIntensityOf(today),
+            last24hIntensity = rollingHourIntensityOf(last24h, now),
+            last24hActiveMinutes = usageMinutes(last24h),
             typeSlicesToday = slices(today),
             recentEvents = today.sortedByDescending { it.timestamp }.take(RECENT_LIMIT),
             weekEventCount = week.size,
