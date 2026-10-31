@@ -75,6 +75,17 @@ sealed interface DebugCommand {
         DebugCommand {
         override val name: String = "db"
     }
+
+    /**
+     * 无障碍界面通道：看控件树、点、滚、返回。
+     *
+     * 为什么必须走这里而不是 `adb shell input`：输入注入是伪造事件，绕开 App 真实交互且在部分
+     * ROM 上被拦；这条通道在 App 进程内读树 + performAction，不需要 root、不注入事件。
+     * 服务未开时一律 `ok=false reason=accessibility_off`，绝不静默失败。
+     */
+    data class Ui(val action: UiAction) : DebugCommand {
+        override val name: String get() = "ui." + action.op
+    }
 }
 
 /** `db` 的子操作。 */
@@ -177,6 +188,18 @@ object DebugCommands {
     const val EXTRA_TABLE = "table"
     const val EXTRA_SQL = "sql"
 
+    const val EXTRA_TEXT = "text"
+    const val EXTRA_DESC = "desc"
+    const val EXTRA_ID = "id"
+    const val EXTRA_BOUNDS = "bounds"
+    const val EXTRA_DIR = "dir"
+    const val EXTRA_WIN = "win"
+    const val EXTRA_MS = "ms"
+    const val EXTRA_X1 = "x1"
+    const val EXTRA_Y1 = "y1"
+    const val EXTRA_X2 = "x2"
+    const val EXTRA_Y2 = "y2"
+
     const val DEFAULT_DUMP_LIMIT = 20
     const val MAX_DUMP_LIMIT = 200
 
@@ -187,9 +210,21 @@ object DebugCommands {
     /** 表名只接受普通标识符：PRAGMA 不支持占位符，限制字符集比拼接转义更稳。 */
     private val TABLE_NAME = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
+    /** `ui wait` 的上限：等待只是「等动画稳定」，再长就该让调用方自己重试，别占着广播不放。 */
+    const val MAX_WAIT_MS = 5_000
+    const val DEFAULT_WAIT_MS = 1_000
+
+    /** `ui swipe` 的时长边界：短于 50ms 会被系统当 fling，长于 10s 会一直占住触摸。 */
+    const val MIN_SWIPE_MS = 50
+    const val MAX_SWIPE_MS = 10_000
+    const val DEFAULT_SWIPE_MS = 300
+
+    /** 屏幕坐标的合理上界：超过它基本是参数串位（比如把 ms 填进了 x2）。 */
+    const val MAX_COORDINATE = 20_000
+
     /** 命令表（顺序 = 文档顺序，错误信息里直接复用它）。 */
     val SUPPORTED: List<String> = listOf(
-        "unlock", "state", "sample_location", "dump", "seed", "clear", "open", "heartbeat", "db",
+        "unlock", "state", "sample_location", "dump", "seed", "clear", "open", "heartbeat", "db", "ui",
     )
 
     /**
@@ -263,6 +298,8 @@ object DebugCommands {
                 }
 
                 "db" -> ParseResult.Ok(dbCommandOf(extras))
+
+                "ui" -> ParseResult.Ok(DebugCommand.Ui(uiActionOf(extras)))
 
                 else -> throw ArgError("未实现的命令：$cmd")
             }
@@ -367,6 +404,95 @@ object DebugCommands {
         if (raw !is String) throw ArgError("参数 sql 必须是字符串（--es sql \"select ...\"），实际 ${raw.javaClass.simpleName}")
         return raw
     }
+
+    /** `ui` 的 op + 各动作参数解析；非法组合一律抛 [ArgError] 转 BadArgs。 */
+    private fun uiActionOf(extras: Map<String, Any?>): UiAction {
+        val rawOp = extras[EXTRA_OP]
+        if (rawOp == null) throw ArgError("ui 需要 --es op <${UiAction.list()}>")
+        if (rawOp !is String) throw ArgError("参数 op 必须是字符串（--es op dump），实际 ${rawOp.javaClass.simpleName}")
+        val op = rawOp.trim().lowercase()
+        if (op.isEmpty()) throw ArgError("ui 需要 --es op <${UiAction.list()}>")
+        return when (op) {
+            "dump" -> UiAction.Dump(tag = stringOf(extras, EXTRA_WIN)?.trim()?.ifEmpty { null })
+
+            "click" -> UiAction.Click(selectorOf(extras, op))
+            "longclick" -> UiAction.LongClick(selectorOf(extras, op))
+
+            "scroll" -> {
+                val dirText = stringOf(extras, EXTRA_DIR)?.trim()?.lowercase().orEmpty()
+                if (dirText.isEmpty()) throw ArgError("ui scroll 需要 --es dir <${ScrollDir.list()}>")
+                val dir = ScrollDir.from(dirText)
+                    ?: throw ArgError("dir 取值非法：期望 ${ScrollDir.list()}，实际 $dirText")
+                UiAction.Scroll(dir)
+            }
+
+            "swipe" -> {
+                val x1 = coordinateOf(extras, EXTRA_X1)
+                val y1 = coordinateOf(extras, EXTRA_Y1)
+                val x2 = coordinateOf(extras, EXTRA_X2)
+                val y2 = coordinateOf(extras, EXTRA_Y2)
+                if (x1 == x2 && y1 == y2) throw ArgError("swipe 的起止点不能重合：给 --ei x1/y1/x2/y2 两个不同的点")
+                val ms = intOf(extras, EXTRA_MS, DEFAULT_SWIPE_MS)
+                if (ms < MIN_SWIPE_MS || ms > MAX_SWIPE_MS) {
+                    throw ArgError("ms 超出范围：期望 $MIN_SWIPE_MS..$MAX_SWIPE_MS，实际 $ms")
+                }
+                UiAction.Swipe(x1 = x1, y1 = y1, x2 = x2, y2 = y2, ms = ms)
+            }
+
+            "back" -> UiAction.Back
+            "home" -> UiAction.Home
+            "recents" -> UiAction.Recents
+
+            "wait" -> {
+                val ms = intOf(extras, EXTRA_MS, DEFAULT_WAIT_MS)
+                if (ms < 0 || ms > MAX_WAIT_MS) throw ArgError("ms 超出范围：期望 0..$MAX_WAIT_MS，实际 $ms")
+                UiAction.Wait(ms)
+            }
+
+            else -> throw ArgError("ui 的 op 取值非法：期望 ${UiAction.list()}，实际 $op")
+        }
+    }
+
+    /** `click` / `longclick` 至少要给一个选择器：空选择器会点到页面第一个节点。 */
+    private fun selectorOf(extras: Map<String, Any?>, op: String): UiSelector {
+        val boundsText = stringOf(extras, EXTRA_BOUNDS)?.trim()?.ifEmpty { null }
+        val bounds = boundsText?.let {
+            UiRect.parse(it) ?: throw ArgError(
+                "bounds 取值非法：期望 x1,y1,x2,y2（如 10,20,110,80 且 x2>x1、y2>y1），实际 $it",
+            )
+        }
+        val selector = UiSelector(
+            text = stringOf(extras, EXTRA_TEXT)?.trim()?.ifEmpty { null },
+            desc = stringOf(extras, EXTRA_DESC)?.trim()?.ifEmpty { null },
+            id = stringOf(extras, EXTRA_ID)?.trim()?.ifEmpty { null },
+            bounds = bounds,
+        )
+        if (selector.isEmpty) {
+            throw ArgError(
+                "ui $op 需要选择器（至少给一个）：--es text <片段> / --es desc <片段> / " +
+                    "--es id <资源名片段> / --es bounds x1,y1,x2,y2",
+            )
+        }
+        return selector
+    }
+
+    /** 屏幕坐标：负值只可能是参数写错（手势坐标原点在左上角）。 */
+    private fun coordinateOf(extras: Map<String, Any?>, key: String): Int {
+        val value = intOf(extras, key, Int.MIN_VALUE)
+        if (value == Int.MIN_VALUE) throw ArgError("ui swipe 缺少 --ei $key <坐标>")
+        if (value < 0 || value > MAX_COORDINATE) {
+            throw ArgError("参数 $key 超出范围：期望 0..$MAX_COORDINATE，实际 $value")
+        }
+        return value
+    }
+
+    /** 字符串参数：给了非字符串一律拒（`--es` 与 `--ei` 用错时能一眼看出来）。 */
+    private fun stringOf(extras: Map<String, Any?>, key: String): String? =
+        when (val raw = extras[key]) {
+            null -> null
+            is String -> raw
+            else -> throw ArgError("参数 $key 必须是字符串（--es $key <值>），实际 ${raw.javaClass.simpleName}")
+        }
 
     private fun scenarioOf(extras: Map<String, Any?>): String =
         when (val raw = extras[EXTRA_SCENARIO]) {
