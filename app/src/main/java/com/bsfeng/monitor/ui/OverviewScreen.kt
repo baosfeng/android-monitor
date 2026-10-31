@@ -303,7 +303,7 @@ private fun OverviewIconButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = t.fg2, modifier = Modifier.size(t.iconSize / 2))
+        Icon(icon, contentDescription = description, tint = t.fg2, modifier = Modifier.size(t.iconSize / 2).testTag("button.icon"))
     }
 }
 
@@ -873,7 +873,12 @@ private fun OverviewKpiCard(
             }
             .padding(t.space3),
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = t.meta,
+            modifier = Modifier.testTag("kpi.card"),
+        )
         Spacer(Modifier.height(t.space2))
         Row(verticalAlignment = Alignment.Bottom) {
             value(replay)
@@ -1036,7 +1041,12 @@ private fun PrimaryTextButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = t.onAccent)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = t.onAccent,
+            modifier = Modifier.testTag("button.primary"),
+        )
     }
 }
 
@@ -1058,7 +1068,12 @@ private fun GhostTextButton(text: String, onClick: () -> Unit, modifier: Modifie
             .clickable(interactionSource = interaction, indication = null) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = t.fg)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = t.fg,
+            modifier = Modifier.testTag("button.ghost"),
+        )
     }
 }
 
@@ -1088,6 +1103,7 @@ private fun TripCardS01(
             .border(1.dp, t.borderSoft, shape)
             .rowPressFeedback(interaction)
             .keyboardFocusRing(shape)
+            .testTag("s01-trip")
             .clickable(interactionSource = interaction, indication = null) {
                 haptic(HapticTone.LIGHT)
                 onClick()

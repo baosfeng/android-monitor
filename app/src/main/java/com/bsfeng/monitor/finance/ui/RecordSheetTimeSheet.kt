@@ -163,6 +163,7 @@ private fun DateChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (selected) t.fgFade(7) else Color.Transparent)
             .border(1.dp, if (selected) t.fgFade(24) else t.border, shape)
+            .testTag("chip.date")
             .clickable {
                 haptic(HapticTone.LIGHT)
                 onClick()

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.platform.testTag
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -93,7 +94,7 @@ internal fun FieldRow(
             label,
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
-            modifier = Modifier.width(FIELD_LABEL_W),
+            modifier = Modifier.width(FIELD_LABEL_W).testTag("row.field"),
         )
         Text(
             text = value.ifBlank { placeholder },

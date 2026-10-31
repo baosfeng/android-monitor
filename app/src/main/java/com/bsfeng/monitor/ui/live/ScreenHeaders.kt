@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
@@ -83,6 +84,7 @@ fun HeadIconButton(
             .clip(CircleShape)
             .background(t.surface)
             .border(1.dp, t.borderSoft, CircleShape)
+            .testTag("button.icon")
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {

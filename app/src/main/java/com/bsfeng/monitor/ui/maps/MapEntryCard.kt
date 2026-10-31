@@ -148,6 +148,7 @@ private fun EntryRow(onClick: () -> Unit) {
             .fillMaxWidth()
             .pressFeedback(interaction)
             .clip(RoundedCornerShape(t.radiusLg))
+            .testTag("row.map.entry")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -204,6 +205,7 @@ private fun PickerRow(label: String, onClick: () -> Unit) {
             .pressFeedback(interaction)
             .clip(shape)
             .background(t.fgFade(5))
+            .testTag("row.map.picker")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,

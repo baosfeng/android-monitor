@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.HeatBar
@@ -104,7 +105,7 @@ fun LiveKpiCard(
             .clip(shape)
             .background(t.surface)
             .border(1.dp, t.borderSoft, shape)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(if (onClick != null) Modifier.testTag("kpi.card").clickable { onClick() } else Modifier)
             .padding(t.space3),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)

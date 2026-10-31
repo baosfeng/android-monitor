@@ -130,7 +130,7 @@ internal fun S04MonthBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        S04MonthArrow(modifier = Modifier.testTag("s04-prev"), description = "上个月", onClick = onPrevious) { label ->
+        S04MonthArrow(tag = "s04-prev", description = "上个月", onClick = onPrevious) { label ->
             Icon(
                 Icons.Filled.ChevronLeft,
                 contentDescription = label,
@@ -148,7 +148,7 @@ internal fun S04MonthBar(
                 scaleY = bump.value
             },
         )
-        S04MonthArrow(modifier = Modifier.testTag("s04-next"), description = "下个月", onClick = onNext) { label ->
+        S04MonthArrow(tag = "s04-next", description = "下个月", onClick = onNext) { label ->
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = label,
@@ -168,6 +168,7 @@ internal fun S04MonthBar(
 private fun S04MonthArrow(
     description: String,
     onClick: () -> Unit,
+    tag: String,
     modifier: Modifier = Modifier,
     content: @Composable (String?) -> Unit,
 ) {
@@ -177,6 +178,7 @@ private fun S04MonthArrow(
     Box(
         modifier = modifier
             .size(t.tapMin)
+            .testTag(tag)
             .pressFeedback(interaction)
             .clip(RoundedCornerShape(t.radiusPill))
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
@@ -350,7 +352,13 @@ private fun S04EntryCard(
             contentAlignment = Alignment.Center,
         ) { icon() }
         Spacer(Modifier.height(t.space2))
-        Text(title, style = MaterialTheme.typography.titleSmall, color = t.fg, fontWeight = FontWeight.SemiBold)
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            color = t.fg,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.testTag("card.entry"),
+        )
         Spacer(Modifier.height(t.space1))
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.muted)
     }

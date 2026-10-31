@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,7 +111,10 @@ internal fun AggregateRankRow(
             }
             .padding(horizontal = t.space4, vertical = t.space2),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.testTag("row.agg"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             RankBadge(rank = row.rank, top = row.rank == 1)
             Spacer(Modifier.width(t.space3))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MAIN_GAP)) {

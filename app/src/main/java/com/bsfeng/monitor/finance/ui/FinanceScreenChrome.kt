@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -174,6 +175,7 @@ internal fun FinanceIconButton(
                     Modifier
                 },
             )
+            .testTag("button.icon")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 haptic(HapticTone.LIGHT)
                 onClick()
@@ -340,6 +342,7 @@ internal fun FinanceInlineErrorBar(
                     style = MaterialTheme.typography.titleSmall,
                     color = t.accent,
                     fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.testTag("button.retry"),
                 )
             }
         }

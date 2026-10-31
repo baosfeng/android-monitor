@@ -462,6 +462,7 @@ private fun TitleActionButton(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = if (danger) t.dangerText else t.accent,
+            modifier = Modifier.testTag("button.title.action"),
         )
     }
 }

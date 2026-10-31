@@ -8,11 +8,11 @@ import org.junit.Test
  * 无障碍审计的判定（纯 JVM）：两类缺口、dp 换算、统计项、摘要条数。
  *
  * 这些判定在真机上跑一次要装包 + 点进屏幕，几分钟才拿到一行；这里毫秒级把边界钉住
- * （尤其 47.9dp 与 48.0dp 之间那条线）。
+ * （尤其 43.9dp 与 44.0dp 之间那条线，判定线与设计 token tap-min 同源）。
  */
 class DebugUiAuditTest {
 
-    /** 默认密度 2.0：120px = 60dp（放行），96px = 48dp（刚好放行），95px = 47.5dp（缺口）。 */
+    /** 默认密度 2.0：120px = 60dp（放行），88px = 44dp（刚好放行），87px = 43.5dp（缺口）。 */
     private companion object {
         const val DENSITY = 2.0f
     }
@@ -131,7 +131,7 @@ class DebugUiAuditTest {
     // ────────────────────────── 触达过小 ──────────────────────────
 
     @Test
-    fun `触达过小 - 短边 dp 低于 48 就报，并给出 dp 实数`() {
+    fun `触达过小 - 短边 dp 低于 44 就报，并给出 dp 实数`() {
         val gap = audit(node(text = "更多", bounds = listOf(0, 0, 40, 200))).gaps.single()
         assertEquals(UiAudit.REASON_SMALL_TARGET, gap.reason)
         // 短边取 min(width, height) = 40px ÷ 2.0 = 20dp
@@ -139,9 +139,10 @@ class DebugUiAuditTest {
     }
 
     @Test
-    fun `触达过小 - 48dp 是放行线（95px 报、96px 不报）`() {
-        assertEquals(1, audit(node(text = "更多", bounds = listOf(0, 0, 95, 300))).gapCount)
-        assertTrue(audit(node(text = "更多", bounds = listOf(0, 0, 96, 300))).gaps.isEmpty())
+    fun `触达过小 - 44dp 是放行线（87px 报、88px 不报）`() {
+        // 44dp × density 2.0 = 88px；判定线与设计 token tap-min（44）同源
+        assertEquals(1, audit(node(text = "更多", bounds = listOf(0, 0, 87, 300))).gapCount)
+        assertTrue(audit(node(text = "更多", bounds = listOf(0, 0, 88, 300))).gaps.isEmpty())
     }
 
     @Test

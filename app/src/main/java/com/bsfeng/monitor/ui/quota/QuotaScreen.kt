@@ -373,7 +373,8 @@ private fun QuotaHeadIcon(
             modifier = Modifier
                 .size(t.iconSize / 2)
                 // 只在绘制期读动画值：转圈不触发重组
-                .graphicsLayer { rotationZ = if (rotating && motion) angle else 0f },
+                .graphicsLayer { rotationZ = if (rotating && motion) angle else 0f }
+                .testTag("button.icon"),
         )
     }
 }

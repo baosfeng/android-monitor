@@ -210,6 +210,7 @@ private fun FinanceLegendRow(label: String, value: String, color: androidx.compo
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { translationX = shift }
+            .testTag("row.legend")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { }
             .padding(vertical = t.space1),
         verticalAlignment = Alignment.CenterVertically,

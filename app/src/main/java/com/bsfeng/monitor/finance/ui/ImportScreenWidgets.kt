@@ -111,6 +111,7 @@ internal fun ImportActionButton(
             color = t.accentOn,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("button.primary"),
         )
     }
 }
@@ -146,7 +147,12 @@ internal fun GhostActionButton(
             .padding(vertical = t.space3),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = t.fg2)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = t.fg2,
+            modifier = Modifier.testTag("button.ghost"),
+        )
     }
 }
 

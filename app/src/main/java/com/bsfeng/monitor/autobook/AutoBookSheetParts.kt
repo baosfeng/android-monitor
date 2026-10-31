@@ -112,6 +112,7 @@ internal fun SegmentItem(
         modifier = modifier
             .clip(RoundedCornerShape(MonitorRadius.sm - 2.dp))
             .background(if (selected) tokens.surface else tokens.surface.copy(alpha = 0f))
+            .testTag("seg.item")
             .clickable(onClick = onClick)
             .padding(vertical = MonitorSpacing.sm),
         contentAlignment = Alignment.Center

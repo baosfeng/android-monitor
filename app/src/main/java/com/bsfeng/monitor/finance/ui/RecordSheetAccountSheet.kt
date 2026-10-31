@@ -110,6 +110,7 @@ private fun AccountSheetRow(account: Account, selected: Boolean, onClick: () -> 
             .defaultMinSize(minHeight = t.rowMinH)
             .clip(RoundedCornerShape(t.radiusMd))
             .background(bg)
+            .testTag("row.acct")
             .clickable(interactionSource = interaction, indication = null) {
                 // 行选中属轻触级；已选中的行再点不取消、不重复震
                 if (!selected) haptic(HapticTone.LIGHT)

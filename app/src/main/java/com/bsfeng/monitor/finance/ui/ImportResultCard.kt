@@ -224,6 +224,7 @@ private fun FailureRow(error: String, requester: FocusRequester, onMove: (Int) -
                     }
                 }
             }
+            .testTag("row.fail")
             .clickable(interactionSource = interaction, indication = null) { /* 只展示原因 */ }
             .padding(horizontal = t.space3, vertical = t.space3),
         verticalAlignment = Alignment.CenterVertically,

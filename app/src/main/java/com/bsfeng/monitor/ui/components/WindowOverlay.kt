@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -110,6 +111,7 @@ fun WindowOverlay(
                     .fillMaxSize()
                     .background(t.scrim)
                     .background(t.scrim)
+                    .testTag("sheet.scrim")
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

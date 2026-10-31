@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.testTag
 
 /** 页面底衬：浅色玻璃必须压在可见底衬上才成立（契约 §4）。 */
 @Composable
@@ -90,7 +91,7 @@ fun AppCard(
             .clip(shape)
             .background(t.surface)
             .border(1.dp, t.borderSoft, shape)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(if (onClick != null) Modifier.testTag("card.tap").clickable { onClick() } else Modifier)
             .padding(p),
         content = content,
     )

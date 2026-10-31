@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
@@ -49,6 +50,7 @@ fun ImmersiveScrim(
                 .fillMaxSize()
                 .background(t.scrim)
                 .background(t.scrim)
+                .testTag("page.scrim")
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

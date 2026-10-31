@@ -10,7 +10,7 @@
 #
 # WARN（启发式，只报数量与前 20 条，不影响 exit code）：
 #   WARN 1. clickable 所在函数没有 testTag：运行时审计与自动化定位都靠这个锚点。
-#   WARN 2. clickable 所在修饰链写死 .size(<48.dp) / .height(<48.dp)：触达区不足。
+#   WARN 2. clickable 所在修饰链写死 .size(<44.dp) / .height(<44.dp)：触达区不足（44 = token tap-min）。
 #   WARN 3. switch/checkbox/toggle 类函数里有 clickable 却没有 toggleable/selectable：
 #           状态只靠颜色/位移表达，读屏读不出开或关。
 #   WARN 4. 可点元素既无可读名也无装饰标记：函数内有 clickable + contentDescription = null，
@@ -156,7 +156,9 @@ FUNC_AWK_PRELUDE='
             ftag[cur] = 0; ftoggle[cur] = 0; inf = 1
             ftext[cur] = 0; flabel[cur] = 0; fnull[cur] = 0; fclear[cur] = 0
         }
-        if ($0 ~ /testTag[[:space:]]*\(/) ftag[cur] = 1
+        # Glance（RemoteViews）没有 testTag(...) 函数，只有 semantics { testTag = "…" } 属性形式，
+        # 两种写法都算「有标识」（glance-testing 的 hasTestTag 读的也是它）。
+        if ($0 ~ /testTag[[:space:]]*(\(|=)/) ftag[cur] = 1
         if ($0 ~ /(toggleable|selectable)[[:space:]]*\(/) ftoggle[cur] = 1
         if ($0 ~ /Text[[:space:]]*\(/) ftext[cur] = 1
         if ($0 ~ /clearAndSetSemantics/) fclear[cur] = 1
@@ -197,7 +199,7 @@ scan_clickable_without_testtag() {
     done
 }
 
-# WARN 2：clickable 同一条修饰链上写死 .size(<48.dp) / .height(<48.dp)。
+# WARN 2：clickable 同一条修饰链上写死 .size(<44.dp) / .height(<44.dp)。
 # 修饰链 = 从 .clickable 行向上连续「以 . 开头」或「以 , / . 结尾」的行。
 scan_clickable_small_touch() {
     find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
@@ -205,7 +207,7 @@ scan_clickable_small_touch() {
             function small(s,   v) {
                 if (!match(s, /\.(size|height)\([[:space:]]*[0-9]+(\.[0-9]+)?[[:space:]]*\.dp/)) return ""
                 v = substr(s, RSTART, RLENGTH); sub(/.*\([[:space:]]*/, "", v); sub(/[^0-9.].*/, "", v)
-                if (v + 0 >= 48) return ""
+                if (v + 0 >= 44) return ""
                 return substr(s, RSTART, RLENGTH)
             }
             '"$FUNC_AWK_ENTER"'
@@ -260,7 +262,7 @@ echo
 
 run_error 1 "IconButton 内图标无 contentDescription" scan_icon_button_without_label
 run_warn 1 "clickable 所在函数没有 testTag" scan_clickable_without_testtag
-run_warn 2 "clickable 修饰链写死触达区 <48dp" scan_clickable_small_touch
+run_warn 2 "clickable 修饰链写死触达区 <44dp" scan_clickable_small_touch
 run_warn 3 "switch/checkbox 无 toggleable/selectable" scan_toggle_without_semantics
 run_warn 4 "可点图标无可读名兜底（ERROR 降级）" scan_clickable_icon_without_label
 

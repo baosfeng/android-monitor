@@ -364,6 +364,7 @@ private fun QuotaRangeChips(
                     range.title,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (on) t.fg else t.muted,
+                    modifier = Modifier.testTag("chip.range"),
                 )
             }
         }

@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.AppDialog
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -89,6 +90,7 @@ private fun DialogButton(
             .clip(RoundedCornerShape(t.radiusMd))
             .background(if (primary) t.accent else t.surface)
             .border(1.dp, if (primary) t.accent else t.border, RoundedCornerShape(t.radiusMd))
+            .testTag("button.dialog")
             .clickable(enabled = enabled) {
                 // 保存走成功档（CONFIRM），取消走轻触
                 haptic(if (primary) HapticTone.SUCCESS else HapticTone.LIGHT)

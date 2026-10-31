@@ -42,6 +42,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.testTag
 
 /** 原型 .dialog：max-width 320px。 */
 private val DIALOG_MAX_W = 320.dp
@@ -85,6 +86,7 @@ fun AppDialog(
                     // 弹窗里是要读的字，不能透出下层内容（有意偏离该主题语言）
                     .background(t.opaquePanel)
                     // 卡片自身吞掉点击，避免点内容触发遮罩关闭
+                    .testTag("dialog.panel")
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -151,6 +153,7 @@ private fun DialogAction(
             .background(if (primary) t.accent else Color.Transparent)
             .border(1.dp, if (primary) Color.Transparent else t.border, shape)
             .pressFeedback(interaction)
+            .testTag("dialog.action")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,

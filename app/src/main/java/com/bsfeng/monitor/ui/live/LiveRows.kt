@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.model.Record
@@ -86,7 +87,7 @@ fun StackRow(
             .clip(shape)
             .background(t.surface)
             .border(1.dp, t.borderSoft, shape)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+            .then(if (onClick != null) Modifier.testTag("stack.row").clickable { onClick() } else Modifier),
     ) {
         content()
     }
@@ -133,7 +134,7 @@ fun LiveEventRow(
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
-            modifier = Modifier.width(TL_TIME_COL_W),
+            modifier = Modifier.width(TL_TIME_COL_W).testTag("row.event"),
         )
         Spacer(Modifier.width(t.space1))
         // 凡是 detail 里带 package_name 的记录都显示应用图标（APP_USAGE / PAGE 页面轨迹 /

@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.MotionToken
@@ -101,6 +102,7 @@ internal fun AppButton(
             color = if (enabled) fg else t.muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("button.app"),
         )
     }
 }
@@ -126,6 +128,7 @@ internal fun AppIconButton(
             .size(t.tapMin)
             .clip(RoundedCornerShape(t.radiusMd))
             .background(t.surfaceWarm)
+            .testTag("button.icon")
             .clickable {
                 haptic(tone)
                 onClick()

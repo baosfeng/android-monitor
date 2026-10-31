@@ -40,6 +40,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -112,6 +113,7 @@ fun Chip(
             .clip(shape)
             .background(bg)
             .border(1.dp, stroke, shape)
+            .testTag("chip.option")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 // 选中切换属轻触级：震动收敛在控件内，调用点不再各补一次
                 haptic(HapticTone.LIGHT)
@@ -235,6 +237,7 @@ fun SegmentedControl(
                     .tokenShadow(if (selected) 1 else 0, shape)
                     .clip(shape)
                     .background(bg)
+                    .testTag("seg.segment")
                     .clickable {
                         // 切换属轻触级；重复点当前段不再震
                         if (!selected) haptic(HapticTone.LIGHT)

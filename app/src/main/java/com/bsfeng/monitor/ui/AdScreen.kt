@@ -672,6 +672,7 @@ private fun AdRecordRow(
             .focusRequester(focusRequester)
             .keyboardFocusRing(RoundedCornerShape(t.radiusSm))
             .rowPressFeedback(interaction)
+            .testTag("row.ad")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 onClick()
             }
