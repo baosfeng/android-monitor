@@ -12,6 +12,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.TriggerEvent
+import android.hardware.TriggerEventListener
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -97,6 +99,12 @@ class LocationForegroundService : Service() {
     private var stepCounterRegistered = false
     private var significantRegistered = false
 
+    /** 显著运动失败日志只打一次：syncSensors 每 30 秒跑一次，重复打会刷屏。 */
+    private var significantFailureLogged = false
+
+    /** 步数计失败日志同样只打一次。 */
+    private var stepCounterFailureLogged = false
+
     /** 已经应用到采集器的门禁态；用于去重，避免每条传感器样本都重配订阅。 */
     @Volatile
     private var appliedGateState: MotionGate.State = MotionGate.State.SLEEPING
@@ -141,11 +149,14 @@ class LocationForegroundService : Service() {
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     }
 
-    private val significantMotionListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) {
+    /**
+     * 显著运动是 **trigger 类型**传感器：只能用 requestTriggerSensor，registerListener 会被框架拒绝
+     * （真机日志：E/SensorManager: Trigger Sensors should use the requestTriggerSensor）。
+     * 一次性触发后系统自动摘除，必须重新 request 才能再次唤醒 —— 所以回调末尾要重注册。
+     */
+    private val significantMotionTriggerListener = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent) {
             if (event.sensor.type != Sensor.TYPE_SIGNIFICANT_MOTION) return
-            if (event.values.getOrElse(0) { 0f } <= 0f) return
-            // 一次性传感器：触发后系统不再上报，必须重新注册才能再次唤醒
             significantRegistered = false
             val now = System.currentTimeMillis()
             observingUntilMs = now + OBSERVE_WINDOW_MS
@@ -153,9 +164,9 @@ class LocationForegroundService : Service() {
             applyGateState(state)
             syncSensors(now)
             Log.i(TAG, "门禁传感器：显著运动触发，开 " + (OBSERVE_WINDOW_MS / 1000) + "s 观察窗")
+            // 重新待命：不重注册的话，这个人再走一整天也不会再有下一次唤醒
+            requestSignificantMotion()
         }
-
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     }
 
     private val ticker = object : Runnable {
@@ -249,23 +260,50 @@ class LocationForegroundService : Service() {
 
     private fun ensureSignificantMotion(): Boolean {
         if (significantRegistered) return true
-        val manager = sensorManager ?: return false
-        val sensor = significantMotionSensor ?: return false
+        return requestSignificantMotion()
+    }
+
+    /**
+     * 注册显著运动 trigger 传感器。
+     *
+     * 为什么不用 registerListener：TYPE_SIGNIFICANT_MOTION 是 trigger 类，平台只接受
+     * requestTriggerSensor；用 registerListener 会静默失败（真机打 E/SensorManager 后返回 false）。
+     * 失败原因必须写日志 —— 这次就是静默失败让模拟器验收全绿、真机才发现。
+     */
+    private fun requestSignificantMotion(): Boolean {
+        val manager = sensorManager
+        val sensor = significantMotionSensor
+        if (manager == null || sensor == null) {
+            logSignificantFailureOnce("本机没有显著运动传感器（模拟器常见）")
+            return false
+        }
         val ok = runCatching {
-            manager.registerListener(
-                significantMotionListener,
-                sensor,
-                SensorManager.SENSOR_DELAY_NORMAL,
-                handler,
+            manager.requestTriggerSensor(significantMotionTriggerListener, sensor)
+        }.onFailure {
+            Log.w(
+                TAG,
+                "门禁传感器：显著运动注册异常（" + it.javaClass.simpleName + "：" + it.message + "）",
             )
         }.getOrDefault(false)
+        val wasRegistered = significantRegistered
         significantRegistered = ok
         if (ok) {
-            Log.i(TAG, "门禁传感器：显著运动已注册（一次性硬件触发，功耗≈0）")
+            if (!wasRegistered) {
+                Log.i(TAG, "门禁传感器：显著运动已注册（" + sensor.name + "，一次性硬件触发）")
+            }
         } else {
-            Log.w(TAG, "门禁传感器：显著运动注册失败，退化为加速度计常开（30s batching）")
+            logSignificantFailureOnce("注册返回 false（" + sensor.name + "）")
         }
         return ok
+    }
+
+    private fun logSignificantFailureOnce(detail: String) {
+        if (significantFailureLogged) return
+        significantFailureLogged = true
+        Log.w(
+            TAG,
+            "门禁传感器：显著运动不可用（" + detail + "），退化为加速度计常开（30s batching）",
+        )
     }
 
     private fun setAccelMode(mode: AccelMode) {
@@ -331,16 +369,36 @@ class LocationForegroundService : Service() {
                 BATCH_LATENCY_US,
                 handler,
             )
+        }.onFailure {
+            Log.w(
+                TAG,
+                "门禁传感器：步数计注册异常（" + it.javaClass.simpleName + "：" + it.message + "）",
+            )
         }.getOrDefault(false)
         stepCounterRegistered = ok
-        if (ok) gate.markHardwareStepsAvailable()
+        if (ok) {
+            gate.markHardwareStepsAvailable()
+        } else if (!stepCounterFailureLogged) {
+            // 23127PN0CC 实测：没有 ACTIVITY_RECOGNITION 权限时 step_counter 注册会失败。
+            // 不加新权限（用户没同意运动权限），失败就把原因写清楚，软件步数兜底。
+            stepCounterFailureLogged = true
+            Log.w(
+                TAG,
+                "门禁传感器：步数计不可用（缺少 ACTIVITY_RECOGNITION 或硬件不支持），" +
+                    "改用加速度峰值软件步数",
+            )
+        }
     }
 
     private fun releaseSensors() {
         val manager = sensorManager
         runCatching { manager?.unregisterListener(accelerometerListener) }
         runCatching { manager?.unregisterListener(stepCounterListener) }
-        runCatching { manager?.unregisterListener(significantMotionListener) }
+        // trigger 传感器必须用 cancelTriggerSensor 摘除（与 requestTriggerSensor 成对）
+        val triggerSensor = significantMotionSensor
+        if (significantRegistered && manager != null && triggerSensor != null) {
+            runCatching { manager.cancelTriggerSensor(significantMotionTriggerListener, triggerSensor) }
+        }
         accelMode = AccelMode.NONE
         stepCounterRegistered = false
         significantRegistered = false
