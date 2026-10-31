@@ -315,6 +315,10 @@ internal fun LiveEventTimeline(
                 val rowEnter = remember(record.id) {
                     if (enterWindow.open && ei < STAGGER_MAX_STEPS) ei + 1 else -1
                 }
+                // 行点击的交互源与触感在这里建：clickable 必须与 eventAnchor 落在同一函数，
+                // 否则契约锚点与点击修饰链分居两个函数，静态门禁按函数判定会判成「无可达标识」。
+                val rowInteraction = remember { MutableInteractionSource() }
+                val rowHaptic = rememberHaptic()
                 StackRow(
                     first = false,
                     last = ei == group.events.lastIndex,
@@ -326,7 +330,15 @@ internal fun LiveEventTimeline(
                         modifier = Modifier
                             .eventAnchor(record)
                             .focusRequester(focusRequesterFor(record.id))
-                            .testTagRowPress { onSelect(record) },
+                            .rowPressFeedback(rowInteraction)
+                            .keyboardFocusRing(RoundedCornerShape(LocalDesignTokens.current.radiusLg))
+                            .clickable(
+                                interactionSource = rowInteraction,
+                                indication = LocalIndication.current,
+                            ) {
+                                rowHaptic(HapticTone.LIGHT)
+                                onSelect(record)
+                            },
                     )
                 }
             }
@@ -464,25 +476,6 @@ private fun Modifier.focusHighlight(): Modifier {
         alpha.animateTo(0f, tween(FOCUS_HIGHLIGHT_FADE_MS))
     }
     return background(t.accent.copy(alpha = alpha.value))
-}
-
-/**
- * 行点击：0.99 + alpha .9 按下（--dur-press）+ LIGHT 触感；触感只在这里发一次。
- *
- * 键盘 / 遥控器聚焦时叠 2dp 焦点环（契约 s02 头部通用口径；触屏点按不出环）。
- */
-@Composable
-private fun Modifier.testTagRowPress(onClick: () -> Unit): Modifier {
-    val interaction = remember { MutableInteractionSource() }
-    val haptic = rememberHaptic()
-    val shape = RoundedCornerShape(LocalDesignTokens.current.radiusLg)
-    return this
-        .rowPressFeedback(interaction)
-        .keyboardFocusRing(shape)
-        .clickable(interactionSource = interaction, indication = LocalIndication.current) {
-            haptic(HapticTone.LIGHT)
-            onClick()
-        }
 }
 
 /** 「加载更早的事件（还有 N 条）」：44dp、按下 0.96、LIGHT；加载中锁连点。 */

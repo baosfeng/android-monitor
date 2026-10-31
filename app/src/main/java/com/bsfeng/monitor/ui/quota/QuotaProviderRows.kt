@@ -178,6 +178,7 @@ internal fun ProviderSettingsRow(
             .pressFeedback(interaction, enabled = affordance.interactive)
             .keyboardFocusRing(rowShape)
             .focusRequester(rowFocus)
+            .testTag("row.provider")
             .clickable(
                 enabled = affordance.interactive,
                 interactionSource = interaction,
@@ -315,6 +316,7 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (enabled) t.accent else t.fgFade(10))
             .pressFeedback(interaction, enabled = enabled)
+            .testTag("button.save")
             .clickable(
                 enabled = enabled,
                 interactionSource = interaction,
@@ -355,6 +357,7 @@ private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
                     .clip(RoundedCornerShape(t.radiusSm))
                     .background(bg)
                     .pressFeedback(interaction)
+                    .testTag("chip.interval")
                     .clickable(
                         interactionSource = interaction,
                         indication = LocalIndication.current,
@@ -502,6 +505,7 @@ private fun QuotaProviderChip(
             style = MaterialTheme.typography.labelLarge,
             color = if (selected) t.fg else t.fg2,
             maxLines = 1,
+            modifier = Modifier.testTag("chip.provider"),
         )
     }
 }

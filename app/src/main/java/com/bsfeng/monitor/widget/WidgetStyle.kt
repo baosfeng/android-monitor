@@ -24,6 +24,8 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.semantics.semantics
+import androidx.glance.semantics.testTag
 import androidx.glance.text.FontFamily
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -114,6 +116,8 @@ internal fun WidgetCard(
             .background(face.surface)
             .cornerRadius(CARD_RADIUS)
             .clickable(action)
+            // 可达标识：Glance 1.2 只提供属性形式（没有 testTag(...) 函数），glance-testing 的 hasTestTag 读它
+            .semantics { testTag = "widget.card" }
             .padding(padding),
         verticalAlignment = verticalAlignment,
         horizontalAlignment = horizontalAlignment,
@@ -130,6 +134,7 @@ internal fun SolidTile(action: Action, content: @Composable ColumnScope.() -> Un
             .background(WIDGET_QUICK_ADD)
             .cornerRadius(CARD_RADIUS)
             .clickable(action)
+            .semantics { testTag = "widget.tile" }
             .padding(12.dp),
         verticalAlignment = Alignment.Vertical.CenterVertically,
         horizontalAlignment = Alignment.Horizontal.CenterHorizontally,

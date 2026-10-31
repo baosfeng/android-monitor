@@ -6,7 +6,7 @@
 // 契约、原型、代码三方靠同一套锚点字符串对账，不改号、不转下划线。
 //
 // 判据：
-//   1. 契约锚点 = docs/交互设计/s*.md 表格第一列（去重；同一锚点可有多行触发）
+//   1. 契约锚点 = docs/交互设计/s*.md 表格第一列（去重；同一锚点可有多行触发；字符集含 . 与 -）
 //   2. 代码锚点 = testTag("X") 字面量 + 映射表/常量里的锚点字符串（排除 token 表）
 //   3. 运行时拼接 = 代码里以 - 结尾的前缀（如 s15-l1-），能覆盖以它开头的契约锚点
 //   4. 自增 = 代码有、契约无 —— 这是硬错误：锚点集合必须能逐字对账
@@ -42,7 +42,8 @@ function readContractAnchors() {
       if (!line.startsWith('|')) continue;
       const anchor = line.split('|').map((s) => s.trim())[1];
       if (!anchor || anchor === '锚点' || /^[-:]+$/.test(anchor)) continue;
-      if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(anchor)) continue;
+      // 字符集含 "."：组件级锚点用 组件名.用途（chip.option / button.primary），见 s12a 组件级锚点登记
+      if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(anchor)) continue;
       if (!anchors.has(anchor)) anchors.set(anchor, new Set());
       anchors.get(anchor).add(file);
     }

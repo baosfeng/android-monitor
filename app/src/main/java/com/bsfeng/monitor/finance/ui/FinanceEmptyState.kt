@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -78,6 +79,7 @@ internal fun FinanceCtaButton(text: String, onClick: () -> Unit, modifier: Modif
         modifier = modifier
             .clip(RoundedCornerShape(t.radiusLg))
             .background(t.surfaceWarm)
+            .testTag("button.cta")
             .clickable { onClick() }
             .padding(horizontal = t.space6, vertical = t.space2),
         contentAlignment = Alignment.Center,

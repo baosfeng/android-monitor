@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.CategoryIcon
@@ -106,6 +107,7 @@ internal fun GalleryMotion(toast: com.bsfeng.monitor.ui.components.ToastHostStat
                     .graphicsLayer { scaleX = scale; scaleY = scale }
                     .clip(RoundedCornerShape(t.radiusMd))
                     .background(t.surfaceWarm)
+                    .testTag("card.press")
                     .clickable(interactionSource = interaction, indication = null) { toast.show("按压：spring 规格来自 --ease-spring + --dur-press") }
                     .padding(horizontal = t.space4, vertical = t.space3),
             ) {

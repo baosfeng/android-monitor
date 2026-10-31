@@ -683,6 +683,7 @@ private fun BudgetDialogAction(
                 else -> t.fg
             },
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.testTag("dialog.action"),
         )
     }
 }

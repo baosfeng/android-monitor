@@ -208,6 +208,7 @@ private fun SegmentRow(
                 color = if (segment is Gap) t.muted else t.fg,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("row.segment"),
             )
             Spacer(Modifier.height(t.space1))
             Text(

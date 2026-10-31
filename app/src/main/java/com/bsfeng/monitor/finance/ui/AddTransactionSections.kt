@@ -255,6 +255,7 @@ private fun KindSegment(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = fg,
+                    modifier = Modifier.testTag("seg.kind"),
                 )
             }
         }

@@ -276,6 +276,7 @@ internal fun TransferSheetButton(
                 primary -> t.accentOn
                 else -> t.fg
             },
+            modifier = Modifier.testTag("button.sheet"),
         )
     }
 }
@@ -329,6 +330,7 @@ private fun MenuRow(
                     danger -> t.dangerText
                     else -> t.fg
                 },
+                modifier = Modifier.testTag("row.menu"),
             )
             if (!enabled && hint != null) {
                 Spacer(Modifier.height(t.space1))

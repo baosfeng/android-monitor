@@ -112,6 +112,7 @@ internal fun LowBalanceRow(
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .rowPressFeedback(interaction)
+            .testTag("row.alert")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -166,6 +167,7 @@ internal fun NotificationPermissionRow() {
         Modifier
             .fillMaxWidth()
             .rowPressFeedback(interaction)
+            .testTag("row.permission")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,

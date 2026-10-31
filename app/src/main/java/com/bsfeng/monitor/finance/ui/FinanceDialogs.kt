@@ -49,6 +49,7 @@ private fun DialogAction(
             .clip(shape)
             .background(if (primary) t.accent.copy(alpha = if (enabled) 1f else 0.45f) else Color.Transparent)
             .border(1.dp, if (primary) Color.Transparent else t.border, shape)
+            .testTag("dialog.action")
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center,
     ) {

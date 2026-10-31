@@ -428,6 +428,7 @@ private fun LiveFilterChip(
             .clip(shape)
             .background(bg)
             .border(1.dp, stroke, shape)
+            .testTag("chip.filter")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { onClick() }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -508,6 +509,12 @@ internal fun LiveActionButton(label: String, onClick: () -> Unit, modifier: Modi
             .padding(horizontal = t.space4),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = t.fg, maxLines = 1)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = t.fg,
+            maxLines = 1,
+            modifier = Modifier.testTag("button.action"),
+        )
     }
 }

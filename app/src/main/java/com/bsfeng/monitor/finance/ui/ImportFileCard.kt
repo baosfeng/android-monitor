@@ -80,6 +80,7 @@ internal fun ImportFileCard(
                 .clip(shape)
                 .background(bg)
                 .border(1.dp, t.borderSoft, shape)
+                .testTag("row.file")
                 .clickable(interactionSource = interaction, indication = null) { /* 抬指无动作 */ }
                 .padding(horizontal = t.space3, vertical = t.space3),
             verticalAlignment = Alignment.CenterVertically,

@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.bsfeng.monitor.finance.model.Budget
@@ -149,6 +150,7 @@ internal fun BudgetKpiLine(
             .then(
                 if (onClick != null) {
                     Modifier
+                        .testTag("row.budget.kpi")
                         .keyboardFocusRing(shape)
                         .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                             haptic(HapticTone.LIGHT)
@@ -229,7 +231,7 @@ internal fun BudgetRow(
                 maxLines = 1,
                 // 契约 s06-list：分类名超长单行省略号，不挤压右侧金额
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("row.budget"),
             )
             Spacer(Modifier.width(t.space2))
             Text(
@@ -319,7 +321,7 @@ internal fun BudgetEdgeRow(
                 color = t.fg,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("row.budget.edge"),
             )
             Spacer(Modifier.width(t.space2))
             Text(yen(budgetAmount, 0), style = MaterialTheme.typography.titleSmall, color = t.fg, fontWeight = FontWeight.SemiBold)

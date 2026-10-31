@@ -212,6 +212,7 @@ private fun QuotaSaveButton(
             "保存并查询",
             style = MaterialTheme.typography.labelLarge,
             color = if (enabled) t.accentOn else t.muted,
+            modifier = Modifier.testTag("button.save"),
         )
     }
 }
@@ -307,6 +308,7 @@ fun QuotaErrorBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(t.radiusSm))
                 .background(t.fgFade(6))
+                .testTag("button.retry")
                 .clickable(enabled = !retrying) {
                     haptic(HapticTone.SUCCESS)
                     onRetry()
@@ -338,6 +340,7 @@ fun QuotaUsageUnavailableCard(
             color = t.accent,
             modifier = Modifier
                 .clip(RoundedCornerShape(t.radiusSm))
+                .testTag("card.cta")
                 .clickable(onClick = onOpenSettings)
                 .padding(horizontal = t.space2, vertical = t.space1),
         )
@@ -434,7 +437,12 @@ internal fun QuotaInlineAction(
             .padding(horizontal = t.space2),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = tone)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = tone,
+            modifier = Modifier.testTag("button.inline"),
+        )
     }
 }
 

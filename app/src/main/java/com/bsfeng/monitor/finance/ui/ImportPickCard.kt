@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
@@ -73,6 +74,7 @@ internal fun ImportPickCard(
                 .background(bg)
                 .border(1.dp, t.borderSoft, shape)
                 .keyboardFocusRing(shape)
+                .testTag("card.pick")
                 .clickable(interactionSource = interaction, indication = null, enabled = enabled) {
                     haptic(HapticTone.LIGHT)
                     onPick()

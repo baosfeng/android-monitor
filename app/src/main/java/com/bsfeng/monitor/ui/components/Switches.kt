@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -153,6 +154,7 @@ fun AppFab(
             .pressFeedback(interaction)
             .clip(CircleShape)
             .background(t.accent)
+            .testTag("fab.add")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 // 主操作给中触（区别于列表点击的轻触），按下就出现缩放
                 haptic(HapticTone.MEDIUM)
@@ -184,6 +186,7 @@ fun ThemeOpt(
                 color = if (selected) t.accent else t.borderSoft,
                 shape = RoundedCornerShape(t.radiusLg),
             )
+            .testTag("theme.option")
             .clickable { onClick() }
             .padding(t.space3),
     ) {

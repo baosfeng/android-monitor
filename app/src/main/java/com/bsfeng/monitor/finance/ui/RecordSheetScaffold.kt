@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.BottomSheet
@@ -60,6 +61,7 @@ internal fun SheetGhostButton(text: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(shape)
             .border(1.dp, t.border, shape)
+            .testTag("button.ghost")
             .clickable { onClick() }
             .padding(vertical = t.space3),   // 原型 .btn 的 min-height:48px 由「上下 --space-3 + 17px 行高」达成
         contentAlignment = Alignment.Center,
@@ -77,6 +79,7 @@ internal fun SheetPrimaryButton(text: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(t.radiusLg))
             .background(t.accent)
+            .testTag("button.primary")
             .clickable { onClick() }
             .padding(vertical = t.space3),
         contentAlignment = Alignment.Center,

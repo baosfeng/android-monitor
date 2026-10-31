@@ -209,7 +209,7 @@ internal fun TransactionRow(
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).testTag("row.tx"),
                 )
                 if (isAutoBooked) {
                     // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、token 着色）
@@ -291,6 +291,7 @@ private fun S04EdgeRow(
             .rowPressFeedback(interaction)
             .clip(rowShape)
             .background(rowBackground)
+            .testTag("row.edge")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { }
             .heightIn(min = t.rowMinH)
             .padding(horizontal = t.space3, vertical = t.space2),

@@ -32,8 +32,14 @@ object UiAudit {
     const val REASON_NO_LABEL = "no_label"
     const val REASON_SMALL_TARGET = "small_target"
 
-    /** 触达目标的最小短边（dp）：Material 与 WCAG 2.2 AA 的下限，别再各写一份。 */
-    const val MIN_TARGET_DP = 48.0
+    /**
+     * 触达目标的最小短边（dp）= 设计 token `tap-min` 的 44px（WCAG 2.1 AA 的下限）。
+     *
+     * 曾经写 48（Material 默认值），与项目 token 打架：全站按钮/行都按 `t.tapMin` 做 44dp，
+     * 拿 48 判就会把「照规范做的控件」一律报成缺口（真机实测额度页「保存并查询」44.6dp 被误报）。
+     * 判定线必须与 token 同源，否则审计结果没人敢信。
+     */
+    const val MIN_TARGET_DP = 44.0
 
     /** RESULT 行里带几条可读缺口摘要：够定位，又不会把 logcat 一行撑爆。 */
     const val HEAD_LIMIT = 5

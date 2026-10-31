@@ -300,6 +300,7 @@ private fun BasemapChip(enabled: Boolean, onClick: () -> Unit) {
             .pressFeedback(interaction)
             .clip(RoundedCornerShape(t.radiusPill))
             .background(if (enabled) t.accent.copy(alpha = 0.12f) else t.fgFade(6))
+            .testTag("chip.basemap")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -337,6 +338,7 @@ private fun TripExportChip(exporting: Boolean, onClick: () -> Unit) {
             .pressFeedback(interaction, enabled = !exporting)
             .clip(RoundedCornerShape(t.radiusPill))
             .background(t.fgFade(6))
+            .testTag("chip.export")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,

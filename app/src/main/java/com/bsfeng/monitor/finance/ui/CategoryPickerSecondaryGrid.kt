@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -176,6 +177,7 @@ private fun PickerCell(
                 }
             )
             .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
+            .testTag("cell.category.l2")
             .clickable { onClick() }
             .padding(vertical = t.space1),
         horizontalAlignment = Alignment.CenterHorizontally,

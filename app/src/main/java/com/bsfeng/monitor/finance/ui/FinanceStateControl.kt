@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -79,6 +80,7 @@ internal fun FinanceStateBar(control: FinanceStateControl, modifier: Modifier = 
                 modifier = Modifier
                     .clip(RoundedCornerShape(t.radiusPill))
                     .background(if (selected) t.accent else t.surface)
+                    .testTag("seg.state")
                     .clickable { control.select(state) }
                     .padding(horizontal = t.space2, vertical = t.space1),
             ) {

@@ -497,7 +497,7 @@ private fun DayArrow(
             icon,
             contentDescription = description,
             tint = if (enabled) t.fg else t.muted,
-            modifier = Modifier.size(t.space5),
+            modifier = Modifier.size(t.space5).testTag("button.icon"),
         )
     }
 }

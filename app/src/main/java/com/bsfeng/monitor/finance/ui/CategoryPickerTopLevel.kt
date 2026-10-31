@@ -97,6 +97,7 @@ private fun TopLevelCell(
             .background(if (selected) t.accent.copy(alpha = SELECTED_BG_ALPHA) else Color.Transparent)
             .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
             // 点一级只换网格：轻震一次（口径同全部格子点击；s15 契约 s15-l1-* 的「轻震」）
+            .testTag("cell.category.l1")
             .clickable {
                 haptic(HapticTone.LIGHT)
                 onClick()
@@ -153,6 +154,7 @@ private fun TopLevelChip(name: String, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (selected) t.accent.copy(alpha = 0.12f) else Color.Transparent)
             .border(1.dp, if (selected) t.accent else t.border, shape)
+            .testTag("chip.category")
             .clickable { onClick() }
             .padding(horizontal = t.space3),
         contentAlignment = Alignment.Center,

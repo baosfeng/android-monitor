@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -217,6 +218,7 @@ private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier =
             .keyboardFocusRing(shape)
             .clip(shape)
             .border(1.dp, t.border, shape)
+            .testTag("button.ghost")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 // 普通按钮点击属轻触级：震动收敛在控件内，调用点不再各补一次
                 haptic(HapticTone.LIGHT)

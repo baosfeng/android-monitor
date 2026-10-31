@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -160,6 +161,7 @@ internal fun WheelColumn(
                         .height(WHEEL_ITEM_H)
                         // 锚点 s14a-wheel-hour / s14a-wheel-minute 的 click：点格滚到中带（120ms）。
                         // 反馈就是「滚到中带 + 数字转 fg/600」，不弹 ripple、不加按压缩放。
+                        .testTag("cell.wheel")
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,

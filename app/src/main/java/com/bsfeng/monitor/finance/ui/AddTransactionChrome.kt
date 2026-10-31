@@ -57,8 +57,10 @@ internal fun AddTransactionTopBar(
             if (isEditing) "编辑交易" else "记一笔",
             style = MaterialTheme.typography.titleLarge,
             color = t.fg,
-            modifier = Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
+            modifier = Modifier
+                .testTag("title.toggle")
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
                 indication = null,
             ) { onToggleStateBar() },
         )
