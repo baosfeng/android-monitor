@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.resume
@@ -145,6 +146,51 @@ class DebugCommandReceiver : BroadcastReceiver() {
             is DebugCommand.Open -> emitOpen(context, command, token)
             is DebugCommand.Db -> emitDb(context, command, token)
             DebugCommand.Heartbeat -> emitHeartbeat(context, token)
+            is DebugCommand.Ui -> emitUi(context, command, token)
+        }
+    }
+
+    // ─────────────────────────────── ui ───────────────────────────────
+
+    /**
+     * 无障碍界面通道。全部动作在 [DebugUiBridge] 里 post 到主线程执行。
+     *
+     * 超时保护比 CLI 的 12 秒轮询**短 1 秒**：目标 App 不响应（动画卡死 / 窗口不给节点）时，
+     * 必须由端上先打出 `reason=timeout`，否则 CLI 先放弃、验证方只看到「没有结果行」，
+     * 分不清是「命令超时」还是「广播没投递到」。
+     */
+    private suspend fun emitUi(context: Context, cmd: DebugCommand.Ui, token: String?) {
+        val outcome = withTimeoutOrNull(UI_TIMEOUT_MS) {
+            DebugUiBridge.run(context.applicationContext, cmd.action)
+        }
+        when (outcome) {
+            null -> emitFailure(
+                cmd = cmd.name,
+                token = token,
+                reason = "timeout",
+                data = JSONObject()
+                    .put("op", cmd.action.op)
+                    .put("timeoutMs", UI_TIMEOUT_MS)
+                    .put("hint", "无障碍主线程没在时限内返回：确认屏幕亮着、服务未被系统重连（再跑一次 ui dump）"),
+            )
+
+            is DebugUiBridge.Outcome.Fail -> emitFailure(
+                cmd = cmd.name,
+                token = token,
+                reason = outcome.reason,
+                data = outcome.data,
+            )
+
+            is DebugUiBridge.Outcome.Ok -> {
+                // dump 的 path/nodes/pkg 额外打到 RESULT 行前缀：CLI 不用解析 data 就能直接 cat 文件
+                val extra = LinkedHashMap<String, String>()
+                if (cmd.action is UiAction.Dump) {
+                    extra["path"] = outcome.data.optString("path")
+                    extra["nodes"] = outcome.data.optInt("nodes").toString()
+                    extra["pkg"] = outcome.data.optString("pkg", "?")
+                }
+                emitWithDetail(cmd = cmd.name, token = token, detail = extra, data = outcome.data)
+            }
         }
     }
 
@@ -623,6 +669,14 @@ class DebugCommandReceiver : BroadcastReceiver() {
     private fun emit(cmd: String, token: String?, data: JSONObject) =
         write("${prefix(cmd, true, null, token)} data=$data")
 
+    /** 成功行 + 若干 `k=v` 明细（只给 dump 用：path/nodes/pkg 要能直接从行里读到）。 */
+    private fun emitWithDetail(cmd: String, token: String?, detail: Map<String, String>, data: JSONObject) =
+        write(buildString {
+            append(prefix(cmd, true, null, token))
+            detail.forEach { (key, value) -> append(' ').append(key).append('=').append(value) }
+            append(" data=").append(data)
+        })
+
     private fun emitFailure(cmd: String, token: String?, reason: String, data: JSONObject) =
         write("${prefix(cmd, false, reason, token)} data=$data")
 
@@ -667,5 +721,8 @@ class DebugCommandReceiver : BroadcastReceiver() {
 
         /** 监控库文件名（`DatabaseHelper.DATABASE_NAME` 是私有的，这里只读打开要用绝对路径）。 */
         const val MONITOR_DB = "monitor.db"
+
+        /** ui 命令的端上超时：必须小于 CLI 的 12 秒轮询上限，保证超时理由先被打出来。 */
+        const val UI_TIMEOUT_MS = 11_000L
     }
 }
