@@ -142,6 +142,9 @@ private fun Modifier.longPressWithTimeout(timeoutMillis: Long, onLongPress: () -
  *
  * 反馈按契约走共享基元：[pressFeedback] 按下 0.96 + 点击时 [HapticTone.LIGHT]
  * （「可点元素必须有按下态」——此前本控件完全无按下反馈）。
+ *
+ * 可读名只有一处：[contentDescription] 由内容 lambda 交给内部图标（`contentDescription = label`）。
+ * 不在这里给 Box 补 semantics —— 父子都有名字时读屏会把同一句话念两遍。
  */
 @Composable
 internal fun FinanceIconButton(
@@ -150,7 +153,8 @@ internal fun FinanceIconButton(
     contentDescription: String? = null,
     /** 是否画 `.icon-btn` 的浅灰圆底 + 描边；月份条内传 false（原型是透明态）。 */
     chrome: Boolean = true,
-    content: @Composable () -> Unit,
+    /** 内容 lambda 收到可读名：图标要把它落到 `contentDescription`，读屏才念得出按钮用途。 */
+    content: @Composable (String?) -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -175,7 +179,7 @@ internal fun FinanceIconButton(
                 onClick()
             },
         contentAlignment = Alignment.Center,
-    ) { content() }
+    ) { content(contentDescription) }
 }
 
 /**
@@ -223,10 +227,10 @@ internal fun FinanceMonthBar(
             modifier = previousModifier,
             contentDescription = "上个月",
             chrome = false,
-        ) {
+        ) { label ->
             Icon(
                 Icons.Filled.ChevronLeft,
-                contentDescription = null,
+                contentDescription = label,
                 tint = t.accent,
                 modifier = Modifier.size(t.iconSize),
             )
@@ -245,10 +249,10 @@ internal fun FinanceMonthBar(
             modifier = nextModifier,
             contentDescription = "下个月",
             chrome = false,
-        ) {
+        ) { label ->
             Icon(
                 Icons.Filled.ChevronRight,
-                contentDescription = null,
+                contentDescription = label,
                 tint = t.accent,
                 modifier = Modifier.size(t.iconSize),
             )

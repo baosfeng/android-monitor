@@ -58,6 +58,7 @@ internal fun SettingsMonitorSection(rt: SettingsScreenRuntime) {
                     },
                     // 锚点落在开关本身：契约 s09-monitor 的触发是「拨开关」而不是点整行
                     modifier = Modifier.testTag("s09-monitor"),
+                    contentDescription = "前台应用监控",
                 )
             },
         )

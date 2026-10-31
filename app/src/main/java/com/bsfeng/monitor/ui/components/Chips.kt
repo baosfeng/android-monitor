@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -100,6 +101,9 @@ fun Chip(
     val shape = RoundedCornerShape(t.radiusPill)
     Box(
         modifier = modifier
+            // 触达红线（≥48dp）：短标签（「7 天」这类）只靠左右内边距会窄到 46.7dp，
+            // 补最小宽度让点击域达标；视觉上是同一个 pill，只是最短的那个宽一点点。
+            .widthIn(min = t.tapMin)
             .height(t.tapMin)
             .pressFeedback(interaction)
             // 键盘焦点环 2dp（契约 s01 通用口径）：与分段控件同一实现，仅键盘 / 遥控器输入时画；

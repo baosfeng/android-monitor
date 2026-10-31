@@ -66,11 +66,15 @@ internal fun SettingsTransferPairingRows(
         subtitle = "系统通知音 + 震动",
         icon = Icons.Outlined.VolumeUp,
         trailing = {
-            AppSwitch(sound.complete, { enabled ->
-                transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
-                view.performConfirmHaptic()
-                toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
-            })
+            AppSwitch(
+                sound.complete,
+                { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.COMPLETE)
+                    view.performConfirmHaptic()
+                    toast.show(if (enabled) "已开启传输完成提示" else "已关闭传输完成提示")
+                },
+                contentDescription = "传输完成提示",
+            )
         },
     )
     TokenDivider(first = false)
@@ -79,10 +83,14 @@ internal fun SettingsTransferPairingRows(
         subtitle = "提示音 + 震动（默认关）",
         icon = Icons.Outlined.VolumeOff,
         trailing = {
-            AppSwitch(sound.failure, { enabled ->
-                transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
-                view.performConfirmHaptic()
-            })
+            AppSwitch(
+                sound.failure,
+                { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.FAILURE)
+                    view.performConfirmHaptic()
+                },
+                contentDescription = "传输失败提示",
+            )
         },
     )
     TokenDivider(first = false)
@@ -91,10 +99,14 @@ internal fun SettingsTransferPairingRows(
         subtitle = "仅震动（默认关）",
         icon = Icons.Outlined.Vibration,
         trailing = {
-            AppSwitch(sound.newDevice, { enabled ->
-                transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
-                view.performConfirmHaptic()
-            })
+            AppSwitch(
+                sound.newDevice,
+                { enabled ->
+                    transferViewModel.setSound(enabled, TransferViewModel.SoundKind.NEW_DEVICE)
+                    view.performConfirmHaptic()
+                },
+                contentDescription = "新设备出现提示",
+            )
         },
     )
     TokenDivider(first = false)
@@ -109,17 +121,21 @@ internal fun SettingsTransferPairingRows(
         icon = Icons.Outlined.LockOpen,
         trailing = {
             TailNum(if (windowState.enabled) windowState.minutes.toString() + " 分钟" else "关")
-            AppSwitch(windowState.enabled, { enabled ->
-                transferViewModel.setOpenPairingWindow(enabled)
-                view.performConfirmHaptic()
-                toast.show(
-                    if (enabled) {
-                        "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
-                    } else {
-                        "已关闭免配对窗口"
-                    }
-                )
-            })
+            AppSwitch(
+                windowState.enabled,
+                { enabled ->
+                    transferViewModel.setOpenPairingWindow(enabled)
+                    view.performConfirmHaptic()
+                    toast.show(
+                        if (enabled) {
+                            "免配对窗口已开启：" + windowState.minutes + " 分钟内免 PIN"
+                        } else {
+                            "已关闭免配对窗口"
+                        }
+                    )
+                },
+                contentDescription = "免配对码窗口",
+            )
         },
     )
     // 窗口时长：开启时切换会以新时长重新计时；

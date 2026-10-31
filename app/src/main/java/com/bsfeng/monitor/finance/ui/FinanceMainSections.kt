@@ -130,10 +130,10 @@ internal fun S04MonthBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        S04MonthArrow(modifier = Modifier.testTag("s04-prev"), description = "上个月", onClick = onPrevious) {
+        S04MonthArrow(modifier = Modifier.testTag("s04-prev"), description = "上个月", onClick = onPrevious) { label ->
             Icon(
                 Icons.Filled.ChevronLeft,
-                contentDescription = null,
+                contentDescription = label,
                 tint = t.accent,
                 modifier = Modifier.size(t.iconSize),
             )
@@ -148,10 +148,10 @@ internal fun S04MonthBar(
                 scaleY = bump.value
             },
         )
-        S04MonthArrow(modifier = Modifier.testTag("s04-next"), description = "下个月", onClick = onNext) {
+        S04MonthArrow(modifier = Modifier.testTag("s04-next"), description = "下个月", onClick = onNext) { label ->
             Icon(
                 Icons.Filled.ChevronRight,
-                contentDescription = null,
+                contentDescription = label,
                 tint = t.accent,
                 modifier = Modifier.size(t.iconSize),
             )
@@ -159,13 +159,17 @@ internal fun S04MonthBar(
     }
 }
 
-/** 月份条单侧箭头：44dp 命中区、按下 [pressFeedback] + LIGHT。 */
+/**
+ * 月份条单侧箭头：48dp 命中区、按下 [pressFeedback] + LIGHT。
+ *
+ * 可读名只有一处：[description] 交给内容 lambda 落到图标上（同 [FinanceIconButton] 的口径）。
+ */
 @Composable
 private fun S04MonthArrow(
     description: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (String?) -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -180,7 +184,7 @@ private fun S04MonthArrow(
                 onClick()
             },
         contentAlignment = Alignment.Center,
-    ) { content() }
+    ) { content(description) }
 }
 
 /**

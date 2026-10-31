@@ -25,11 +25,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -143,13 +146,39 @@ fun LegendDot(color: Color, label: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * 一个 18dp 的「?」入口：点开弹说明。
+ * 一个 20dp 的「?」圆标：纯展示、不接收点击。
  *
  * 额度页的「为什么这样显示」类文案（百分比计划不提供金额、用量写入有延迟）
  * 以前常驻卡片底部，占掉三四行高度；改成按需展开，一屏才能放得下额度卡 + 用量卡。
+ *
+ * 名字与点击落在同位置的 [QuotaInfoTouch] 上：圆标自己带 contentDescription 会让读屏念两遍。
  */
 @Composable
-fun QuotaInfoIcon(
+fun QuotaInfoBadge(modifier: Modifier = Modifier) {
+    val t = LocalDesignTokens.current
+    Box(
+        modifier = modifier
+            .size(20.dp)
+            .clip(CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.HelpOutline,
+            contentDescription = null,
+            tint = t.muted,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/**
+ * 「?」的触达层：48dp 透明可点区，与圆标同位置叠放，点开弹说明。
+ *
+ * 为什么不把圆标本身撑到 48dp：标注行只有 20dp 高，撑开会把整张卡顶高 28dp（视觉变了）。
+ * 叠层放进与卡片内容同高的 Box 里，两者都不动——视觉 20dp、触达 48dp、卡片高度原样。
+ */
+@Composable
+fun QuotaInfoTouch(
     title: String,
     text: String,
     modifier: Modifier = Modifier,
@@ -158,18 +187,12 @@ fun QuotaInfoIcon(
     var open by remember { mutableStateOf(false) }
     Box(
         modifier = modifier
-            .size(20.dp)
+            .minimumInteractiveComponentSize()
+            .size(t.tapMin)
             .clip(CircleShape)
-            .clickable { open = true },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.HelpOutline,
-            contentDescription = title,
-            tint = t.muted,
-            modifier = Modifier.size(16.dp),
-        )
-    }
+            .clickable { open = true }
+            .semantics { contentDescription = title },
+    )
     AppDialog(visible = open, onDismiss = { open = false }) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = t.fg)
         Spacer(Modifier.height(t.space2))

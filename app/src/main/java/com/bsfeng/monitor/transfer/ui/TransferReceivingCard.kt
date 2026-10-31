@@ -12,8 +12,8 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.transfer.service.ReceivingAutoClose
 import com.bsfeng.monitor.transfer.service.ReceivingState
@@ -113,6 +114,7 @@ internal fun ReceivingCard(
                 ReceivingToggle(
                     label = "关闭",
                     filled = false,
+                    checked = running,
                     busy = busy,
                     focusPending = focusPending,
                     onFocusConsumed = onFocusConsumed,
@@ -125,6 +127,7 @@ internal fun ReceivingCard(
             ReceivingToggle(
                 label = "开启接收",
                 filled = true,
+                checked = running,
                 busy = busy,
                 focusPending = focusPending,
                 onFocusConsumed = onFocusConsumed,
@@ -175,6 +178,8 @@ internal fun ReceivingCard(
 private fun ReceivingToggle(
     label: String,
     filled: Boolean,
+    /** 接收总开关的当前状态（读屏据此念「已开启 / 已关闭」）；与视觉形态 [filled] 分开避免互相顶替。 */
+    checked: Boolean,
     busy: Boolean,
     focusPending: String?,
     onFocusConsumed: () -> Unit,
@@ -193,14 +198,19 @@ private fun ReceivingToggle(
             .pressFeedback(interaction, enabled = enabled)
             .clip(shape)
             .background(if (filled) t.accent else t.fgFade(6))
-            .clickable(
+            // 两态按钮承载的是「接收开/关」：toggleable 让读屏念出角色与当前状态，
+            // 视觉与涟漪（indication = null）保持原样
+            .toggleable(
+                value = checked,
                 enabled = enabled,
+                role = Role.Switch,
                 interactionSource = interaction,
                 indication = null,
-            ) {
-                haptic(HapticTone.LIGHT)
-                onClick()
-            }
+                onValueChange = {
+                    haptic(HapticTone.LIGHT)
+                    onClick()
+                },
+            )
             .testTag("C-10")
             .returnFocusWhen(RECEIVING_TOGGLE_ID, focusPending, onFocusConsumed)
             .padding(horizontal = t.space4, vertical = t.space2),

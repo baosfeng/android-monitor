@@ -129,7 +129,7 @@ internal fun SettingsWidgetSection(
                     // 桌面可能正显示旧金额：立刻推一轮重画，不等下一次 60 秒心跳
                     WidgetRefresher.refreshAll(context)
                     toast.show(if (hidden) "小组件已隐藏金额" else "小组件已恢复显示金额")
-                })
+                }, contentDescription = "隐藏金额")
             },
         )
         widgetEntries().forEach { entry ->

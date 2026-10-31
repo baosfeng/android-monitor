@@ -228,10 +228,10 @@ fun BudgetScreen(
                     .padding(horizontal = t.space2, vertical = t.space2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FinanceIconButton(onClick = onBack, contentDescription = "返回") {
+                FinanceIconButton(onClick = onBack, contentDescription = "返回") { label ->
                     Icon(
                         Icons.Filled.ChevronLeft,
-                        contentDescription = null,
+                        contentDescription = label,
                         tint = t.accent,
                         modifier = Modifier.size(t.iconSize),
                     )

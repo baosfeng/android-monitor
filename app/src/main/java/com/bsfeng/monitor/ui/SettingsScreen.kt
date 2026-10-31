@@ -304,6 +304,7 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
                         rt.toast.show(if (rt.isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                     },
                     modifier = Modifier.testTag("s09-monitor"),
+                    contentDescription = "前台应用监控",
                 )
             },
         )

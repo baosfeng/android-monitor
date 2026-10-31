@@ -45,7 +45,9 @@ TokenRow(
         "已关闭：不生成「记账」Tab"
     },
     icon = Icons.Outlined.Payments,
-    trailing = { AppSwitch(financeOn, { setFeature(Feature.FINANCE, it) }) },
+    trailing = {
+        AppSwitch(financeOn, { setFeature(Feature.FINANCE, it) }, contentDescription = "记账")
+    },
 )
 TokenDivider(first = false)
 if (financeOn) {
@@ -65,7 +67,7 @@ if (financeOn) {
                 toast.show(
                     if (enabled) "已开启支付后弹窗记账" else "已关闭支付后弹窗记账"
                 )
-            })
+            }, contentDescription = "支付后弹窗确认")
         },
     )
 } else {

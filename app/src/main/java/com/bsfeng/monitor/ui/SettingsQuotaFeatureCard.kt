@@ -74,6 +74,7 @@ SettingsRow(
             onCheckedChange = { setFeature(Feature.QUOTA, it) },
             // 开关锚点（s09-quota-switch）：关闭后焦点留在开关本身
             modifier = Modifier.testTag("s09-quota-switch"),
+            contentDescription = "额度",
         )
     },
 )
@@ -103,10 +104,14 @@ if (quotaOn) {
             subtitle = "剩余 5% / 4% / 3% / 2% / 1% 各提醒一次",
             icon = Icons.Outlined.Notifications,
             trailing = {
-                AppSwitch(quotaAlertsOn, {
-                    quotaAlertsOn = it
-                    quotaSettings.alertsEnabled = it
-                })
+                AppSwitch(
+                    quotaAlertsOn,
+                    {
+                        quotaAlertsOn = it
+                        quotaSettings.alertsEnabled = it
+                    },
+                    contentDescription = "预警通知",
+                )
             },
         )
         TokenDivider(first = false)

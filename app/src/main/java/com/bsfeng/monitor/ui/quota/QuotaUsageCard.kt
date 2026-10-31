@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -352,7 +353,9 @@ private fun QuotaRangeChips(
                         onSelect(range)
                     }
                     .then(rangeTagOf(variant, range))
-                    // 点击区 44dp：纵向内边距补到下限
+                    // 触达红线（≥48dp）：短标签「7 天」只靠左右内边距会窄到 46.7dp，
+                    // 补最小宽度让点击域达标（最高的那个 chip 一直是 48dp，纵向本来就够）
+                    .widthIn(min = t.tapMin)
                     .heightIn(min = t.tapMin)
                     .padding(horizontal = t.space2),
                 contentAlignment = Alignment.Center,

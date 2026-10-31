@@ -83,6 +83,7 @@ internal fun AppRow(app: AppInfo, onToggle: () -> Unit) {
             )
         }
         Spacer(Modifier.width(t.space3))
-        AppSwitch(app.isInWhitelist, { onToggle() })
+        // 行标题是兄弟节点：开关单独取焦点时要自带应用名
+        AppSwitch(app.isInWhitelist, { onToggle() }, contentDescription = app.appName + " 白名单")
     }
 }

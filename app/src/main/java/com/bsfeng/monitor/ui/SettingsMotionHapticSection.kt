@@ -118,10 +118,14 @@ internal fun SettingsAppearanceSection(rt: SettingsScreenRuntime) {
             icon = Icons.Outlined.Vibration,
             trailing = {
                 TailNum(if (rt.hapticEnabled) hapticStrengthLabel(rt.hapticStrength) else "关")
-                AppSwitch(rt.hapticEnabled, { enabled ->
-                    HapticConfig.setEnabled(enabled)
-                    rt.view.performHaptic(HapticTone.LIGHT)
-                })
+                AppSwitch(
+                    rt.hapticEnabled,
+                    { enabled ->
+                        HapticConfig.setEnabled(enabled)
+                        rt.view.performHaptic(HapticTone.LIGHT)
+                    },
+                    contentDescription = "触觉反馈与强度",
+                )
             },
         )
         // 关闭触觉时整组降透明度：与「已关闭」文案一致，不做成假开关
