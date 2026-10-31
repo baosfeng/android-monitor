@@ -31,6 +31,8 @@ data class UiNode(
     val enabled: Boolean,
     val selected: Boolean,
     val childCount: Int,
+    /** 可聚焦（含 TalkBack 焦点）：审计要用它认「读屏能落在上面」的控件，dump 时也一并带上。 */
+    val focusable: Boolean = false,
 ) {
     val centerX: Int get() = (left + right) / 2
     val centerY: Int get() = (top + bottom) / 2
@@ -65,6 +67,7 @@ data class UiNode(
             .put("enabled", enabled)
             .put("selected", selected)
             .put("childCount", childCount)
+            .put("focusable", focusable)
             .put("truncated", trimmedText.length != text.length || trimmedDesc.length != desc.length)
     }
 }
@@ -151,9 +154,39 @@ object UiTree {
         return null
     }
 
-    /** 第一个可滚动节点（有尺寸的才算：0 宽的容器滚不动）。 */
-    fun firstScrollable(nodes: List<UiNode>): UiNode? =
-        nodes.firstOrNull { it.scrollable && it.enabled && it.width > 0 && it.height > 0 }
+    /**
+     * 选滚动目标：**方向对得上、且覆盖屏幕中部**的优先；方向对不上就返回 null（交给手势兜底）。
+     *
+     * 历史缺陷（真机实测）：只取「第一个 scrollable」，可点屏顶一条横向 HorizontalScrollView 会把
+     * `ui scroll --es dir down` 吃掉 —— 横条自己左移、竖向内容一动不动，验证方误判成「已经滚到底」。
+     *
+     * **为什么方向对不上不回落**：设置页实测只有一个 scrollable，正是那条横向横条
+     * （`[48,346,1152,478]`，外层 ScrollView 的 isScrollable 是 false）。回落到它 = 又滚错轴，
+     * 所以这里宁可返回 null，让调用方用手势滑屏——手势落点全是竖向内容，语义正确。
+     *
+     * @param screenHeight 屏幕高度（px）：用来判断「贯穿中部」；<=0 表示不知道屏幕尺寸，只按方向挑
+     * @param preferVertical true = 找竖向容器（up/down），false = 找横向容器（left/right）
+     */
+    fun firstScrollable(
+        nodes: List<UiNode>,
+        screenHeight: Int = 0,
+        preferVertical: Boolean = true,
+    ): UiNode? {
+        // 0 尺寸的容器滚不动：先滤掉，后面的挑选只在真实容器里做
+        val aligned = nodes.filter {
+            it.scrollable && it.enabled && it.width > 0 && it.height > 0 &&
+                (it.height >= it.width) == preferVertical
+        }.ifEmpty { return null }
+        if (screenHeight > 0) {
+            val middle = screenHeight / 2
+            aligned.firstOrNull { it.top <= middle && it.bottom >= middle }?.let { return it }
+        }
+        return aligned.first()
+    }
+
+    /** 屏上有没有任何可滚容器（方向不论）：用来区分「没得滚」与「只有反方向的轴」。 */
+    fun anyScrollable(nodes: List<UiNode>): Boolean =
+        nodes.any { it.scrollable && it.enabled && it.width > 0 && it.height > 0 }
 
     private const val MAX_ANCESTOR_HOPS = 64
 }

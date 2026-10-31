@@ -150,6 +150,54 @@ class DebugUiModelTest {
     }
 
     @Test
+    fun `firstScrollable - 页顶横向横条不再吃掉竖向滚动（真机实测缺陷）`() {
+        // 实测形态：RecyclerView 顶部一条 346..466 的 HorizontalScrollView，竖向列表在它下面
+        val nodes = listOf(
+            node(index = 0, scrollable = true, bounds = listOf(0, 346, 1080, 466)),
+            node(index = 1, scrollable = true, bounds = listOf(0, 500, 1080, 2400)),
+        )
+        assertEquals(1, UiTree.firstScrollable(nodes, screenHeight = 2400)?.index)
+        // 不知道屏幕高度时至少按方向挑，也仍是竖向那个
+        assertEquals(1, UiTree.firstScrollable(nodes)?.index)
+    }
+
+    @Test
+    fun `firstScrollable - 贯通屏幕中部的竖向容器优先于只露出顶部的小容器`() {
+        val nodes = listOf(
+            node(index = 0, scrollable = true, bounds = listOf(0, 0, 600, 700)),
+            node(index = 1, scrollable = true, bounds = listOf(0, 200, 1080, 2400)),
+        )
+        assertEquals(1, UiTree.firstScrollable(nodes, screenHeight = 2400)?.index)
+    }
+
+    @Test
+    fun `firstScrollable - 只有横向容器时不交给 down，返回 null 让手势兜底（真机实测 2）`() {
+        // 设置页实测：唯一 scrollable 就是那条横向横条，向下滚它 = 滚错轴、内容一动不动
+        val nodes = listOf(node(index = 0, scrollable = true, bounds = listOf(48, 346, 1152, 478)))
+        assertNull(UiTree.firstScrollable(nodes, screenHeight = 2400))
+        assertEquals(0, UiTree.firstScrollable(nodes, screenHeight = 2400, preferVertical = false)?.index)
+        assertTrue(UiTree.anyScrollable(nodes))
+    }
+
+    @Test
+    fun `anyScrollable - 能把「没得滚」与「只有反方向的轴」分开`() {
+        assertTrue(!UiTree.anyScrollable(listOf(node(index = 0, scrollable = false))))
+        assertTrue(!UiTree.anyScrollable(emptyList()))
+        // 0 尺寸容器滚不动，不算「有得滚」
+        assertTrue(!UiTree.anyScrollable(listOf(node(index = 0, scrollable = true, bounds = listOf(0, 0, 0, 0)))))
+        assertTrue(UiTree.anyScrollable(listOf(node(index = 0, scrollable = true, bounds = listOf(0, 0, 10, 10)))))
+    }
+
+    @Test
+    fun `firstScrollable - 横向滚动时优先横向容器`() {
+        val nodes = listOf(
+            node(index = 0, scrollable = true, bounds = listOf(0, 500, 1080, 2400)),
+            node(index = 1, scrollable = true, bounds = listOf(0, 346, 1080, 466)),
+        )
+        assertEquals(1, UiTree.firstScrollable(nodes, screenHeight = 2400, preferVertical = false)?.index)
+    }
+
+    @Test
     fun `中心点 - 点按坐标取矩形中心`() {
         val target = node(bounds = listOf(100, 200, 300, 400))
         assertEquals(200, target.centerX)

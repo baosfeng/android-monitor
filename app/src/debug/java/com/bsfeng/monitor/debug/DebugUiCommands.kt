@@ -16,6 +16,16 @@ sealed interface UiAction {
         override val op: String = "dump"
     }
 
+    /**
+     * 无障碍审计：扫当前活动窗口，列出「无可读名」与「触达 < 48dp」的控件。
+     *
+     * 与 [Dump] 分开：dump 是原始树（给 agent 自己看），audit 是**判定结果 + 可否放行**，
+     * 有缺口时 ok=false（脚本靠退出码拦回归）。`tag` 是文件名标签。
+     */
+    data class Audit(val tag: String?) : UiAction {
+        override val op: String = "audit"
+    }
+
     /** 命中节点或其可点祖先上做 ACTION_CLICK，找不到可点祖先回落到手势点击。 */
     data class Click(val selector: UiSelector) : UiAction {
         override val op: String = "click"
@@ -26,7 +36,7 @@ sealed interface UiAction {
         override val op: String = "longclick"
     }
 
-    /** 第一个可滚动节点上 ACTION_SCROLL_FORWARD/BACKWARD，没有则手势滑动。 */
+    /** 方向对得上、且贯穿屏幕中部的滚动容器上做 ACTION_SCROLL_FORWARD/BACKWARD，没有则手势滑动。 */
     data class Scroll(val dir: ScrollDir) : UiAction {
         override val op: String = "scroll"
     }
@@ -58,7 +68,7 @@ sealed interface UiAction {
 
     companion object {
         /** op 取值表（顺序 = 文档顺序，错误信息直接复用）。 */
-        fun list(): String = "dump|click|longclick|scroll|swipe|back|home|recents|wait"
+        fun list(): String = "dump|audit|click|longclick|scroll|swipe|back|home|recents|wait"
     }
 }
 

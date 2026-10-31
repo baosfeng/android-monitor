@@ -70,6 +70,7 @@ internal object DebugUiBridge {
         return try {
             when (action) {
                 is UiAction.Dump -> dump(context, service, action.tag)
+                is UiAction.Audit -> audit(context, service, action.tag)
                 is UiAction.Click -> tap(service, action.selector, longPress = false)
                 is UiAction.LongClick -> tap(service, action.selector, longPress = true)
                 is UiAction.Scroll -> scroll(service, action.dir)
@@ -116,11 +117,17 @@ internal object DebugUiBridge {
     private fun relativePath(context: Context, file: File): String =
         "files" + file.absolutePath.removePrefix(context.filesDir.absolutePath)
 
-    private fun writeDump(context: Context, tag: String, snapshot: Snapshot): File {
+    /** `files/dsh-ui/`：dump 与 audit 共用同一个私有目录（已 gitignore 之外，也不外置）。 */
+    private fun uiDir(context: Context): File {
         val dir = File(context.filesDir, "dsh-ui")
         if (!dir.isDirectory && !dir.mkdirs()) {
             throw IllegalStateException("无法创建 dump 目录：" + dir.absolutePath)
         }
+        return dir
+    }
+
+    private fun writeDump(context: Context, tag: String, snapshot: Snapshot): File {
+        val dir = uiDir(context)
         val windows = JSONArray()
         snapshot.windows.forEach { windows.put(it.toJson()) }
         val nodes = JSONArray()
@@ -136,6 +143,52 @@ internal object DebugUiBridge {
         val file = File(dir, tag + ".json")
         // 单行紧凑输出：agent 直接解析，人要看也能 jq 格式化
         file.writeText(json.toString(), Charsets.UTF_8)
+        return file
+    }
+
+    // ──────────────────────────── audit ────────────────────────────
+
+    /**
+     * 无障碍审计：扫当前活动窗口，落 `files/dsh-ui/a11y-<tag>.json`。
+     *
+     * **有缺口就是 Fail**：`OK` 只表示「命令跑完了」，而这条命令的语义是「这屏能不能放行」，
+     * 所以 gapCount > 0 时回 `reason=a11y_gaps`（ok=false → CLI 退出码 1），脚本才能拦回归。
+     * 判定全在 [UiAudit] 里（纯函数），这里只负责读树、换算密度、落盘。
+     */
+    private suspend fun audit(context: Context, service: MonitorAccessibilityService, tag: String?): Outcome {
+        val density = context.resources.displayMetrics.density
+        val snapshot = onMain { snapshotOf(service) }
+        if (snapshot.nodes.isEmpty()) return noRoot()
+        val report = UiAudit.run(snapshot.activeNodes(), density, snapshot.pkg.orEmpty())
+        val file = writeAudit(context, UiTag.sanitize(tag), report)
+        val data = JSONObject()
+            .put("op", "audit")
+            .put("path", relativePath(context, file))
+            .put("absolutePath", file.absolutePath)
+            .put("pkg", report.pkg.ifEmpty { "?" })
+            .put("nodes", report.nodeCount)
+            .put("gaps", report.gapCount)
+            .put("clickable", report.clickableCount)
+            .put("info", report.infoJson())
+            .put("top", JSONArray(report.headSummaries()))
+        return if (report.ok) {
+            Outcome.Ok(data)
+        } else {
+            Outcome.Fail(
+                "a11y_gaps",
+                data.put(
+                    "hint",
+                    "每条缺口给控件加 text 或 contentDescription（图标按钮用 Modifier.semantics / Icon 的 " +
+                        "contentDescription）；触达尺寸 ≥48dp（iconButton 默认只有 40dp，用 minimumInteractiveComponentSize 兜住）。" +
+                        "完整报告见 path",
+                ),
+            )
+        }
+    }
+
+    private fun writeAudit(context: Context, tag: String, report: UiAuditReport): File {
+        val file = File(uiDir(context), "a11y-" + tag + ".json")
+        file.writeText(report.toJson(System.currentTimeMillis()).toString(), Charsets.UTF_8)
         return file
     }
 
@@ -169,7 +222,14 @@ internal object DebugUiBridge {
     private suspend fun scroll(service: MonitorAccessibilityService, dir: ScrollDir): Outcome = onMain {
         val snapshot = snapshotOf(service)
         if (snapshot.nodes.isEmpty()) return@onMain noRoot()
-        val target = UiTree.firstScrollable(snapshot.activeNodes())
+        // 方向对得上、且贯穿屏幕中部的容器才用：页顶的横向横条不该吃掉竖向滚动（真机实测缺陷）
+        val metrics = service.resources.displayMetrics
+        val active = snapshot.activeNodes()
+        val target = UiTree.firstScrollable(
+            active,
+            screenHeight = metrics.heightPixels,
+            preferVertical = dir == ScrollDir.UP || dir == ScrollDir.DOWN,
+        )
         if (target != null) {
             val action = if (dir.forward) {
                 AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
@@ -177,23 +237,33 @@ internal object DebugUiBridge {
                 AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
             }
             if (snapshot.refs[target.index].performAction(action)) {
-                return@onMain Outcome.Ok(describe("action", target, longPress = false).put("direction", dir.value))
+                return@onMain Outcome.Ok(scrollOk(target, dir).put("strategy", "action"))
             }
         }
-        // 页面上没有 scrollable 节点（Compose 的 LazyColumn 有时只暴露在语义层）→ 手势兜底
-        val metrics = service.resources.displayMetrics
+        // 没有同方向容器（Compose 的 LazyColumn 常只暴露在语义层 / 屏上只有一条横向横条）→ 手势兜底：
+        // 落点全是当前内容，方向永远是对的；硬滚反方向的容器才是那个「看着滚了、其实没动」的坑
         val queued = dispatchGesture(
             service,
             scrollPath(metrics.widthPixels, metrics.heightPixels, dir),
             SCROLL_MS,
         )
-        val data = JSONObject()
-            .put("op", "scroll")
-            .put("direction", dir.value)
+        val data = scrollOk(null, dir)
             .put("strategy", if (queued) "gesture" else "none")
-            .put("scrollableFound", target != null)
+            .put("scrollableMismatch", UiTree.anyScrollable(active))
         if (queued) Outcome.Ok(data) else Outcome.Fail("gesture_rejected", data)
     }
+
+    /**
+     * 滚动回执。`scrollableFound/scrollableVertical` 说明这次是「命中容器」还是「手势兜底」——
+     * 验证方据此判断「页面其实没得滚」而不是「命令没生效」。
+     */
+    private fun scrollOk(target: UiNode?, dir: ScrollDir): JSONObject = JSONObject()
+        .put("op", "scroll")
+        .put("direction", dir.value)
+        .put("scrollableFound", target != null)
+        .put("scrollableVertical", target != null && target.height >= target.width)
+        .put("index", target?.index ?: -1)
+        .put("boundsInScreen", target?.boundsJson() ?: JSONArray().put(0).put(0).put(0).put(0))
 
     // ────────────────────────── 滑动 ──────────────────────────
 
@@ -303,6 +373,7 @@ internal object DebugUiBridge {
                     right = rect.right,
                     bottom = rect.bottom,
                     clickable = node.isClickable,
+                    focusable = node.isFocusable,
                     scrollable = node.isScrollable,
                     editable = node.isEditable,
                     enabled = node.isEnabled,

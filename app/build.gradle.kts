@@ -273,6 +273,37 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(checkTodos)
 }
 
+// =============================================
+// 无障碍静态门禁：ERROR 阻断，WARN 只报不阻断
+// 规则与豁免口径见 docs/UI设计/无障碍基线.md，脚本 scripts/check-a11y.sh
+// 不挂 preBuild：存量 WARN 会拖慢每次构建且吵；挂在 check 里，本地手动跑
+//   ./gradlew checkA11y      （等价 bash scripts/check-a11y.sh）
+// =============================================
+val checkA11y by tasks.registering {
+    group = "verification"
+    description = "无障碍静态门禁（ERROR：IconButton 无标签；WARN：锚点/触达区/状态语义）"
+
+    // 与 checkUiStyle 一致：不声明 inputs，每次执行都重新扫描并打印实数
+    val script = rootProject.file("scripts/check-a11y.sh").absolutePath
+    val workDir = rootProject.rootDir
+
+    doLast {
+        if (!File(script).exists()) {
+            throw GradleException("缺少无障碍门禁脚本：$script")
+        }
+        val process = ProcessBuilder("bash", script)
+            .directory(workDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        println(output.trimEnd())
+        if (exitCode != 0) {
+            throw GradleException("无障碍静态门禁未通过（退出码 $exitCode）。规范见 docs/UI设计/无障碍基线.md")
+        }
+    }
+}
+
 dependencies {
     // Domain 模块
     implementation(project(":domain"))
@@ -458,5 +489,5 @@ val coverageReport by tasks.registering {
 }
 
 tasks.matching { it.name == "check" }.configureEach {
-    dependsOn(coverageReport)
+    dependsOn(coverageReport, checkA11y)
 }

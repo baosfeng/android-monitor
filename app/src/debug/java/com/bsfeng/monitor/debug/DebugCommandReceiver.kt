@@ -179,19 +179,42 @@ class DebugCommandReceiver : BroadcastReceiver() {
                 token = token,
                 reason = outcome.reason,
                 data = outcome.data,
+                detail = detailOf(cmd.action, outcome.data),
             )
 
-            is DebugUiBridge.Outcome.Ok -> {
-                // dump 的 path/nodes/pkg 额外打到 RESULT 行前缀：CLI 不用解析 data 就能直接 cat 文件
-                val extra = LinkedHashMap<String, String>()
-                if (cmd.action is UiAction.Dump) {
-                    extra["path"] = outcome.data.optString("path")
-                    extra["nodes"] = outcome.data.optInt("nodes").toString()
-                    extra["pkg"] = outcome.data.optString("pkg", "?")
-                }
-                emitWithDetail(cmd = cmd.name, token = token, detail = extra, data = outcome.data)
-            }
+            is DebugUiBridge.Outcome.Ok -> emitWithDetail(
+                cmd = cmd.name,
+                token = token,
+                detail = detailOf(cmd.action, outcome.data),
+                data = outcome.data,
+            )
         }
+    }
+
+    /**
+     * RESULT 行前缀的 `k=v` 明细：CLI 不解析 data 就能直接读路径与计数。
+     *
+     * dump 与 audit 都带 path —— 有缺口（ok=false）时也要能读到报告路径，否则失败行只剩一句话。
+     * 空值不占位（no_root 这类失败没有 path，别打出 `path= `）。
+     */
+    private fun detailOf(action: UiAction, data: JSONObject): Map<String, String> {
+        val detail = LinkedHashMap<String, String>()
+        when (action) {
+            is UiAction.Dump -> {
+                detail["path"] = data.optString("path")
+                detail["nodes"] = data.optInt("nodes").toString()
+                detail["pkg"] = data.optString("pkg", "?")
+            }
+
+            is UiAction.Audit -> {
+                detail["gaps"] = data.optInt("gaps").toString()
+                detail["clickable"] = data.optInt("clickable").toString()
+                detail["path"] = data.optString("path")
+            }
+
+            else -> Unit
+        }
+        return detail.filterValues { it.isNotEmpty() }
     }
 
     // ────────────────────────────── state ──────────────────────────────
@@ -677,8 +700,17 @@ class DebugCommandReceiver : BroadcastReceiver() {
             append(" data=").append(data)
         })
 
-    private fun emitFailure(cmd: String, token: String?, reason: String, data: JSONObject) =
-        write("${prefix(cmd, false, reason, token)} data=$data")
+    private fun emitFailure(
+        cmd: String,
+        token: String?,
+        reason: String,
+        data: JSONObject,
+        detail: Map<String, String> = emptyMap(),
+    ) = write(buildString {
+        append(prefix(cmd, false, reason, token))
+        detail.forEach { (key, value) -> append(' ').append(key).append('=').append(value) }
+        append(" data=").append(data)
+    })
 
     private fun prefix(cmd: String, ok: Boolean, reason: String?, token: String?): String {
         val builder = StringBuilder("RESULT cmd=").append(cmd)

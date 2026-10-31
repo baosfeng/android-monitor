@@ -15,6 +15,7 @@
 #   scripts/debug-cli.sh db query "<sql>" [limit]   # 单条 select/with，默认 50 行、上限 200
 #   scripts/debug-cli.sh heartbeat              # 转发一次真实心跳
 #   scripts/debug-cli.sh ui dump [tag]          # 无障碍控件树 → files/dsh-ui/<tag>.json
+#   scripts/debug-cli.sh ui audit [tag]         # 无障碍审计：无可读名 / 触达 <48dp → files/dsh-ui/a11y-<tag>.json（有缺口=退出码 1）
 #   scripts/debug-cli.sh ui click --es text 功能开关   # 按文案点（亦可 --es desc / --es id / --es bounds）
 #   scripts/debug-cli.sh ui longclick --es id row_trip
 #   scripts/debug-cli.sh ui scroll --es dir down
@@ -209,7 +210,7 @@ case "$cmd" in
     [ $# -gt 0 ] && shift
     case "$op" in
       "")
-        echo "debug-cli: ui 需要动作（dump|click|longclick|scroll|swipe|back|home|recents|wait）" >&2
+        echo "debug-cli: ui 需要动作（dump|audit|click|longclick|scroll|swipe|back|home|recents|wait）" >&2
         exit 2
         ;;
       dump)
@@ -217,6 +218,14 @@ case "$cmd" in
           send --es cmd ui --es op dump --es win "$1"
         else
           send --es cmd ui --es op dump
+        fi
+        ;;
+      audit)
+        # tag 走 --es win（与 dump 同一字段：--es tag 已被回执 token 占用）
+        if [ -n "${1:-}" ]; then
+          send --es cmd ui --es op audit --es win "$1"
+        else
+          send --es cmd ui --es op audit
         fi
         ;;
       click|longclick|scroll|swipe|wait)
@@ -232,7 +241,7 @@ case "$cmd" in
         exit $?
         ;;
       *)
-        echo "debug-cli: ui 未知动作 $op（dump|click|longclick|scroll|swipe|back|home|recents|wait）" >&2
+        echo "debug-cli: ui 未知动作 $op（dump|audit|click|longclick|scroll|swipe|back|home|recents|wait）" >&2
         exit 2
         ;;
     esac
