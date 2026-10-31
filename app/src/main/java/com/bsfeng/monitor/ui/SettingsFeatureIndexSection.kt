@@ -122,7 +122,7 @@ private fun featureIndexRows(rt: SettingsScreenRuntime): List<FeatureIndexRow> =
         feature = Feature.LOCATION,
         page = SettingsSubPage.LOCATION_DETAIL,
         enabled = rt.locationOn,
-        subtitle = if (rt.locationOn) "移动时约 10 秒、静止时约 3 分钟记录一次" else "已关闭：不读位置、不落坐标",
+        subtitle = if (rt.locationOn) LocationHealthText.PACE_SUMMARY else "已关闭：不读位置、不落坐标",
     ),
 )
 
