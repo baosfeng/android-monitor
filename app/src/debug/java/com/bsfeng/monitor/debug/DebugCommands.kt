@@ -415,6 +415,9 @@ object DebugCommands {
         return when (op) {
             "dump" -> UiAction.Dump(tag = stringOf(extras, EXTRA_WIN)?.trim()?.ifEmpty { null })
 
+            // 标签沿用 dump 的 --es win：`--es tag` 已被 CLI 的回执 token 占用
+            "audit" -> UiAction.Audit(tag = stringOf(extras, EXTRA_WIN)?.trim()?.ifEmpty { null })
+
             "click" -> UiAction.Click(selectorOf(extras, op))
             "longclick" -> UiAction.LongClick(selectorOf(extras, op))
 

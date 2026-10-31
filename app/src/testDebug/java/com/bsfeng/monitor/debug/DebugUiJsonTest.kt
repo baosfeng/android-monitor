@@ -45,7 +45,7 @@ class DebugUiJsonTest {
         val expected = setOf(
             "index", "parent", "depth", "window", "className", "viewIdResourceName", "text",
             "contentDescription", "boundsInScreen", "clickable", "scrollable", "editable",
-            "enabled", "selected", "childCount", "truncated",
+            "enabled", "selected", "childCount", "focusable", "truncated",
         )
         assertEquals(expected, json.keys().asSequence().toSet())
         assertEquals(7, json.getInt("index"))
@@ -99,4 +99,76 @@ class DebugUiJsonTest {
         assertEquals(2, root.getJSONArray("nodes").length())
         assertEquals("b", root.getJSONArray("nodes").getJSONObject(1).getString("text"))
     }
+
+    // ───────────────────────── 审计落盘形态 ─────────────────────────
+
+    private fun gap(reason: String = UiAudit.REASON_NO_LABEL) = UiGap(
+        index = 4,
+        reason = reason,
+        className = "android.widget.ImageButton",
+        text = "",
+        desc = "",
+        viewId = "btn_more",
+        bounds = UiRect(1000, 120, 1040, 200),
+        shortSideDp = 20.0,
+    )
+
+    @Test
+    fun `审计 - 缺口字段齐全、bounds 是四元组`() {
+        val json = gap().toJson()
+        val expected = setOf("index", "reason", "className", "text", "desc", "viewId", "bounds", "shortSideDp")
+        assertEquals(expected, json.keys().asSequence().toSet())
+        assertEquals(4, json.getInt("index"))
+        assertEquals(UiAudit.REASON_NO_LABEL, json.getString("reason"))
+        assertEquals("btn_more", json.getString("viewId"))
+        assertEquals(20.0, json.getDouble("shortSideDp"), 0.001)
+        val bounds = json.getJSONArray("bounds")
+        assertEquals(4, bounds.length())
+        assertEquals(1000, bounds.getInt(0))
+        assertEquals(200, bounds.getInt(3))
+    }
+
+    @Test
+    fun `审计 - 报告字段齐全、gaps 是数组、info 带统计项`() {
+        val report = UiAuditReport(
+            pkg = "com.bsfeng.monitor",
+            nodeCount = 12,
+            clickableCount = 3,
+            gaps = listOf(gap(), gap(UiAudit.REASON_SMALL_TARGET)),
+            textWithoutId = 1,
+            labelFromChildren = 2,
+            clippedSkipped = 3,
+            density = 2.75f,
+        )
+        val json = report.toJson(generatedAt = 1_700_000_000_000L)
+        val expected = setOf("pkg", "generatedAt", "nodeCount", "clickableCount", "gapCount", "info", "gaps")
+        assertEquals(expected, json.keys().asSequence().toSet())
+        assertEquals("com.bsfeng.monitor", json.getString("pkg"))
+        assertEquals(12, json.getInt("nodeCount"))
+        assertEquals(3, json.getInt("clickableCount"))
+        assertEquals(2, json.getInt("gapCount"))
+        assertEquals(2, json.getJSONArray("gaps").length())
+        val info = json.getJSONObject("info")
+        assertEquals(1, info.getInt("textWithoutId"))
+        assertEquals(2, info.getInt("labelFromChildren"))
+        assertEquals(3, info.getInt("clippedSkipped"))
+        assertEquals(UiAudit.MIN_TARGET_DP, info.getDouble("minTargetDp"), 0.001)
+        assertEquals(2.75, info.getDouble("density"), 0.001)
+    }
+
+    @Test
+    fun `审计 - 缺口里的长文案同样按 200 字截断`() {
+        val long = UiGap(
+            index = 0,
+            reason = UiAudit.REASON_SMALL_TARGET,
+            className = "android.widget.TextView",
+            text = "长".repeat(UiText.MAX_TEXT_CHARS + 10),
+            desc = "",
+            viewId = "",
+            bounds = UiRect(0, 0, 10, 10),
+            shortSideDp = 5.0,
+        )
+        assertEquals(UiText.MAX_TEXT_CHARS, long.toJson().getString("text").length)
+    }
 }
+

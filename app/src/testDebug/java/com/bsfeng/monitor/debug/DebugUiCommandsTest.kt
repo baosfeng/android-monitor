@@ -156,9 +156,27 @@ class DebugUiCommandsTest {
     }
 
     @Test
-    fun `op 表 - 九个动作都能解析`() {
+    fun `合法 - ui audit 的 tag 走 win，与 dump 一致`() {
+        assertEquals(
+            ParseResult.Ok(DebugCommand.Ui(UiAction.Audit(tag = null))),
+            DebugCommands.parse(mapOf("cmd" to "ui", "op" to "audit")),
+        )
+        assertEquals(
+            ParseResult.Ok(DebugCommand.Ui(UiAction.Audit(tag = "home-after-launch"))),
+            DebugCommands.parse(mapOf("cmd" to "ui", "op" to "audit", "win" to " home-after-launch ")),
+        )
+        // 回执 token 占着 tag：把文件名标签塞进 --es tag 会被静默忽略，必须仍落到 win
+        assertEquals(
+            ParseResult.Ok(DebugCommand.Ui(UiAction.Audit(tag = null))),
+            DebugCommands.parse(mapOf("cmd" to "ui", "op" to "audit", "tag" to "dbg-123")),
+        )
+    }
+
+    @Test
+    fun `op 表 - 十个动作都能解析`() {
         val cases = mapOf(
             "dump" to mapOf("cmd" to "ui", "op" to "dump"),
+            "audit" to mapOf("cmd" to "ui", "op" to "audit"),
             "click" to mapOf("cmd" to "ui", "op" to "click", "text" to "a"),
             "longclick" to mapOf("cmd" to "ui", "op" to "longclick", "text" to "a"),
             "scroll" to mapOf("cmd" to "ui", "op" to "scroll", "dir" to "up"),
@@ -168,7 +186,7 @@ class DebugUiCommandsTest {
             "recents" to mapOf("cmd" to "ui", "op" to "recents"),
             "wait" to mapOf("cmd" to "ui", "op" to "wait", "ms" to 10),
         )
-        assertEquals("op 表与解析分支必须一一对应", 9, cases.size)
+        assertEquals("op 表与解析分支必须一一对应", 10, cases.size)
         cases.forEach { (op, extras) ->
             val result = DebugCommands.parse(extras)
             assertTrue("op=$op 应能解析，实际 $result", result is ParseResult.Ok)
@@ -217,7 +235,7 @@ class DebugUiCommandsTest {
     fun `非法值 - op 不在动作表里`() {
         val result = DebugCommands.parse(mapOf("cmd" to "ui", "op" to "tap"))
         assertTrue(result is ParseResult.BadArgs)
-        assertTrue((result as ParseResult.BadArgs).message.contains("dump|click|longclick"))
+        assertTrue((result as ParseResult.BadArgs).message.contains("dump|audit|click|longclick"))
     }
 
     @Test

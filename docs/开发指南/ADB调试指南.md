@@ -26,13 +26,14 @@ scripts/debug-cli.sh ui back                    # 返回上一屏（ui home / ui
 | 命令 | 用途 |
 |---|---|
 | `ui dump [tag]` | 控件树 JSON（含 windows 列表、节点数、truncatedNodes），tag 即文件名 |
+| `ui audit [tag]` | 无障碍审计：无可读名 / 触达 <48dp 的控件 → `files/dsh-ui/a11y-<tag>.json`；有缺口 `reason=a11y_gaps`、退出码 1（口径见[无障碍基线](../UI设计/无障碍基线.md)） |
 | `ui click` / `ui longclick` + `--es text/desc/id/bounds` | 命中节点或其可点祖先 performAction，无可点祖先则手势点击 |
-| `ui scroll --es dir up/down/left/right` | 前进（down、right）/后退（up、left）滚动，无 scrollable 节点则手势滑动 |
+| `ui scroll --es dir up/down/left/right` | 前进（down、right）/后退（up、left）滚动：只滚方向对得上、贯穿屏幕中部的容器（页顶横向横条不吃竖向滚动），没有则手势滑动 |
 | `ui swipe --ei x1 --ei y1 --ei x2 --ei y2 --ei ms` | 指定起止点的手势滑动 |
 | `ui wait --ei ms` | 等界面稳定，上限 5000 |
 | `shot [name]`（亦可 `ui shot [name]`） | `adb exec-out screencap -p` → `/tmp`（`SHOT_DIR` 可改） |
 
-失败口径（全部 `ok=false`，绝不静默）：无障碍未开 `accessibility_off`、根窗口为空 `no_root`、选择器没命中 `not_found`、端上 11 秒超时 `timeout`。dump 的 JSON 只写 App 私有目录 `files/dsh-ui/`，不外置、不入库。
+失败口径（全部 `ok=false`，绝不静默）：无障碍未开 `accessibility_off`、根窗口为空 `no_root`、选择器没命中 `not_found`、端上 11 秒超时 `timeout`、审计有缺口 `a11y_gaps`。dump / audit 的 JSON 只写 App 私有目录 `files/dsh-ui/`，不外置、不入库。
 
 ## 手机端设置与连接
 
