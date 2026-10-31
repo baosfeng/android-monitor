@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureCatalog
 import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
@@ -224,20 +225,23 @@ internal fun SettingsLocationCard(
                     }
                     // 采集健康：答案「过一会就掉线」到底是不是在掉 —— 上次成功距今多久、订阅在不在、
                     // 上一次失败是什么原因。文案由 LocationHealthText 统一生成（纯函数、有单测）。
-                    val health = remember(locationOn, rechecking, locationPermission) {
+                    // 门禁态一并交给文案层：门禁 SLEEPING 时「30 分钟前最后一点」是待机而非断档，
+                    // 不传它就会出现「静止一天、徽标常年红」的假掉线。
+                    val gate = LocationGateState.state
+                    val health = remember(locationOn, rechecking, locationPermission, gate) {
                         runCatching { LocationCollector.get(context).health() }.getOrNull()
                     }
                     if (locationOn) {
                         SettingsRow(
                             title = "采集状态",
                             modifier = Modifier.testTag("s09-loc-health"),
-                            subtitle = LocationHealthText.describe(health),
+                            subtitle = LocationHealthText.describe(health, gate),
                             subtitleModifier = Modifier.testTag("s09-loc-health-sub"),
                             trailing = {
                                 Badge(
-                                    text = LocationHealthText.badge(health),
+                                    text = LocationHealthText.badge(health, gate),
                                     modifier = Modifier.widthIn(min = 64.dp),
-                                    tone = LocationHealthText.toneOf(health),
+                                    tone = LocationHealthText.toneOf(health, gate),
                                 )
                             },
                         )

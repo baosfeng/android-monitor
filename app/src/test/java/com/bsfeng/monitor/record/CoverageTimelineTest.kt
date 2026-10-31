@@ -7,11 +7,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 采集覆盖时间线（纯逻辑）：把采样时间戳切成 COVERED / GAP / DEEP 段。
+ * 采集覆盖时间线（纯逻辑）：把采样时间戳切成 COVERED / DORMANT / GAP / DEEP 段。
  *
  * 反向验证（改坏算法时应看到的红）：
  * - 去掉 [CoverageTimeline] 里的合并 → 「全部有采样」那条会断言出 2 段以上；
- * - 把深断档阈值改回 40 分钟 → 35 分钟断档那条从 DEEP 变 GAP（反向验证用）；
+ * - 把待机上限改回容忍上限（6 分钟）→ 「静止兜底节奏不算断档」那条冒出几十段断档；
+ * - 把档位判断顺序调成先判断档再判待机 → 待机上限边界那条会变成 GAP；
  * - 把末段裁剪到末点（不补到窗口终点）→ 恒等式那条段时长之和小于 totalMs。
  */
 class CoverageTimelineTest {
@@ -53,25 +54,37 @@ class CoverageTimelineTest {
     // ===== 断档分档 =====
 
     @Test
-    fun `中间一个25分钟断档切成三段且中间是GAP`() {
-        // 前 1 小时正常采样，然后断 25 分钟（低于 30 分钟深断档阈值），再恢复 1 小时正常
+    fun `中间一个25分钟空洞是省电待机而不是断档`() {
+        // 前 1 小时正常采样，然后空 25 分钟（落在兜底节奏 35 分钟以内），再恢复 1 小时正常
         val before = (0..20).map { dayStart + it * 3 * minute }
         val resume = dayStart + 60 * minute + 25 * minute
         val after = (0..20).map { resume + it * 3 * minute }
         val end = resume + 60 * minute
         val window = CoverageTimeline.build(before + after, dayStart, end, still)
 
-        assertEquals("前段 + 断档 + 后段", 3, window.segments.size)
+        assertEquals("前段 + 待机 + 后段", 3, window.segments.size)
         assertEquals(CoverageKind.COVERED, window.segments[0].kind)
-        assertEquals(CoverageKind.GAP, window.segments[1].kind)
+        assertEquals(CoverageKind.DORMANT, window.segments[1].kind)
         assertEquals(CoverageKind.COVERED, window.segments[2].kind)
-        assertEquals("25 分钟断档是中段时长", 25 * minute, window.segments[1].durationMs)
-        assertEquals(1, window.breakCount)
-        assertTrue("断档 < 30 分钟属 GAP（深断档阈值 30 分钟）", window.segments[1].kind != CoverageKind.DEEP)
+        assertEquals("25 分钟待机是中段时长", 25 * minute, window.segments[1].durationMs)
+        assertEquals("待机不算断档", 0, window.breakCount)
+        assertEquals("待机算正常覆盖", 100, window.coveragePct)
     }
 
     @Test
-    fun `中间一个47分钟断档判成DEEP`() {
+    fun `断档列表整条排除待机段`() {
+        val before = (0..20).map { dayStart + it * 3 * minute }
+        val resume = dayStart + 60 * minute + CoverageTimeline.DORMANT_CEILING_MS
+        val after = (0..20).map { resume + it * 3 * minute }
+        val window = CoverageTimeline.build(before + after, dayStart, resume + 60 * minute, still)
+
+        assertEquals("待机上限整点仍是待机", CoverageKind.DORMANT, window.segments[1].kind)
+        assertTrue("断档列表里不能出现待机段", window.gaps().isEmpty())
+    }
+
+    @Test
+    fun `中间一个47分钟空洞是GAP而不是待机`() {
+        // 47 分钟已经越过兜底节奏（35 分钟）：兜底没跑，这是真断档
         val before = (0..20).map { dayStart + it * 3 * minute }
         val resume = dayStart + 60 * minute + 47 * minute
         val after = (0..20).map { resume + it * 3 * minute }
@@ -79,13 +92,13 @@ class CoverageTimelineTest {
         val window = CoverageTimeline.build(before + after, dayStart, end, still)
 
         assertEquals(3, window.segments.size)
-        assertEquals(CoverageKind.DEEP, window.segments[1].kind)
+        assertEquals(CoverageKind.GAP, window.segments[1].kind)
         assertEquals(47 * minute, window.segments[1].durationMs)
         assertEquals(1, window.breakCount)
     }
 
     @Test
-    fun `断档正好卡在30分钟按DEEP处理`() {
+    fun `断档正好卡在2小时按DEEP处理`() {
         val before = (0..5).map { dayStart + it * 3 * minute }
         val resume = dayStart + 15 * minute + CoverageTimeline.DEEP_GAP_MS
         val after = listOf(resume, resume + 3 * minute)
@@ -97,13 +110,37 @@ class CoverageTimelineTest {
     }
 
     @Test
-    fun `断档差1毫秒不到30分钟仍是GAP`() {
+    fun `断档差1毫秒不到2小时仍是GAP`() {
         val before = (0..5).map { dayStart + it * 3 * minute }
         val resume = dayStart + 15 * minute + CoverageTimeline.DEEP_GAP_MS - 1
         val after = listOf(resume, resume + 3 * minute)
         val window = CoverageTimeline.build(before + after, dayStart, resume + 6 * minute, still)
 
         assertEquals(CoverageKind.GAP, window.segments.first { it.kind.isBreak }.kind)
+    }
+
+    @Test
+    fun `待机上限差1毫秒是待机 超过1毫秒就是断档`() {
+        // 边界两测：35 分钟整仍是兜底允许的待机；越过 1ms 才叫断档
+        val atCeiling = dayStart + CoverageTimeline.DORMANT_CEILING_MS
+        val inWindow = CoverageTimeline.build(
+            listOf(dayStart, atCeiling, atCeiling + 3 * minute),
+            dayStart,
+            atCeiling + 6 * minute,
+            still,
+        )
+        assertEquals("35 分钟整仍是待机", CoverageKind.DORMANT, inWindow.segments[0].kind)
+        assertEquals("待机不算断档", 0, inWindow.breakCount)
+
+        val justOver = dayStart + CoverageTimeline.DORMANT_CEILING_MS + 1
+        val over = CoverageTimeline.build(
+            listOf(dayStart, justOver, justOver + 3 * minute),
+            dayStart,
+            justOver + 6 * minute,
+            still,
+        )
+        assertEquals("越过待机上限 1ms 就是断档", 1, over.breakCount)
+        assertEquals(CoverageKind.GAP, over.segments.first { it.kind.isBreak }.kind)
     }
 
     @Test
@@ -119,27 +156,62 @@ class CoverageTimelineTest {
     }
 
     @Test
-    fun `超过容忍上限1毫秒就算断档`() {
-        // 窗口正好收在末点上：只有中间那 1ms 超限的间隔是断档，首尾两端都贴住采样点
+    fun `超过容忍上限但仍在兜底节奏内算待机`() {
+        // 窗口正好收在末点上：中间那 1ms 超限的间隔是待机，不算断档
         val second = dayStart + tolerance + 1
         val end = second + 3 * minute
         val window = CoverageTimeline.build(listOf(dayStart, second, end), dayStart, end, still)
 
-        assertEquals(1, window.breakCount)
-        assertEquals(tolerance + 1, window.breaks.single().durationMs)
+        assertEquals("待机不算断档", 0, window.breakCount)
+        assertEquals("超限的那一段是待机", CoverageKind.DORMANT, window.segments[0].kind)
+        assertEquals(tolerance + 1, window.segments[0].durationMs)
     }
 
     @Test
-    fun `移动模式容忍更紧 10分钟的间隔就是断档`() {
+    fun `待机档与模式无关 两种模式下同一空洞同一档`() {
+        // 待机是「门禁睡着」的呈现档，不跟当前采样模式走：
+        // 若按模式收紧，用户在移动中打开设置页时，24 小时窗口里的静止期会被整片画成断档。
         val stamps = listOf(dayStart, dayStart + 10 * minute, dayStart + 20 * minute)
         val moving = CoverageTimeline.build(stamps, dayStart, dayStart + 30 * minute, SampleMode.MOVING)
         val fixed = CoverageTimeline.build(stamps, dayStart, dayStart + 30 * minute, still)
 
-        assertEquals("移动模式 2x10s=20s，10 分钟就是断档", 1, moving.breakCount)
-        assertEquals("静止模式 2x180s=6 分钟，10 分钟也是断档", 1, fixed.breakCount)
-        // 10 分钟没到深断档阈值（30 分钟）：两种模式下都只是 GAP
+        assertEquals("10 分钟在兜底节奏内，两模式都是待机", 0, moving.breakCount)
+        assertEquals(0, fixed.breakCount)
+        assertTrue("整窗都是待机（同为一种颜色会合并成一段）", moving.segments.all { it.kind == CoverageKind.DORMANT })
+        assertTrue(fixed.segments.all { it.kind == CoverageKind.DORMANT })
+    }
+
+    @Test
+    fun `移动模式下超过兜底节奏照样报断档`() {
+        val stamps = listOf(dayStart, dayStart + 60 * minute, dayStart + 63 * minute)
+        val moving = CoverageTimeline.build(stamps, dayStart, dayStart + 90 * minute, SampleMode.MOVING)
+
+        assertEquals("移动中 1 小时没点必须报断档", 1, moving.breakCount)
         assertEquals(CoverageKind.GAP, moving.segments.first { it.kind.isBreak }.kind)
-        assertEquals(CoverageKind.GAP, fixed.segments.first { it.kind.isBreak }.kind)
+    }
+
+    // ===== 回归：真机静止兜底节奏 =====
+
+    @Test
+    fun `静止期只按30分钟兜底采样时不报任何断档`() {
+        // 真机实测形态：门禁 SLEEPING 时每 30~30.5 分钟兜底一个点（服务层 STILL_FALLBACK_MS）
+        val stamps = (0..48).map { dayStart + it * 30 * minute + (it % 2) * 30_000L }
+        val end = dayStart + 24 * 60 * minute
+        val window = CoverageTimeline.build(stamps, dayStart, end, still)
+
+        assertEquals("兜底节奏内的空洞全是待机，不能报断档", 0, window.breakCount)
+        assertTrue("待机算正常覆盖，覆盖率必须接近 100%", window.coveragePct >= 95)
+        assertTrue("待机段要能画出来", window.dormantMs > 6 * 60 * minute)
+    }
+
+    @Test
+    fun `兜底停了才是断档 2小时没点判DEEP`() {
+        val stamps = listOf(dayStart, dayStart + 3 * minute) +
+            listOf(dayStart + 3 * minute + 150 * minute, dayStart + 156 * minute)
+        val window = CoverageTimeline.build(stamps, dayStart, dayStart + 240 * minute, still)
+
+        assertEquals(2, window.breakCount)
+        assertTrue("150 分钟没点越过 2 小时深断档阈值", window.breaks.any { it.kind == CoverageKind.DEEP })
     }
 
     // ===== 边界 =====
@@ -210,9 +282,11 @@ class CoverageTimelineTest {
         val end = dayStart + 60 * minute
         val window = CoverageTimeline.build(listOf(dayStart + 30 * minute), dayStart, end, still)
         assertEquals(end - dayStart, window.segments.sumOf { it.durationMs })
-        // 前 30 分钟与后 30 分钟都超过容忍上限 → 两段断档，中间一个零长覆盖段被合并掉
-        assertTrue(window.breakCount >= 1)
-        assertTrue(window.coveragePct < 100)
+        // 前后各 30 分钟都在兜底节奏（35 分钟）以内 → 两段待机，不算断档
+        assertEquals(0, window.breakCount)
+        assertEquals(100, window.coveragePct)
+        assertEquals(CoverageKind.DORMANT, window.segments.first().kind)
+        assertEquals(CoverageKind.DORMANT, window.segments.last().kind)
     }
 
     // ===== 不补点 =====
@@ -225,8 +299,8 @@ class CoverageTimelineTest {
 
         val breakTotal = window.breaks.sumOf { it.durationMs }
         assertEquals(
-            "断档时长 = 窗口内无采样的时间，不由采样点插值补齐",
-            window.totalMs - window.coveredMs,
+            "断档时长 = 窗口内既没采样、也不算待机的时长，不由采样点插值补齐",
+            window.totalMs - window.coveredMs - window.dormantMs,
             breakTotal,
         )
         // 段的边界只可能落在「采样时间戳」或「窗口边界」上
@@ -240,7 +314,7 @@ class CoverageTimelineTest {
     // ===== 断档列表口径 =====
 
     @Test
-    fun `断档列表最多五条且按时间升序`() {
+    fun `断档列表最多五条且按时间倒序取最新`() {
         // 造 7 条断档：每段正常 2 个点（3 分钟间隔）后接 60 分钟空窗
         val stamps = ArrayList<Long>()
         var cursor = dayStart
@@ -256,8 +330,9 @@ class CoverageTimelineTest {
         val gaps = window.gaps()
 
         assertEquals("最多 5 条", CoverageTimeline.MAX_GAPS, gaps.size)
-        assertEquals("按时间升序", gaps.map { it.startMs }.sorted(), gaps.map { it.startMs })
+        assertEquals("按时间倒序：最近的断档排第一", gaps.map { it.startMs }.sortedDescending(), gaps.map { it.startMs })
         assertTrue(gaps.all { it.kind.isBreak })
+        assertEquals("取的是最新的 5 段而不是最早的 5 段", window.breaks.takeLast(5).reversed().map { it.startMs }, gaps.map { it.startMs })
     }
 
     @Test
@@ -368,9 +443,9 @@ class CoverageTimelineTest {
         val clock: (Long) -> String = { ms -> if (ms == dayStart) "03:12" else "14:20" }
         val two = listOf(
             CoverageGap(dayStart, 35 * minute, CoverageKind.GAP),
-            CoverageGap(dayStart, 47 * minute, CoverageKind.DEEP),
+            CoverageGap(dayStart, 150 * minute, CoverageKind.DEEP),
         )
-        assertEquals("03:12 起 35 分钟 · 03:12 起 47 分钟", coverageGapNote(two, 2, clock))
+        assertEquals("03:12 起 35 分钟 · 03:12 起 2 小时 30 分", coverageGapNote(two, 2, clock))
 
         val five = (1..5).map { CoverageGap(dayStart, it * minute, CoverageKind.GAP) }
         val note = coverageGapNote(five, 5, clock)
@@ -391,7 +466,8 @@ class CoverageTimelineTest {
         val empty = CoverageTimeline.build(emptyList(), dayStart, dayStart + 24 * 60 * minute, still)
         assertEquals("空窗口 N 写 0，「一条都没有」由卡内空态说明", "过去 24 小时 · 断档 0 次", coverageSubtitle(empty))
 
-        val some = CoverageTimeline.build(listOf(dayStart, dayStart + 3 * minute), dayStart, dayStart + 10 * minute, still)
+        // 空 57 分钟越过兜底节奏 → 真断档
+        val some = CoverageTimeline.build(listOf(dayStart, dayStart + 3 * minute), dayStart, dayStart + 60 * minute, still)
         assertEquals("过去 24 小时 · 断档 1 次", coverageSubtitle(some))
     }
 }

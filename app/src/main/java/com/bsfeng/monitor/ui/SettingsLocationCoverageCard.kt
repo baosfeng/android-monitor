@@ -5,8 +5,12 @@ package com.bsfeng.monitor.ui
 // 为什么单独成卡而不是塞进权限引导卡：引导卡回答「权限对不对」，这张卡回答「过去一天到底采到了多少」。
 // 掉线原来只有进程内的瞬时状态，重启归零、事后不可查；没有这条时间线，前台服务改造做完也无法验收。
 //
-// 视觉与文案逐字对齐原型 .open-design/41-location-health.html「位置采集 · 已就绪」屏的采集覆盖卡：
-// 覆盖条 34dp / 段间 1px / 四色语义占比 / 刻度标窗口首·中·末的真实时刻 / 图例四项 / 断档列表最多 5 条。
+// 视觉与文案对齐原型 .open-design/41-location-health.html「位置采集 · 已就绪」屏的采集覆盖卡：
+// 覆盖条 34dp / 段间 1px / 分档占比 / 刻度标窗口首·中·末的真实时刻 / 图例四项 / 断档列表最多 5 条。
+//
+// 分档口径（真机校正过，见 record/CoverageTimeline.kt）：有采样 / **省电待机** / 断档 / 深断档。
+// 功耗门禁 SLEEPING 时静止不采点、只按 30 分钟兜底，那些间隔是设计内静默 —— 画成中性灰。
+// 覆盖率把待机计入分子，卡头「有覆盖时长」= 有采样 + 待机，与徽标百分比同口径。
 //
 // 契约：docs/交互设计/s09-设置-交互契约.md 的 s09-loc-cov / -sub / -badge / -bar / -gap-list。
 // 卡片内没有任何可点元素（断档行也不开详情）—— 它只回答「是什么样」，动作都在引导卡里。
@@ -172,6 +176,8 @@ private fun CoverageCardBody(t: DesignTokens, snapshot: CoverageSnapshot?, modif
                     CoverageAxis(t, window)
                     Spacer(Modifier.height(t.space3))
                     CoverageLegend(t)
+                    // 断档列表：record 层已按时间**倒序**（最新在前）取最新 5 条，这里只做上限兜底、不重排 ——
+                    // 再 reversed / sortedBy 一次就会把最值得看的「刚刚那段」翻到屏幕外
                     val gaps = snapshot.gaps.take(GAP_ROWS)
                     if (gaps.isNotEmpty()) {
                         Spacer(Modifier.height(t.space3))
@@ -210,12 +216,17 @@ private fun CoverageEmptyText(t: DesignTokens, text: String) {
     }
 }
 
-/** 卡内第一行：已覆盖时长 + 窗口总长（原型 .cov-head）。 */
+/**
+ * 卡内第一行：有覆盖时长 + 窗口总长（原型 .cov-head）。
+ *
+ * 左侧取「有采样 + 省电待机」而不是只算有采样：待机半天的一天里 coveredMs 可能接近 0，
+ * 只写它就会出现「0 分钟 / 共 24 小时」配 98% 徽标这种自相矛盾的一屏。
+ */
 @Composable
 private fun CoverageHead(t: DesignTokens, window: CoverageWindow) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Text(
-            text = coverageDurationText(window.coveredMs),
+            text = coverageDurationText(window.coveredMs + window.dormantMs),
             style = MaterialTheme.typography.titleSmall,
             color = t.fg,
             modifier = Modifier.weight(1f),
@@ -266,9 +277,11 @@ private fun CoverageBar(
     }
 }
 
-/** 段色：与原型 .cov-seg 的四条 color-mix 逐字一致。 */
+/** 段色：与原型 .cov-seg 的 color-mix 一致；待机沿用中性灰，不借警告色。 */
 private fun segmentColor(t: DesignTokens, kind: CoverageKind): Color = when (kind) {
     CoverageKind.COVERED -> t.success.copy(alpha = 0.62f)
+    // 省电待机：中性灰（原 OFF 那一档）—— 它是设计内静默，染成 warn 会让静止的一天看起来像在报警
+    CoverageKind.DORMANT -> t.fg.copy(alpha = 0.14f)
     CoverageKind.GAP -> t.warn.copy(alpha = 0.58f)
     CoverageKind.DEEP -> t.danger.copy(alpha = 0.55f)
     CoverageKind.OFF -> t.fg.copy(alpha = 0.14f)
@@ -298,11 +311,12 @@ private fun CoverageAxis(t: DesignTokens, window: CoverageWindow) {
 /** 图例四项（2×2，不换行）：色块与覆盖条同色。 */
 @Composable
 private fun CoverageLegend(t: DesignTokens) {
+    // OFF 不占图例位：当前没有可靠依据判「功能关闭」时段，恒不出现，占位只会让四项里有一项永远对不上
     val items = listOf(
         CoverageKind.COVERED to "有采样",
-        CoverageKind.GAP to "断档 <30 分",
-        CoverageKind.DEEP to "断档 ≥30 分",
-        CoverageKind.OFF to "功能关闭",
+        CoverageKind.DORMANT to "省电待机",
+        CoverageKind.GAP to "断档",
+        CoverageKind.DEEP to "深断档",
     )
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(t.space2)) {
         items.chunked(2).forEach { row ->

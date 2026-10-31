@@ -89,7 +89,7 @@ private val TRACE_STROKE = 1.5.dp
  * @param basemapEnabled 是否叠加底图（免费瓦片源，见 [TileSources]）
  * @param onToggleBasemap 切换底图；只在有采样时出现
  * @param coverage 当天窗口的采集覆盖（null = 不渲染覆盖条，例如数据还没到）
- * @param gaps 当天断档（升序、已截断），用于「今天断了 N 次」的副标题
+ * @param gaps 当天断档（**倒序、最新在前**，已截断），用于「今天断了 N 次」的副标题
  */
 @Composable
 internal fun TripMapCard(
@@ -438,7 +438,7 @@ private const val TRIP_GAP_PREVIEW = 3
  * 轨迹卡底部覆盖条 + 断档汇总行（契约 trip-cov）。
  *
  * @param window 当天窗口的覆盖分段
- * @param gaps 当天断档（已按时间升序、已截断）
+ * @param gaps 当天断档（已按时间倒序、最新在前、已截断）
  * @param isToday 今天写「今天断了 N 次」，历史日期写「这一天断了 N 次」
  */
 @Composable
@@ -519,9 +519,10 @@ private fun CoverageThinBar(window: CoverageWindow) {
     }
 }
 
-/** 段色：与设置页「采集覆盖」逐字同源，两处不得各写一套。 */
+/** 段色：与设置页「采集覆盖」逐字同源，两处不得各写一套（含省电待机的中性灰）。 */
 private fun tripSegmentColor(t: DesignTokens, kind: CoverageKind): Color = when (kind) {
     CoverageKind.COVERED -> t.success.copy(alpha = 0.62f)
+    CoverageKind.DORMANT -> t.fg.copy(alpha = 0.14f)
     CoverageKind.GAP -> t.warn.copy(alpha = 0.58f)
     CoverageKind.DEEP -> t.danger.copy(alpha = 0.55f)
     CoverageKind.OFF -> t.fg.copy(alpha = 0.14f)

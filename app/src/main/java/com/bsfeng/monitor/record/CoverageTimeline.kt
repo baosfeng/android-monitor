@@ -16,11 +16,14 @@ import kotlin.math.roundToInt
 /**
  * 覆盖段类型。
  *
- * [COVERED] 有采样且间隔在容忍范围内；[GAP] 断档但不到 [CoverageTimeline.DEEP_GAP_MS]；
- * [DEEP] 深断档；[OFF] 功能关闭时段（当前无可靠依据判定，保留给后续接入）。
+ * [COVERED] 有采样且间隔在容忍范围内；[DORMANT] **省电待机**（门禁睡着时按
+ * [CoverageTimeline.DORMANT_CEILING_MS] 兜底节奏空着，是设计内行为、不是掉线）；
+ * [GAP] 断档但不到 [CoverageTimeline.DEEP_GAP_MS]；[DEEP] 深断档；
+ * [OFF] 功能关闭时段（当前无可靠依据判定，保留给后续接入）。
  */
 enum class CoverageKind {
     COVERED,
+    DORMANT,
     GAP,
     DEEP,
     OFF,
@@ -28,6 +31,9 @@ enum class CoverageKind {
 
     /** 是否算作「断档」（GAP / DEEP）：断档次数、断档列表、徽标配色都按这个口径。 */
     val isBreak: Boolean get() = this == GAP || this == DEEP
+
+    /** 是否算作「正常」（有采样或设计内待机）：覆盖率按这个口径算，待机不能拉低覆盖率。 */
+    val isHealthy: Boolean get() = this == COVERED || this == DORMANT
 }
 
 /**
@@ -63,12 +69,22 @@ data class CoverageWindow(
     /** 有采样的时长合计。 */
     val coveredMs: Long get() = segments.filter { it.kind == CoverageKind.COVERED }.sumOf { it.durationMs }
 
-    /** 覆盖率（0..100 整数，四舍五入）；窗口非法或没有采样时为 0。 */
+    /** 省电待机时长合计（门禁睡着，不该被读成掉线）。 */
+    val dormantMs: Long get() = segments.filter { it.kind == CoverageKind.DORMANT }.sumOf { it.durationMs }
+
+    /**
+     * 覆盖率（0..100 整数，四舍五入）= (有采样 + 省电待机) / 窗口；窗口非法或没有采样时为 0。
+     *
+     * 为什么待机也算「有覆盖」：门禁 SLEEPING 时本来就不采点（用户要的省电），
+     * 把这段算成掉线会让覆盖率在静止的一天里掉到个位数、徽标常年变红 ——
+     * 那是口径错误，不是设备故障。真掉线仍在 [breaks] 里如实分段。
+     */
     val coveragePct: Int
         get() {
             val total = totalMs
             if (total <= 0L) return 0
-            return ((coveredMs.toDouble() / total) * 100.0).roundToInt().coerceIn(0, 100)
+            val healthy = segments.filter { it.kind.isHealthy }.sumOf { it.durationMs }
+            return ((healthy.toDouble() / total) * 100.0).roundToInt().coerceIn(0, 100)
         }
 
     /** 断档段（GAP + DEEP），时间升序。 */
@@ -84,8 +100,11 @@ data class CoverageWindow(
 /**
  * 覆盖时间线的**全部规则**：采样时间戳 + 窗口 + 模式 → 分段覆盖。
  *
- * 分段口径：
- * - 相邻采样间隔 <= [COVERED_FACTOR] 倍模式间隔 → COVERED；否则按 [DEEP_GAP_MS] 分成 GAP / DEEP；
+ * 分段口径（按间隔从短到长四档，先判短档）：
+ * - <= [COVERED_FACTOR] 倍模式间隔 → COVERED；
+ * - <= [DORMANT_CEILING_MS] → **DORMANT（省电待机）**：门禁 SLEEPING 时的兜底节奏；
+ * - < [DEEP_GAP_MS] → GAP；
+ * - 其余 → DEEP；
  * - 首个采样之前、最后一个采样之后同样按此规则判（两端断档不能被裁掉）；
  * - 相邻同类型段合并（否则「全程正常」会被相邻采样切成几十段，覆盖条无法阅读）。
  *
@@ -93,6 +112,13 @@ data class CoverageWindow(
  * 自愈阈值是**动作阈值**（过了它就强制补采），覆盖条是**呈现阈值**（用户看到「有采样」）。
  * 静止 3 分钟一个点时，1.5 倍 = 4.5 分钟，偶发的一次漏拍就会把覆盖条画成断档；
  * 2 倍给一次漏拍的余量，用户看到的断档才都是真断档。
+ *
+ * 为什么必须有 DORMANT 这一档（真机数据推翻过旧口径）：
+ * 功耗门禁上线后，静止时 [com.bsfeng.monitor.record.MotionGate] 停在 SLEEPING，
+ * 只按 30 分钟兜底采一个点。旧口径按「2 倍 STILL 间隔 = 6 分钟」判覆盖，
+ * 于是每两个兜底点之间（约 30 分钟）都被画成断档 —— 真机 24 小时实测出 40+ 段，
+ * 用户看到的就是「一直在断档」。那些洞是**省电设计的正常静默**，与掉线是两件事，
+ * 必须分开呈现：待机不动、断档报警。
  */
 object CoverageTimeline {
 
@@ -103,16 +129,26 @@ object CoverageTimeline {
     const val MAX_GAPS = 5
 
     /**
-     * 深断档阈值：30 分钟。
+     * 省电待机上限：35 分钟。
      *
-     * 与 [LocationGapHealing.DEEP_GAP_MS] **同值但语义不同**：那边是动作阈值（过了就重建订阅），
-     * 这边是呈现阈值（色块分级）。两者取同一个数是为了避免「同一个词两个数」——
-     * 用户看到红色段去问「这算不算深断档」，答案不该取决于在哪一屏看。
+     * 取值为服务层兜底节奏 [com.bsfeng.monitor.service.LocationForegroundService.STILL_FALLBACK_MS]
+     * （30 分钟）+ 5 分钟调度余量：兜底是 30 秒 tick 触发的，实测落在 30:00~30:30；
+     * 不留余量会把每次兜底晚到 20 秒判成断档，比不修还吵。
      *
-     * 曾一度取 40 分钟去迁就原型里 35 分钟画黄的示意，那个做法是错的：
-     * 原型是示意数据，不该反过来决定产品阈值。
+     * 边界是「动作阈值 vs 呈现阈值」的分工：超过它就是真没采到点（服务被杀、权限被撤、
+     * 心跳停摆），才配叫断档。
      */
-    const val DEEP_GAP_MS = 30 * 60_000L
+    const val DORMANT_CEILING_MS = 35 * 60_000L
+
+    /**
+     * 深断档阈值：2 小时。
+     *
+     * 与 [LocationGapHealing.DEEP_GAP_MS]（30 分钟）**不同值也不同语义**，别合并：
+     * 那边是动作阈值（过了就重建订阅），这边是呈现阈值（GAP / DEEP 分色）。
+     * 曾经取同一个 30 分钟，待机档引入后两者必然打架 —— 35 分钟的待机上限已经越过 30，
+     * 深断档若还留在 30 分钟，GAP 区间会被压空、图例里「断档」永远不出现。
+     */
+    const val DEEP_GAP_MS = 2 * 60 * 60_000L
 
     /**
      * 算一个窗口的覆盖分段。
@@ -160,9 +196,10 @@ object CoverageTimeline {
     /** 该模式的「正常间隔」容忍上限：2 倍模式间隔。 */
     fun toleranceOf(mode: SampleMode): Long = LocationPace.intervalOf(mode) * COVERED_FACTOR
 
-    /** 一个间隔的定性：容忍内 COVERED；不到深断档阈值 GAP；否则 DEEP。 */
+    /** 一个间隔的定性：容忍内 COVERED；兜底节奏内 DORMANT；不到深断档 GAP；否则 DEEP。 */
     private fun kindOf(gapMs: Long, tolerance: Long): CoverageKind = when {
         gapMs <= tolerance -> CoverageKind.COVERED
+        gapMs <= DORMANT_CEILING_MS -> CoverageKind.DORMANT
         gapMs < DEEP_GAP_MS -> CoverageKind.GAP
         else -> CoverageKind.DEEP
     }
@@ -229,15 +266,21 @@ data class CoverageGap(
 }
 
 /**
- * 断档列表口径：最多 [MAX_GAPS] 条、按时间升序、只取 GAP / DEEP。
+ * 断档列表口径：**按时间倒序（最新的在前）**、最多 [MAX_GAPS] 条、只取 GAP / DEEP。
  *
- * 为什么截断在时间早的那几条而不是最长的几条：断档列表是「时间线」的延伸，
- * 用户按时间从上往下读；挑最长的会把时间顺序打乱，读起来像随机采样。
+ * 为什么是倒序而不是升序（旧口径写反过）：这个列表回答的是「最近断在那儿」，
+ * 用户点开设置页第一眼要看的正是刚刚那段 —— 升序 + take(5) 会把最新的断档
+ * 全部截在屏幕外（真机 24 小时有 40+ 段，永远只看到凌晨最早那 5 段）。
+ * 时间线方向仍由覆盖条承担（左旧右新），列表本身按「最值得看」排序。
+ *
+ * 为什么截断在最新的几条而不是最长的几条：挑最长的会打乱时间顺序，
+ * 读起来像随机采样；最新的几条至少还在「刚才发生了什么」的上下文里。
  */
 fun CoverageWindow.gaps(
     limit: Int = CoverageTimeline.MAX_GAPS,
     reasonOf: (CoverageSegment) -> LocationFailureReason? = { null },
 ): List<CoverageGap> = breaks
+    .asReversed()
     .take(limit.coerceAtLeast(0))
     .map { CoverageGap(it.startMs, it.durationMs, it.kind, reasonOf(it)) }
 
@@ -371,7 +414,8 @@ fun coverageGapHeadline(breakCount: Int, isToday: Boolean): String {
 }
 
 /**
- * 断档汇总副标题：三段以内逐条列「03:12 起 35 分钟」，超过 3 条折成「等 N 处」。
+ * 断档汇总副标题：三段以内逐条列「03:12 起 35 分钟」（**最新的在前**，与断档列表同向），
+ * 超过 3 条折成「等 N 处」。
  *
  * [totalBreaks] 是真实断档次数（窗口里的 GAP + DEEP 段数），不能用 [gaps] 长度代替：
  * 列表本身按上限截断，拿它计数会把 7 次断档写成 5 次。
