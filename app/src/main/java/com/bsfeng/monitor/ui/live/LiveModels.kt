@@ -55,6 +55,37 @@ fun hourlyIntensityOf(events: List<Record>): List<Float> {
     return buckets.toList()
 }
 
+/**
+ * 滚动 24 小时逐时强度：把 [nowMs - 24h, nowMs] 切成 24 个 1 小时桶，下标 0 最早、23 最新。
+ *
+ * 为什么不复用 [hourlyIntensityOf]：那个按**自然日小时**分桶（0..23 时），画出来是「今天到现在」，
+ * 而这张卡的标题写的是「最近 24 小时」。两者在凌晨相差整整一天 —— 标题说滚动窗口、
+ * 图上却是当天，会让人误判「昨晚到底活跃不活跃」。
+ */
+fun rollingHourIntensityOf(events: List<Record>, nowMs: Long): List<Float> {
+    val buckets = FloatArray(HOURS_PER_DAY)
+    val windowStart = nowMs - DAY_MS
+    events.forEach { record ->
+        val offset = record.timestamp - windowStart
+        if (offset < 0L || offset > DAY_MS) return@forEach
+        val index = (offset / HOUR_MS).toInt().coerceIn(0, HOURS_PER_DAY - 1)
+        buckets[index] += 1f
+    }
+    return buckets.toList()
+}
+
+/** 滚动窗口里第 [index] 个桶的起点时刻：峰值文案要对上真实时间，不能写自然日的小时。 */
+fun rollingHourStartAt(nowMs: Long, index: Int): Long =
+    nowMs - DAY_MS + index.coerceIn(0, HOURS_PER_DAY - 1) * HOUR_MS
+
+/**
+ * 滚动窗口的轴刻度：窗口起点 / 中点 / 终点三个**真实时刻**。
+ *
+ * 不写 0:00 / 12:00 / 24:00：窗口是滚动的，起点不是当天 0 点（与采集覆盖卡刻度同一口径）。
+ */
+fun rollingHourAxisLabels(nowMs: Long): List<String> =
+    listOf(nowMs - DAY_MS, nowMs - DAY_MS / 2, nowMs).map { formatClock(it) }
+
 /** 峰值：返回 (小时, 峰值计数)；全 0 时返回 (0, 0f)。 */
 fun peakOf(values: List<Float>): Pair<Int, Float> {
     var idx = 0
@@ -73,6 +104,7 @@ fun startOfDay(now: Long): Long =
     Instant.ofEpochMilli(now).atZone(ZONE).toLocalDate().atStartOfDay(ZONE).toInstant().toEpochMilli()
 
 const val DAY_MS: Long = 86_400_000L
+const val HOUR_MS: Long = 3_600_000L
 const val HOURS_PER_DAY: Int = 24
 
 // J8：DateTimeFormatter 不可变且线程安全（SimpleDateFormat 非线程安全，且随默认时区在类加载时固化）。

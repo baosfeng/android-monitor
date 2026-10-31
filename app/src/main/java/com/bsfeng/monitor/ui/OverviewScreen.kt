@@ -96,6 +96,8 @@ import com.bsfeng.monitor.ui.live.recordTypeLabel
 import com.bsfeng.monitor.ui.live.TypeIconDot
 import com.bsfeng.monitor.ui.live.formatFullDate
 import com.bsfeng.monitor.ui.live.peakOf
+import com.bsfeng.monitor.ui.live.rollingHourAxisLabels
+import com.bsfeng.monitor.ui.live.rollingHourStartAt
 import com.bsfeng.monitor.ui.live.weekdayLabel
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.categoryDot
@@ -122,7 +124,7 @@ private const val EMPTY_DESC_READY = "开启无障碍服务后，屏幕、应用
 private const val EMPTY_DESC_DENIED =
     "无障碍服务未授权（设置 → 无障碍服务 → 去开启）。开启后，屏幕、应用、网络与充电事件会自动汇总到这里。"
 
-private val HOUR_TICKS = listOf("00", "04", "08", "12", "16", "20", "23")
+
 
 private val RANGE_OPTIONS = listOf("今日", "近 7 天", "近 30 天")
 
@@ -522,29 +524,34 @@ private fun LazyListScope.todayPanelS01(
 
     item(key = "card-24h") {
         val t = LocalDesignTokens.current
-        val peak = peakOf(state.hourlyIntensity)
+        // 窗口是「此刻往回 24 小时」的滚动窗口（跨自然日），刻度和峰值都按真实时刻标；
+        // 曾经按自然日 0..23 时画、刻度写死 00/04/08/12/16/20/23，凌晨打开时标题与图对不上。
+        val intensity = state.last24hIntensity
+        val peak = peakOf(intensity)
+        val axis = remember(state.lastUpdatedAt) { rollingHourAxisLabels(state.lastUpdatedAt) }
         AppCard(modifier = Modifier.testTag("s01-chart24h").staggerEnterAt(4)) {
-            CardHead("最近 24 小时活跃", "合计 " + state.todayActiveMinutes + " 分钟")
+            CardHead("最近 24 小时活跃", "合计 " + state.last24hActiveMinutes + " 分钟")
             Spacer(Modifier.height(t.space3))
             AreaChart(
-                values = state.hourlyIntensity,
+                values = intensity,
                 modifier = Modifier.fillMaxWidth().height(t.chartH),
             )
-            ChartAxisLabels(HOUR_TICKS)
+            ChartAxisLabels(axis)
             Spacer(Modifier.height(t.space3))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MetaText("逐时活跃强度")
                 // 0 条时峰值文案写「暂无数据」
                 MetaText(
-                    if (state.hourlyIntensity.any { it > 0f }) {
-                        "峰值 " + String.format(Locale.US, "%02d:00", peak.first) + " · " + peak.second.toInt() + " 条"
+                    if (intensity.any { it > 0f }) {
+                        "峰值 " + formatClock(rollingHourStartAt(state.lastUpdatedAt, peak.first)) +
+                            " · " + peak.second.toInt() + " 条"
                     } else {
                         "暂无数据"
                     },
                 )
             }
             Spacer(Modifier.height(t.space2))
-            HeatStrip(values = state.hourlyIntensity)
+            HeatStrip(values = intensity)
         }
     }
 
