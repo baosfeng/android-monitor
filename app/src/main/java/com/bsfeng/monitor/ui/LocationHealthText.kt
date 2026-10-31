@@ -32,6 +32,14 @@ object LocationHealthText {
     const val WARMUP_WINDOW_MS = 5 * 60 * 1000L
 
     /**
+     * 采集节奏的一句话说明（设置页功能索引行与位置采集细则页共用同一句）。
+     *
+     * 曾经写「移动时约 10 秒、静止时约 3 分钟」——功耗门禁上线后这两个数都不对了：
+     * 移动 30 秒、静止根本不采（30 分钟兜底一次）。两处写死同一句，避免又各改一遍走岔。
+     */
+    const val PACE_SUMMARY = "移动时约 30 秒记录一次，静止时省电降频"
+
+    /**
      * 省电待机的容忍上限：与 record 层同源（30 分钟兜底 + 5 分钟调度余量）。
      *
      * 门禁 SLEEPING 时静止不采点，最后一点常停在 30 分钟前；拿 [FRESH_WINDOW_MS] 判
@@ -208,7 +216,7 @@ object LocationHealthText {
         LocationPermissionStatus.GRANTED -> LocationCopy(
             badge = "已就绪",
             tone = BadgeTone.Success,
-            summary = "定位已就绪 · 行程按 10 分钟采样",
+            summary = "定位已就绪 · 移动时约 30 秒采样",
             check = "已就绪 · 后台定位可用",
             doneSteps = 3,
             stepsHint = STEPS_HINT,
