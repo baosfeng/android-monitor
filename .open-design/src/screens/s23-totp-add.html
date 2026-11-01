@@ -1,0 +1,122 @@
+<!-- ============================================================
+     s23 · 添加账户（push 屏）
+
+     入口：s22「添加账户」。三入口：扫码 / 手动输入 / 从相册识别。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s23">
+/* ── s23 添加账户 ───────────────────────────────────────────────── */
+.screen.s23{font-size:max(var(--text-sm),14px)}
+.screen.s23 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s23 :is(.meta,.row-sub,.row-tail,.group-label,.st-desc,.fine){font-size:max(var(--text-sm),14px)}
+.screen.s23 button:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s23-intro{display:block;margin:0 0 var(--space-3);line-height:1.5}
+.s23-entry{display:grid;grid-template-columns:44px minmax(0,1fr) 18px;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-3) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s23-entry:first-child{border-top:0}
+.s23-entry:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s23-entry .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s23-chev{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s23-card{margin-top:var(--space-3)}
+.s23-card .row + .row{border-top:0}
+.s23-kv{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--border-soft)}
+.s23-kv:first-child{border-top:0}
+.s23-kv .num{white-space:nowrap}
+.s23-detail{display:block;line-height:1.5}
+.s23-in{opacity:0}
+.s23.is-active .s23-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s23.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s23.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s23.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s23 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen s23" data-screen="s23" data-title="添加账户" id="s23" data-od-id="screen-s23">
+  <div class="content pad" data-od-id="s23-content">
+
+    <p class="s23-intro s23-in od-d1" data-od-min-fs>
+      <span class="meta">选择一种方式添加 TOTP 账户 · 密钥只保存在本机</span>
+    </p>
+
+    <div class="group s23-in od-d2" data-state-hide="loading" data-od-id="s23-entries">
+      <button class="s23-entry" type="button" data-goto="s24" data-od-id="s23-entry-scan">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M4 8.4V5.6A1.6 1.6 0 0 1 5.6 4h2.8"/><path d="M15.6 4h2.8A1.6 1.6 0 0 1 20 5.6v2.8"/><path d="M20 15.6v2.8a1.6 1.6 0 0 1-1.6 1.6h-2.8"/><path d="M8.4 20H5.6A1.6 1.6 0 0 1 4 18.4v-2.8"/><path d="M4 12h16"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">扫码添加</span>
+          <span class="row-sub">对准网站出示的 otpauth 二维码</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+      <button class="s23-entry" type="button" data-goto="s25" data-od-id="s23-entry-manual">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.6" rx="2.6"/><path d="M7 10.4h6"/><path d="M7 14.2h3.4"/><path d="M16.4 10.4h1.2"/><path d="M16.4 14.2h1.2"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">手动输入</span>
+          <span class="row-sub">粘贴 Base32 密钥，可调算法与周期</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+      <button class="s23-entry" type="button" data-album data-goto="s24" data-od-id="s23-entry-album">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M4.4 17.4 10 12l3.2 3 2.6-2.4 3.8 3.6"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">从相册识别</span>
+          <span class="row-sub">选择二维码截图，本机离线解码</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+    </div>
+
+    <div class="card s23-card s23-in od-d3" data-state-hide="loading empty error edge" data-od-id="s23-support">
+      <div class="sec-head">
+        <h2 class="h3">支持的参数</h2>
+        <span class="badge" data-od-min-fs>RFC 6238</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">算法</span>
+        <span class="num">SHA1 / SHA256 / SHA512</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">位数</span>
+        <span class="num">6 / 8 位</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">周期</span>
+        <span class="num">30 / 60 秒</span>
+      </div>
+      <p class="fine mt-3 s23-detail" data-od-min-fs>扫码优先读 otpauth 里的参数；二维码里没有的项，先按 SHA1 / 6 位 / 30 秒计算，之后可在账户详情里改。</p>
+    </div>
+
+    <p class="fine s23-in od-d3" data-od-min-fs style="display:block;padding-top:var(--space-3);line-height:1.5">密钥以 Android Keystore 加密后只存本机，不进备份、不写日志、不上传；卸载 App 即随之删除。</p>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s23-loading">
+      <div class="card">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s23：从相册入口 → 先给一句「正在读取所选图片」的反馈，再进扫码页演示解码。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    sec.addEventListener('click', function (e) {
+      var album = e.target.closest && e.target.closest('[data-album]');
+      if (!album) return;
+      if (window.App) App.toast('已选择相册图片 · 正在本机识别二维码');
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

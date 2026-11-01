@@ -79,7 +79,7 @@ internal fun SettingsSkipDetail(rt: SettingsScreenRuntime) {
 
 /** 记账细则：开关 + 支付后弹窗确认，正文见 SettingsFinanceFeatureCard.kt。 */
 @Composable
-internal fun SettingsFinanceDetail(rt: SettingsScreenRuntime) {
+internal fun SettingsFinanceDetail(rt: SettingsScreenRuntime, onOpenSubPage: (SettingsSubPage) -> Unit) {
     SettingsFinanceFeatureCard(
         t = rt.t,
         context = rt.context,
@@ -87,6 +87,7 @@ internal fun SettingsFinanceDetail(rt: SettingsScreenRuntime) {
         toast = rt.toast,
         financeOn = rt.financeOn,
         setFeature = rt.setFeature,
+        onOpenWidgetDetail = { onOpenSubPage(SettingsSubPage.WIDGET_DETAIL) },
     )
 }
 

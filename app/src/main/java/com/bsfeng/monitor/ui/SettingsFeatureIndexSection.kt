@@ -51,15 +51,8 @@ internal fun SettingsFeatureIndexSection(
         }
     }
 
-    AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
-        TokenRow(
-            title = "桌面小组件",
-            subtitle = "六个组件 · 隐藏金额开关 · 添加到桌面",
-            icon = settingsPageIcon(SettingsSubPage.WIDGET_DETAIL),
-            onClick = { onOpenDetail(SettingsSubPage.WIDGET_DETAIL) },
-            trailing = { TailChevron() },
-        )
-    }
+    // 桌面小组件不在这里：它属于记账的呈现方式，入口已挪到「记账」细则页，
+    // 本页严格保持 7 项（7 项功能各一行）。
 }
 
 /** 「功能开关」页的一行：功能、开关状态、摘要、下钻到哪一页。 */
@@ -124,6 +117,17 @@ private fun featureIndexRows(rt: SettingsScreenRuntime): List<FeatureIndexRow> =
         page = SettingsSubPage.LOCATION_DETAIL,
         enabled = rt.locationOn,
         subtitle = if (rt.locationOn) LocationHealthText.PACE_SUMMARY else "已关闭：不读位置、不落坐标",
+    ),
+    FeatureIndexRow(
+        feature = Feature.TOTP,
+        page = SettingsSubPage.TOTP_DETAIL,
+        enabled = rt.totpOn,
+        // 没有底部 Tab：关闭态要说清「入口去哪儿了」，否则用户会去找 Tab
+        subtitle = if (rt.totpOn) {
+            "二次验证码 · 概览页右上角图标进入"
+        } else {
+            "已关闭：概览入口收起，本地密钥保留"
+        },
     ),
 )
 

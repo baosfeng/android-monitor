@@ -1,0 +1,427 @@
+<!-- ============================================================
+     s22 · 验证器首页（push 屏）
+
+     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
+     文件内三行 od 标记（style / section / end）由组装脚本消费，
+     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
+
+     入口：概览「验证码」卡片 / 设置「验证器 › 管理账户」。
+     push 屏：appbar 由外壳按 data-title 生成，不进 TABS。
+     演示数据全部来自 .open-design/50-totp-brief.md 的占位值。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s22">
+/* ── s22 验证器首页 ─────────────────────────────────────────────── */
+.screen.s22{font-size:max(var(--text-sm),14px)}
+.screen.s22 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s22 :is(.meta,.row-sub,.row-tail,.chip,.st-desc,.group-label){font-size:max(var(--text-sm),14px)}
+.screen.s22 :is(button,input){font-family:inherit}
+.screen.s22 button:focus-visible,
+.screen.s22 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s22-searchbox{display:flex;align-items:center;gap:var(--space-2);height:calc(var(--tap-min) + 2px);padding:0 var(--space-3);
+  border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border-soft)}
+.s22-searchbox svg{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:var(--muted);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s22-search{flex:1 1 auto;min-width:0;height:var(--tap-min);padding:0;border:0;background:transparent;color:var(--fg);
+  font-size:max(var(--text-base),14px)}
+.s22-search::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.s22-search::placeholder{color:var(--muted)}
+.s22-searchbox:focus-within{border-color:var(--accent);box-shadow:var(--focus-ring)}
+
+/* 账户行：平台首字色块 + 平台/账号 + 右侧验证码与倒计时 */
+.totp-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:64px;padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.totp-row:first-child{border-top:0}
+.totp-row:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.totp-ava{width:34px;height:34px;border-radius:var(--radius-sm);display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600;line-height:1}
+.totp-tail{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:96px}
+.totp-code{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:var(--text-xl);font-weight:600;letter-spacing:.02em;line-height:1.1;color:var(--fg)}
+.totp-code--wide{font-size:var(--text-lg)}
+.totp-meta{display:inline-flex;align-items:center;gap:var(--space-2)}
+.totp-sec{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-xs);
+  color:var(--muted);min-width:2.6em;text-align:right}
+.totp-ring{--c:var(--fg-2);position:relative;flex:0 0 auto;width:18px;height:18px;border-radius:50%;
+  background:conic-gradient(var(--c) calc(var(--p,100) * 1%),color-mix(in srgb,var(--fg) 13%,transparent) 0)}
+.totp-ring::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--surface)}
+.totp-row.is-warn .totp-ring{--c:var(--warn)}
+.totp-row.is-warn .totp-sec{color:var(--warn-text)}
+.totp-paused{opacity:.55}
+.totp-paused .totp-code{text-decoration:line-through}
+
+.s22-actions{display:grid;gap:var(--space-2);padding-top:var(--space-3)}
+.s22-actions .btn{width:100%}
+.s22-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s22-empty-hit{display:none}
+.s22-in{opacity:0}
+.s22.is-active .s22-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s22.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s22.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s22.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.s22.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+.device-screen:has(#odSplash:not([hidden])) .s22 *{animation:none}
+
+/* 长按菜单（sheet） */
+.s22-menu .sheet{display:block}
+.s22-menu-item{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:var(--tap-min);
+  padding:var(--space-3) var(--space-2);border:0;background:transparent;color:var(--fg);
+  font-size:max(var(--text-base),14px);text-align:left;cursor:pointer;border-radius:var(--radius-md)}
+.s22-menu-item:active{background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.s22-menu-item svg{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s22-menu-title{font-size:max(var(--text-sm),14px);color:var(--muted);padding:var(--space-2) var(--space-2) var(--space-1)}
+</style>
+<!--@od:section-->
+<section class="screen s22" data-screen="s22" data-title="验证器" id="s22" data-od-id="screen-s22">
+  <div class="content pad" data-od-id="s22-content">
+
+    <!-- 加载态 -->
+    <div class="st-loading" data-state-when="loading" data-od-id="s22-loading">
+      <div class="card">
+        <div class="sk w-60 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-40"></div>
+      </div>
+      <div class="card mt-3">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <!-- 空态 -->
+    <div class="st-empty" data-state-when="empty" data-od-id="s22-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><rect x="4.4" y="2.6" width="15.2" height="18.8" rx="3"/><path d="M9.4 17.4h5.2"/><path d="M12 7.4v5.2"/><path d="M9.4 10h5.2"/></svg></span>
+      <p class="st-title">还没有验证器账户</p>
+      <p class="st-desc">扫码或手动输入 Base32 密钥，验证码只在本机计算，不上传、不联网。</p>
+      <button class="btn" type="button" data-goto="s23" data-od-id="s22-empty-cta">添加第一个账户</button>
+      <button class="btn btn-ghost" type="button" data-goto="s27" data-od-id="s22-empty-import">从 Aegis / 2FAS 导入</button>
+    </div>
+
+    <!-- 错误态 -->
+    <div class="st-error" data-state-when="error" data-od-id="s22-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg></span>
+      <p class="st-title">账户列表读取失败</p>
+      <p class="st-desc">加密存储暂时不可用（Keystore 未解锁）。系统解锁后重试即可，账户不会丢失。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('正在重新读取本地账户…')" data-od-id="s22-error-retry">重试</button>
+    </div>
+
+    <!-- 边界态：超长平台名 / 8 位码 / 60 秒周期 / 剩余 ≤5 秒 -->
+    <div class="pad" data-state-when="edge" data-od-id="s22-edge">
+      <div class="group">
+        <div class="totp-row is-warn totp-paused" data-od-id="s22-edge-long">
+          <span class="totp-ava" aria-hidden>腾</span>
+          <span class="row-body">
+            <span class="row-title">腾讯云 · 重庆区域对象存储管理控制台</span>
+            <span class="row-sub">ops+backup-2024@acme-enterprise-cn.cn</span>
+          </span>
+          <span class="totp-tail">
+            <span class="totp-code totp-code--wide">4829 1376</span>
+            <span class="totp-meta" data-od-min-fs>
+              <span class="totp-ring" aria-hidden></span>
+              <span class="totp-sec">5s</span>
+            </span>
+          </span>
+        </div>
+        <div class="totp-row" data-od-id="s22-edge-paused">
+          <span class="totp-ava" aria-hidden>A</span>
+          <span class="row-body">
+            <span class="row-title">AWS（已暂停）</span>
+            <span class="row-sub">root@acme</span>
+          </span>
+          <span class="totp-tail">
+            <span class="totp-code">— — —</span>
+            <span class="totp-meta" data-od-min-fs><span class="totp-sec">暂停</span></span>
+          </span>
+        </div>
+      </div>
+      <p class="fine mt-2" data-od-min-fs>超长平台名与账号单行截断；8 位码降一档字号；暂停账户不参与倒计时。</p>
+    </div>
+
+    <!-- 正常态 -->
+    <div data-state-hide="loading empty error edge" data-od-id="s22-body">
+
+      <div class="s22-in od-d1" data-od-id="s22-search">
+        <div class="s22-searchbox">
+          <svg viewBox="0 0 24 24" aria-hidden><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 20.4 20.4"/></svg>
+          <input class="s22-search" type="search" id="s22Search" placeholder="搜索平台或账户" autocomplete="off" aria-label="搜索平台或账户" />
+        </div>
+      </div>
+
+      <div class="mt-3 s22-in od-d2" data-od-id="s22-list">
+        <p class="group-label">云服务 · 3 个</p>
+        <div class="group">
+          <button class="totp-row" type="button" data-totp-row data-search="腾讯云 ops@acme.cn"
+                  data-period="30" data-left="23" data-code="482913" data-issuer="腾讯云" data-account="ops@acme.cn"
+                  aria-label="腾讯云 ops@acme.cn，验证码 482913" data-od-id="s22-row-tencent">
+            <span class="totp-ava" aria-hidden>腾</span>
+            <span class="row-body">
+              <span class="row-title">腾讯云</span>
+              <span class="row-sub">ops@acme.cn</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>482 913</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="阿里云 dev@acme.cn"
+                  data-period="30" data-left="18" data-code="705214" data-issuer="阿里云" data-account="dev@acme.cn"
+                  aria-label="阿里云 dev@acme.cn，验证码 705214" data-od-id="s22-row-aliyun">
+            <span class="totp-ava" aria-hidden>阿</span>
+            <span class="row-body">
+              <span class="row-title">阿里云</span>
+              <span class="row-sub">dev@acme.cn</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>705 214</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="AWS root@acme"
+                  data-period="30" data-left="9" data-code="118002" data-issuer="AWS" data-account="root@acme"
+                  aria-label="AWS root@acme，验证码 118002" data-od-id="s22-row-aws">
+            <span class="totp-ava" aria-hidden>A</span>
+            <span class="row-body">
+              <span class="row-title">AWS</span>
+              <span class="row-sub">root@acme</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>118 002</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <p class="group-label mt-4">代码与账号 · 2 个</p>
+        <div class="group">
+          <button class="totp-row" type="button" data-totp-row data-search="GitHub alice@acme.com"
+                  data-period="30" data-left="27" data-code="936140" data-issuer="GitHub" data-account="alice@acme.com"
+                  aria-label="GitHub alice@acme.com，验证码 936140" data-od-id="s22-row-github">
+            <span class="totp-ava" aria-hidden>G</span>
+            <span class="row-body">
+              <span class="row-title">GitHub</span>
+              <span class="row-sub">alice@acme.com</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>936 140</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="Google alice.work@gmail.com"
+                  data-period="30" data-left="4" data-code="250478" data-issuer="Google" data-account="alice.work@gmail.com"
+                  aria-label="Google alice.work@gmail.com，验证码 250478" data-od-id="s22-row-google">
+            <span class="totp-ava" aria-hidden>G</span>
+            <span class="row-body">
+              <span class="row-title">Google</span>
+              <span class="row-sub">alice.work@gmail.com</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>250 478</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <div class="st-empty s22-noresult" hidden data-od-id="s22-noresult">
+          <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 20.4 20.4"/></svg></span>
+          <p class="st-title">没有匹配的账户</p>
+          <p class="st-desc">换个平台名或邮箱片段试试；也可以直接添加一个新账户。</p>
+          <button class="btn btn-ghost" type="button" data-clear-search data-od-id="s22-noresult-clear">清空搜索</button>
+        </div>
+      </div>
+
+      <div class="s22-actions s22-in od-d3" data-od-id="s22-actions">
+        <button class="btn" type="button" data-goto="s23" data-od-id="s22-add">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M12 5.4v13.2"/><path d="M5.4 12h13.2"/></svg>
+          <span>添加账户</span>
+        </button>
+        <button class="btn btn-ghost" type="button" data-goto="s27" data-od-id="s22-backup">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/></svg>
+          <span>备份与导入</span>
+        </button>
+      </div>
+
+      <p class="fine s22-note s22-in od-d4" data-od-min-fs>点按账户即复制验证码，30 秒后自动清空剪贴板；长按可编辑或暂停账户。验证码在本机计算，不联网、不上传。</p>
+    </div>
+  </div>
+
+  <!-- 长按菜单 -->
+  <div class="scrim is-bottom s22-menu" id="s22-menu" hidden data-od-id="s22-menu">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="账户操作" data-od-id="s22-menu-sheet">
+      <span class="sheet-grip" aria-hidden></span>
+      <p class="s22-menu-title" id="s22MenuTitle">GitHub · alice@acme.com</p>
+      <div class="grid-2">
+        <button class="btn btn-ghost" type="button" data-menu-copy data-od-id="s22-menu-copy">复制验证码</button>
+        <button class="btn btn-ghost" type="button" data-menu-pause data-od-id="s22-menu-pause">暂停账户</button>
+      </div>
+      <button class="s22-menu-item mt-2" type="button" data-menu-edit data-od-id="s22-menu-edit">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M4.5 19.5h4l10-10-4-4-10 10z"/><path d="M13.5 6.5l4 4"/></svg>
+        <span>查看与编辑账户</span>
+      </button>
+      <button class="s22-menu-item" type="button" data-close="#s22-menu" data-od-id="s22-menu-cancel">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
+        <span>取消</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  /* s22：账号搜索、复制、长按菜单、30s 倒计时（≤5s 切 --warn）。
+     行是真实 button；长按走 pointerdown 计时，pointerup 后抑制随后的 click。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var rows = Array.prototype.slice.call(sec.querySelectorAll('[data-totp-row]'));
+    var search = sec.querySelector('#s22Search');
+    var menu = sec.querySelector('#s22-menu');
+    var menuTitle = sec.querySelector('#s22MenuTitle');
+    var pressTimer = null;
+    var suppressClick = false;
+    var target = null;
+
+    function openMenu(row) {
+      target = row;
+      if (menuTitle) {
+        menuTitle.textContent = (row.getAttribute('data-issuer') || '') + ' · ' + (row.getAttribute('data-account') || '');
+      }
+      if (menu) menu.hidden = false;
+    }
+    if (menu) {
+      menu.addEventListener('click', function (e) {
+        if (e.target === menu) menu.hidden = true;
+      });
+    }
+
+    function copyCode(row) {
+      var code = row.getAttribute('data-code') || '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code);
+      } catch (err) { /* 原型不阻塞反馈 */ }
+      if (window.App) App.toast('已复制，30 秒后自动清空');
+    }
+
+    function tick() {
+      rows.forEach(function (r) {
+        if (r.classList.contains('totp-paused')) return;
+        var period = Number(r.getAttribute('data-period')) || 30;
+        var left = Number(r.getAttribute('data-left')) - 1;
+        if (!(left > 0) || left > period) left = period;
+        r.setAttribute('data-left', String(left));
+        var ring = r.querySelector('.totp-ring');
+        if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+        var s = r.querySelector('[data-sec]');
+        if (s) s.textContent = left + 's';
+        r.classList.toggle('is-warn', left <= 5);
+      });
+    }
+    rows.forEach(function (r) {
+      var period = Number(r.getAttribute('data-period')) || 30;
+      var left = Number(r.getAttribute('data-left')) || period;
+      var ring = r.querySelector('.totp-ring');
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      var s = r.querySelector('[data-sec]');
+      if (s) s.textContent = left + 's';
+      r.classList.toggle('is-warn', left <= 5);
+    });
+    window.setInterval(tick, 1000);
+
+    function filter() {
+      var q = (search && search.value ? search.value : '').trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (r) {
+        var hay = (r.getAttribute('data-search') || '').toLowerCase();
+        var hit = !q || hay.indexOf(q) >= 0;
+        r.hidden = !hit;
+        if (hit) shown++;
+      });
+      var empty = sec.querySelector('.s22-noresult');
+      if (empty) empty.hidden = shown > 0;
+    }
+    if (search) {
+      search.addEventListener('input', filter);
+      search.addEventListener('search', filter);
+    }
+    var clearBtn = sec.querySelector('[data-clear-search]');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        if (search) { search.value = ''; filter(); search.focus(); }
+      });
+    }
+
+    /* 长按 500ms 打开账户菜单；右键 / 长按同等对待 */
+    sec.addEventListener('pointerdown', function (e) {
+      var row = e.target.closest && e.target.closest('[data-totp-row]');
+      if (!row) return;
+      suppressClick = false;
+      pressTimer = window.setTimeout(function () {
+        pressTimer = null;
+        suppressClick = true;
+        openMenu(row);
+        if (window.App) { App.haptic('medium'); }
+      }, 500);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+      sec.addEventListener(ev, function () {
+        if (pressTimer) { window.clearTimeout(pressTimer); pressTimer = null; }
+      });
+    });
+    sec.addEventListener('contextmenu', function (e) {
+      var row = e.target.closest && e.target.closest('[data-totp-row]');
+      if (!row) return;
+      e.preventDefault();
+      openMenu(row);
+    });
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      if (t.closest('[data-menu-copy]')) {
+        if (target) copyCode(target);
+        if (menu) menu.hidden = true;
+        return;
+      }
+      if (t.closest('[data-menu-pause]')) {
+        if (target) {
+          var paused = target.classList.toggle('totp-paused');
+          if (window.App) App.toast(paused ? '账户已暂停，不再滚动验证码' : '账户已恢复');
+        }
+        if (menu) menu.hidden = true;
+        return;
+      }
+      if (t.closest('[data-menu-edit]')) {
+        if (menu) menu.hidden = true;
+        if (window.App) App.go('s26');
+        return;
+      }
+
+      var row = t.closest('[data-totp-row]');
+      if (row) {
+        if (suppressClick) { suppressClick = false; return; }
+        copyCode(row);
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->

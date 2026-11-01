@@ -175,6 +175,13 @@ internal fun MainContent(
             var showAppearance by remember { mutableStateOf(false) }
             // 额度设置（从额度页齿轮 / 设置页分组 push）
             var showQuotaSettings by remember { mutableStateOf(false) }
+            // 验证器（push 屏，无底部 Tab）：入口只有概览右上角图标与设置卡两个跳点，落点是同一个宿主
+            var showTotpScreen by remember { mutableStateOf(false) }
+            var totpStartAtBackup by remember { mutableStateOf(false) }
+            fun openTotp(startAtBackup: Boolean) {
+                totpStartAtBackup = startAtBackup
+                showTotpScreen = true
+            }
             // 设置二级页：存枚举名（String 进 Bundle），旋转 / 进程重建后能回到同一页；
             // 空串 = 停留在一级页。Tab 切换时重置（见 onSelectTab 与深链兜底）。
             var settingsSubPageName by rememberSaveable { mutableStateOf("") }
@@ -190,7 +197,7 @@ internal fun MainContent(
                 if (adSkipOn || showWhitelistScreen) viewModel() else null
             val view = LocalView.current
             val overlayOpen = showSkipRuleScreen || showWhitelistScreen || showGallery ||
-                showAppearance || showTripScreen || showQuotaSettings ||
+                showAppearance || showTripScreen || showQuotaSettings || showTotpScreen ||
                 (selectedTab == AppTab.SETTINGS && settingsSubPage != null)
             // 原型二级页（记账子页 / 设置子页）无 Tab 栏
             val financeSubPage = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main
@@ -210,6 +217,10 @@ internal fun MainContent(
                 if (!adSkipOn) {
                     showSkipRuleScreen = false
                     showWhitelistScreen = false
+                }
+                // 验证器关闭：入口与已打开的覆盖层一起收起（不在关闭态继续显示验证码）
+                if (!featureOn(Feature.TOTP)) {
+                    showTotpScreen = false
                 }
             }
 
@@ -338,6 +349,7 @@ internal fun MainContent(
                             settingsSubPage = settingsSubPage,
                             onOpenSettingsSubPage = { settingsSubPageName = it.name },
                             onCloseSettingsSubPage = { settingsSubPageName = "" },
+                            onOpenTotp = ::openTotp,
                         )
                     }
                 }
@@ -348,6 +360,8 @@ internal fun MainContent(
                 showWhitelistScreen = showWhitelistScreen,
                 showGallery = showGallery,
                 showQuotaSettings = showQuotaSettings,
+                showTotpScreen = showTotpScreen,
+                totpStartAtBackup = totpStartAtBackup,
                 showAppearance = showAppearance,
                 showTripScreen = showTripScreen,
                 showSplash = showSplash,
@@ -363,6 +377,10 @@ internal fun MainContent(
                 },
                 onCloseGallery = { showGallery = false },
                 onCloseQuotaSettings = { showQuotaSettings = false },
+                onCloseTotp = {
+                    showTotpScreen = false
+                    totpStartAtBackup = false
+                },
                 onCloseAppearance = { showAppearance = false },
                 onCloseTrip = { showTripScreen = false },
                 onOpenLocationSettings = {

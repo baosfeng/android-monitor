@@ -75,6 +75,8 @@ internal fun MainTabContent(
     settingsSubPage: SettingsSubPage?,
     onOpenSettingsSubPage: (SettingsSubPage) -> Unit,
     onCloseSettingsSubPage: () -> Unit,
+    /** 验证器入口（true = 直接落备份页）：概览图标与设置卡共用同一个宿主。 */
+    onOpenTotp: (Boolean) -> Unit = {},
 ) {
     // 删除后返回列表的一次性焦点复位请求（锚点 s05-del-confirm · 移除后）。
     // 删除发生在「编辑」分支、消费点在「主页」分支，两者是 when 的不同分支 ——
@@ -99,6 +101,8 @@ internal fun MainTabContent(
                 mainViewModel.requestLiveFocus(record.id)
                 onSelectTab(FeatureCatalog.resolveTab(AppTab.LIVE, featureOn))
             },
+            // 功能关闭时图标整个不渲染（入口消失，而不是点了没反应）
+            onOpenTotp = { onOpenTotp(false) }.takeIf { featureOn(Feature.TOTP) },
             modifier = Modifier.fillMaxSize()
         )
         AppTab.LIVE -> MainScreen(
@@ -257,6 +261,7 @@ internal fun MainTabContent(
             onNavigateToAppearance = onOpenAppearance,
             onNavigateToGallery = onOpenGallery,
             onNavigateToQuotaSettings = onOpenQuotaSettings,
+            onNavigateToTotp = if (featureOn(Feature.TOTP)) onOpenTotp else null,
             modifier = Modifier.fillMaxSize()
         )
     }

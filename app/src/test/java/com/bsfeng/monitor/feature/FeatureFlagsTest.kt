@@ -164,6 +164,28 @@ class FeatureFlagsTest {
     }
 
     @Test
+    fun `验证器默认开启 且不生成底部 Tab`() {
+        val flags = FeatureFlags(FakeStore())
+
+        // 默认开启：概览右上角图标常驻，设置页只提供关闭入口
+        assertTrue("验证器默认开启", flags.isEnabled(Feature.TOTP))
+        assertTrue("验证器不在 DEFAULT_OFF 里", FeatureCatalog.defaultOf(Feature.TOTP))
+        // 没有 Tab：AppTab 里任何一个 Tab 都不属于验证器
+        assertTrue(
+            "验证器不该有自己的底部 Tab",
+            AppTab.entries.none { it.feature == Feature.TOTP },
+        )
+        // 关掉它只收起入口，不影响任何 Tab 的可见性
+        flags.setEnabled(Feature.TOTP, false)
+        assertTrue(AppTab.OVERVIEW in flags.visibleTabs())
+        assertEquals(
+            "验证器不是 Tab，深链不会落到它",
+            AppTab.entries.size,
+            FeatureCatalog.visibleTabs { true }.size,
+        )
+    }
+
+    @Test
     fun `额度 Tab 的枚举下标固定为 6 旧通知不位移`() {
         // 深链用枚举下标，额度只能追加在末尾；插到中间会让已发出的通知跳到别的 Tab
         assertEquals(0, AppTab.OVERVIEW.ordinal)

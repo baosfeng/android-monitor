@@ -10,6 +10,14 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        验证器（Feature.TOTP）：扫码页申请 CAMERA 与手电筒（Camera2 setTorchMode）。
+        只申请 CAMERA —— 不碰存储（相册走系统 GET_CONTENT）、不碰通讯录。
+        required=false：没有摄像头的设备仍可手动输入密钥，不能因为权限声明被商店过滤。
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <!-- 应用内更新：下载完成后拉起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 局域网互传：接收组播必须持有 MulticastLock（协议 §3 的 Android 特有约束） -->

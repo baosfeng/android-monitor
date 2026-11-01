@@ -1,0 +1,220 @@
+<!-- ============================================================
+     s25 · 手动输入密钥（push 屏）
+
+     平台名 / 账户 / Base32 密钥 + 高级参数折叠（算法 / 位数 / 周期）。
+     密钥预填公开测试值 JBSWY3DPEHPK3PXP（见 50-totp-brief.md 演示数据）。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s25">
+/* ── s25 手动输入 ───────────────────────────────────────────────── */
+.screen.s25{font-size:max(var(--text-sm),14px)}
+.screen.s25 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s25 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s25-err){font-size:max(var(--text-sm),14px)}
+.screen.s25 button:focus-visible,
+.screen.s25 input:focus-visible,
+.screen.s25 summary:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s25-form{display:grid;gap:var(--space-3);padding:var(--space-3) 0 var(--space-4)}
+.s25-field{display:grid;gap:var(--space-1)}
+.s25-label{font-size:max(var(--text-sm),14px);color:var(--fg-2);font-weight:500}
+.s25-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s25-in::placeholder{color:var(--muted)}
+.s25-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s25-in[aria-invalid="true"]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border))}
+.s25-in.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.s25-err{display:flex;align-items:center;gap:var(--space-2);color:var(--danger-text);line-height:1.4}
+.s25-err svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s25-hint{color:var(--muted);line-height:1.4}
+.s25-adv{border-top:1px solid var(--border-soft);margin-top:var(--space-2);padding-top:var(--space-2)}
+.s25-adv summary{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);
+  min-height:var(--tap-min);cursor:pointer;list-style:none;font-size:max(var(--text-base),14px)}
+.s25-adv summary::-webkit-details-marker{display:none}
+.s25-adv summary svg{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;transition:transform var(--dur-state) var(--ease-standard)}
+.s25-adv[open] summary svg{transform:rotate(90deg)}
+.s25-adv-body{display:grid;gap:var(--space-3);padding:var(--space-2) 0 var(--space-1)}
+.s25-seg-label{font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s25-preview{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s25-preview .totp-code{font-size:var(--text-xl)}
+.s25-preview .meta{line-height:1.4}
+.s25-actions{display:grid;gap:var(--space-2);padding-top:var(--space-2)}
+.s25-actions .btn{width:100%}
+.s25-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s25-foot{display:block;padding-top:var(--space-3);line-height:1.5}
+.device-screen:has(#odSplash:not([hidden])) .s25 *{animation:none}
+</style>
+<!--@od:section-->
+<section class="screen s25" data-screen="s25" data-title="手动输入" id="s25" data-od-id="screen-s25">
+  <div class="content pad" data-od-id="s25-content">
+
+    <p class="s25-hint" data-od-min-fs style="display:block;padding-top:var(--space-2)">网站「两步验证」页给出的密钥通常是一串 Base32 字符（A–Z 与 2–7），可带空格。</p>
+
+    <form class="s25-form" data-s25-form novalidate data-od-id="s25-form">
+      <label class="s25-field">
+        <span class="s25-label">平台名</span>
+        <input class="s25-in" type="text" name="issuer" id="s25Issuer" placeholder="例如 GitHub / 腾讯云" autocomplete="off" />
+      </label>
+
+      <label class="s25-field">
+        <span class="s25-label">账户（可选）</span>
+        <input class="s25-in" type="text" name="account" id="s25Account" placeholder="例如 alice@acme.com" autocomplete="off" inputmode="email" />
+      </label>
+
+      <label class="s25-field">
+        <span class="s25-label">密钥（Base32）</span>
+        <input class="s25-in num" type="text" name="secret" id="s25Secret" value="JBSWY3DPEHPK3PXP"
+               autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <span class="s25-hint" data-od-min-fs>演示用公开测试值；真实密钥请从网站的「无法扫码」入口复制。</span>
+      </label>
+
+      <p class="s25-err" id="s25Err" hidden role="alert" data-od-id="s25-err">
+        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg>
+        <span id="s25ErrText">密钥格式不对</span>
+      </p>
+
+      <div class="s25-preview" data-od-id="s25-preview">
+        <span>
+          <span class="meta" data-od-min-fs>按当前参数预演（假数据）</span>
+          <span class="totp-code" id="s25PreviewCode">654 321</span>
+        </span>
+        <span class="totp-meta" data-od-min-fs>
+          <span class="totp-ring" id="s25Ring" aria-hidden></span>
+          <span class="totp-sec" id="s25Sec">30s</span>
+        </span>
+      </div>
+
+      <details class="s25-adv" data-od-id="s25-adv">
+        <summary>
+          <span>高级参数</span>
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+        </summary>
+        <div class="s25-adv-body">
+          <div class="s25-field">
+            <span class="s25-seg-label">算法</span>
+            <div class="segmented" role="radiogroup" aria-label="哈希算法">
+              <button type="button" role="radio" aria-checked="true" data-adv="algo" data-value="SHA1">SHA1</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="algo" data-value="SHA256">SHA256</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="algo" data-value="SHA512">SHA512</button>
+            </div>
+          </div>
+          <div class="s25-field">
+            <span class="s25-seg-label">位数</span>
+            <div class="segmented" role="radiogroup" aria-label="验证码位数">
+              <button type="button" role="radio" aria-checked="true" data-adv="digits" data-value="6">6 位</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="digits" data-value="8">8 位</button>
+            </div>
+          </div>
+          <div class="s25-field">
+            <span class="s25-seg-label">周期</span>
+            <div class="segmented" role="radiogroup" aria-label="刷新周期">
+              <button type="button" role="radio" aria-checked="true" data-adv="period" data-value="30">30 秒</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="period" data-value="60">60 秒</button>
+            </div>
+          </div>
+          <p class="fine" data-od-min-fs style="line-height:1.45">默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。</p>
+        </div>
+      </details>
+
+      <div class="s25-actions">
+        <button class="btn" type="submit" data-od-id="s25-submit">添加账户</button>
+        <button class="btn btn-ghost" type="button" data-goto="s24" data-od-id="s25-goto-scan">改扫码添加</button>
+      </div>
+    </form>
+
+    <p class="fine s25-foot" data-od-min-fs style="line-height:1.5">密钥加密后只存本机，不写日志、不上传、不进导出包；添加后可在账户详情里改名、换平台或删除。</p>
+  </div>
+
+  <script>
+  /* s25：高级参数分段选择、密钥格式校验、预演倒计时。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var form = sec.querySelector('[data-s25-form]');
+    var issuer = sec.querySelector('#s25Issuer');
+    var account = sec.querySelector('#s25Account');
+    var secret = sec.querySelector('#s25Secret');
+    var err = sec.querySelector('#s25Err');
+    var errText = sec.querySelector('#s25ErrText');
+    var params = { algo: 'SHA1', digits: '6', period: '30' };
+    var left = 30;
+
+    var ring = sec.querySelector('#s25Ring');
+    var secEl = sec.querySelector('#s25Sec');
+    var preview = sec.querySelector('#s25PreviewCode');
+
+    function paint() {
+      var period = Number(params.period);
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      if (secEl) secEl.textContent = left + 's';
+      if (preview) {
+        preview.textContent = params.digits === '8' ? '6543 2170' : '654 321';
+        preview.classList.toggle('totp-code--wide', params.digits === '8');
+      }
+      if (secEl) secEl.classList.toggle('is-warn', left <= 5);
+      if (ring) ring.classList.toggle('is-warn', left <= 5);
+    }
+    paint();
+    window.setInterval(function () {
+      left = left > 1 ? left - 1 : Number(params.period);
+      paint();
+    }, 1000);
+
+    function showError(text, field) {
+      if (errText) errText.textContent = text;
+      if (err) err.hidden = false;
+      if (field) { field.setAttribute('aria-invalid', 'true'); field.focus(); }
+    }
+    function clearError(field) {
+      if (err) err.hidden = true;
+      if (field) field.removeAttribute('aria-invalid');
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('[data-adv]');
+      if (btn) {
+        var group = sec.querySelectorAll('[data-adv="' + btn.getAttribute('data-adv') + '"]');
+        Array.prototype.forEach.call(group, function (b) {
+          b.setAttribute('aria-checked', b === btn ? 'true' : 'false');
+        });
+        params[btn.getAttribute('data-adv')] = btn.getAttribute('data-value');
+        left = Number(params.period);
+        paint();
+        if (window.App) App.toast('已切换为 ' + btn.textContent.trim() + ' · 预演已刷新');
+      }
+    });
+
+    if (secret) secret.addEventListener('input', function () { clearError(secret); });
+    if (issuer) issuer.addEventListener('input', function () { clearError(issuer); });
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = issuer && issuer.value ? issuer.value.trim() : '';
+        var key = secret && secret.value ? secret.value.replace(/\s+/g, '').toUpperCase() : '';
+        if (!name) { showError('请填写平台名，用于在列表里区分账户', issuer); return; }
+        if (!/^[A-Z2-7]{16,}$/.test(key)) {
+          showError('密钥应为 16 位以上的 Base32 字符（A–Z 与 2–7）', secret);
+          return;
+        }
+        clearError(secret);
+        clearError(issuer);
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('已添加 ' + name + (account && account.value.trim() ? ' · ' + account.value.trim() : ''));
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+      });
+    }
+  })();
+  </script>
+</section>
+<!--@od:end-->

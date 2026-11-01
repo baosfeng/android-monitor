@@ -42,10 +42,11 @@ class SettingsInformationArchitectureTest {
     }
 
     @Test
-    fun `功能开关页六项功能各有一页细则`() {
-        // 六项功能 = 六行开关 = 六个细则页，一一对应，不允许两项共用一个细则页
+    fun `功能开关页七项功能各有一页细则`() {
+        // 七项功能 = 七行开关 = 七个细则页，一一对应，不允许两项共用一个细则页
         val details = settingsFeatureDetailPages()
-        assertEquals(6, details.size)
+        assertEquals(7, details.size)
+        assertEquals(1, details.count { it == SettingsSubPage.TOTP_DETAIL })
         assertEquals(details.size, details.toSet().size)
         assertEquals(1, details.count { it == SettingsSubPage.SKIP_DETAIL })
     }

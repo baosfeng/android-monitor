@@ -116,6 +116,9 @@
 #s01.is-active .chart-dot{animation:od-fade var(--dur-chart-fast) var(--ease-out) 320ms forwards}
 #s01.is-active .heat-cell{animation:od-fade 260ms var(--ease-out) var(--heat-d,0ms) forwards}
 
+/* 顶部栏图标组：验证器入口 + 今日提醒并排（.icon-btn 自带 44px 点击区） */
+.s01-head-actions{display:flex;align-items:center;gap:var(--space-2)}
+
 /* 开屏未结束时先不播入场，等开屏收起再播（:has 不支持时自动退回「立即播」） */
 .device-screen:has(#odSplash:not([hidden])) #s01 *{animation:none}
 </style>
@@ -176,9 +179,14 @@
           <p class="meta">2025 年 10 月 14 日 · 星期二</p>
           <h1 class="h1 mt-2">今日概览</h1>
         </div>
-        <button class="icon-btn" type="button" aria-label="今日提醒" onclick="App.toast('今日已记录 128 条事件')" data-od-id="s01-bell">
-          <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
-        </button>
+        <div class="s01-head-actions">
+          <button class="icon-btn" type="button" aria-label="今日提醒" onclick="App.toast('今日已记录 128 条事件')" data-od-id="s01-bell">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+          </button>
+          <button class="icon-btn" type="button" aria-label="验证器" data-goto="s22" data-od-id="s01-goto-totp">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><circle cx="12" cy="10.4" r="1.6"/><path d="M12 12v3.2"/></svg>
+          </button>
+        </div>
       </header>
 
       <div class="pad" data-od-id="s01-range">

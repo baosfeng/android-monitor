@@ -612,3 +612,11 @@ C-15	s22-局域网互传
 C-16	s22-局域网互传
 C-17	s22-局域网互传
 C-18	s22-局域网互传
+s01-goto-totp	s01-今日概览
+s09-totp	s09-设置
+s09-totp-blur	s09-设置
+s09-totp-clip-clear	s09-设置
+s09-totp-flag-secure	s09-设置
+s09-totp-sub	s09-设置
+s09-totp-switch	s09-设置
+s22-mask	s22-验证器

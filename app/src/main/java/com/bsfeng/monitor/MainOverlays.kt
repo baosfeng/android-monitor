@@ -4,6 +4,8 @@ package com.bsfeng.monitor
 // 负责「盖在 Scaffold 之上、铺到系统栏之下」的二级页；显示状态仍由 MainActivity 持有。
 
 import androidx.compose.runtime.Composable
+import com.bsfeng.monitor.totp.ui.TotpRoute
+import com.bsfeng.monitor.totp.ui.TotpScreenHost
 import com.bsfeng.monitor.ui.AppearanceScreen
 import com.bsfeng.monitor.ui.SkipRuleScreen
 import com.bsfeng.monitor.ui.SkipRuleViewModel
@@ -27,6 +29,9 @@ internal fun MainOverlays(
     showWhitelistScreen: Boolean,
     showGallery: Boolean,
     showQuotaSettings: Boolean,
+    showTotpScreen: Boolean = false,
+    /** true = 打开时直接落在备份页（设置卡「备份与导入」那一行）。 */
+    totpStartAtBackup: Boolean = false,
     showAppearance: Boolean,
     showTripScreen: Boolean,
     showSplash: Boolean,
@@ -36,6 +41,7 @@ internal fun MainOverlays(
     onCloseWhitelist: () -> Unit,
     onCloseGallery: () -> Unit,
     onCloseQuotaSettings: () -> Unit,
+    onCloseTotp: () -> Unit = {},
     onCloseAppearance: () -> Unit,
     onCloseTrip: () -> Unit,
     /** s16 空态 CTA / 定位提示行：关掉行程覆盖层并跳到设置页定位项。null 时不渲染那两个锚点。 */
@@ -95,6 +101,17 @@ internal fun MainOverlays(
         onBack = { onCloseQuotaSettings() },
     ) {
         QuotaSettingsScreen(onBack = { onCloseQuotaSettings() })
+    }
+
+    // 验证器（push 屏，无底部 Tab）：概览图标 / 设置卡进入，返回即退出
+    AnimatedScreenOverlay(
+        visible = showTotpScreen,
+        onBack = { onCloseTotp() },
+    ) {
+        TotpScreenHost(
+            onBack = { onCloseTotp() },
+            startRoute = if (totpStartAtBackup) TotpRoute.Backup else TotpRoute.List,
+        )
     }
 
     // s13 外观 / 主题切换（占位屏，W3 接手）

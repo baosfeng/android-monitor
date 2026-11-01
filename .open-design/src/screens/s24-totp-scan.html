@@ -1,0 +1,154 @@
+<!-- ============================================================
+     s24 · 扫码添加（push 屏）
+
+     取景框 + 手电筒 + 相册入口 + 失败反馈；相机权限被拒时走整屏错误态。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s24">
+/* ── s24 扫码添加 ───────────────────────────────────────────────── */
+.screen.s24{font-size:max(var(--text-sm),14px)}
+.screen.s24 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s24 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.s24-hint){font-size:max(var(--text-sm),14px)}
+.screen.s24 button:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s24-view{padding:var(--space-2) 0 var(--space-3)}
+.s24-lens{position:relative;width:100%;aspect-ratio:1/1;max-height:260px;border-radius:var(--radius-lg);
+  background:color-mix(in srgb,var(--fg) 88%,var(--bg));overflow:hidden;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s24-lens::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(120% 90% at 50% 0%,color-mix(in srgb,var(--bg) 12%,transparent),transparent 70%)}
+.s24-scanline{position:absolute;left:8%;right:8%;top:18%;height:2px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--bg) 78%,transparent);
+  animation:od-scan 2.6s var(--ease-standard) infinite}
+@keyframes od-scan{0%{top:18%;opacity:.15}45%{opacity:.85}100%{top:82%;opacity:.15}}
+.s24-frame{position:absolute;inset:14%;border-radius:var(--radius-md)}
+.s24-frame span{position:absolute;width:26px;height:26px;border:2px solid color-mix(in srgb,var(--bg) 82%,transparent)}
+.s24-frame span:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:var(--radius-sm) 0 0 0}
+.s24-frame span:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 var(--radius-sm) 0 0}
+.s24-frame span:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-radius:0 0 0 var(--radius-sm)}
+.s24-frame span:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-radius:0 0 var(--radius-sm) 0}
+.s24-lens.is-torch{background:color-mix(in srgb,var(--fg) 62%,var(--bg))}
+.s24-hint{display:block;text-align:center;margin-top:var(--space-3);color:var(--muted);line-height:1.45}
+.s24-alert{margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--danger) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--danger) 26%,transparent)}
+.s24-alert .row-title{color:var(--danger-text)}
+.s24-alert .row-sub{white-space:normal;color:var(--fg-2)}
+.s24-tools{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-3)}
+.s24-tools .btn{width:100%}
+.s24-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  min-height:var(--tap-min);padding:var(--space-2) 0}
+.s24-row .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s24-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s24-in{opacity:0}
+.s24.is-active .s24-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s24.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s24.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s24.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s24 *{animation:none}
+@media (prefers-reduced-motion: reduce){.s24-scanline{animation:none;top:50%;opacity:.6}}
+</style>
+<!--@od:section-->
+<section class="screen s24" data-screen="s24" data-title="扫码添加" id="s24" data-od-id="screen-s24">
+  <div class="content pad" data-od-id="s24-content">
+
+    <!-- 相机权限被拒 -->
+    <div class="st-error" data-state-when="error" data-od-id="s24-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 8.4V5.6A1.6 1.6 0 0 1 5.6 4h2.8"/><path d="M20 15.6v2.8a1.6 1.6 0 0 1-1.6 1.6h-2.8"/><path d="M8.4 20H5.6A1.6 1.6 0 0 1 4 18.4v-2.8"/><path d="M15.6 4h2.8A1.6 1.6 0 0 1 20 5.6v2.8"/><path d="M8 8l8 8"/></svg></span>
+      <p class="st-title">无法使用相机</p>
+      <p class="st-desc">相机权限被拒绝，扫码不可用。可以到系统设置里重新授权，或改用手动输入密钥。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('已跳转系统设置 · 应用权限 · 相机')" data-od-id="s24-error-settings">去系统设置</button>
+      <button class="btn btn-ghost" type="button" data-goto="s25" data-od-id="s24-error-manual">改用手动输入</button>
+    </div>
+
+    <!-- 正常取景 -->
+    <div data-state-hide="error" data-od-id="s24-body">
+      <div class="s24-view s24-in od-d1" data-od-id="s24-view">
+        <div class="s24-lens" id="s24Lens" data-od-id="s24-lens">
+          <span class="s24-scanline" aria-hidden></span>
+          <span class="s24-frame" aria-hidden><span></span><span></span><span></span><span></span></span>
+        </div>
+        <span class="s24-hint" data-od-min-fs>把二维码放进取景框 · 识别在本机完成，截图不外传</span>
+      </div>
+
+      <div class="s24-alert s24-in od-d2" id="s24Alert" hidden data-od-id="s24-alert">
+        <div class="row" style="padding:0">
+          <span class="row-icon" aria-hidden style="background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)">
+            <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">没有识别到二维码</span>
+            <span class="row-sub">这张图片里没有 otpauth 二维码，或图片太模糊。换一张，或直接手动输入密钥。</span>
+          </span>
+        </div>
+        <div class="grid-2 mt-2">
+          <button class="btn btn-ghost" type="button" data-album-retry data-od-id="s24-alert-retry">换一张图片</button>
+          <button class="btn" type="button" data-goto="s25" data-od-id="s24-alert-manual">手动输入</button>
+        </div>
+      </div>
+
+      <div class="s24-tools s24-in od-d2" data-od-id="s24-tools">
+        <button class="btn btn-ghost" type="button" data-torch aria-pressed="false" data-od-id="s24-torch">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3.4h5.6l-.9 5.2H10z"/><path d="M10.1 8.6 9.4 20.6h5.2l-.7-12"/></svg>
+          <span>手电筒</span>
+        </button>
+        <button class="btn btn-ghost" type="button" data-album-open data-od-id="s24-album">
+          <svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M4.4 17.4 10 12l3.2 3 2.6-2.4 3.8 3.6"/></svg>
+          <span>从相册选择</span>
+        </button>
+      </div>
+
+      <div class="group s24-in od-d3 mt-3" data-od-id="s24-fallback">
+        <div class="s24-row">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.6" rx="2.6"/><path d="M7 10.4h6"/><path d="M7 14.2h3.4"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">扫码不方便？</span>
+            <span class="row-sub">网站只给了密钥字符串时可改手动输入</span>
+          </span>
+          <button class="btn btn-ghost" type="button" data-goto="s25" data-od-id="s24-manual">手动输入</button>
+        </div>
+      </div>
+
+      <p class="fine s24-note s24-in od-d3" data-od-min-fs>识别成功后直接回到账户列表，可再改平台名与账号；二维码解析出的密钥立即用 Keystore 加密，不落明文磁盘。</p>
+    </div>
+  </div>
+
+  <script>
+  /* s24：手电筒开关 + 相册识别失败反馈（原型不发真实摄像头请求）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var lens = sec.querySelector('#s24Lens');
+    var alert = sec.querySelector('#s24Alert');
+    var torch = sec.querySelector('[data-torch]');
+
+    function toggleTorch() {
+      if (!torch) return;
+      var on = torch.getAttribute('aria-pressed') === 'true';
+      torch.setAttribute('aria-pressed', on ? 'false' : 'true');
+      if (lens) lens.classList.toggle('is-torch', !on);
+      if (window.App) App.toast(on ? '手电筒已关闭' : '手电筒已打开');
+    }
+
+    function scanFail() {
+      if (alert) alert.hidden = false;
+      if (window.App) { App.haptic('medium'); App.toast('未识别到二维码，请换一张图片'); }
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('[data-torch]')) { toggleTorch(); return; }
+      if (t.closest('[data-album-open]')) { scanFail(); return; }
+      if (t.closest('[data-album-retry]')) {
+        if (window.App) App.toast('已重新打开相册 · 请选择二维码截图');
+        if (alert) alert.hidden = true;
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->
