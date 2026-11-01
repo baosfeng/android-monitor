@@ -6,8 +6,8 @@
 // 原型（data-od-id）、锚点账本、代码三方靠同一套锚点字符串对账，不改号、不转下划线。
 //
 // 判据：
-//   1. 账本锚点 = docs/交互设计/锚点账本.md 与 s12a-组件级锚点登记.md 的表格第一列
-//      （去重；同一锚点可有多行，如点击与长按各一行；字符集含 . 与 -）
+//   1. 账本锚点 = scripts/anchor-ledger.tsv 第 1 列（页面级）
+//      + docs/交互设计/s12a-组件级锚点登记.md 表格第一列（组件级）；去重，字符集含 . 与 -
 //   2. 代码锚点 = testTag("X") 字面量 + 映射表/常量里的锚点字符串（排除 token 表）
 //   3. 运行时拼接 = 代码里以 - 结尾的前缀（如 s15-l1-），能覆盖以它开头的账本锚点
 //   4. 自增 = 代码有、账本无 —— 这是硬错误：锚点集合必须能逐字对账
@@ -28,36 +28,42 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOC_DIR = path.join(ROOT, 'docs/交互设计');
 const SRC_DIR = path.join(ROOT, 'app/src/main/java');
 
-// 锚点源：第一份带「来源页面」列，其余只有锚点列（页名固定取文件名）。
-const ANCHOR_SOURCES = [
-  { file: path.join(DOC_DIR, '锚点账本.md'), page: null },
-  { file: path.join(DOC_DIR, 's12a-组件级锚点登记.md'), page: 's12a-组件级锚点登记' },
-];
+// 锚点源：页面级在 tsv（第 1 列锚点、第 2 列来源页面），组件级在 s12a 的 md 表格。
+const LEDGER_TSV = path.join(ROOT, 'scripts/anchor-ledger.tsv');
+const COMPONENT_DOC = path.join(DOC_DIR, 's12a-组件级锚点登记.md');
+const ANCHOR_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/;
 
 const args = new Set(process.argv.slice(2));
 const STRICT = args.has('--strict');
 const JSON_OUT = args.has('--json');
 
-/** 表格第一列的锚点，去重，值 = 来源页面。 */
+function readLines(file) {
+  if (!fs.existsSync(file)) {
+    console.error(`缺锚点源文件：${path.relative(ROOT, file)}`);
+    process.exit(2);
+  }
+  return fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() && !l.trim().startsWith('#'));
+}
+
+/** 锚点清单，去重，值 = 来源页面。先登记者为准，同一锚点只归属一处。 */
 function readLedgerAnchors() {
   const anchors = new Map();
-  for (const { file, page } of ANCHOR_SOURCES) {
-    if (!fs.existsSync(file)) {
-      console.error(`缺锚点源文件：${path.relative(ROOT, file)}`);
-      process.exit(2);
-    }
-    const fallbackPage = page || path.basename(file, '.md');
-    for (const raw of fs.readFileSync(file, 'utf8').split('\n')) {
-      const line = raw.trim();
-      if (!line.startsWith('|')) continue;
-      const cols = line.split('|').map((s) => s.trim());
-      const anchor = cols[1];
-      if (!anchor || anchor === '锚点' || /^[-:]+$/.test(anchor)) continue;
-      // 字符集含 "."：组件级锚点用 组件名.用途（chip.option / button.primary），见 s12a 组件级锚点登记
-      if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(anchor)) continue;
-      // 先登记者为准，同一锚点只归属一个页面
-      if (!anchors.has(anchor)) anchors.set(anchor, (page ? page : cols[2]) || fallbackPage);
-    }
+  // 字符集含 "."：组件级锚点用 组件名.用途（chip.option / button.primary），见 s12a 组件级锚点登记
+  const add = (anchor, page) => {
+    if (anchor && ANCHOR_RE.test(anchor) && !anchors.has(anchor)) anchors.set(anchor, page);
+  };
+  // 页面级：tsv 的「锚点 <TAB> 来源页面」；首行表头是中文列名，被字符集过滤掉
+  for (const raw of readLines(LEDGER_TSV)) {
+    const [anchor, page] = raw.split('\t').map((s) => s.trim());
+    add(anchor, page || 'anchor-ledger.tsv');
+  }
+  // 组件级：md 表格第一列，页名固定
+  for (const raw of readLines(COMPONENT_DOC)) {
+    const line = raw.trim();
+    if (!line.startsWith('|')) continue;
+    const cols = line.split('|').map((s) => s.trim());
+    if (cols[1] === '锚点' || /^[-:]+$/.test(cols[1] || '')) continue;
+    add(cols[1], 's12a-组件级锚点登记');
   }
   return anchors;
 }
