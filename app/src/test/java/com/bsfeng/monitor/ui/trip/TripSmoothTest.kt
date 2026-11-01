@@ -52,8 +52,64 @@ class TripSmoothTest {
         }
     }
 
+    /**
+     * 上一版（固定窄窗 ±2 点 / ±60s、单遍）的对照实现：逐行照抄 v1 的 TripDenoise.smooth。
+     * 只用于钉住「移动段与 v1 逐点一致」，别在这里加优化。
+     */
+    private fun narrowWindowSmooth(samples: List<TraceSample>): List<TraceSample> {
+        if (samples.size < 3) return samples
+        fun accuracyOf(sample: TraceSample): Double {
+            val raw = sample.accuracyM?.toDouble()
+            return if (raw == null || raw.isNaN() || raw < 1.0) 50.0 else raw
+        }
+        val segments = ArrayList<IntRange>()
+        var start = 0
+        for (index in 1 until samples.size) {
+            val gap = samples[index].timestamp - samples[index - 1].timestamp
+            if (gap > 300_000L || gap < 0L) {
+                segments.add(start until index)
+                start = index
+            }
+        }
+        segments.add(start until samples.size)
+        val out = ArrayList<TraceSample>(samples.size)
+        for (segment in segments) {
+            out.add(samples[segment.first])
+            val floors = segment.map { accuracyOf(samples[it]) }.sorted()
+            val threshold = maxOf(10.0, 2.0 * floors[floors.size / 2])
+            for (index in segment.first + 1 until segment.last) {
+                val origin = samples[index]
+                var from = index
+                var to = index
+                while (index - from < 2 && from > segment.first &&
+                    kotlin.math.abs(samples[from - 1].timestamp - origin.timestamp) <= 60_000L
+                ) from--
+                while (to - index < 2 && to < segment.last &&
+                    kotlin.math.abs(samples[to + 1].timestamp - origin.timestamp) <= 60_000L
+                ) to++
+                if (from < to && TripDenoise.perpendicularMeters(samples[from], samples[to], origin) > threshold) {
+                    out.add(origin)
+                    continue
+                }
+                var sumWeight = 0.0
+                var sumLat = 0.0
+                var sumLng = 0.0
+                for (j in from..to) {
+                    val accuracy = accuracyOf(samples[j])
+                    val weight = 1.0 / (accuracy * accuracy)
+                    sumWeight += weight
+                    sumLat += samples[j].lat * weight
+                    sumLng += samples[j].lng * weight
+                }
+                out.add(if (sumWeight <= 0.0) origin else origin.copy(lat = sumLat / sumWeight, lng = sumLng / sumWeight))
+            }
+            if (segment.last > segment.first) out.add(samples[segment.last])
+        }
+        return out
+    }
+
     @Test
-    fun `静止抖动平滑后到真值的平均偏差至少降一半`() {
+    fun `静止抖动平滑后到真值的平均偏差不超过五米`() {
         val truthLat = 31.23
         val truthLng = 121.47
         val raw = stationaryJitter(30.0, 60, 30f)
@@ -63,7 +119,7 @@ class TripSmoothTest {
         val after = meanDeviation(smoothed, truthLat, truthLng)
         println("静止抖动 60 点(±30m)：改前平均偏差 " + before + " m → 改后 " + after +
             " m（降 " + (100.0 * (before - after) / before) + "%）")
-        assertTrue("平滑后平均偏差必须下降一半以上（改前 " + before + " → " + after + "）", after <= before * 0.5)
+        assertTrue("静止抖动必须压到 5m 以内（改前 " + before + " → " + after + "）", after <= 5.0)
     }
 
     @Test
@@ -134,11 +190,32 @@ class TripSmoothTest {
 
     @Test
     fun `窗口是五点加权平均-钉死位移数值`() {
-        // 只有第 3 个点向北偏 20m，其余 6 个点都在真值上：五点等权平均后应偏移 4m
+        // 直线向东每 10 秒 100m，只有第 3 个点向北偏 20m：相邻位移 100m 远大于两端精度和(40m)，
+        // 判为「在动」走窄窗；20m 又小于拐点保护的 2×精度(40m)，所以会被平均 —— 五点等权得 4m。
         val truthLat = 31.0
         val truthLng = 121.0
         val raw = (0 until 7).map { index ->
-            val offset = if (index == 3) 20.0 else 0.0
+            TraceSample(
+                timestamp = index * 10_000L,
+                lat = truthLat + latOffset(if (index == 3) 20.0 else 0.0),
+                lng = truthLng + lngOffset(100.0 * index, truthLat),
+                accuracyM = 20f,
+            )
+        }
+        val smoothed = TripDenoise.smooth(raw)
+        assertEquals("每段首点不动", raw[0], smoothed[0])
+        assertEquals("每段末点不动", raw[6], smoothed[6])
+        assertEquals("五点平均：20m 的横向偏移被摊成 4m", 4.0, deviation(smoothed[3], truthLat, raw[3].lng), 0.01)
+        assertEquals("沿行进方向的坐标不该被五点平均挪动", raw[3].lng, smoothed[3].lng, 1e-12)
+    }
+
+    @Test
+    fun `静止时窗口放宽到二十九点加权平均-钉死位移数值`() {
+        // 40 个点都在真值上，只有第 20 个点向北偏 26m；±14 点窗口把 26m 摊成 29 分之一
+        val truthLat = 31.0
+        val truthLng = 121.0
+        val raw = (0 until 40).map { index ->
+            val offset = if (index == 20) 26.0 else 0.0
             TraceSample(
                 timestamp = index * 10_000L,
                 lat = truthLat + latOffset(offset),
@@ -147,9 +224,56 @@ class TripSmoothTest {
             )
         }
         val smoothed = TripDenoise.smooth(raw)
+        assertEquals(raw.size, smoothed.size)
         assertEquals("每段首点不动", raw[0], smoothed[0])
-        assertEquals("每段末点不动", raw[6], smoothed[6])
-        assertEquals("五点平均：20m 的偏移被摊成 4m", 4.0, deviation(smoothed[3], truthLat, truthLng), 0.01)
+        assertEquals("每段末点不动", raw[39], smoothed[39])
+        assertEquals("静止窗口 29 点平均：26m 摊成 26/29", 26.0 / 29.0, deviation(smoothed[20], truthLat, truthLng), 0.01)
+    }
+
+    @Test
+    fun `前半静止后半移动-移动段与窄窗口口径逐点一致而静止段变准`() {
+        val truthLat = 31.0
+        val truthLng = 121.0
+        val random = Jitter(20_261_102L)
+        // 前 40 点：几乎没动，精度差（30m），±30m 抖动
+        val still = (0 until 40).map { index ->
+            TraceSample(
+                timestamp = index * 10_000L,
+                lat = truthLat + latOffset(random.unit() * 30.0),
+                lng = truthLng + lngOffset(random.unit() * 30.0, truthLat),
+                accuracyM = 30f,
+            )
+        }
+        // 后 20 点：每 10 秒向东 100m（远大于两端精度和 20m），明确在移动
+        val walking = (0 until 20).map { step ->
+            val index = 40 + step
+            TraceSample(
+                timestamp = index * 10_000L,
+                lat = truthLat + latOffset(random.unit() * 3.0),
+                lng = truthLng + lngOffset(100.0 * step + random.unit() * 3.0, truthLat),
+                accuracyM = 10f,
+            )
+        }
+        val raw = still + walking
+        val smoothed = TripDenoise.smooth(raw)
+        val narrowOnly = narrowWindowSmooth(raw)
+        var maxDelta = 0.0
+        for (index in 40 until raw.size) {
+            maxDelta = maxOf(
+                maxDelta,
+                TripTrace.meters(smoothed[index].lat, smoothed[index].lng, narrowOnly[index].lat, narrowOnly[index].lng),
+            )
+        }
+        println("混合数据：移动段与窄窗口口径的最大坐标差 " + maxDelta + " m")
+        // 转折点及其后每个移动点都等于窄窗口口径 —— 静止窗口没有跨过转折点
+        assertTrue("移动段不许被静止窗口改写（实测最大差 " + maxDelta + " m）", maxDelta <= 1e-9)
+        val movedDelta = deviation(smoothed[45], raw[45].lat, raw[45].lng)
+        assertTrue("移动段的点本来就在动，平滑不该把它拽回起点", movedDelta < 5.0)
+        // 离转折点足够远的静止段确实拿到了宽窗收益
+        val stillMean = meanDeviation(smoothed.subList(0, 26), truthLat, truthLng)
+        val narrowMean = meanDeviation(narrowOnly.subList(0, 26), truthLat, truthLng)
+        println("混合数据：静止段前 26 点平均偏差 宽窗 " + stillMean + " m vs 窄窗 " + narrowMean + " m")
+        assertTrue("静止段必须比窄窗口径更准（" + stillMean + " vs " + narrowMean + "）", stillMean < narrowMean * 0.8)
     }
 
     @Test

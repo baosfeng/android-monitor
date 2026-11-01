@@ -42,11 +42,26 @@ object TripDenoise {
     /** 抽稀阈值的上界（米）：再粗就会把真实拐弯抹平。 */
     private const val SIMPLIFY_MAX_METERS = 40.0
 
-    /** 平滑窗口的时间半宽（毫秒）：跨度再大，两端就不是「同一个位置」了。 */
+    /** 移动中的平滑窗口时间半宽（毫秒）：跨度再大，两端就不是「同一个位置」了。 */
     private const val SMOOTH_HALF_WINDOW_MS = 60_000L
 
-    /** 平滑窗口的点数半宽：窗口最多 5 个点，再宽会把真实拐弯磨圆。 */
+    /** 移动中的平滑窗口点数半宽：窗口最多 5 个点，再宽会把真实拐弯磨圆。 */
     private const val SMOOTH_HALF_WINDOW_POINTS = 2
+
+    /** 静止时的窗口时间半宽（毫秒）：没动的那段可以放宽到 ±3 分钟。 */
+    private const val STILL_HALF_WINDOW_MS = 180_000L
+
+    /**
+     * 静止时的窗口点数半宽：同类点越多平均越接近真值。
+     *
+     * 29 点均值把 ±30m 抖动的平均偏差压到 4.6m（5 点 10.9m、13 点 6.7m、21 点 5.3m），
+     * 到 5m 以内需要 25 点以上；时间上限 [STILL_HALF_WINDOW_MS] 先于它生效（10 秒采样时
+     * ±14 点 = ±140 秒，仍在 3 分钟内）。
+     */
+    private const val STILL_HALF_WINDOW_POINTS = 14
+
+    /** 判「静止」的位移地板（米）：一步走不到这么远的，画在 180dp 画布上就是没动。 */
+    private const val STILL_STEP_MIN_METERS = 15.0
 
     /** 跨这个时长（5 分钟）就是断档：两侧不属于同一次移动，平滑会把断档两头拉近。 */
     private const val SMOOTH_MAX_GAP_MS = 300_000L
@@ -110,9 +125,14 @@ object TripDenoise {
      * 精度加权滑动平均：把静止漂移的锯齿压平。
      *
      * 权重 ∝ 1/accuracy²（缺精度按 [DEFAULT_ACCURACY_METERS]）—— 精度好的点说话算数，
-     * 室内几百米的点几乎不参与。窗口同时受时间（±[SMOOTH_HALF_WINDOW_MS]）与点数
-     * （±[SMOOTH_HALF_WINDOW_POINTS]）约束：时间保证「窗口里的点确实在同一位置附近」，
-     * 点数保证实时补采时不会一次平均掉半分钟的路。
+     * 室内几百米的点几乎不参与。窗口同时受时间与点数双重约束：时间保证「窗口里的点确实
+     * 在同一位置附近」，点数保证实时补采时不会一次平均掉半分钟的路。
+     *
+     * 窗口大小按局部是否在动自适应（见 [isStill]）：
+     * - 没动 → ±[STILL_HALF_WINDOW_MS] 且 ±[STILL_HALF_WINDOW_POINTS] 点。静止漂移只能靠
+     *   多点平均压下去，±2 点窗口只把方差降到 1/5，一整天没动仍是十几米的一团涂鸦；
+     * - 在动 → 仍是 ±[SMOOTH_HALF_WINDOW_MS] 且 ±[SMOOTH_HALF_WINDOW_POINTS] 点。移动轨迹
+     *   的形状不能被改写：换窗口就等于换了一条线。
      *
      * 三条不变量（下游 dedupe / simplify / cap 全靠它们）：
      * - 点数、顺序、时间戳、label、accuracy 一律不动，只改 lat / lng；
@@ -139,7 +159,8 @@ object TripDenoise {
             out.add(samples[segment.first])
             val threshold = turnProtectMeters(samples, segment, accuracyOf)
             for (index in segment.first + 1 until segment.last) {
-                out.add(smoothAt(samples, segment, index, threshold, accuracyOf))
+                val still = isStill(samples, segment, index, accuracyOf)
+                out.add(smoothAt(samples, segment, index, threshold, accuracyOf, still))
             }
             if (segment.last > segment.first) out.add(samples[segment.last])
         }
@@ -179,10 +200,11 @@ object TripDenoise {
         index: Int,
         threshold: Double,
         accuracyOf: (TraceSample) -> Double,
+        still: Boolean,
     ): TraceSample {
         val origin = samples[index]
-        val from = windowEdge(samples, segment, index, -1)
-        val to = windowEdge(samples, segment, index, 1)
+        val from = windowEdge(samples, segment, index, -1, still)
+        val to = windowEdge(samples, segment, index, 1, still)
         if (from >= to) return origin
         if (TripDenoise.perpendicularMeters(samples[from], samples[to], origin) > threshold) return origin
         var sumWeight = 0.0
@@ -199,20 +221,49 @@ object TripDenoise {
         return origin.copy(lat = sumLat / sumWeight, lng = sumLng / sumWeight)
     }
 
+    /**
+     * 这个点所在的窗口是不是「没动」。
+     *
+     * 判据：宽窗内**每一**段相邻位移都不超过 max(两端精度之和, [STILL_STEP_MIN_METERS])。
+     * 精度和是「一次定位本身能错多少」，15m 是「画在 180dp 画布上还看得出在走」的下限；
+     * 只用一个相邻段超了就整窗判移动 —— 转折点前后混在一起平均，正是把路走成斜线的原因。
+     *
+     * 宽窗铺不开（段太短，点数还不如窄窗多）时一律按移动处理，等价上一版窄窗行为。
+     */
+    private fun isStill(
+        samples: List<TraceSample>,
+        segment: IntRange,
+        index: Int,
+        accuracyOf: (TraceSample) -> Double,
+    ): Boolean {
+        val from = windowEdge(samples, segment, index, -1, still = true)
+        val to = windowEdge(samples, segment, index, 1, still = true)
+        if (to - from < 2 * SMOOTH_HALF_WINDOW_POINTS) return false
+        for (j in from until to) {
+            val step = TripTrace.meters(samples[j].lat, samples[j].lng, samples[j + 1].lat, samples[j + 1].lng)
+            val floor = accuracyOf(samples[j]) + accuracyOf(samples[j + 1])
+            if (step > max(floor, STILL_STEP_MIN_METERS)) return false
+        }
+        return true
+    }
+
     /** 从 [index] 向 [step] 方向扩窗口，停在段边界、时间半宽或点数半宽上。 */
     private fun windowEdge(
         samples: List<TraceSample>,
         segment: IntRange,
         index: Int,
         step: Int,
+        still: Boolean,
     ): Int {
+        val maxPoints = if (still) STILL_HALF_WINDOW_POINTS else SMOOTH_HALF_WINDOW_POINTS
+        val maxGapMs = if (still) STILL_HALF_WINDOW_MS else SMOOTH_HALF_WINDOW_MS
         val anchor = samples[index].timestamp
         var edge = index
         var count = 0
-        while (count < SMOOTH_HALF_WINDOW_POINTS) {
+        while (count < maxPoints) {
             val next = edge + step
             if (next !in segment) break
-            if (abs(samples[next].timestamp - anchor) > SMOOTH_HALF_WINDOW_MS) break
+            if (abs(samples[next].timestamp - anchor) > maxGapMs) break
             edge = next
             count++
         }
