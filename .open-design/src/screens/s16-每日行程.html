@@ -281,69 +281,28 @@
       </div>
     </div>
 
+    <!-- 时间轴倒序：最新段（15:00–24:00）在最上，最早段在最下；data-od-id 仍绑段本身，不随位置改名 -->
     <div class="pad mt-3 s16-in od-d3" data-od-id="s16-timeline">
       <div class="card" style="padding:0 var(--space-4)" data-od-id="s16-timeline-list">
         <div class="s16-tl" data-od-min-fs>
 
-          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-am">
-            <span class="s16-seg-time"><span class="num">00:00</span><span class="num">09:10</span></span>
+          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-pm">
+            <span class="s16-seg-time"><span class="num">15:00</span><span class="num">24:00</span></span>
             <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg></span>
             <span class="s16-seg-body">
               <span class="s16-seg-title">家</span>
-              <span class="s16-seg-sub">停留 9 小时 10 分</span>
-              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span><span class="pv-b">微信 › 页面 a3f2 · 12 次 · 抖音 › 页面 c81d · 8 次</span><span class="pv-c">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span></span>
+              <span class="s16-seg-sub">停留 9 小时</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span><span class="pv-b">微信 › 页面 a3f2 · 7 次 · 抖音 › 页面 c81d · 5 次</span><span class="pv-c">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span></span>
             </span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
 
-          <div class="s16-seg" data-od-id="s16-seg-move-1">
-            <span class="s16-seg-time"><span class="num">09:10</span><span class="num">09:30</span></span>
-            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+          <div class="s16-seg is-gap" data-od-id="s16-seg-gap-1">
+            <span class="s16-seg-time"><span class="num">14:20</span><span class="num">15:00</span></span>
+            <span class="s16-seg-icon is-gap" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 12h4l2 4h3l2-4h4"/><path d="M8 5.5 4.5 9v2"/><path d="M16 18.5 19.5 15v-2"/></svg></span>
             <span class="s16-seg-body">
-              <span class="s16-seg-title">家 → 某某咖啡</span>
-              <span class="s16-seg-sub">移动 20 分 · 约 1.2 公里</span>
-            </span>
-            <span aria-hidden></span>
-          </div>
-
-          <button class="s16-seg" type="button" data-ctl-open="s16-s2" data-od-id="s16-seg-cafe">
-            <span class="s16-seg-time"><span class="num">09:30</span><span class="num">10:15</span></span>
-            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 8.5h11v5.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5z"/><path d="M15.5 10h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M4 21h13"/></svg></span>
-            <span class="s16-seg-body">
-              <span class="s16-seg-title">某某咖啡</span>
-              <span class="s16-seg-sub">停留 45 分 · 最长停留</span>
-              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span><span class="pv-b">微信 › 页面 a3f2 · 6 次 · 小红书 › 页面 7e05 · 4 次</span><span class="pv-c">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span></span>
-            </span>
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
-          </button>
-
-          <div class="s16-seg" data-od-id="s16-seg-move-2">
-            <span class="s16-seg-time"><span class="num">10:15</span><span class="num">10:35</span></span>
-            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
-            <span class="s16-seg-body">
-              <span class="s16-seg-title">某某咖啡 → 公司</span>
-              <span class="s16-seg-sub">移动 20 分 · 约 1.6 公里</span>
-            </span>
-            <span aria-hidden></span>
-          </div>
-
-          <button class="s16-seg" type="button" data-ctl-open="s16-s3" data-od-id="s16-seg-office">
-            <span class="s16-seg-time"><span class="num">10:35</span><span class="num">11:00</span></span>
-            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M9 7.5h2M13 7.5h2M9 11.5h2M13 11.5h2M9 15.5h2M13 15.5h2"/></svg></span>
-            <span class="s16-seg-body">
-              <span class="s16-seg-title">公司</span>
-              <span class="s16-seg-sub">停留 25 分</span>
-              <span class="s16-seg-track"><span class="pv-a">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span><span class="pv-b">微信 › 页面 b1c4 · 5 次 · 钉钉 › 页面 5d92 · 3 次</span><span class="pv-c">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span></span>
-            </span>
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
-          </button>
-
-          <div class="s16-seg" data-od-id="s16-seg-move-3">
-            <span class="s16-seg-time"><span class="num">11:00</span><span class="num">11:20</span></span>
-            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
-            <span class="s16-seg-body">
-              <span class="s16-seg-title">公司 → 家</span>
-              <span class="s16-seg-sub">移动 20 分 · 约 2.0 公里</span>
+              <span class="s16-seg-title">未记录</span>
+              <span class="s16-seg-sub">采集暂停 40 分 · 不做推断</span>
             </span>
             <span aria-hidden></span>
           </div>
@@ -359,23 +318,65 @@
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
 
-          <div class="s16-seg is-gap" data-od-id="s16-seg-gap-1">
-            <span class="s16-seg-time"><span class="num">14:20</span><span class="num">15:00</span></span>
-            <span class="s16-seg-icon is-gap" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 12h4l2 4h3l2-4h4"/><path d="M8 5.5 4.5 9v2"/><path d="M16 18.5 19.5 15v-2"/></svg></span>
+          <div class="s16-seg" data-od-id="s16-seg-move-3">
+            <span class="s16-seg-time"><span class="num">11:00</span><span class="num">11:20</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
             <span class="s16-seg-body">
-              <span class="s16-seg-title">未记录</span>
-              <span class="s16-seg-sub">采集暂停 40 分 · 不做推断</span>
+              <span class="s16-seg-title">公司 → 家</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 2.0 公里</span>
             </span>
             <span aria-hidden></span>
           </div>
 
-          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-pm">
-            <span class="s16-seg-time"><span class="num">15:00</span><span class="num">24:00</span></span>
+          <button class="s16-seg" type="button" data-ctl-open="s16-s3" data-od-id="s16-seg-office">
+            <span class="s16-seg-time"><span class="num">10:35</span><span class="num">11:00</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M9 7.5h2M13 7.5h2M9 11.5h2M13 11.5h2M9 15.5h2M13 15.5h2"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">公司</span>
+              <span class="s16-seg-sub">停留 25 分</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span><span class="pv-b">微信 › 页面 b1c4 · 5 次 · 钉钉 › 页面 5d92 · 3 次</span><span class="pv-c">微信 › 会话列表 · 5 次 · 钉钉 › 工作台 · 3 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg" data-od-id="s16-seg-move-2">
+            <span class="s16-seg-time"><span class="num">10:15</span><span class="num">10:35</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">某某咖啡 → 公司</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 1.6 公里</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s2" data-od-id="s16-seg-cafe">
+            <span class="s16-seg-time"><span class="num">09:30</span><span class="num">10:15</span></span>
+            <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4.5 8.5h11v5.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5z"/><path d="M15.5 10h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M4 21h13"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">某某咖啡</span>
+              <span class="s16-seg-sub">停留 45 分 · 最长停留</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span><span class="pv-b">微信 › 页面 a3f2 · 6 次 · 小红书 › 页面 7e05 · 4 次</span><span class="pv-c">微信 › 朋友圈 · 6 次 · 小红书 › 笔记详情 · 4 次</span></span>
+            </span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+          </button>
+
+          <div class="s16-seg" data-od-id="s16-seg-move-1">
+            <span class="s16-seg-time"><span class="num">09:10</span><span class="num">09:30</span></span>
+            <span class="s16-seg-icon is-move" aria-hidden><svg viewBox="0 0 24 24"><path d="M5 19V6.5A2.5 2.5 0 0 1 7.5 4h6A2.5 2.5 0 0 1 16 6.5V19"/><path d="M3.5 19h17"/><circle cx="10.5" cy="9" r="1"/><circle cx="10.5" cy="14" r="1"/></svg></span>
+            <span class="s16-seg-body">
+              <span class="s16-seg-title">家 → 某某咖啡</span>
+              <span class="s16-seg-sub">移动 20 分 · 约 1.2 公里</span>
+            </span>
+            <span aria-hidden></span>
+          </div>
+
+          <button class="s16-seg" type="button" data-ctl-open="s16-s1" data-od-id="s16-seg-home-am">
+            <span class="s16-seg-time"><span class="num">00:00</span><span class="num">09:10</span></span>
             <span class="s16-seg-icon is-stay" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg></span>
             <span class="s16-seg-body">
               <span class="s16-seg-title">家</span>
-              <span class="s16-seg-sub">停留 9 小时</span>
-              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span><span class="pv-b">微信 › 页面 a3f2 · 7 次 · 抖音 › 页面 c81d · 5 次</span><span class="pv-c">微信 › 朋友圈 · 7 次 · 抖音 › 推荐页 · 5 次</span></span>
+              <span class="s16-seg-sub">停留 9 小时 10 分</span>
+              <span class="s16-seg-track"><span class="pv-a">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span><span class="pv-b">微信 › 页面 a3f2 · 12 次 · 抖音 › 页面 c81d · 8 次</span><span class="pv-c">微信 › 朋友圈 · 12 次 · 抖音 › 推荐页 · 8 次</span></span>
             </span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>

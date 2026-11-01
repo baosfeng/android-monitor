@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui.trip
 
-// 从 ui/trip/TripScreen.kt 拆出：日视图时间轴 —— TripTimelineCard（卡片外壳）、SegmentRow（停留 / 移动 / 未记录单段）。负责「一天按时间顺序摊开」。
+// 从 ui/trip/TripScreen.kt 拆出：日视图时间轴 —— TripTimelineCard（卡片外壳）、SegmentRow（停留 / 移动 / 未记录单段）。负责「一天按时间倒序摊开，最新段在最上」（顺序规则见 TripTimelineOrder.kt）。
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -80,11 +80,13 @@ internal fun TripTimelineCard(
                 .fillMaxWidth()
                 .testTag("s16-timeline-list"),
         ) {
-            timeline.segments.forEachIndexed { index, segment ->
+            // 倒序（最新在上）：只改显示顺序，域层 segments 顺序与导出不动
+            val rows = remember(timeline.segments) { timelineRowsNewestFirst(timeline.segments) }
+            rows.forEachIndexed { index, segment ->
                 if (index > 0) HorizontalDivider(color = t.borderSoft)
                 SegmentRow(
                     segment = segment,
-                    index = index,
+                    anchor = timelineAnchorFor(index, rows.size),
                     dayStart = dayStart,
                     onSelect = onSelect,
                 )
@@ -96,22 +98,14 @@ internal fun TripTimelineCard(
 /**
  * 段级锚点（契约 9 段：home-am / move-1 / cafe / move-2 / office / move-3 / home-noon / gap-1 / home-pm）。
  *
- * 原型按示例数据画死「家 00:00–09:10 / 移动 / 咖啡 / …」，真实一天段数不定；这里按段在**当天时间带的位次**
- * （[index]，段已按开始时间排序）映射到契约同名锚点 —— 是**结构位置**不是数据身份。
- * 第 10 段起不打锚点：锚点集合严格等于契约定义，不新增自增号（一经发布不改号、不新增）。
+ * 原型按示例数据画死「家 00:00–09:10 / 移动 / 咖啡 / …」，真实一天段数不定；锚点跟随**段的身份**：
+ * 倒序渲染后视觉第 i 行按时间序第 (段数 - 1 - i) 段去查锚点表，所以 9 段时最上一行（最晚）是
+ * s16-seg-home-pm、最下一行（最早）是 s16-seg-home-am，与原型块一一对应。
+ * 时间序第 10 段起不打锚点：锚点集合严格等于契约定义，不新增自增号（一经发布不改号、不新增）。
+ * 锚点名表在 TripTimelineOrder.kt（唯一真源），由 timelineAnchorFor 换算。
  */
-private fun Modifier.segmentTag(index: Int): Modifier = when (index) {
-    0 -> testTag("s16-seg-home-am")
-    1 -> testTag("s16-seg-move-1")
-    2 -> testTag("s16-seg-cafe")
-    3 -> testTag("s16-seg-move-2")
-    4 -> testTag("s16-seg-office")
-    5 -> testTag("s16-seg-move-3")
-    6 -> testTag("s16-seg-home-noon")
-    7 -> testTag("s16-seg-gap-1")
-    8 -> testTag("s16-seg-home-pm")
-    else -> this
-}
+private fun Modifier.segmentTag(anchor: String?): Modifier =
+    anchor?.let { testTag(it) } ?: this
 
 /**
  * 单段一行：时间列 + 类型图标 + 标题 / 副标题（停留段另带 ›）。
@@ -123,7 +117,7 @@ private fun Modifier.segmentTag(index: Int): Modifier = when (index) {
 @Composable
 private fun SegmentRow(
     segment: DaySegment,
-    index: Int,
+    anchor: String?,
     dayStart: Long,
     onSelect: (Stay, FocusRequester) -> Unit,
 ) {
@@ -152,7 +146,7 @@ private fun SegmentRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .segmentTag(index)
+            .segmentTag(anchor)
             .clip(shape)
             .background(pressedBg)
             .then(
