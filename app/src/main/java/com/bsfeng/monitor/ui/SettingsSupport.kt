@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -87,6 +90,24 @@ internal fun formatUptime(ms: Long): String {
 /** 本机名称长度上限（发现报文一行文案，过长会被对端列表截断）。 */
 internal const val ALIAS_MAX_LENGTH = 24
 
+/** 更新记录滚动区的高度上限：超过就滚动，不撑破对话框（一屏正常能看 10 行左右）。 */
+private val UPDATE_CHANGELOG_MAX_HEIGHT = 260.dp
+
+/** 发布流程没写更新记录时的回落文案。 */
+internal const val UPDATE_CHANGELOG_FALLBACK = "包含功能改进与问题修复。"
+
+/**
+ * 更新记录 → 行列表：按行拆分，去掉行尾空白与空行，全空时回落到一行说明。
+ *
+ * 为什么要拆行：更新记录是「上一 tag → HEAD」的提交列表，最多 40 行；整段塞进一个 Text 时
+ * 既不能滚动、长文本一次性布局也慢。拆成每行一个 Text 后，容器按固定高度滚动，行高由
+ * typography.bodyMedium 统一接管。行内容不截断——截断会吞掉提交信息，超长行交给 Text 换行。
+ */
+internal fun updateChangelogLines(changelog: String): List<String> {
+    val lines = changelog.split('\n').map { it.trimEnd() }.filter { it.isNotBlank() }
+    return lines.ifEmpty { listOf(UPDATE_CHANGELOG_FALLBACK) }
+}
+
 /** 应用内更新的检查 / 下载 / 安装对话框。 */
 @Composable
 internal fun UpdateDialog(
@@ -100,10 +121,16 @@ internal fun UpdateDialog(
             onDismissRequest = onDismiss,
             title = { Text("发现新版本 ${state.manifest.versionName}") },
             text = {
-                Text(
-                    state.manifest.changelog.ifBlank { "包含功能改进与问题修复。" },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                // 更新记录最多 40 行：有限高度 + 垂直滚动，避免超出对话框后滚不动
+                Column(
+                    Modifier
+                        .heightIn(max = UPDATE_CHANGELOG_MAX_HEIGHT)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    updateChangelogLines(state.manifest.changelog).forEach { line ->
+                        Text(line, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             },
             confirmButton = { TextButton(onClick = { onDownload(state.manifest) }) { Text("下载更新") } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("稍后") } },
