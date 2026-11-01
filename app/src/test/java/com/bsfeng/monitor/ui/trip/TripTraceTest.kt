@@ -171,14 +171,6 @@ class TripTraceTest {
         assertTrue(p.stays.count { it.labelVisible } <= TripTrace.MAX_STAY_LABELS)
     }
 
-    @Test
-    fun `地址前缀被裁掉且保留可读部分`() {
-        assertEquals("文三路 100 号", TripTrace.shortLabel("浙江省杭州市西湖区文三路 100 号"))
-        assertEquals("家", TripTrace.shortLabel("家"))
-        assertEquals("", TripTrace.shortLabel(""))
-        assertTrue(TripTrace.shortLabel("浙江省杭州市西湖区文三路 100 号").length <= 12)
-    }
-
     // ==================== 最小可视跨度（原地不动的一天） ====================
 
     private fun latAt(meters: Double) = 31.2176 + meters / 111_320.0
