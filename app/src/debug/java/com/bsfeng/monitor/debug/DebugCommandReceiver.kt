@@ -300,7 +300,7 @@ class DebugCommandReceiver : BroadcastReceiver() {
         )
     }
 
-    /** `collectThrottledAsync` 的「恰好一次回调」契约 → 转成挂起函数。 */
+    /** `collectThrottledAsync` 的「恰好一次回调」口径 → 转成挂起函数。 */
     private suspend fun awaitSample(collector: LocationCollector): LocationSample? =
         suspendCancellableCoroutine { continuation ->
             try {

@@ -56,14 +56,14 @@ internal fun SettingsMonitorSection(rt: SettingsScreenRuntime) {
                         rt.viewModel.togglePause()
                         rt.toast.show(if (rt.isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                     },
-                    // 锚点落在开关本身：契约 s09-monitor 的触发是「拨开关」而不是点整行
+                    // 锚点落在开关本身：锚点 s09-monitor 的触发是「拨开关」而不是点整行
                     modifier = Modifier.testTag("s09-monitor"),
                     contentDescription = "前台应用监控",
                 )
             },
         )
         TokenDivider(first = false)
-        // 状态值放行尾（契约 s09 页层级规则 5）：只读项不藏进副标题，一眼看到开没开
+        // 状态值放行尾（锚点 s09 页层级规则 5）：只读项不藏进副标题，一眼看到开没开
         TokenRow(
             title = "使用时长统计",
             subtitle = "按应用累计前台时长，用于概览曲线",

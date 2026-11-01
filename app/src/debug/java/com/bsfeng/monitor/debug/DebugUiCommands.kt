@@ -8,7 +8,7 @@ package com.bsfeng.monitor.debug
  */
 sealed interface UiAction {
 
-    /** `RESULT cmd=ui.<op>` 用的稳定标识，改它等于改 CLI 契约。 */
+    /** `RESULT cmd=ui.<op>` 用的稳定标识，改它等于改 CLI 口径。 */
     val op: String
 
     /** 读控件树落盘：根窗口 + `getWindows()` 里的全部交互窗口。`tag` 是文件名标签。 */

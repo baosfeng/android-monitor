@@ -10,8 +10,8 @@ package com.bsfeng.monitor.ui.maps
 // 浏览器兜底永远排在候选末尾，因此「直接打开」不会落到网页上（只有它一个时才落到网页）。
 //
 // 设计口径：复用 AppCard + 44dp 点击区 + pressFeedback + LIGHT 震，与 s16 其它入口行一致。
-// 锚点 s16-map-entry 已在 docs/交互设计/s16-每日行程-交互契约.md 登记（scripts/check-anchors.mjs
-// 要求「代码锚点 ⊆ 契约锚点」，新增锚点必须先登记后使用）。
+// 锚点 s16-map-entry 已在 锚点账本 登记（scripts/check-anchors.mjs
+// 要求「代码锚点 ⊆ 锚点」，新增锚点必须先登记后使用）。
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -112,7 +112,7 @@ fun MapEntryCard(
         }
     }
 
-    // 锚点 s16-map-entry 已在 docs/交互设计/s16-每日行程-交互契约.md 登记
+    // 锚点 s16-map-entry 已在 锚点账本 登记
     AppCard(modifier = modifier.testTag("s16-map-entry")) { EntryRow(onClick = ::onClick) }
 
     if (pickerOpen) {

@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/FinanceStatsScreen.kt 的四个图表卡；职责：分类环+图例、近 7 天收支柱、24 小时热力、KPI 行，
-// 以及这四张卡的按点/按拖读数交互（契约 s07-kpicard / s07-ringcard / s07-barscard / s07-bars / s07-heatcard）。
+// 以及这四张卡的按点/按拖读数交互（锚点 s07-kpicard / s07-ringcard / s07-barscard / s07-bars / s07-heatcard）。
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -72,10 +72,10 @@ import com.bsfeng.monitor.ui.theme.heatRamp
 import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 import kotlinx.coroutines.delay
 
-/** 读数提示条（契约 s07-barscard：抬指后顶部浮出、1.6s 消失）预留高度，避免出现/消失时图表跳动。 */
+/** 读数提示条（锚点 s07-barscard：抬指后顶部浮出、1.6s 消失）预留高度，避免出现/消失时图表跳动。 */
 private val TIP_BAR_H: Dp = 20.dp
 
-/** 图例行按下右移量（契约 s07-ringcard：整行右移 2px）。 */
+/** 图例行按下右移量（锚点 s07-ringcard：整行右移 2px）。 */
 private val LEGEND_SHIFT: Dp = 2.dp
 
 /** 热力格圆角（原型 .heat i radius 2px）。 */
@@ -113,7 +113,7 @@ internal fun FinanceStatsKpiRow(stats: FinanceStats, modifier: Modifier = Modifi
             color = t.incomeText,
             modifier = Modifier.weight(1f),
         )
-        // 契约 s07-kpicard：结余为负时转红
+        // 锚点 s07-kpicard：结余为负时转红
         KpiTile(
             label = "结余",
             value = yen(animatedAmount(stats.balance.toFloat()).toDouble(), 0),
@@ -246,7 +246,7 @@ internal fun FinanceStatsWeekCard(
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
     var tipDay by remember { mutableStateOf<Int?>(null) }
-    // 契约：抬指/tap 后 1.6s 自动消失
+    // 口径：抬指/tap 后 1.6s 自动消失
     LaunchedEffect(tipDay) {
         val day = tipDay ?: return@LaunchedEffect
         delay(1_600)
@@ -464,7 +464,7 @@ internal fun FinanceStatsHeatCard(
 }
 
 /**
- * 热力说明行文案（契约 s07-heatcard）。
+ * 热力说明行文案（锚点 s07-heatcard）。
  *
  * 选中某小时 → 「12:00 · 9 笔」；否则峰值文案「峰值出现在 12:00（9 笔）与 19:00（8 笔）；柱高按当月最大值归一。」；
  * 当月无交易 → 「本月还没有交易记录，热力图为空。」。
@@ -481,7 +481,7 @@ internal fun heatNoteText(hourly: List<Float>, peaks: List<Int>, selectedHour: I
 
 private fun hourText(hour: Int): String = (if (hour < 10) "0" else "") + hour + ":00"
 
-/** 2026-10-08 → 10月08日（契约 s07-barscard 的读数文案）。 */
+/** 2026-10-08 → 10月08日（锚点 s07-barscard 的读数文案）。 */
 internal fun monthDayLabelOf(isoDate: String): String {
     val parts = isoDate.split("-")
     val month = parts.getOrNull(1)?.toIntOrNull()

@@ -5,7 +5,7 @@ package com.bsfeng.monitor.ui
 // 五态容器（加载 / 空 / 错 / 边界）在一级页与二级页共用同一份文案与重试动作；
 // 二级页骨架只负责「页头 + 五态 + 正文」，各组正文见 ui/SettingsSubPages.kt。
 //
-// 二级页内**不再写与页头标题重复的 SectionHeader**（契约 s09 页层级）：分组只靠卡间隙区分，
+// 二级页内**不再写与页头标题重复的 SectionHeader**（锚点 s09 页层级）：分组只靠卡间隙区分，
 // 页头大标题已经是这一页的名字，正文再来一个同名小标题是同一句话说两遍。
 
 import android.content.Intent

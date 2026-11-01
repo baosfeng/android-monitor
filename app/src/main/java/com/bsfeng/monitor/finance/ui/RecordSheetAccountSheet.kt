@@ -95,7 +95,7 @@ private fun AccountSheetRow(account: Account, selected: Boolean, onClick: () -> 
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    // 契约 s14a-acct-list：本行按下背景 fg 5%（120ms），选中后对勾移到本行（单选不可清空）
+    // 锚点 s14a-acct-list：本行按下背景 fg 5%（120ms），选中后对勾移到本行（单选不可清空）
     val bg by animateColorAsState(
         targetValue = if (pressed) t.fgFade(5) else Color.Transparent,
         animationSpec = tween(t.durState),

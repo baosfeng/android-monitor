@@ -60,7 +60,7 @@ import kotlinx.coroutines.withTimeout
  *
  * 长按标题可唤出 DEBUG 五态开关（见 [FinanceStateBar]）——正式包不生效。
  *
- * 长按阈值默认沿用系统 `longPressTimeout`（≈500ms）；契约写死数字的页面（如 s04 的 600ms）
+ * 长按阈值默认沿用系统 `longPressTimeout`（≈500ms）；口径写死数字的页面（如 s04 的 600ms）
  * 传 [longPressTimeoutMillis]，否则同一手势在「按设计稿」和「按系统」之间对不上。
  */
 @Composable
@@ -110,10 +110,10 @@ internal fun FinanceScreenHead(
 }
 
 /**
- * 指定阈值的长按检测（契约写死 600ms 这类非系统值时用）。
+ * 指定阈值的长按检测（口径写死 600ms 这类非系统值时用）。
  *
  * 与 [detectTapGestures] 只差阈值来源：系统值走 `viewConfiguration.longPressTimeoutMillis`，
- * 契约数字必须能自己给，否则同一手势在实机与设计稿之间判定不一致。
+ * 口径数字必须能自己给，否则同一手势在实机与设计稿之间判定不一致。
  * 阈值内抬起 / 手势被取消都不算长按；长按命中后吃掉这一次抬起，避免上层再当成一次点击。
  */
 private fun Modifier.longPressWithTimeout(timeoutMillis: Long, onLongPress: () -> Unit): Modifier =
@@ -141,7 +141,7 @@ private fun Modifier.longPressWithTimeout(timeoutMillis: Long, onLongPress: () -
  * （`.s04-month .icon-btn{border-color:transparent;background:transparent}`，00-shell:1929），
  * 由 [chrome] 关闭，避免与月份胶囊底叠成两层。
  *
- * 反馈按契约走共享基元：[pressFeedback] 按下 0.96 + 点击时 [HapticTone.LIGHT]
+ * 反馈按口径走共享基元：[pressFeedback] 按下 0.96 + 点击时 [HapticTone.LIGHT]
  * （「可点元素必须有按下态」——此前本控件完全无按下反馈）。
  *
  * 可读名只有一处：[contentDescription] 由内容 lambda 交给内部图标（`contentDescription = label`）。
@@ -280,7 +280,7 @@ internal fun LegendDot(color: Color, modifier: Modifier = Modifier, size: Dp? = 
 }
 
 /**
- * 错误态该画成「整块错态卡」还是「列表首位的一条错误条」（契约 s06-error / s07-error · 边界，纯函数可单测）。
+ * 错误态该画成「整块错态卡」还是「列表首位的一条错误条」（锚点 s06-error / s07-error · 边界，纯函数可单测）。
  *
  * 只有「真的在错误态 **且** 没有任何缓存可显示」时，才允许整块替换列表区（不显示任何数字）；
  * 有缓存时错误只贴一条，下面的数值与图表照常渲染 —— 一次读库抖动不该把用户已经看到的数字清空。
@@ -289,7 +289,7 @@ internal fun financeErrorAsCard(state: FiveState, hasCache: Boolean): Boolean =
     state == FiveState.ERROR && !hasCache
 
 /**
- * 错误条（契约 s06-error / s07-error · 边界「有缓存时错误条贴在列表首位、下方数值可读」）。
+ * 错误条（锚点 s06-error / s07-error · 边界「有缓存时错误条贴在列表首位、下方数值可读」）。
  *
  * 与共享 `ErrorState` 的差别只有一条：**不占列表区**。
  * - 无缓存（什么都读不到）：仍然用整块错态卡，列表区只留这一块，不显示任何数字；

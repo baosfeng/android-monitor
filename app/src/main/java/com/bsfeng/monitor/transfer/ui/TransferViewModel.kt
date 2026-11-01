@@ -207,7 +207,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     /**
      * C-17 / C-08：按原文件与原目标重发一条终态发送任务（旧记录保留在「最近完成」）。
      *
-     * @param onResult 真实结果；失败时 message 已是契约逐字口径（源文件已不在本机 / 对方不在线）。
+     * @param onResult 真实结果；失败时 message 已是逐字口径（源文件已不在本机 / 对方不在线）。
      */
     fun resendTask(task: TransferTask, onResult: (Result<Unit>) -> Unit = {}) {
         engine.resendTask(task, onResult)

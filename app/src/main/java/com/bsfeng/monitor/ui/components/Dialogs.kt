@@ -143,7 +143,7 @@ private fun DialogAction(
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
-    // 弹窗按钮按压（契约 s12-dialog：0.96 + 120ms + LIGHT）
+    // 弹窗按钮按压（锚点 s12-dialog：0.96 + 120ms + LIGHT）
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
     Box(

@@ -2,7 +2,7 @@ package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/FinanceMainScreen.kt 的明细行；职责：按日分组卡的行外框、单笔交易行、五态块与明细 lazy items。
 //
-// s04 契约要求每行一个锚点（s04-tx-1..8 / s04-edge-tx / s04-edge-refund）与「背景 fg 5% + 缩小」按下反馈，
+// s04 交互口径要求每行一个锚点（s04-tx-1..8 / s04-edge-tx / s04-edge-refund）与「背景 fg 5% + 缩小」按下反馈，
 // 而原实现的行内 clickable 用自建 interaction source 且锚点无处落地，故本文件同时承载 items 构造
 // （原 FinanceMainList.kt 的职责迁入，见交接文档「被取代的产物」）。
 
@@ -65,14 +65,14 @@ import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 契约在明细里定义了 8 个行锚点（s04-tx-1..8）；第 9 行起不再带锚点。 */
+/** 交互口径在明细里定义了 8 个行锚点（s04-tx-1..8）；第 9 行起不再带锚点。 */
 private const val TX_ANCHOR_COUNT = 8
 
 /**
- * 行按下背景（契约：背景转 fg 5%）。
+ * 行按下背景（口径：背景转 fg 5%）。
  *
  * 缩放与透明度由共享基元 [rowPressFeedback] 提供（0.99 + alpha 0.9，与 s01/s03 同口径），
- * 这里只补契约要求的背景色；不额外建动画对象，滚动挂载不增开销。
+ * 这里只补交互口径要求的背景色；不额外建动画对象，滚动挂载不增开销。
  */
 @Composable
 private fun pressBackground(interaction: MutableInteractionSource, idle: Color): Color {
@@ -81,7 +81,7 @@ private fun pressBackground(interaction: MutableInteractionSource, idle: Color):
     return if (pressed) t.fgFade(5) else idle
 }
 
-/** 行锚点（契约 s04-tx-1..8）：按明细可见顺序编号，逐字照抄锚点原文。 */
+/** 行锚点（锚点 s04-tx-1..8）：按明细可见顺序编号，逐字照抄锚点原文。 */
 private fun Modifier.txRowAnchor(index: Int): Modifier = when (index) {
     0 -> testTag("s04-tx-1")
     1 -> testTag("s04-tx-2")
@@ -156,7 +156,7 @@ internal fun TransactionRow(
     highlighted: Boolean = false,
     /** >= 0 走错落入场；-1 表示离屏行不做入场动画（每行一个 Animatable 会拖帧） */
     enterIndex: Int,
-    /** 契约锚点序号（0 起，对应 s04-tx-1..8）；-1 = 不带锚点 */
+    /** 锚点序号（0 起，对应 s04-tx-1..8）；-1 = 不带锚点 */
     anchorIndex: Int = -1,
     /** 焦点落点（删除后回位用），由调用方决定挂在哪一行；必须排在 `clickable` 之前才落到同一节点 */
     focusModifier: Modifier = Modifier,
@@ -266,7 +266,7 @@ private fun autoBookHighlightColor(): Color {
 }
 
 /**
- * 边界演示行（契约 s04-edge-tx / s04-edge-refund）。
+ * 边界演示行（锚点 s04-edge-tx / s04-edge-refund）。
  *
  * 与普通行同一套按下反馈（fg 5% + 共享 rowPressFeedback）、同一套截断口径（标题 / 副标题各单行省略、
  * 金额不换行），但**不接编辑跳转**：这两行是占位数据，没有真实主键，跳编辑会把占位金额写进库。
@@ -328,7 +328,7 @@ private fun S04EdgeRow(
     }
 }
 
-/** 加载态（契约 s04-loading）：只有「加载中且无数据」才出骨架；骨架不接收点击、不参与位移。 */
+/** 加载态（锚点 s04-loading）：只有「加载中且无数据」才出骨架；骨架不接收点击、不参与位移。 */
 @Composable
 internal fun S04LoadingBlock() {
     val t = LocalDesignTokens.current
@@ -340,7 +340,7 @@ internal fun S04LoadingBlock() {
     )
 }
 
-/** 空态（契约 s04-empty / s04-empty-add）：文案逐字照抄，CTA 未接线时不渲染。 */
+/** 空态（锚点 s04-empty / s04-empty-add）：文案逐字照抄，CTA 未接线时不渲染。 */
 @Composable
 internal fun S04EmptyBlock(onAdd: () -> Unit) {
     val t = LocalDesignTokens.current
@@ -357,7 +357,7 @@ internal fun S04EmptyBlock(onAdd: () -> Unit) {
     )
 }
 
-/** 错态（契约 s04-error / s04-retry）：只替换明细区，页头 / 月份条 / KPI / 双入口仍在。 */
+/** 错态（锚点 s04-error / s04-retry）：只替换明细区，页头 / 月份条 / KPI / 双入口仍在。 */
 @Composable
 internal fun S04ErrorBlock(onRetry: () -> Unit) {
     val t = LocalDesignTokens.current
@@ -374,7 +374,7 @@ internal fun S04ErrorBlock(onRetry: () -> Unit) {
 }
 
 /**
- * 边界态（契约 s04-edge / s04-edge-tx / s04-edge-refund）。
+ * 边界态（锚点 s04-edge / s04-edge-tx / s04-edge-refund）。
  *
  * 演示数据一律为占位值，不读库、不写库；只在 DEBUG 包由五态切换条唤出。
  */
@@ -401,7 +401,7 @@ internal fun S04EdgeBlock() {
                 style = MaterialTheme.typography.titleMedium,
                 color = t.fg,
                 fontWeight = FontWeight.SemiBold,
-                // 契约：超过 13 位省略号截断、不换行不撑破卡片
+                // 口径：超过 13 位省略号截断、不换行不撑破卡片
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -432,12 +432,12 @@ internal fun S04EdgeBlock() {
             )
             S04EdgeRow(
                 categoryName = "购物退款",
-                // 契约：分类缺失时图标回退中性灰
+                // 口径：分类缺失时图标回退中性灰
                 iconColor = t.muted,
                 title = "购物退款",
                 subtitle = "订单 202610140938 原路退回",
                 amountText = "+¥58.00",
-                // 契约：退款金额按收入色显示
+                // 口径：退款金额按收入色显示
                 amountColor = t.incomeText,
                 modifier = Modifier.testTag("s04-edge-refund"),
             )
@@ -466,7 +466,7 @@ internal fun LazyListScope.financeMainItems(
     onRowClick: (Transaction) -> Unit,
     onAddClick: () -> Unit,
     onRetry: () -> Unit,
-    /** 删除后要接住焦点的那一行（契约 s05-del-confirm · 移除后）；null = 不挂焦点落点。 */
+    /** 删除后要接住焦点的那一行（锚点 s05-del-confirm · 移除后）；null = 不挂焦点落点。 */
     focusRowId: Long? = null,
     focusRequester: FocusRequester? = null,
 ) {
@@ -539,7 +539,7 @@ internal fun LazyListScope.financeMainItems(
 internal const val FINANCE_MAIN_HEADER_ITEMS = 5
 
 /**
- * 删除后返回列表的一次性焦点复位请求（契约 s05-del-confirm · 移除后）。
+ * 删除后返回列表的一次性焦点复位请求（锚点 s05-del-confirm · 移除后）。
  *
  * @param deletedId 刚被删掉的那笔。返回列表后要等它从明细里消失（重载落地）再定位，
  *   否则明细还是旧的一份、位次差一行，焦点会落到再下一行。
@@ -553,7 +553,7 @@ data class RowFocusAfterDelete(
 /**
  * 删除某笔交易后，焦点该落到哪一行（纯函数，可 JVM 单测）。
  *
- * 契约 s05-del-confirm · 移除后：「焦点落在被删行的下一行，若为末行则落在上一行」。
+ * 锚点 s05-del-confirm · 移除后：「焦点落在被删行的下一行，若为末行则落在上一行」。
  * [displayOrder] 必须是明细的**真实展示顺序**：FinanceViewModel.getTransactionsGroupedByDate 用
  * groupBy 按日期分组，保留首次出现次序，因此月度列表顺序 == 明细的平铺顺序。
  * 返回 null 表示没有相邻行（整月只有这一笔），调用方把焦点落到明细区标题。

@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 从 ui/ComponentGalleryScreen.kt 拆出：展厅的五态区 —— GalleryFiveStates（五种状态同屏并列）与 StateCard（单格演示壳）。负责 s12 的五态陈列。
-// 契约 docs/交互设计/s12-组件与状态-交互契约.md：
+// 交互口径：
 //   · s12-states  块顺序固定 加载 → 空 → 错误 → 有数据 → 边界；非「有数据」态只渲染当前状态一块
 //   · s12-st-loading / s12-st-empty / s12-st-error / s12-st-populated / s12-st-edge 各自带块级锚点
 
@@ -35,9 +35,9 @@ import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /**
- * 五态展区（契约 s12-states）：
+ * 五态展区（锚点 s12-states）：
  * 有数据态下五块同屏陈列、无遮罩无折叠；切到某一状态时只渲染该状态一块，其余四块整块不渲染。
- * 块顺序固定 加载 → 空 → 错误 → 有数据 → 边界（契约「块顺序固定」）。
+ * 块顺序固定 加载 → 空 → 错误 → 有数据 → 边界（口径「块顺序固定」）。
  */
 @Composable
 internal fun GalleryFiveStates(
@@ -55,7 +55,7 @@ internal fun GalleryFiveStates(
             }
             if (showAll || state == FiveState.EMPTY) {
                 StateCard("empty · 空态", Modifier.testTag("s12-st-empty")) {
-                    // 契约 s12-st-empty：标题「今天还没有记录」+ 说明 + CTA「开启监控」→ toast「已开启监控」
+                    // 锚点 s12-st-empty：标题「今天还没有记录」+ 说明 + CTA「开启监控」→ toast「已开启监控」
                     EmptyState(
                         text = "开启监控后，事件会按小时汇总到这里。",
                         title = "今天还没有记录",
@@ -93,12 +93,12 @@ internal fun GalleryFiveStates(
 }
 
 /**
- * 错误态（契约 s12-st-error）：标题「数据加载失败」+ 说明 + 「重试」→ toast「正在重试…」，
+ * 错误态（锚点 s12-st-error）：标题「数据加载失败」+ 说明 + 「重试」→ toast「正在重试…」，
  * 800ms 内重复点击不重复请求（[retryLock] 单调计数闸门）。
  */
 @Composable
 private fun GalleryErrorState(toast: ToastHostState) {
-    // 800ms 闸门：契约「重试 800ms 内重复点击不重复请求」。用递增令牌 + LaunchedEffect 解锁，
+    // 800ms 闸门：口径「重试 800ms 内重复点击不重复请求」。用递增令牌 + LaunchedEffect 解锁，
     // 不引第三方计时器；点一次加一，effect 到点后清空 → 空 = 可重试。
     var retryLock by remember { mutableIntStateOf(0) }
     ErrorState(
@@ -119,10 +119,10 @@ private fun GalleryErrorState(toast: ToastHostState) {
     }
 }
 
-/** 重试闸门时长（契约 s12-st-error「按钮禁用 800ms」）。 */
+/** 重试闸门时长（锚点 s12-st-error「按钮禁用 800ms」）。 */
 private const val RETRY_LOCK_MS = 800L
 
-/** 有数据态（契约 s12-st-populated）：纯展示记录行，无按下态、不进 Tab 顺序。 */
+/** 有数据态（锚点 s12-st-populated）：纯展示记录行，无按下态、不进 Tab 顺序。 */
 @Composable
 private fun GalleryPopulatedCard() {
     val t = LocalDesignTokens.current
@@ -144,7 +144,7 @@ private fun GalleryPopulatedCard() {
 }
 
 /**
- * 边界态（契约 s12-st-edge）：超长标题最多 2 行省略、右侧计数不换行；缺结束时间按 0 计。
+ * 边界态（锚点 s12-st-edge）：超长标题最多 2 行省略、右侧计数不换行；缺结束时间按 0 计。
  *
  * 共享 EdgeState 的内容槽只接一段说明，表达不了「两行 = 标题/副标题 + 右侧定宽计数」，
  * 故本页局部实现两条只读行（仅本页使用，不改共享件）。
@@ -187,7 +187,7 @@ private fun GalleryEdgeRow(title: String, subtitle: String, value: String) {
     }
 }
 
-/** 单格演示壳：块级锚点由调用点逐字传 literal（契约锚点不做字符串拼接）。 */
+/** 单格演示壳：块级锚点由调用点逐字传 literal（锚点不做字符串拼接）。 */
 @Composable
 private fun StateCard(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val t = LocalDesignTokens.current

@@ -12,7 +12,7 @@ package com.bsfeng.monitor.ui
 // 功耗门禁 SLEEPING 时静止不采点、只按 30 分钟兜底，那些间隔是设计内静默 —— 画成中性灰。
 // 覆盖率把待机计入分子，卡头「有覆盖时长」= 有采样 + 待机，与徽标百分比同口径。
 //
-// 契约：docs/交互设计/s09-设置-交互契约.md 的 s09-loc-cov / -sub / -badge / -bar / -gap-list。
+// 口径：锚点账本 的 s09-loc-cov / -sub / -badge / -bar / -gap-list。
 // 卡片内没有任何可点元素（断档行也不开详情）—— 它只回答「是什么样」，动作都在引导卡里。
 
 import androidx.compose.foundation.Canvas
@@ -85,7 +85,7 @@ private const val GAP_ROWS = 5
 /** 刷新间隔：一分钟（覆盖条按分钟粒度缓存，更快的刷新读到的还是同一份）。 */
 private const val REFRESH_MS = 60_000L
 
-/** 空态文案（契约 s09-loc-cov 边界逐字）。 */
+/** 空态文案（锚点 s09-loc-cov 边界逐字）。 */
 private const val EMPTY_TEXT = "过去 24 小时没有采样记录"
 
 /**
@@ -144,7 +144,7 @@ private fun CoverageCardBody(t: DesignTokens, snapshot: CoverageSnapshot?, modif
             icon = Icons.Outlined.BarChart,
             trailing = snapshot?.takeIf { !it.isEmpty }?.let { ready ->
                 {
-                    // 徽标只在有采样时出现（契约 s09-loc-cov-badge 前置）：空窗口写百分比没有意义
+                    // 徽标只在有采样时出现（锚点 s09-loc-cov-badge 前置）：空窗口写百分比没有意义
                     Badge(
                         text = ready.window.coveragePct.toString() + "%",
                         modifier = Modifier.widthIn(min = 64.dp).testTag("s09-loc-cov-badge"),
@@ -391,7 +391,7 @@ private fun GapRow(
     }
 }
 
-/** 徽标色调：>=90% 正常、60~89% 警告、<60% 危险（分档阈值见 CoverageLevel，契约 s09-loc-cov-badge）。 */
+/** 徽标色调：>=90% 正常、60~89% 警告、<60% 危险（分档阈值见 CoverageLevel，锚点 s09-loc-cov-badge）。 */
 internal fun coverageTone(pct: Int): BadgeTone = when (CoverageLevel.of(pct)) {
     CoverageLevel.GOOD -> BadgeTone.Success
     CoverageLevel.WARN -> BadgeTone.Warn

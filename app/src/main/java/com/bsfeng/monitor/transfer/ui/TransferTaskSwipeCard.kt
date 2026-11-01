@@ -2,13 +2,13 @@ package com.bsfeng.monitor.transfer.ui
 
 // 任务卡片的滑动外壳（C-07）：左右两个方向一致，越过 20% 露红底、越过 40% 松手删除。
 //
-// 契约要点：
+// 口径要点：
 //  - 进行中卡片左滑松手直接回弹 + REJECT 触感，**不显红底**（删除不是进行中卡片的动作）；
 //  - 终态卡片滑过 40% 松手走与 C-05 相同的删除路径（接收 + 已完成仍先二次确认，由页面处理）；
 //  - 滑动不是唯一入口：等效入口是 C-04 动作面板。
 //
 // 位移阈值不用手写像素：Compose 的触摸阈值（touch slop）本身就是「达到最小位移才判定为滑动」，
-// 契约里的 8px 是原型口径，这里按 dp 由平台折算。
+// 账本里的 8px 是原型口径，这里按 dp 由平台折算。
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -62,7 +62,7 @@ internal fun SwipeableTaskCard(
         confirmValueChange = { value ->
             when {
                 value == SwipeToDismissBoxValue.Settled -> true
-                // 进行中：回弹 + REJECT（契约 C-07「不显红底」）
+                // 进行中：回弹 + REJECT（锚点 C-07「不显红底」）
                 !canDelete -> {
                     haptic(HapticTone.REJECT)
                     false
@@ -75,7 +75,7 @@ internal fun SwipeableTaskCard(
                 }
             }
         },
-        // 越过 40% 才判定为删除（契约 C-07）
+        // 越过 40% 才判定为删除（锚点 C-07）
         positionalThreshold = { totalDistance -> totalDistance * DELETE_THRESHOLD_PROGRESS },
     )
     // 撤销恢复的列表项可能复用同一 key 的保存态：从已滑出位置复位，否则卡片会停在屏外

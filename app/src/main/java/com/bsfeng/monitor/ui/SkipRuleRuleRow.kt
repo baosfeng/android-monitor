@@ -58,7 +58,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 /**
  * 规则行：标题 / 计数 + 启用徽标 + 可折叠的选择器明细。
  *
- * 交互口径（契约 s10-rules）：
+ * 交互口径（锚点 s10-rules）：
  *  - 主区按下透明度 0.62（120ms、--ease-out）、触感 LIGHT，不叠 ripple（原型 .rule-main:active）；
  *  - 展开 / 收起：箭头 120ms 转 90 度、明细 220ms 上浮淡入（expandEnter）；
  *  - 键盘：行主区 2dp 焦点环，Enter 与 Space 等价；开关独立取环、Space 只切开关（由 AppSwitch 承担）；
@@ -84,7 +84,7 @@ internal fun RuleRow(
         label = "ruleChevron",
     )
     val interaction = remember { MutableInteractionSource() }
-    // 选择器为 0 时没有可展开的内容：整行不可展开、箭头换成「—」（契约 s10-rules 边界）。
+    // 选择器为 0 时没有可展开的内容：整行不可展开、箭头换成「—」（锚点 s10-rules 边界）。
     val expandable = selectorCountOf(rule) > 0
     Column(modifier.fillMaxWidth()) {
         Row(
@@ -110,7 +110,7 @@ internal fun RuleRow(
                     onToggleExpand()
                 }
                 .onPreviewKeyEvent { event ->
-                    // clickable 只映射 Enter / 方向中键；契约要求 Space 与 Enter 等价。
+                    // clickable 只映射 Enter / 方向中键；交互口径要求 Space 与 Enter 等价。
                     // KeyDown 也要吞掉：否则 LazyColumn 会把 Space 当翻页键再滚一屏。
                     if (expandable && event.key == Key.Spacebar) {
                         if (event.type == KeyEventType.KeyUp) {
@@ -193,7 +193,7 @@ internal fun RuleRow(
  * 规则行主区按下反馈：透明度降到 [RULE_PRESS_ALPHA]（原型 .rule-main:active 的 opacity .62），
  * 时长取 --dur-press、缓动取 --ease-out；精简档不播。
  *
- * 不复用 RowPress（0.99 + alpha .9）：契约给本行写的是 .62，且 RowPress 在 ui/components 写区外、
+ * 不复用 RowPress（0.99 + alpha .9）：口径给本行写的是 .62，且 RowPress 在 ui/components 写区外、
  * 无法按行覆盖系数（已记交接文档遗留）。
  */
 @Composable
@@ -245,7 +245,7 @@ private fun RuleDetail(rule: SkipRule, onCopySelector: (String) -> Unit) {
                             color = t.meta,
                             modifier = Modifier.width(t.space6),
                         )
-                        // 单行省略号截断；长按复全文并 toast「已复制选择器」（契约 s10-rules 边界行）。
+                        // 单行省略号截断；长按复全文并 toast「已复制选择器」（锚点 s10-rules 边界行）。
                         // 用 detectTapGestures 而不是 combinedClickable：明细行不该变成可点节点
                         // （否则多出 ripple 与焦点落点）。长按时长取平台默认（500ms）。
                         Box(

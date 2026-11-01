@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/AddTransactionScreen.kt 的三张卡；职责：类型+金额卡、字段卡（分类/账户/时间/说明）、单据卡。
-// 契约锚点（s14a）：s14a-amount / s14a-kind（含三段 s14a-kind-*）/ s14a-fields / s14a-cat-row /
+// 锚点（s14a）：s14a-amount / s14a-kind（含三段 s14a-kind-*）/ s14a-fields / s14a-cat-row /
 // s14a-acct-row / s14a-time-row / s14a-note-row / s14a-receipt / s14a-receipt-row 都落在本文件。
 
 import androidx.compose.animation.animateColorAsState
@@ -59,7 +59,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
 /**
- * 类型分段的逐段锚点（契约 s14a-kind-expense / -income / -transfer，顺序同 [RecordForm.TYPE_OPTIONS]）。
+ * 类型分段的逐段锚点（锚点 s14a-kind-expense / -income / -transfer，顺序同 [RecordForm.TYPE_OPTIONS]）。
  *
  * 写成 when 而不是 List：每个锚点都要以 testTag 的字面形态被 grep 逐字查到（验收口径）。
  */
@@ -161,9 +161,9 @@ internal fun AddTransactionAmountCard(
 }
 
 /**
- * 收支类型分段「支出／收入／转账」（契约 s14a-kind + 三段逐段锚点）。
+ * 收支类型分段「支出／收入／转账」（锚点 s14a-kind + 三段逐段锚点）。
  *
- * 为什么本页不复用共享 [com.bsfeng.monitor.ui.components.SegmentedControl]：契约要求**逐段**锚点
+ * 为什么本页不复用共享 [com.bsfeng.monitor.ui.components.SegmentedControl]：交互口径要求**逐段**锚点
  * （s14a-kind-expense / -income / -transfer），而共享件不暴露 per-item modifier。此处按同一 token
  * 口径重构，键盘行为复用共享的 [segmentNavTarget] + [keyboardFocusRing]（roving tabindex）。
  * 待共享件补 itemModifiers 形参后删掉本副本。
@@ -242,7 +242,7 @@ private fun KindSegment(
                     .background(bg)
                     .then(kindAnchor(index))
                     .clickable {
-                        // 切换属轻触级；重复点当前段不再震（契约「已在支出态时再点无变化、不重复触觉」）
+                        // 切换属轻触级；重复点当前段不再震（口径「已在支出态时再点无变化、不重复触觉」）
                         if (!selected) {
                             haptic(HapticTone.LIGHT)
                             onTypeChange(index)
@@ -266,7 +266,7 @@ private fun KindSegment(
  * 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 说明 —— 四行同构，与原型一致。
  *
  * 每一行都通过回调上抛字段标识，由屏幕层决定打开哪个抽屉；
- * [catFocus] / [acctFocus] / [timeFocus] 是抽屉关闭后焦点回行的落点（契约「移除/关闭后」列）。
+ * [catFocus] / [acctFocus] / [timeFocus] 是抽屉关闭后焦点回行的落点（口径「移除/关闭后」列）。
  */
 @Composable
 internal fun AddTransactionFieldCard(
@@ -311,7 +311,7 @@ internal fun AddTransactionFieldCard(
             if (isTransferType(txType)) {
                 FieldDivider()
                 // 转账的「转入」行沿用「账户」行语义，但不另贴锚点：一个节点只能有一个 testTag，
-                // 契约 s14a-acct-row 的「转账态本行标签变「转出」并另出一行「转入」」由本行承接交互
+                // 锚点 s14a-acct-row 的「转账态本行标签变「转出」并另出一行「转入」」由本行承接交互
                 FieldRow(
                     label = "转入",
                     value = toAccountName,

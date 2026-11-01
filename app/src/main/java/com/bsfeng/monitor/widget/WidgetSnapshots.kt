@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.widget
 
-// 小组件的数据契约：全部不可变、不依赖 Android，UI 层只渲染这些字段。
+// 小组件的数据口径：全部不可变、不依赖 Android，UI 层只渲染这些字段。
 
 /*
  * 为什么不直接把 FinanceStats / QuotaSnapshot 传给 Glance：

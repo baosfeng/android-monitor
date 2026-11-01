@@ -9,7 +9,7 @@ package com.bsfeng.monitor.record
  * 抽成接口只为让「缓存为空 → 发起请求 / 超时 → 放弃」这两条路径能在纯 JVM 单测里跑，
  * 生产实现是 [AndroidSingleFixSource]。
  *
- * 契约：`request` 必须**恰好回调一次** `onResult`（成功、失败、超时各一条路径），
+ * 口径：`request` 必须**恰好回调一次** `onResult`（成功、失败、超时各一条路径），
  * 并在回调前释放底层请求（`CancellationSignal.cancel()` / `removeUpdates()`）。
  */
 interface SingleFixSource {

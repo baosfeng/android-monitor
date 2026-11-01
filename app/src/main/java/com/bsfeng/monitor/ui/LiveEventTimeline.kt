@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 从 ui/MainScreen.kt 拆出：实时页的事件时间线 —— 按小时分组、组头吸顶、逐行入场、分页加载更多。
-// 锚点（契约 s02）：s02-timeline / s02-g09..s02-g05 / s02-ev-page / s02-ev-notification / s02-loadwrap。
+// 锚点（s02）：s02-timeline / s02-g09..s02-g05 / s02-ev-page / s02-ev-notification / s02-loadwrap。
 
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -78,7 +78,7 @@ private val TL_TIME_COL_W = 46.dp
 /**
  * 聚焦命中行的高亮时长 / 淡出 / 底色（s01-recent-1..3：从概览点进来要能看出是哪一条）。
  *
- * s01 契约只写「滚到可视区」没写高亮时长，这里沿用 s04 自动记账新行的同一口径
+ * s01 口径只写「滚到可视区」没写高亮时长，这里沿用 s04 自动记账新行的同一口径
  * （FinanceMainDerived.kt:12-18：1.6s 保持 + 240ms 淡出 + 12% accent 底），
  * 避免同一 App 里出现第二种「新行点亮」节奏。
  */
@@ -172,7 +172,7 @@ internal fun lazyIndexesOfRecord(groups: List<HourGroup>, recordId: String): Pai
     return -1 to -1
 }
 
-/** 行副标题：契约固定「页面轨迹 · 无障碍服务」「通知事件 · 正文不记录」，其余按类型推导。 */
+/** 行副标题：口径固定「页面轨迹 · 无障碍服务」「通知事件 · 正文不记录」，其余按类型推导。 */
 internal fun rowSubtitleOf(record: Record): String = when {
     record.isPageEvent() -> "页面轨迹 · 无障碍服务"
     record.isNotificationEvent() -> "通知事件 · 正文不记录"
@@ -227,7 +227,7 @@ internal fun LiveEventTimeline(
         if (rowIndex >= 0) {
             stage = LiveFocusStage.SCROLLING
             focusedRowId = id
-            // 契约 s01-recent-*：滚到「该条本身」，不是滚到组头 —— 目标行常不是组内第一行，
+            // 锚点 s01-recent-*：滚到「该条本身」，不是滚到组头 —— 目标行常不是组内第一行，
             // 只滚组头会把它留在视口外，或被吸顶组头顶住。
             // 两步：① 先把组头滚到顶部（保证它被组合出来、量得到真实高度）；② 再按组头高度
             // 给行留出偏移，让行落在吸顶组头下方。组头是吸顶的，滚到行时它仍占住顶部这段高度。
@@ -316,7 +316,7 @@ internal fun LiveEventTimeline(
                     if (enterWindow.open && ei < STAGGER_MAX_STEPS) ei + 1 else -1
                 }
                 // 行点击的交互源与触感在这里建：clickable 必须与 eventAnchor 落在同一函数，
-                // 否则契约锚点与点击修饰链分居两个函数，静态门禁按函数判定会判成「无可达标识」。
+                // 否则锚点与点击修饰链分居两个函数，静态门禁按函数判定会判成「无可达标识」。
                 val rowInteraction = remember { MutableInteractionSource() }
                 val rowHaptic = rememberHaptic()
                 StackRow(
@@ -363,7 +363,7 @@ internal fun LiveEventTimeline(
 }
 
 /**
- * 筛选无命中时的一行说明（契约 s02-chips 边界「列表区显示空行文案且不出空态大图」）。
+ * 筛选无命中时的一行说明（锚点 s02-chips 边界「列表区显示空行文案且不出空态大图」）。
  *
  * 文案与 s03 同口径（s03-chips 边界逐字为「该筛选方式下暂无记录」），不另编一句。
  */

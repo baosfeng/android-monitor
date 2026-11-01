@@ -41,7 +41,7 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import java.util.Locale
 
-/** 进度条封顶值：导入没有真实进度事件，动画停在 92% 直到结果返回（契约 s08-progress）。 */
+/** 进度条封顶值：导入没有真实进度事件，动画停在 92% 直到结果返回（锚点 s08-progress）。 */
 internal const val PROGRESS_CEILING = 0.92f
 
 /** 结果统计的一格（标签 + 数值）。三格不拆成三个 Tab 停位，见 [ImportResultSummaryCard]。 */
@@ -69,7 +69,7 @@ internal fun ResultTile(
 /**
  * 导入主按钮（锚点 s08-go）。
  *
- * 契约：按下底加深一档（--dur-state，触感 MEDIUM）→ 转「导入中…」并禁用；禁用态 45% 透明、
+ * 口径：按下底加深一档（--dur-state，触感 MEDIUM）→ 转「导入中…」并禁用；禁用态 45% 透明、
  * 不可聚焦、读屏「开始导入，不可用，请先选择文件」；焦点环 2dp 画在按钮内侧，不改高度与圆角。
  */
 @Composable
@@ -157,9 +157,9 @@ internal fun GhostActionButton(
 }
 
 /**
- * 进度文案按阶段推进（契约三段：解析 → 写入本地数据库 → 重建预算与统计）。
+ * 进度文案按阶段推进（口径三段：解析 → 写入本地数据库 → 重建预算与统计）。
  *
- * 段界取契约的 45% / 90%；文件格式沿用产品现状（.db），文案不写「CSV」。
+ * 段界取口径的 45% / 90%；文件格式沿用产品现状（.db），文案不写「CSV」。
  */
 internal fun progressLabel(value: Float): String {
     val percent = (value * 100).toInt().coerceIn(0, 100)
@@ -171,7 +171,7 @@ internal fun progressLabel(value: Float): String {
     return stage + percent + "%"
 }
 
-/** 文件大小展示（契约「1.2 MB」：一位小数，KB 取整）。 */
+/** 文件大小展示（口径「1.2 MB」：一位小数，KB 取整）。 */
 internal fun formatFileSize(bytes: Long): String = when {
     bytes <= 0L -> ""
     bytes >= 1024L * 1024L -> String.format(Locale.CHINA, "%.1f MB", bytes / 1048576.0)

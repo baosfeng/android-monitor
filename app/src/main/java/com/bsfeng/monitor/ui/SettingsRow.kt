@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 设置页专用行：TokenRow 的「副标题可锚定」版本。
-// 只用在一处 —— 契约锚点落在副标题本身（s09-quota-sub），而 TokenRow 的 subtitle 是
+// 只用在一处 —— 锚点落在副标题本身（s09-quota-sub），而 TokenRow 的 subtitle 是
 // 内部 Text，外部拿不到节点。布局与 TokenRow 同规格（图标 32dp / 行高 >= 52dp / 标题单行 /
 // 副标题单行），按压与触感复用 PressFeedback + Haptics 基元，不新造第二套动效。
 
@@ -40,7 +40,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 /**
  * 设置行（TokenRow 的锚点子集）。
  *
- * 与 TokenRow 的差别只有两处：副标题可传 subtitleModifier（承载契约锚点）、
+ * 与 TokenRow 的差别只有两处：副标题可传 subtitleModifier（承载锚点）、
  * 点击由本组件内建（0.96 按压 + LIGHT），调用点不再各补触感。
  *
  * @param onClick null = 不可点（纯展示行，不画按压态、不发触感）

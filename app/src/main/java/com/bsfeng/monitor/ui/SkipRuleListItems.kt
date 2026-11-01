@@ -73,7 +73,7 @@ internal fun SkipRuleLegend(rules: List<SkipRule>, modifier: Modifier = Modifier
             Triple("排除 excludeMatches", selectorKindCount(rules) { it.excludeMatches.size }, t.chartRamp[2]),
             Triple("规则组 groups", rules.sumOf { it.groups.size }, t.chartRamp[3]),
         )
-            // 条数为 0 的类型整行隐藏（契约 s10-legend 边界：不出现 0 行）
+            // 条数为 0 的类型整行隐藏（锚点 s10-legend 边界：不出现 0 行）
             .filter { it.second > 0 }
             .map { LegendItem(it.first, it.second.toString(), it.third) }
     }

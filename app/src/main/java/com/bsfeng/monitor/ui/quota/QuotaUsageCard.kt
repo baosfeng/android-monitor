@@ -63,10 +63,10 @@ private val STACK_HEIGHT = 76.dp
 private val STACK_GAP = 4.dp
 
 /**
- * 用量卡的三套契约锚点：同一张卡在三个 provider 面板里各叫各的
+ * 用量卡的三套锚点：同一张卡在三个 provider 面板里各叫各的
  * （s18-*-usage / s18-*-range-* / s18-*-models-*）。
  *
- * 锚点值一律写成字面量 testTag —— 契约对账是 grep 源码的，拼字符串扫不到。
+ * 锚点值一律写成字面量 testTag —— 口径对账是 grep 源码的，拼字符串扫不到。
  */
 enum class UsageCardVariant { OLLAMA_USD, OLLAMA_LEGACY, DEEPSEEK }
 

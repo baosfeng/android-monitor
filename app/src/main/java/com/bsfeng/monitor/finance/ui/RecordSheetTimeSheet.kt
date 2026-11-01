@@ -64,7 +64,7 @@ internal fun BoxScope.TimeSheet(
     val t = LocalDesignTokens.current
     val today = LocalDate.now()
     val shortcuts = RecordForm.dateShortcuts(today)
-    // 初始值取打开抽屉那一刻的当前值；之后所有操作只动草稿（契约 s14a-time-sheet 边界）
+    // 初始值取打开抽屉那一刻的当前值；之后所有操作只动草稿（锚点 s14a-time-sheet 边界）
     var draft by remember { mutableStateOf(parts) }
     SheetShell(title = "选择时间", onDismiss = onDismiss) {
         // 锚点 s14a-time-sheet（「选择时间」抽屉）：贴在面板内容根上，关闭即随抽屉卸载
@@ -91,7 +91,7 @@ internal fun BoxScope.TimeSheet(
                     DateChip(
                         label = shortcut.label,
                         selected = shortcut.date == draft.date,
-                        // 只改草稿：预览行立即跟手，抽屉保持打开（契约 s14a-date-strip）
+                        // 只改草稿：预览行立即跟手，抽屉保持打开（锚点 s14a-date-strip）
                         onClick = { draft = draft.copy(date = shortcut.date) },
                     )
                 }

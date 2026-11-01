@@ -59,7 +59,7 @@ import com.bsfeng.monitor.ui.theme.fgFade
  * 日视图时间轴卡。
  *
  * @param onSelect 停留段被点开时回调，并把该段的 [FocusRequester] 交给调用方 ——
- *   抽屉关闭后焦点回到这一段（契约 trip-detail-sheet「移除/关闭后 · 焦点回到触发它的停留段」），
+ *   抽屉关闭后焦点回到这一段（锚点 trip-detail-sheet「移除/关闭后 · 焦点回到触发它的停留段」），
  *   沿用 AdScreen 的 lastRowRequester 模式。移动 / 未记录段不回调（它们没有详情可开）。
  */
 @Composable
@@ -74,7 +74,7 @@ internal fun TripTimelineCard(
         // 处数 / 段数已由结论卡次行给出，这里只给操作提示，避免同一组计数在屏内出现两遍
         CardHead("时间轴", "停留段可点开详情")
         Spacer(Modifier.height(t.space2))
-        // 段列表容器（契约 s16-timeline-list）：由整页统一跟手滚动，卡内不做独立滚动，避免嵌套吃手势
+        // 段列表容器（锚点 s16-timeline-list）：由整页统一跟手滚动，卡内不做独立滚动，避免嵌套吃手势
         Column(
             Modifier
                 .fillMaxWidth()
@@ -96,12 +96,12 @@ internal fun TripTimelineCard(
 }
 
 /**
- * 段级锚点（契约 9 段：home-am / move-1 / cafe / move-2 / office / move-3 / home-noon / gap-1 / home-pm）。
+ * 段级锚点（9 段：home-am / move-1 / cafe / move-2 / office / move-3 / home-noon / gap-1 / home-pm）。
  *
  * 原型按示例数据画死「家 00:00–09:10 / 移动 / 咖啡 / …」，真实一天段数不定；锚点跟随**段的身份**：
  * 倒序渲染后视觉第 i 行按时间序第 (段数 - 1 - i) 段去查锚点表，所以 9 段时最上一行（最晚）是
  * s16-seg-home-pm、最下一行（最早）是 s16-seg-home-am，与原型块一一对应。
- * 时间序第 10 段起不打锚点：锚点集合严格等于契约定义，不新增自增号（一经发布不改号、不新增）。
+ * 时间序第 10 段起不打锚点：锚点集合严格等于账本定义，不新增自增号（一经发布不改号、不新增）。
  * 锚点名表在 TripTimelineOrder.kt（唯一真源），由 timelineAnchorFor 换算。
  */
 private fun Modifier.segmentTag(anchor: String?): Modifier =
@@ -110,7 +110,7 @@ private fun Modifier.segmentTag(anchor: String?): Modifier =
 /**
  * 单段一行：时间列 + 类型图标 + 标题 / 副标题（停留段另带 ›）。
  *
- * 交互口径（契约 s16-seg-*）：
+ * 交互口径（锚点 s16-seg-*）：
  * - 停留段可点：按下**行底色加深一档**（dur-state 120ms）+ LIGHT，抬指打开详情抽屉；
  * - 移动段 / 未记录段不可点：无点击区、无高亮、无 toast，行尾也没有 ›（未记录段整行降为次要色）。
  */

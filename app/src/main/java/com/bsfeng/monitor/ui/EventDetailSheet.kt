@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/MainScreen.kt 拆出：实时页的事件详情抽屉 —— 标题 + 类型徽标 + 契约字段行 + 关闭/复制 JSON。
+// 从 ui/MainScreen.kt 拆出：实时页的事件详情抽屉 —— 标题 + 类型徽标 + 口径字段行 + 关闭/复制 JSON。
 // 锚点：s02-drawer-page / s02-drawer-notification。遮罩由 BottomSheet 的窗口级全屏浮层承担。
 
 import androidx.compose.foundation.layout.Arrangement

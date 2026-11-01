@@ -60,7 +60,7 @@ class WhitelistViewModel : ViewModel() {
     private var filterJob: Job? = null
 
     /**
-     * 搜索框输入（契约 s11-search 输入行）：即时回显 + 停手 300ms 后过滤。
+     * 搜索框输入（锚点 s11-search 输入行）：即时回显 + 停手 300ms 后过滤。
      *
      * 防抖期间列表保持上一次结果、不出 loading；关键词超 [SEARCH_MAX_CHARS] 截断不报错。
      */
@@ -75,7 +75,7 @@ class WhitelistViewModel : ViewModel() {
         }
     }
 
-    /** 立即过滤（chip 快捷筛选 / 重置 / 清空搜索：契约要求点下去同帧生效，不等防抖）。 */
+    /** 立即过滤（chip 快捷筛选 / 重置 / 清空搜索：交互口径要求点下去同帧生效，不等防抖）。 */
     fun applySearchNow(query: String) {
         filterJob?.cancel()
         _searchQuery.value = query.take(SEARCH_MAX_CHARS)
@@ -169,10 +169,10 @@ class WhitelistViewModel : ViewModel() {
     }
 
     private companion object {
-        /** 搜索防抖窗口（契约 s11-search 输入行：停手 300ms 后过滤）。 */
+        /** 搜索防抖窗口（锚点 s11-search 输入行：停手 300ms 后过滤）。 */
         const val SEARCH_DEBOUNCE_MS = 300L
 
-        /** 关键词上限（契约 s11-search 输入行边界：超 60 字符截断不报错）。 */
+        /** 关键词上限（锚点 s11-search 输入行边界：超 60 字符截断不报错）。 */
         const val SEARCH_MAX_CHARS = 60
     }
 }
@@ -180,7 +180,7 @@ class WhitelistViewModel : ViewModel() {
 /**
  * 系统「使用情况访问」设置页的 action。
  *
- * 契约 s11-st-empty：点「去授权」必须**真跳转**系统「使用情况访问」设置页（只弹 toast 不跳转 = 假跳转）。
+ * 锚点 s11-st-empty：点「去授权」必须**真跳转**系统「使用情况访问」设置页（只弹 toast 不跳转 = 假跳转）。
  * 常量放在 ViewModel 文件里而不是 WhitelistScreen.kt：后者是纯 Composable 文件，不会被 JVM 单测加载
  * （见 app/build.gradle.kts 的覆盖率排除清单），可单测的普通声明不放进去。
  */
@@ -191,7 +191,7 @@ internal val USAGE_ACCESS_SETTINGS_ACTION: String =
 internal enum class WhitelistFocusDecision { REQUEST, WAIT, DROP }
 
 /**
- * 空态「去授权」从系统设置返回后的焦点决策（契约 s11-st-empty · 返回本页时焦点回「去授权」）。
+ * 空态「去授权」从系统设置返回后的焦点决策（锚点 s11-st-empty · 返回本页时焦点回「去授权」）。
  *
  * 返回后会重扫一次：扫描中（LOADING）等待，仍落在空态才请求焦点；扫描出结果、空态不再呈现时
  * 作废信号，避免在别的状态抢焦点。

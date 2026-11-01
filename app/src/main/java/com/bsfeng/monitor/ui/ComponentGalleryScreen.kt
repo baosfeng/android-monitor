@@ -114,7 +114,7 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var showDialog by remember { mutableStateOf(false) }
     var showSheet by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
-    // 契约 screen-s12「状态切换后滚动位置回到该状态块顶部」：记五态区的纵向位置，切状态即滚过去。
+    // 锚点 screen-s12「状态切换后滚动位置回到该状态块顶部」：记五态区的纵向位置，切状态即滚过去。
     var statesTop by remember { mutableIntStateOf(0) }
     LaunchedEffect(state) {
         if (statesTop > 0) scroll.animateScrollTo(statesTop)
@@ -122,7 +122,7 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     Box(modifier.fillMaxSize().pageBackdrop().testTag("screen-s12")) {
         Column(Modifier.fillMaxSize()) {
-            // 页头只作说明：无按下态、无涟漪、不进 Tab 顺序（契约 s12-head）
+            // 页头只作说明：无按下态、无涟漪、不进 Tab 顺序（锚点 s12-head）
             ScreenHead(
                 title = "组件与状态",
                 meta = "全量组件陈列 · 五种状态 · 弹窗 / 抽屉 / Toast",

@@ -3,7 +3,7 @@ package com.bsfeng.monitor.finance.ui
 // 来源：原 finance/ui/AddTransactionScreen.kt；职责：s14a「记一笔」屏幕装配（表单状态 / 抽屉互斥 / 保存与删除）。
 // 三张卡见 AddTransactionSections，表单行见 AddTransactionFormRows，按钮见 AddTransactionButtons，
 // 顶栏与抽屉分发见 AddTransactionChrome，交易组装见 AddTransactionDraft，取值规则见 AddTransactionFormState。
-// 契约锚点：screen-s14a / s14a-content / s14a-actions / s05-loading / s05-empty / s05-empty-import /
+// 锚点：screen-s14a / s14a-content / s14a-actions / s05-loading / s05-empty / s05-empty-import /
 // s05-error / s05-retry；行与卡片锚点在 AddTransactionSections，抽屉锚点在 AddTransactionChrome 与 Record*Sheet。
 
 import androidx.compose.foundation.layout.Box
@@ -97,16 +97,16 @@ fun AddTransactionScreen(
     var openSheet by remember { mutableStateOf(RecordSheet.NONE) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     // 提交态：保存 / 删除后到路由返回之间（MainTabContent 的 FINANCE_BACK_DELAY_MS = 260ms）
-    // 表单仍在组合、按钮仍可点 —— 没有这个闸门，双击就写两笔（契约 s14a-save「连续点只写一次」）。
+    // 表单仍在组合、按钮仍可点 —— 没有这个闸门，双击就写两笔（锚点 s14a-save「连续点只写一次」）。
     // rememberSaveable 让旋转期间也不放行第二笔。
     var submitting by rememberSaveable(editingId) { mutableStateOf(false) }
 
-    // 抽屉关闭后焦点回行（契约「移除/关闭后」列）：四个可开抽屉的行各一个落点
+    // 抽屉关闭后焦点回行（口径「移除/关闭后」列）：四个可开抽屉的行各一个落点
     val catFocus = remember { FocusRequester() }
     val acctFocus = remember { FocusRequester() }
     val timeFocus = remember { FocusRequester() }
     val receiptFocus = remember { FocusRequester() }
-    // 删除确认框关闭后的回位落点（契约 s05-del-dialog / s05-del-cancel · 移除后）
+    // 删除确认框关闭后的回位落点（锚点 s05-del-dialog / s05-del-cancel · 移除后）
     val deleteFocus = remember { FocusRequester() }
     var pendingFocus by remember { mutableStateOf<FocusRequester?>(null) }
     LaunchedEffect(pendingFocus, openSheet) {
@@ -118,7 +118,7 @@ fun AddTransactionScreen(
         }
     }
 
-    // 契约 s05-del-dialog / s05-del-cancel · 移除后：确认框关闭后焦点回「删除这笔交易」按钮。
+    // 锚点 s05-del-dialog / s05-del-cancel · 移除后：确认框关闭后焦点回「删除这笔交易」按钮。
     // 该弹窗是本窗口内的浮层（Dialogs.kt → WindowOverlay.kt 的 if (!visible) return），没有系统级
     // 焦点回退，只能显式请求；等一帧让浮层先卸载，再请求按钮（节点一直在组合里，请求失败也不崩）。
     // ⚠️ 顺序固定「等帧 → 请求 → 复位 key」，复位绝不能挪到 withFrameNanos 之前 ——
@@ -134,7 +134,7 @@ fun AddTransactionScreen(
             reset = { restoreDeleteFocus = false },
         )
     }
-    // 契约 s05-retry · 移除后：重试成功后焦点回分类行。错态卡这一帧还在组合里，
+    // 锚点 s05-retry · 移除后：重试成功后焦点回分类行。错态卡这一帧还在组合里，
     // 表单要等 loadFailed 复位后才重新挂载 —— 等几帧再请求，仍失败就放弃（不崩、不改状态）。
     // 同一条安全执行序（请求在复位之前，见 restoreFocusAfterFrames）。
     var restoreCatFocus by remember { mutableStateOf(false) }
@@ -221,10 +221,10 @@ fun AddTransactionScreen(
     // 错态下图内表单与保存都不可用：只留错态卡 + 唯一出口「重新加载」
     val showError = state == FiveState.ERROR
 
-    // 根锚点：s14a 契约 screen-s14a（页根容器 / 表单滚动区）
+    // 根锚点：s14a 锚点 screen-s14a（页根容器 / 表单滚动区）
     Box(Modifier.fillMaxSize().pageBackdrop().testTag("screen-s14a")) {
         // imePadding：项目已 edge-to-edge（窗口不再自动 resize），键盘弹起时整页上抬，
-        // 说明输入行与吸底「保存」都不被遮挡（契约 screen-s14a 边界）；滚动区变矮但仍可滚到底。
+        // 说明输入行与吸底「保存」都不被遮挡（锚点 screen-s14a 边界）；滚动区变矮但仍可滚到底。
         Column(Modifier.fillMaxSize().imePadding()) {
             // 顶栏：关闭 / 标题（s14a 顶栏不承载保存 —— 它吸在底部，永远可点）
             AddTransactionTopBar(
@@ -236,7 +236,7 @@ fun AddTransactionScreen(
             when {
                 state == FiveState.LOADING -> LoadingBlock(Modifier.weight(1f))
                 showError -> ErrorBlock(onRetry = {
-                    // 契约 s05-retry：立即重查，**按真实结果**决定走向 ——
+                    // 锚点 s05-retry：立即重查，**按真实结果**决定走向 ——
                     // 成功才清演示态 + 焦点回分类行；再次失败时 loadFailed 保持置位
                     // （错态卡原地保留），不弹成功提示、也不把用户留在出不去的错态里。
                     vm?.loadCurrentMonth { result ->
@@ -418,7 +418,7 @@ internal fun addTransactionState(
  *
  * 放行后调用方必须**同步**把 submitting 置 true；保存成功要等 260ms 才返回列表
  * （MainTabContent 的 FINANCE_BACK_DELAY_MS），这个窗口里的每次补点都读同一个状态，
- * 因此第二次起一律 false —— 连点 N 次只写 1 笔（契约 s14a-save）。
+ * 因此第二次起一律 false —— 连点 N 次只写 1 笔（锚点 s14a-save）。
  */
 internal fun acceptSubmit(canSubmit: Boolean, submitting: Boolean): Boolean = canSubmit && !submitting
 
@@ -460,7 +460,7 @@ internal suspend fun restoreFocusAfterFrames(
     return focused
 }
 
-/** 加载骨架（契约 s05-loading）：只有「加载中且分类与账户两表皆空」才出，已有数据时换月不闪骨架。 */
+/** 加载骨架（锚点 s05-loading）：只有「加载中且分类与账户两表皆空」才出，已有数据时换月不闪骨架。 */
 @Composable
 private fun LoadingBlock(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
@@ -472,7 +472,7 @@ private fun LoadingBlock(modifier: Modifier = Modifier) {
     )
 }
 
-/** 错态卡（契约 s05-error / s05-retry）：标题、说明逐字照抄原型；唯一出口「重新加载」。 */
+/** 错态卡（锚点 s05-error / s05-retry）：标题、说明逐字照抄原型；唯一出口「重新加载」。 */
 @Composable
 private fun ErrorBlock(onRetry: () -> Unit, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current

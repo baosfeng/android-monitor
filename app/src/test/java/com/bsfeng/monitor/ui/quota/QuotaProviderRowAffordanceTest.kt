@@ -2,10 +2,10 @@ package com.bsfeng.monitor.ui.quota
 
 // P1-2 回归：额度设置页「未接入 provider 的假输入框」。
 //
-// 曾误判 opencode-go / opendesign 是假能力、按契约 s19:18/19 应改成不可展开。
+// 曾误判 opencode-go / opendesign 是假能力、按锚点 s19:18/19 应改成不可展开。
 // 核对结果是**误报**：两家在源码里都是真实 provider（ServiceContainer 注册 + 各自
 // fetchItems 实现 + OpencodeGoQuotaProviderTest / OpenDesignQuotaProviderTest），
-// 且 docs/交互设计/_口径/契约矛盾清单.md:44 已裁决「以源码为准，行可展开」。
+// 且 历史裁决记录 已裁决「以源码为准，行可展开」。
 // 所以这里**不**按 id 硬编码禁用（那会把能用的功能改成死功能）。
 //
 // 本用例锁住的是真正该有的东西：一条**数据驱动**的禁用态机制 —— 未接入的行
@@ -27,7 +27,7 @@ class QuotaProviderRowAffordanceTest {
         val a = providerRowAffordance(available = true)
 
         assertTrue("已接入行必须可点", a.interactive)
-        assertTrue("已接入行要有 chevron（契约 s19-provider-ollama 展开入口）", a.showChevron)
+        assertTrue("已接入行要有 chevron（锚点 s19-provider-ollama 展开入口）", a.showChevron)
         assertEquals(1f, a.alpha, 0.0f)
         assertNull("已接入行不显示「未接入」角标", a.unavailableBadge)
         assertFalse(a.useUnavailableHint)
@@ -37,14 +37,14 @@ class QuotaProviderRowAffordanceTest {
     fun `未接入行不可展开不可填凭据`() {
         val a = providerRowAffordance(available = false)
 
-        assertFalse("未接入行点击必须无反应（契约 s19:18/19）", a.interactive)
+        assertFalse("未接入行点击必须无反应（s19 口径 18/19 行）", a.interactive)
         assertFalse("未接入行无 chevron", a.showChevron)
-        assertEquals("契约原文 opacity 0.85", 0.85f, a.alpha, 0.0f)
+        assertEquals("交互口径原文 opacity 0.85", 0.85f, a.alpha, 0.0f)
         assertTrue("未接入行要给「为什么填不了」的副行说明", a.useUnavailableHint)
     }
 
     @Test
-    fun `未接入行按契约给行尾角标`() {
+    fun `未接入行按交互口径给行尾角标`() {
         assertEquals("下次接入", providerRowAffordance(available = false).unavailableBadge)
         assertEquals(
             "opendesign 档的口径：手动录入",
@@ -54,7 +54,7 @@ class QuotaProviderRowAffordanceTest {
     }
 
     @Test
-    fun `未接入副行用契约原文而不是继续显示未配置`() {
+    fun `未接入副行用交互口径原文而不是继续显示未配置`() {
         assertEquals("无公开接口 · 手动录入", UNAVAILABLE_HINT)
     }
 

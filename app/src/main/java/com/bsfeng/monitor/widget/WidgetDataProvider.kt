@@ -198,7 +198,7 @@ object WidgetDataProvider {
      * 累计里「已复核确认」的跳过条数。
      *
      * 为什么绕开 [RecordStore]：它只暴露 type/action 的计数入口，这条统计要下推到 detail 的
-     * JSON 片段上；放在这里是不想改动 RecordStore 的公开契约（App 内 UI 也共用它）。
+     * JSON 片段上；放在这里是不想改动 RecordStore 的公开口径（App 内 UI 也共用它）。
      * 代价是错误兜底得由调用方负责 —— 所以在 [ads] 的 [runCatching] 里被调用。
      *
      * 性能：`detail LIKE` 走不了索引（命中 timestamp 区间后逐行比对 detail），但只 COUNT、

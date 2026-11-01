@@ -3,7 +3,7 @@ package com.bsfeng.monitor.transfer.service
 // C-17「重新发送」与 C-08「重试失败项」的共用能力：把一条终态发送任务按原文件、原目标
 // 重新建一次会话上传（旧记录保留在「最近完成」）。
 //
-// 契约依据（docs/交互设计/s22-局域网互传-交互契约.md:25）：
+// 口径依据（原交互口径）：
 // - 前置：任务终态且**发送方向**的源文件仍可读；
 // - 源文件被删除或无读权限 → 本项置灰并说明「源文件已不在本机」；
 // - 目标设备离线 → 置灰「对方不在线」；
@@ -28,7 +28,7 @@ internal sealed class ResendAvailability {
     /** 本项**不渲染**（接收方向 / 未到终态）。 */
     object Hidden : ResendAvailability()
 
-    /** 渲染但置灰，[reason] 是给用户看的原因（契约逐字口径）。 */
+    /** 渲染但置灰，[reason] 是给用户看的原因（逐字口径）。 */
     data class Blocked(val reason: String) : ResendAvailability()
 
     /** 渲染且可点。 */
@@ -38,10 +38,10 @@ internal sealed class ResendAvailability {
 /** 是否「可点重发」（Hidden / Blocked 都不可点；Blocked 仍要渲染成置灰态）。 */
 internal fun isResendReady(state: ResendAvailability): Boolean = state is ResendAvailability.Ready
 
-/** 源文件已不在本机（无读权限 / 已删除）。契约 s22 C-17 边界逐字。 */
+/** 源文件已不在本机（无读权限 / 已删除）。锚点 s22 C-17 边界逐字。 */
 internal const val RESEND_BLOCK_SOURCE_GONE: String = "源文件已不在本机"
 
-/** 目标设备不在线。契约 s22 C-17 边界逐字。 */
+/** 目标设备不在线。锚点 s22 C-17 边界逐字。 */
 internal const val RESEND_BLOCK_PEER_OFFLINE: String = "对方不在线"
 
 /**
@@ -96,7 +96,7 @@ internal class ResendFailedException(message: String) : Exception(message)
  * @param task 目标任务；非发送方向或未到终态时回失败（UI 本不该显示入口，防连点 / 越界调用）。
  * @param onResult 真实结果：
  *   - 成功 = 新批次已建（新卡片自行出现在「进行中」顶部，进度由既有链路回写）；
- *   - 失败 = [ResendFailedException]，message 是契约逐字口径，UI 直接 toast。
+ *   - 失败 = [ResendFailedException]，message 是逐字口径，UI 直接 toast。
  */
 internal fun TransferEngine.resendTaskImpl(task: TransferTask, onResult: (Result<Unit>) -> Unit) {
     scope.launch {

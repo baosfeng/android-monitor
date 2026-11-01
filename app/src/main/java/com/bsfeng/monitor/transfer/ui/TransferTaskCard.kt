@@ -3,7 +3,7 @@ package com.bsfeng.monitor.transfer.ui
 // 任务卡片本体（C-01 取消 / C-04 更多 / C-06 撤销后的高亮）。
 //
 // 进行中卡片：文件名 + 「发送/接收 · 状态 · 已传/总量 · 速度」+ 进度条 + 右侧「取消」（C-01）。
-// 终态卡片：文件名 + 完成副行（契约 §文案口径）+ 状态图标 + 右侧「更多」（C-04，常驻可见）。
+// 终态卡片：文件名 + 完成副行（交互口径 §文案口径）+ 状态图标 + 右侧「更多」（C-04，常驻可见）。
 // 破坏性入口一律「先面板后动作」：卡上按钮只负责开面板（C-01 → C-02 / C-04 → 动作面板）。
 
 import androidx.compose.animation.animateColorAsState
@@ -59,7 +59,7 @@ import com.bsfeng.monitor.ui.theme.accentFade
 import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.delay
 
-/** 高亮时长（契约 C-02 / C-06：移到「最近完成」后高亮 1.2s）。 */
+/** 高亮时长（锚点 C-02 / C-06：移到「最近完成」后高亮 1.2s）。 */
 internal const val HIGHLIGHT_MS: Long = 1_200L
 
 @Composable

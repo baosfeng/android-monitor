@@ -47,14 +47,14 @@ internal fun SkipRuleSourceCard(
     onRequestUpdate: () -> Unit,
     onAddSubscription: () -> Unit,
     onRequestSnapshot: () -> Unit,
-    // 焦点回位落点（契约 s10-st-empty / s10-confirm / s10-st-error）；null = 本卡不接管焦点。
+    // 焦点回位落点（锚点 s10-st-empty / s10-confirm / s10-st-error）；null = 本卡不接管焦点。
     // URL 输入框与「更新订阅」按钮都由本卡渲染，回位请求必须由屏幕层持有 requester 再传进来。
     urlFocusRequester: FocusRequester? = null,
     updateFocusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
     // 卡片容器锚点 s10-source：卡本身不可按压（原型 .src-card 无 :active），
-    // 卡内「更新订阅 / 新增订阅 / 页面快照」三颗按钮共用本锚点（契约 24 行 / 14 锚点）。
+    // 卡内「更新订阅 / 新增订阅 / 页面快照」三颗按钮共用本锚点（14 个锚点）。
     GlassCard(Modifier.testTag("s10-source")) {
         GroupLabel("订阅源 URL", Modifier.padding(start = 0.dp))
         AppField(
@@ -96,7 +96,7 @@ internal fun SkipRuleSourceCard(
                 variant = AppButtonVariant.Ghost,
                 enabled = !updating,
             )
-            // 页面快照：AppButton 内部已发一次触感，这里不再叠加（契约「同一操作不重复震动」）
+            // 页面快照：AppButton 内部已发一次触感，这里不再叠加（口径「同一操作不重复震动」）
             AppButton(
                 "页面快照",
                 onClick = onRequestSnapshot,

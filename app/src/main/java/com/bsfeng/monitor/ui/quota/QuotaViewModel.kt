@@ -106,7 +106,7 @@ class QuotaViewModel(
      * 正在保存凭据 / 查询的 provider（设置页据此把「保存并查询」锁一次）。
      *
      * 同一时刻只有一行展开，所以用单值而不是集合：在途期间不再接受任何一行的保存请求
-     * （契约 s19 · 连点只存一次）。
+     * （锚点 s19 · 连点只存一次）。
      */
     private val _savingProviderId = MutableStateFlow<String?>(null)
     val savingProviderId: StateFlow<String?> = _savingProviderId.asStateFlow()
@@ -162,7 +162,7 @@ class QuotaViewModel(
 
     /** 修改某个 provider 的刷新间隔（分钟）；同时刷新 repository 的节流基准。 */
     fun onRefreshIntervalChange(providerId: String, minutes: Int) {
-        // 点已选中的 chip 不重复落盘（契约 s19 · 点已选中的 chip 不重复落盘也不发请求）
+        // 点已选中的 chip 不重复落盘（锚点 s19 · 点已选中的 chip 不重复落盘也不发请求）
         if (settings.refreshIntervalMinutes(providerId) == minutes) return
         settings.setRefreshIntervalMinutes(providerId, minutes)
         repository.intervalSeconds = { id -> settings.refreshIntervalMinutes(id) * 60L }

@@ -112,8 +112,7 @@ private const val RETRY_SKELETON_MS = 800L
  * s03 广告跳过记录。
  *
  * 结构：固定页头 → 内容区（统计卡 → 近 7 天趋势 → 方式筛选 chip → 倒序记录列表）→
- * 记录详情底部抽屉。契约锚点逐个落在对应节点 `testTag` 上（见
- * docs/交互设计/s03-广告跳过记录-交互契约.md）。
+ * 记录详情底部抽屉。锚点逐个落在对应节点 `testTag` 上（见锚点账本）。
  */
 @Composable
 fun AdScreen(
@@ -341,7 +340,7 @@ fun AdScreen(
                         record = record,
                         onClose = { closeSheet() },
                         onCopySelector = {
-                            // 契约：选择器为空时不写剪贴板。
+                            // 口径：选择器为空时不写剪贴板。
                             if (record.selector.isNotBlank()) {
                                 clipboard.setText(AnnotatedString(record.selector))
                             }

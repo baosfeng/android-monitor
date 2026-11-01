@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 键盘焦点环线宽回归（契约 s01：2dp；颜色对比 ≥3:1 由 t.accent 保证，触屏不画环由 InputMode 判定）。 */
+/** 键盘焦点环线宽回归（锚点 s01：2dp；颜色对比 ≥3:1 由 t.accent 保证，触屏不画环由 InputMode 判定）。 */
 class FocusRingTest {
 
     @Test

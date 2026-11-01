@@ -41,7 +41,7 @@ class TransferResendAvailabilityTest {
 
     @Test
     fun `接收方向不显示重发入口`() {
-        // 契约 s22 C-17 边界逐字：「接收方向不显示本项」
+        // 锚点 s22 C-17 边界逐字：「接收方向不显示本项」
         assertEquals(
             ResendAvailability.Hidden,
             resendAvailabilityOf(

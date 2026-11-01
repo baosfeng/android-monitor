@@ -234,7 +234,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
      * 新增一笔交易。
      *
      * 写库异常此前会直接抛穿 viewModelScope（协程里的未捕获异常会崩进程）：用户刚填的
-     * 金额 / 分类 / 说明全丢，而且零提示。契约 s14a-save 的失败路径在实现里根本不存在。
+     * 金额 / 分类 / 说明全丢，而且零提示。锚点 s14a-save 的失败路径在实现里根本不存在。
      * 现在失败落到 [actionNotice]（1.6s toast），表单的输入随组合卸载由路由保留，
      * 进程不崩、用户知道「没存上、可以再点一次」。
      *
@@ -245,8 +245,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val result = runFinanceWrite { manager.addTransaction(tx) }
             result.onSuccess { id ->
-                // 契约 s14a-save / s05-save：手动保存的新行也要「就地出现并高亮 1.6s」。
-                // 与自动记账共用同一条「刚落库」一次性信号（lead 裁定：契约优先于旧 KDoc），
+                // 锚点 s14a-save / s05-save：手动保存的新行也要「就地出现并高亮 1.6s」。
+                // 与自动记账共用同一条「刚落库」一次性信号（lead 裁定：口径优先于旧 KDoc），
                 // 列表侧消费一次即清；编辑 / 切 Tab / 回前台重载都不点亮。
                 FinanceInsertSignal.mark(id)
                 _actionNotice.value = FinanceActionNotice(savedNoticeMessage(tx), deleted = false)

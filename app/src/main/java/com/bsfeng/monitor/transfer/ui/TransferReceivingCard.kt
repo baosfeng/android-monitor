@@ -2,7 +2,7 @@ package com.bsfeng.monitor.transfer.ui
 
 // 接收侧卡片（C-10）：端口 / 可被发现 / 免配对窗口 / 自动关闭 / 暂停接收。
 //
-// C-10 的口径（契约）：
+// C-10 的口径（口径）：
 //  - 一个控件承载开 / 关：关闭态是主按钮「开启接收」，开启态是卡头右侧的「关闭」；
 //  - 点击后按钮即时转圈（在途禁用防连点），状态由 engine 的 running 流落定；
 //  - 关闭时若有传输中任务，由页面先弹二次确认（说明会中断），本卡片只管发动作。
@@ -259,13 +259,13 @@ internal fun statusLabel(task: TransferTask): String = when (task.status) {
 /** 抖动幅度（协议 §7：±4px）。 */
 internal const val SHAKE_PX = 4f
 
-/** 滑到该比例时红底达到完全不透明（契约 C-07：越过 20% 露底，越过 40% 松手删除）。 */
+/** 滑到该比例时红底达到完全不透明（锚点 C-07：越过 20% 露底，越过 40% 松手删除）。 */
 internal const val REVEAL_FULL_PROGRESS = 0.4f
 
-/** 露出红底的下限（契约 C-07：越过 20% 才露）。 */
+/** 露出红底的下限（锚点 C-07：越过 20% 才露）。 */
 internal const val REVEAL_START_PROGRESS = 0.2f
 
-/** 松手删除的阈值（契约 C-07：越过 40%）。 */
+/** 松手删除的阈值（锚点 C-07：越过 40%）。 */
 internal const val DELETE_THRESHOLD_PROGRESS = 0.4f
 
 /** 「最近完成」最多展示条数（更早的记录由删除整理，不做无限增长）。 */

@@ -51,7 +51,7 @@ class RecordCollector(
     private var lastBatteryLevel: Int? = null
 
     /**
-     * 落库前的暂停闸门（契约 s09-monitor「暂停后停止写新事件、实时流不再增长」）。
+     * 落库前的暂停闸门（锚点 s09-monitor「暂停后停止写新事件、实时流不再增长」）。
      *
      * 闸门放在本类而不是 [RecordStore]：定位采样、广播事件、广告跳过、使用时长全部经由
      * [RecordCollector] 进入事件表，一处短路就覆盖全部采集源；放 Store 会把「用户暂停」和

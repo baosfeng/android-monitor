@@ -51,7 +51,7 @@ import com.bsfeng.monitor.ui.theme.fgFade
 /**
  * 开关外层触达尺寸（纯函数，便于单测）：视觉轨道尺寸不动，点击域取 max(视觉, tapMin)。
  *
- * 结果再经 material3 `minimumInteractiveComponentSize()` 托底到 48dp；契约下限是 44×44。
+ * 结果再经 material3 `minimumInteractiveComponentSize()` 托底到 48dp；口径下限是 44×44。
  */
 internal fun switchTouchSize(trackW: Dp, trackH: Dp, tapMin: Dp): Pair<Dp, Dp> =
     trackW.coerceAtLeast(tapMin) to trackH.coerceAtLeast(tapMin)
@@ -87,7 +87,7 @@ fun AppSwitch(
         animationSpec = tween(t.durState),
         label = "swKnob",
     )
-    // 触达口径（契约 §二「可点元素点击区 ≥ 44×44dp」）：视觉轨道保持 52×32 不变，
+    // 触达口径（交互口径 §二「可点元素点击区 ≥ 44×44dp」）：视觉轨道保持 52×32 不变，
     // 点击域由外层撑开——minimumInteractiveComponentSize 兜住 Material 的 48dp 下限，
     // 外层 size 取 max(视觉, tapMin)；视觉轨道另画在内层，尺寸与轨道动画完全不动。
     val (touchW, touchH) = switchTouchSize(t.switchTrackW, t.switchTrackH, t.tapMin)

@@ -40,7 +40,7 @@ import com.bsfeng.monitor.finance.ui.FinanceViewModel
 /**
  * 保存 / 删除成功后的返回延迟（毫秒）。
  *
- * s14a 契约：保存 / 删除成功 260ms 后返回列表 —— 让按下（0.97 / 120ms）与 SUCCESS / REJECT
+ * s14a 口径：保存 / 删除成功 260ms 后返回列表 —— 让按下（0.97 / 120ms）与 SUCCESS / REJECT
  * 触感先落地，表单不当场卸载。失败 / 校验不通过不会走到这里（见各 onSave 回调上方的注释）。
  */
 private const val FINANCE_BACK_DELAY_MS = 260L
@@ -76,7 +76,7 @@ internal fun MainTabContent(
     onOpenSettingsSubPage: (SettingsSubPage) -> Unit,
     onCloseSettingsSubPage: () -> Unit,
 ) {
-    // 删除后返回列表的一次性焦点复位请求（契约 s05-del-confirm · 移除后）。
+    // 删除后返回列表的一次性焦点复位请求（锚点 s05-del-confirm · 移除后）。
     // 删除发生在「编辑」分支、消费点在「主页」分支，两者是 when 的不同分支 ——
     // 所以状态必须提在本函数体上，否则跨分支就丢了。
     var rowFocusAfterDelete by remember { mutableStateOf<RowFocusAfterDelete?>(null) }
@@ -119,7 +119,7 @@ internal fun MainTabContent(
                     entryKey = financeEntryKey,
                     // 从主页进表单：返回落点 = 主页
                     onAddClick = { onOpenAddTransaction(fvm.currentMonth.value, false) },
-                    // 契约 s05-del-confirm · 移除后：删除返回后把焦点复位到相邻行
+                    // 锚点 s05-del-confirm · 移除后：删除返回后把焦点复位到相邻行
                     focusRowAfterDelete = rowFocusAfterDelete,
                     onRowFocusConsumed = { rowFocusAfterDelete = null },
                     onImportClick = {
@@ -138,12 +138,12 @@ internal fun MainTabContent(
                     val backScope = rememberCoroutineScope()
                     // s05-empty-import：导入页叠在表单**之上**，不替换它 ——
                     // 金额 / 说明 / 时间都是表单自己的 remember 局部态，一旦离开组合就整份丢失，
-                    // 而契约要求「返回后仍可保存」。叠放（同一 Box 的兄弟节点）保住表单实例，
+                    // 而交互口径要求「返回后仍可保存」。叠放（同一 Box 的兄弟节点）保住表单实例，
                     // 返回时表单原样还在；导入完成后重新读分类与账户即可。
                     var importOverlay by remember(route) { mutableStateOf(false) }
                     fun closeImportOverlay() {
                         importOverlay = false
-                        // 契约 s05-empty-import · 移除后：返回后重新读取分类与账户
+                        // 锚点 s05-empty-import · 移除后：返回后重新读取分类与账户
                         fvm.loadCurrentMonth()
                     }
                     // 叠层打开时返回键先收叠层：MainContent 的 BackHandler 会把整条记账路由回来源页，
@@ -161,7 +161,7 @@ internal fun MainTabContent(
                                 fvm.addTransaction(tx)
                                 backScope.launch {
                                     delay(FINANCE_BACK_DELAY_MS)
-                                    // 契约 s14a-save「成功后页面返回来处」/ s07-empty-add「保存成功后空态卡
+                                    // 锚点 s14a-save「成功后页面返回来处」/ s07-empty-add「保存成功后空态卡
                                     // 立即移除、KPI 与图表按新数据重绘」：保存与取消走**同一个**返回落点
                                     // （按登记来源回统计页或记账主页）。硬编码主页会让「统计空态 → 新增 → 保存」
                                     // 掉回列表页，那一屏永远看不到（N2 只修了取消这一半）。
@@ -199,7 +199,7 @@ internal fun MainTabContent(
                             }
                         },
                         onDelete = { tx ->
-                            // 契约 s05-del-confirm · 移除后：必须用**删除前**的明细顺序算相邻行
+                            // 锚点 s05-del-confirm · 移除后：必须用**删除前**的明细顺序算相邻行
                             // （下一行；末行则上一行），返回列表后由 FinanceMainScreen 把焦点复位到它。
                             val order = fvm.monthlyTransactions.value.map { it.id }
                             rowFocusAfterDelete = RowFocusAfterDelete(
@@ -224,7 +224,7 @@ internal fun MainTabContent(
                     // s07-empty-add：空态「新增一笔」跳到新增表单，浏览月按当前统计月带过去；
                     // 登记来源 = 统计页，表单取消 / 返回键都回到这张空态卡（不是记账主页）
                     onAddClick = { onOpenAddTransaction(fvm.currentMonth.value, true) },
-                    // 从表单返回时恢复空态 CTA 的焦点（契约 s07-empty-add · 移除后）
+                    // 从表单返回时恢复空态 CTA 的焦点（锚点 s07-empty-add · 移除后）
                     returnFocusTick = statsReturnTick,
                     onBack = onBackToFinanceMain,
                     modifier = Modifier.fillMaxSize()

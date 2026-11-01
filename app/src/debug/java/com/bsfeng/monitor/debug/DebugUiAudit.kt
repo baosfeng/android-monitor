@@ -206,7 +206,7 @@ data class UiAuditReport(
 
     val ok: Boolean get() = gaps.isEmpty()
 
-    /** 落盘形态：字段是外部脚本的契约，改名等于改工具链。 */
+    /** 落盘形态：字段是外部脚本的口径，改名等于改工具链。 */
     fun toJson(generatedAt: Long): JSONObject = JSONObject()
         .put("pkg", pkg)
         .put("generatedAt", generatedAt)
