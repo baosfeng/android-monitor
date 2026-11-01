@@ -69,49 +69,45 @@ class TripAggregator(
         points: List<LocationPoint>,
         usage: List<UsageSlice>,
     ): DayTimeline {
-        val runs = buildRuns(points)
+        // 先剔单点漂移再聚类：兜底定位的假点会被判 >80m 而断段，
+        // 断出的单点 Run 又不满足 Run.isStay()，整段被落成 Gap——
+        // 同一地点的连续停留就这样被切成多段、中间误标未记录。
+        val runs = buildRuns(dropOutliers(points))
         val stayRunIndexes = runs.indices.filter { runs[it].isStay() }
         if (stayRunIndexes.isEmpty()) {
             // 有定位点但没形成停留：全天只可能是「未记录」，不去推断移动
-            return DayTimeline(dayStart, listOf(Gap(dayStart, dayEnd)), Basis.GPS, coveragePct = 0)
+            return DayTimeline(
+                dayStart,
+                listOf(Gap(dayStart, dayEnd, gapReason(points, dayStart, dayEnd))),
+                Basis.GPS,
+                coveragePct = 0,
+            )
         }
 
-        val segments = ArrayList<DaySegment>()
-        var activeMs = 0L
-        var cursor = dayStart
         // 同一地点只发一个 Place：id 用坐标量化串而不是序号，
         // 否则「家 6h32」「家 2h36」会变成两个地点，主地点时长只取最长单段，
         // 「在外」随之把另一段算成在外，两格相加超过一天。
         val registry = PlaceRegistry(TripAggregatorRules.GENERIC_PLACE_LABEL)
-
-        for ((order, runIndex) in stayRunIndexes.withIndex()) {
+        val spans = ArrayList<StaySpan>(stayRunIndexes.size)
+        val moves = ArrayList<Move?>(stayRunIndexes.size)
+        for (order in stayRunIndexes.indices) {
+            val runIndex = stayRunIndexes[order]
             val run = runs[runIndex]
-            val stayStart = run.start.coerceIn(dayStart, dayEnd)
-            val stayEnd = run.end.coerceIn(dayStart, dayEnd)
-            if (stayEnd > stayStart) {
-                if (stayStart > cursor) segments.add(Gap(cursor, stayStart))
-                val place = registry.geo(run.centroidLat, run.centroidLng, run.labelOrNull())
-                segments.add(
-                    Stay(
-                        start = stayStart,
-                        end = stayEnd,
-                        place = place,
-                        topApps = topApps(usage, stayStart, stayEnd),
-                    ),
-                )
-                activeMs += stayEnd - stayStart
-                cursor = stayEnd
-            }
-
+            spans.add(
+                StaySpan(
+                    start = run.start.coerceIn(dayStart, dayEnd),
+                    end = run.end.coerceIn(dayStart, dayEnd),
+                    place = registry.geo(run.centroidLat, run.centroidLng, run.labelOrNull()),
+                ),
+            )
             val nextIndex = stayRunIndexes.getOrNull(order + 1) ?: continue
-            val moveStart = cursor
-            val moveEnd = runs[nextIndex].start.coerceIn(dayStart, dayEnd)
-            if (moveEnd > moveStart) {
-                val between = ArrayList<LocationPoint>()
-                for (i in runIndex + 1 until nextIndex) between.addAll(runs[i].samples)
-                val move = buildMove(
-                    start = moveStart,
-                    end = moveEnd,
+            // 中间 run 的采样：两段停留之间的过渡点（含被判不出移动的那些）
+            val between = ArrayList<LocationPoint>()
+            for (i in runIndex + 1 until nextIndex) between.addAll(runs[i].samples)
+            moves.add(
+                buildMove(
+                    start = run.end.coerceIn(dayStart, dayEnd),
+                    end = runs[nextIndex].start.coerceIn(dayStart, dayEnd),
                     from = registry.geo(run.centroidLat, run.centroidLng, run.labelOrNull()),
                     to = registry.geo(
                         runs[nextIndex].centroidLat,
@@ -119,16 +115,40 @@ class TripAggregator(
                         runs[nextIndex].labelOrNull(),
                     ),
                     track = between,
-                )
-                if (move != null) {
-                    segments.add(move)
-                    activeMs += move.durationMs
-                    cursor = moveEnd
+                ),
+            )
+        }
+
+        val segments = ArrayList<DaySegment>()
+        var activeMs = 0L
+        var cursor = dayStart
+        for (block in buildStayBlocks(spans, moves)) {
+            val stayStart = block.start.coerceIn(dayStart, dayEnd)
+            val stayEnd = block.end.coerceIn(dayStart, dayEnd)
+            if (stayEnd > stayStart) {
+                if (stayStart > cursor) {
+                    segments.add(Gap(cursor, stayStart, gapReason(points, cursor, stayStart)))
                 }
+                segments.add(
+                    Stay(
+                        start = stayStart,
+                        end = stayEnd,
+                        place = block.place,
+                        topApps = topApps(usage, stayStart, stayEnd),
+                    ),
+                )
+                activeMs += stayEnd - stayStart
+                cursor = stayEnd
+            }
+            val move = block.followingMove
+            if (move != null) {
+                segments.add(move)
+                activeMs += move.durationMs
+                cursor = maxOf(cursor, move.end)
             }
         }
 
-        if (cursor < dayEnd) segments.add(Gap(cursor, dayEnd))
+        if (cursor < dayEnd) segments.add(Gap(cursor, dayEnd, gapReason(points, cursor, dayEnd)))
         return DayTimeline(dayStart, segments, Basis.GPS, coveragePct(activeMs, windowMs))
     }
 

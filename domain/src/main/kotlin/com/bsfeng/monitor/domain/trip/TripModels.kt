@@ -69,10 +69,21 @@ data class Move(
     val distanceMeters: Double,
 ) : DaySegment
 
+/**
+ * 未记录的成因。区分它才能回答「是没采集，还是采集了判不出」：
+ * - [INTERRUPTED]：区间内**一条定位采样都没有**（采集中断 / 窗口外的空档）；
+ * - [UNRESOLVED]：区间内**有定位采样**，但仍判不出停留或移动（漂移、断档、覆盖不足）。
+ *
+ * DEVICE 基准下没有定位采样，故该路径的 Gap 恒为 [INTERRUPTED]。
+ */
+enum class GapReason { INTERRUPTED, UNRESOLVED }
+
 /** 未记录：采集有中断 / 无法判定。**不推断期间内容**。 */
 data class Gap(
     override val start: Long,
     override val end: Long,
+    /** 默认值必须保留：app 侧存在 Gap(start, end) 位置参数构造点。 */
+    val reason: GapReason = GapReason.INTERRUPTED,
 ) : DaySegment
 
 /** 当天行程时间轴。[coveragePct] = 已判定（停留 + 移动）时长占窗口的百分比，Gap 不计入。 */

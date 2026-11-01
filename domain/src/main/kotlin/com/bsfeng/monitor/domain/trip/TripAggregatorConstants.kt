@@ -14,6 +14,9 @@ internal object TripAggregatorRules {
 
     const val STAY_MIN_MS = 10 * 60_000L
     const val STAY_RADIUS_M = 80.0
+
+    /** 单点漂移剔除：被一个假点夹住的两点，彼此相距不得超过 1.5 倍停留半径（= 120m）。 */
+    const val OUTLIER_BRIDGE_RATIO = 1.5
     const val MOVE_MIN_METERS = 300.0
     const val MOVE_MIN_COVERAGE = 0.6
     const val MAX_SAMPLE_GAP_MS = 60 * 60_000L
