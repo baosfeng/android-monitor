@@ -222,6 +222,41 @@ class TripFormatTest {
     }
 
     @Test
+    fun `地名短名去掉行政区划链并截十二字`() {
+        // 真机当天的地点名：全名一行放不下，短名要留下楼名
+        assertEquals("虹桥·博雅苑", placeShortName("上海市闵行区华漕镇虹桥·博雅苑"))
+        assertEquals("牛 New 寿喜烧", placeShortName("上海市闵行区华漕镇牛 New 寿喜烧"))
+        assertEquals("文三路 100 号", placeShortName("浙江省杭州市西湖区文三路 100 号"))
+        // 干净的短名原样返回
+        assertEquals("家", placeShortName("家"))
+        // 空 label 回退原名（也是空串，不编造）
+        assertEquals("", placeShortName(""))
+        assertEquals("", placeShortName("   "))
+        // 没有可去的前缀时按 12 字截断
+        assertEquals(12, placeShortName("某某某某某某某某某某某某某某某").length)
+        // 「镇江」「景德镇」这类正式地名不被后缀规则误伤（后缀不能切在字符串开头或只剩 1 字）
+        assertEquals("镇江市", placeShortName("江苏省镇江市"))
+        assertEquals("景德镇市", placeShortName("江西省景德镇市"))
+    }
+
+    @Test
+    fun `时间轴标题用短名拼两端`() {
+        val from = Place("p1", "上海市闵行区华漕镇虹桥·博雅苑", source = Basis.DEVICE)
+        val to = Place("p2", "上海市闵行区华漕镇牛 New 寿喜烧", source = Basis.DEVICE)
+        val move = Move(dayStart, dayStart + 20 * MIN, from, to, 1200.0)
+        assertEquals("虹桥·博雅苑 → 牛 New 寿喜烧", segmentTitle(move))
+
+        val stay = Stay(dayStart, dayStart + HOUR, Place("p3", "上海市闵行区华漕镇虹桥·博雅苑", source = Basis.DEVICE))
+        assertEquals("虹桥·博雅苑", segmentTitle(stay))
+
+        // 空 label 回退：标题为空串而不是拼出「→ 某某」
+        val blankStay = Stay(dayStart, dayStart + HOUR, Place("p4", "", source = Basis.DEVICE))
+        assertEquals("", segmentTitle(blankStay))
+        val halfMove = Move(dayStart, dayStart + 20 * MIN, from, null, 0.0)
+        assertEquals("移动", segmentTitle(halfMove))
+    }
+
+    @Test
     fun `移动缺地名时只说移动不编造地点`() {
         val move = Move(dayStart, dayStart + HOUR, null, null, 0.0)
         assertEquals("移动", segmentTitle(move))
