@@ -3,6 +3,7 @@ package com.bsfeng.monitor.ui.trip
 import com.bsfeng.monitor.domain.trip.Basis
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.Gap
+import com.bsfeng.monitor.domain.trip.GapReason
 import com.bsfeng.monitor.domain.trip.Move
 import com.bsfeng.monitor.domain.trip.Place
 import com.bsfeng.monitor.domain.trip.Stay
@@ -194,6 +195,30 @@ class TripFormatTest {
         assertEquals("移动 20 分 · 约 1.2 公里", segmentSubtitle(move))
         assertEquals("未记录", segmentTitle(gap))
         assertTrue("未记录必须写明不做推断", segmentSubtitle(gap).contains("不做推断"))
+    }
+
+    @Test
+    fun `未记录段按成因分文案`() {
+        val interrupted = Gap(dayStart, dayStart + 40 * MIN, GapReason.INTERRUPTED)
+        val unresolved = Gap(dayStart, dayStart + 40 * MIN, GapReason.UNRESOLVED)
+        assertEquals("采集中断 40 分 · 不做推断", segmentSubtitle(interrupted))
+        assertEquals("定位不足 40 分 · 不做推断", segmentSubtitle(unresolved))
+        // 缺省 reason 仍是 INTERRUPTED：既有多数构造点不受影响
+        assertEquals("采集中断 40 分 · 不做推断", segmentSubtitle(Gap(dayStart, dayStart + 40 * MIN)))
+        // 与既有基础测试同一条未记录段（无采样）保持原文案
+        assertTrue(segmentSubtitle(day.segments.last()).startsWith("采集中断 "))
+    }
+
+    @Test
+    fun `未记录不足一分钟沿用秒与零分口径`() {
+        assertEquals(
+            "采集中断 30 秒 · 不做推断",
+            segmentSubtitle(Gap(dayStart, dayStart + 30_000L, GapReason.INTERRUPTED)),
+        )
+        assertEquals(
+            "定位不足 0 分 · 不做推断",
+            segmentSubtitle(Gap(dayStart, dayStart, GapReason.UNRESOLVED)),
+        )
     }
 
     @Test
