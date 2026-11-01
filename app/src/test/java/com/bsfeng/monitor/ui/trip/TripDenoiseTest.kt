@@ -155,4 +155,73 @@ class TripDenoiseTest {
         assertTrue(cleaned.size <= samples.size)
         assertTrue(cleaned.isNotEmpty())
     }
+
+    // ==================== 单点漂移（跳出去又跳回） ====================
+
+    /** 31.2176 / 121.2579（同一栋楼），纬度偏移按米换算。 */
+    private fun latAt(meters: Double) = BASE_LAT + meters / 111_320.0
+
+    private val baseLng = 121.2579
+
+    /** 19 个正常点：±25m 抖动；与漂移点相邻的 6 个点取 0 偏移，保证跳出/跳回都 > 80m。 */
+    private val jitter = listOf(
+        0.0, 25.0, -25.0, 18.0, 0.0, 0.0, -12.0, 20.0, -20.0, 15.0,
+        0.0, 0.0, 8.0, -8.0, 22.0, -22.0, 0.0, 0.0, 10.0,
+    )
+
+    @Test
+    fun `原地一天的三个南跳漂移点全部剔除且跨度收敛`() {
+        val samples = ArrayList<TraceSample>()
+        var ts = 0L
+        for (index in jitter.indices) {
+            samples.add(sample(ts, latAt(jitter[index]), baseLng))
+            ts += 60_000L
+            // 03:20 / 04:20 / 06:50 的三次南跳：90m 外一个点，下一拍又跳回
+            if (index in setOf(4, 10, 16)) {
+                samples.add(sample(ts, latAt(-90.0), baseLng))
+                ts += 60_000L
+            }
+        }
+        assertEquals("19 个正常点 + 3 个漂移点", 22, samples.size)
+
+        val kept = TripDenoise.dropDriftSpikes(samples)
+        assertEquals(19, kept.size)
+        assertFalse(
+            "漂移点必须一个不剩（按距基准 > 80m 判定，正常点抖动只有 ±25m）",
+            kept.any { TripTrace.meters(it.lat, baseLng, BASE_LAT, baseLng) > 80.0 },
+        )
+        val span = TripTrace.meters(kept.minOf { it.lat }, baseLng, kept.maxOf { it.lat }, baseLng)
+        assertTrue("剔除后跨度应 ≤ 60m，实际 ${span}m", span <= 60.0)
+    }
+
+    @Test
+    fun `真实步行每点五十米一个都不剔除`() {
+        val walk = (0 until 12).map { index -> sample(index * 30_000L, latAt(index * 50.0), baseLng) }
+        assertEquals(12, TripDenoise.dropDriftSpikes(walk).size)
+    }
+
+    @Test
+    fun `首尾不判且连续两个同址漂移点不连坐`() {
+        // 首点自己就「在外面」：没有前邻居，必须保留
+        val head = listOf(
+            sample(0L, latAt(-90.0), baseLng),
+            sample(60_000L, latAt(0.0), baseLng),
+            sample(120_000L, latAt(5.0), baseLng),
+        )
+        assertEquals(3, TripDenoise.dropDriftSpikes(head).size)
+
+        // 连续两个同址假点：彼此距离 0，第二条件不成立，两者都保留（那是真的挪了位置）
+        val twin = listOf(
+            sample(0L, latAt(0.0), baseLng),
+            sample(60_000L, latAt(-90.0), baseLng),
+            sample(120_000L, latAt(-90.0), baseLng),
+            sample(180_000L, latAt(5.0), baseLng),
+        )
+        val kept = TripDenoise.dropDriftSpikes(twin)
+        assertEquals(4, kept.size)
+        assertEquals(2, kept.count { TripTrace.meters(it.lat, baseLng, BASE_LAT, baseLng) > 80.0 })
+    }
 }
+
+/** 真机同址基准纬度（31.2176°N）。 */
+private const val BASE_LAT: Double = 31.2176
