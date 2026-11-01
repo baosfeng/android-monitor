@@ -142,6 +142,13 @@ enum class SeedScenario(val value: String) {
 
     /** 两段停留之间留出 >1 小时空档（验证空档口径：空档不算移动）。 */
     GAP("gap"),
+
+    /**
+     * 带噪声移动：直线步行 ±30m 抖动（accuracy 15~60m）+ 室内 network 段（accuracy 250~450m）。
+     *
+     * 给「轨迹线按精度分档」与「虚线说明行」做截图对照：步行段应当全实线，室内段应当全虚线。
+     */
+    NOISE("noise"),
     ;
 
     companion object {

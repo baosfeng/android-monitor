@@ -11,6 +11,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -228,6 +229,14 @@ object TripExportRenderer {
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
+        // 低置信段虚线：与屏内同一套线型（4dp + 3dp），只换 dash、不换颜色与线宽
+        val dashed = paint(colors.accent, 0f).apply {
+            this.style = Paint.Style.STROKE
+            strokeWidth = 5f
+            strokeCap = Paint.Cap.BUTT
+            strokeJoin = Paint.Join.ROUND
+            pathEffect = DashPathEffect(floatArrayOf(4f * DENSITY, 3f * DENSITY), 0f)
+        }
         val labelPaint = paint(colors.fg, LABEL_TEXT_PX)
 
         canvas.withTranslation(mapRect.left, mapRect.top) {
@@ -238,11 +247,7 @@ object TripExportRenderer {
             }
 
             if (projection.points.size > 1) {
-                val path = Path()
-                projection.points.forEachIndexed { index, point ->
-                    if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-                }
-                drawPath(path, line)
+                drawTraceSegments(projection.points, samples, line, dashed)
             }
 
             val start = projection.points.first()
@@ -260,6 +265,35 @@ object TripExportRenderer {
                 val top = (stay.y - radius - LABEL_HEIGHT_PX).coerceAtLeast(0f)
                 drawText(stay.label, left, top + LABEL_TEXT_PX, labelPaint)
             }
+        }
+    }
+
+    /**
+     * 折线分档绘制：与屏内 [TracePrecision.segmentRuns] 同一套判定，导出图与截图不会两套口径。
+     *
+     * 分档长度与投影点对不上时退回整条实线（宁可少表达，不画错段）。
+     */
+    private fun Canvas.drawTraceSegments(
+        points: List<TracePoint>,
+        samples: List<TraceSample>,
+        solid: Paint,
+        dashed: Paint,
+    ) {
+        val runs = TracePrecision.segmentRuns(samples.map { TracePrecision.bandOf(it.accuracyM) })
+        if (runs.isEmpty() || runs.last().to != points.lastIndex) {
+            val path = Path()
+            points.forEachIndexed { index, point ->
+                if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+            }
+            drawPath(path, solid)
+            return
+        }
+        runs.forEach { run ->
+            if (run.to <= run.from) return@forEach
+            val path = Path()
+            path.moveTo(points[run.from].x, points[run.from].y)
+            for (index in run.from + 1..run.to) path.lineTo(points[index].x, points[index].y)
+            drawPath(path, if (run.low) dashed else solid)
         }
     }
 

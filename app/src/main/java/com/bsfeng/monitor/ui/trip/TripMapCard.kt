@@ -43,6 +43,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.record.CoverageGap
+import com.bsfeng.monitor.record.LocationQuality
 import com.bsfeng.monitor.record.CoverageKind
 import com.bsfeng.monitor.record.CoverageWindow
 import com.bsfeng.monitor.record.coverageGapHeadline
@@ -80,6 +82,14 @@ private val MAP_HEIGHT = 180.dp
 
 /** 折线宽度：设计口径 1.5dp，比分割线略粗，长轨迹在浅色底上也看得清。 */
 private val TRACE_STROKE = 1.5.dp
+
+/**
+ * 低置信段的虚线节奏（画到 / 空着）：4dp + 3dp，与 1.5dp 线宽成比例，180dp 画布上三段一循环。
+ *
+ * 只用线型、不用颜色区分 —— 灰度屏与色弱用户也要能看出「这一段不可全信」。
+ */
+private val TRACE_DASH_ON = 4.dp
+private val TRACE_DASH_OFF = 3.dp
 
 /**
  * 今日轨迹卡。
@@ -107,6 +117,8 @@ internal fun TripMapCard(
     val t = LocalDesignTokens.current
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = t.fg2)
+    // 精度画像：画线分档、图例第二行、粗坐标提示三处共用同一份判定
+    val precision = remember(samples) { TracePrecision.profile(samples) }
 
     AppCard(modifier = modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -240,17 +252,9 @@ internal fun TripMapCard(
                         )
                     }
 
-                    // ② 轨迹折线（单点时不画线）
+                    // ② 轨迹折线（单点时不画线）：高置信段实线、低置信段虚线，颜色与线宽不变
                     if (projection.points.size > 1) {
-                        val path = Path()
-                        projection.points.forEachIndexed { index, point ->
-                            if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-                        }
-                        drawPath(
-                            path = path,
-                            color = t.accent,
-                            style = Stroke(width = TRACE_STROKE.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
-                        )
+                        drawTraceSegments(projection.points, precision.bands, t.accent)
                     }
 
                     // ③ 起终点：白色描边圈 + 语义色实心点（起点绿、终点红）
@@ -277,6 +281,9 @@ internal fun TripMapCard(
         if (samples.isNotEmpty()) {
             Spacer(Modifier.height(t.space2))
             TraceLegend(basemapOn = basemapEnabled)
+            // 两行都只在对应情况出现：没有低置信段 / 不是粗坐标日就整行不渲染，不留空行
+            if (precision.hasLowConfidence) TraceConfidenceKey()
+            if (precision.isCoarseDay) TraceCoarseDayNote()
         }
         // 当日采集覆盖条（契约 trip-cov）：没有样本时不画 —— 空条会被读成「一整天都没采到」
         if (coverage != null && samples.isNotEmpty() && !coverage.isEmpty) {
@@ -363,6 +370,79 @@ private fun TripExportChip(exporting: Boolean, onClick: () -> Unit) {
             color = if (exporting) t.muted else t.accent,
         )
     }
+}
+
+/**
+ * 图例第二行：低置信段为什么是虚线。
+ *
+ * 只在当天确实有低置信段时渲染 —— 天天挂一行「虚线是什么」会变成噪音。
+ * 颜色用 `muted`（surface 上 4.66:1），不用 `meta`（3.33:1，小字不达标）。
+ */
+@Composable
+private fun TraceConfidenceKey() {
+    val t = LocalDesignTokens.current
+    Text(
+        text = "虚线 = 精度 > ${LocationQuality.HIGH_ACCURACY_METERS.toInt()}m（可能偏几百米）",
+        modifier = Modifier.fillMaxWidth().padding(top = t.space1),
+        style = MaterialTheme.typography.labelSmall,
+        color = t.muted,
+    )
+}
+
+/**
+ * 历史粗坐标日提示：说清「只准到 110m」与「这天不做平滑」两件事。
+ *
+ * 阶梯是量化造成的、不是走错了 —— 不给这句话，用户只会觉得轨迹画得烂。
+ */
+@Composable
+private fun TraceCoarseDayNote() {
+    val t = LocalDesignTokens.current
+    Text(
+        text = "坐标只存 3 位小数（≈${TracePrecision.COARSE_RESOLUTION_METERS}m），这天不做平滑：" +
+            "阶梯是量化造成的",
+        modifier = Modifier.fillMaxWidth().padding(top = t.space1),
+        style = MaterialTheme.typography.labelSmall,
+        color = t.muted,
+    )
+}
+
+/**
+ * 按精度分档画折线：任一端低置信的段走虚线，两端都高置信走实线。
+ *
+ * 颜色与线宽不变（仍 accent + [TRACE_STROKE]），只换 dash —— 灰度屏与色弱用户同样可辨。
+ * 分档与投影点一一对应；长度对不上时退回整条实线，宁可少表达也不画错段。
+ */
+private fun DrawScope.drawTraceSegments(points: List<TracePoint>, bands: List<FixBand>, color: Color) {
+    val solid = Stroke(width = TRACE_STROKE.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val runs = TracePrecision.segmentRuns(bands)
+    if (runs.isEmpty() || runs.last().to != points.lastIndex) {
+        drawPolyline(points, 0, points.lastIndex, color, solid)
+        return
+    }
+    val dashed = Stroke(
+        width = TRACE_STROKE.toPx(),
+        cap = StrokeCap.Butt,
+        join = StrokeJoin.Round,
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(TRACE_DASH_ON.toPx(), TRACE_DASH_OFF.toPx())),
+    )
+    runs.forEach { run ->
+        drawPolyline(points, run.from, run.to, color, if (run.low) dashed else solid)
+    }
+}
+
+/** 画 points[from..to] 这一段折线（少于两点不画）。 */
+private fun DrawScope.drawPolyline(
+    points: List<TracePoint>,
+    from: Int,
+    to: Int,
+    color: Color,
+    style: Stroke,
+) {
+    if (to <= from) return
+    val path = Path()
+    path.moveTo(points[from].x, points[from].y)
+    for (index in from + 1..to) path.lineTo(points[index].x, points[index].y)
+    drawPath(path = path, color = color, style = style)
 }
 
 /** 起终点圆点：外圈用页面底色隔开浅色底，内圈语义色。 */
