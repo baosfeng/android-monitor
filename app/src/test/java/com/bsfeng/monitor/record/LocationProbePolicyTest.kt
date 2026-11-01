@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 门禁探测的纯判定：force 路径必须绕过采集节流与缓存。
+ * 门禁探测的纯判定：force 路径必须绕过采集节流；缓存只在 90 秒内可以顶替主动定位。
  *
  * 背景（模拟器实测）：PROBING 的 180 秒探测被「STILL 间隔 180s 内已采过」挡掉，
  * 门禁拿不到位移证据，5 分钟无证据直接回 SLEEPING —— 坐车位移 675m 也升级不了。
@@ -43,10 +43,18 @@ class LocationProbePolicyTest {
     }
 
     @Test
-    fun `force 探测跳过缓存 直取主动定位`() {
-        // 缓存可用、静止模式、非断档 —— 非 force 会直接用缓存；force 必须不用
+    fun `非 force 照旧用缓存 force 只认 90 秒内的缓存`() {
+        // 缓存可用、静止模式、非断档：非 force 直接用缓存
         assertTrue(LocationProbePolicy.canUseCached(false, true, false, SampleMode.STILL, true))
-        assertFalse(LocationProbePolicy.canUseCached(true, true, false, SampleMode.STILL, true))
+        // force 探测：89 秒命中（顶替一次射频打开），91 秒必须主动定位
+        assertTrue(LocationProbePolicy.canUseCached(true, true, false, SampleMode.STILL, true, 89_000L))
+        assertFalse(LocationProbePolicy.canUseCached(true, true, false, SampleMode.STILL, true, 91_000L))
+    }
+
+    @Test
+    fun `force 探测没有缓存或断档时仍主动定位`() {
+        assertFalse(LocationProbePolicy.canUseCached(true, false, false, SampleMode.STILL, true, 0L))
+        assertFalse("断档时缓存不能代表现在", LocationProbePolicy.canUseCached(true, true, true, SampleMode.STILL, true, 10_000L))
     }
 
     @Test

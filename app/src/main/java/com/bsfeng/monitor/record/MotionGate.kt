@@ -13,7 +13,8 @@ import kotlin.math.sqrt
  * 三态（契约冻结）：
  * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（兜底在服务层）。
  * - [State.PROBING]：有动作但未确认远行（玩手机 / 室内走动 / 摇晃）。**不建订阅**，
- *   只做 180 秒一次单点探测，拿到点即释放。
+ *   只做低频单点探测（180 秒起；连续拿不到位移证据按 [probeIntervalMs] 退避到 300 / 600 秒），
+ *   拿到点即释放。
  * - [State.MOVING]：已确认远行。建订阅，30 秒一次。
  *
  * 升级判据（任一满足即 [State.MOVING]，单向保持到降级）：
@@ -52,7 +53,7 @@ class MotionGate(
         /** 没有运动证据：不建订阅、不采点。 */
         SLEEPING,
 
-        /** 有动作但未确认远行：不建订阅，只做低频单点探测。 */
+        /** 有动作但未确认远行：不建订阅，只做低频单点探测（间隔见 [probeIntervalMs]）。 */
         PROBING,
 
         /** 已确认远行：建订阅，30 秒一次。 */
@@ -80,6 +81,24 @@ class MotionGate(
 
     /** 两类位移证据里的较大值（日志里的「距离=..m」）。 */
     val movementDistanceM: Double get() = max(stepDistanceM, probeDistanceM)
+
+    /**
+     * 连续「拿到探测点但没有位移证据」的探测次数（退避阶梯的唯一输入）。
+     *
+     * 只数**探测点**：主动定位失败（回调 null）不经过这里 —— 没有点就是没有证据，
+     * 既不该升档（没有可判定的东西）也不该复位。
+     */
+    var quietProbeCount: Int = 0
+        private set
+
+    /**
+     * 下一轮探测的间隔（毫秒）：180 秒起，连续无位移证据的探测满 3 次拉到 300 秒、满 6 次拉到 600 秒。
+     *
+     * 服务 tick 与 collector 的 probeIntervalOverride 都读这一个值（两处读同一来源，
+     * 否则「服务按 600 秒 tick、订阅却按 180 秒派点」这种错位会再出现）。
+     * 任何运动证据（步数增量 / 步态 / 抖动 / 位移过噪声地板）都把阶梯打回 180 秒。
+     */
+    val probeIntervalMs: Long get() = LocationPace.probeIntervalMsFor(quietProbeCount)
 
     /** 服务据此开关订阅：只有 MOVING 才允许 startSubscription。 */
     val wantsSubscription: Boolean get() = state == State.MOVING
@@ -148,6 +167,8 @@ class MotionGate(
         when (motionState) {
             MotionDetector.State.GAIT -> {
                 noteActivity(tsMs)
+                // 步态是「真的在走」的证据：探测间隔立刻回 180 秒，不能因为前面几次没位移就迟钝
+                quietProbeCount = 0
                 if (state == State.SLEEPING) transition(State.PROBING, "检出稳定步频")
             }
             MotionDetector.State.STILL -> if (stillSinceMs == 0L) stillSinceMs = tsMs
@@ -176,6 +197,8 @@ class MotionGate(
             shakeSinceSampleMs = 0L
             return state
         }
+        // 明显抖动同样是运动证据（它是唯一在 5Hz 设备上可用的运动信号）：探测间隔回 180 秒
+        quietProbeCount = 0
         if (shakeSinceSampleMs == 0L) shakeSinceSampleMs = sampleTsMs
         if (state == State.SLEEPING && sampleTsMs - shakeSinceSampleMs >= shakeConfirmMs) {
             noteActivity(nowMs)
@@ -197,6 +220,7 @@ class MotionGate(
             if (detectSoftwareStep(magnitude, tsMs, motionState)) {
                 stepsSinceAnchor += 1L
                 noteActivity(tsMs)
+                quietProbeCount = 0
                 // 退化模式（无显著运动传感器）里加速度计是常开的：软件步数本身就能唤醒门禁，
                 // 不能只等 30 分钟兜底探点，否则一路走完也停在 SLEEPING
                 if (state == State.SLEEPING) transition(State.PROBING, "软件步数增量")
@@ -223,6 +247,8 @@ class MotionGate(
         if (delta > 0L) {
             stepsSinceAnchor += delta
             noteActivity(nowMs)
+            // 步数增量是最硬的运动证据：探测间隔立刻回 180 秒
+            quietProbeCount = 0
             if (state == State.SLEEPING) transition(State.PROBING, "步数增量 " + delta)
         }
         return evaluate(nowMs)
@@ -239,6 +265,8 @@ class MotionGate(
         val anchor = probeAnchor
         if (anchor == null) {
             probeAnchor = sample
+            // 首个点只建锚点，拿不出位移证据：同样算一次「无位移证据的探测」
+            quietProbeCount += 1
             return evaluate(now)
         }
         val distance = LocationPace.distanceMeters(
@@ -249,7 +277,12 @@ class MotionGate(
         val noiseFloor = max(PROBE_NOISE_FLOOR_M, anchor.accuracyMeters + sample.accuracyMeters.toDouble())
         if (distance >= noiseFloor) {
             noteActivity(now)
+            // 位移过噪声地板 = 真的挪了地方：探测间隔回 180 秒
+            quietProbeCount = 0
             if (state == State.SLEEPING) transition(State.PROBING, "探测位移 " + metersText(distance))
+        } else {
+            // 没位移证据：下一轮探测按阶梯退避（180 → 300 → 600 秒封顶）
+            quietProbeCount += 1
         }
         return evaluate(now)
     }
@@ -269,6 +302,7 @@ class MotionGate(
         movingSinceMs = 0L
         lastActivityAtMs = 0L
         lastEvaluatedAtMs = 0L
+        quietProbeCount = 0
         hardwareBaselineSet = false
         lastHardwareTotal = 0L
         hardwareStepsAvailable = false
@@ -323,6 +357,8 @@ class MotionGate(
         stillSinceMs = 0L
         movingSinceMs = 0L
         lastActivityAtMs = 0L
+        // 回到 SLEEPING 后探测由 30 分钟兜底接管，退避阶梯重新起算
+        quietProbeCount = 0
     }
 
     private fun noteActivity(tsMs: Long) {

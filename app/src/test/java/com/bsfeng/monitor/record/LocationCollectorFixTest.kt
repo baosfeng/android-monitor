@@ -408,7 +408,8 @@ class LocationCollectorFixTest {
 
     @Test
     fun `force 探测在采集节流窗口内仍发起主动定位 且点位进入门禁证据`() {
-        val cached = sample(timeMs = now)
+        // 缓存是 2 分钟前的（超过 90 秒探测窗口）：force 必须自己发起主动定位
+        val cached = sample(ageMs = 120_000L)
         val fixed = sample(timeMs = now + 2_000L, meters = 100.0)
         val env = FakeEnv(cached = listOf(cached), onActive = { _, cb -> cb(fixed) })
         val collector = LocationCollector(env, clock = { now })

@@ -11,8 +11,8 @@ package com.bsfeng.monitor.record
  * 否则调用方的 PendingResult 永远不 finish（广播超时、心跳停摆）。
  */
 internal class LocationActiveFixRunner(
-    /** 实际发起请求（生产是 env.requestActiveFix；单测注入假实现）。 */
-    private val request: (Long, (LocationSample?) -> Unit) -> Unit,
+    /** 实际发起请求（生产是 env.requestActiveFix；单测注入假实现）。第二参是预算档位。 */
+    private val request: (Long, FixBudget, (LocationSample?) -> Unit) -> Unit,
     private val gate: LocationActiveFixGate = LocationActiveFixGate(),
     private val noteFailure: (LocationFailureReason, String) -> Unit = { _, _ -> },
     private val log: (String, Boolean) -> Unit = { _, _ -> },
@@ -28,6 +28,7 @@ internal class LocationActiveFixRunner(
      * 发起一次主动定位。
      *
      * @param previous 质量闸的对照点（上一次被接受的点）
+     * @param budget 主动定位预算档位（门禁探测传 [FixBudget.PROBE]，其余满预算）
      * @param onDeliver 拿到可用点后的落库路径（更新模式 / 占节流窗口由调用方负责）
      * @param onSample 最终回调，**恰好一次**
      */
@@ -35,6 +36,7 @@ internal class LocationActiveFixRunner(
         nowMs: Long,
         plan: LocationGapHealing.Plan,
         modeAtStart: SampleMode,
+        budget: FixBudget = FixBudget.FULL,
         previous: LocationSample?,
         onDeliver: (LocationSample) -> Unit,
         onSample: (LocationSample?) -> Unit,
@@ -54,12 +56,13 @@ internal class LocationActiveFixRunner(
             return
         }
         log(
-            "定位发起单次主动定位（" + LocationPolicy.ACTIVE_FIX_BUDGET_SUMMARY + "，模式=" + modeAtStart +
-                "，断档补采=" + plan.forceActiveFix + "，首次成功前=" + isInitial + "）",
+            "定位发起单次主动定位（" + LocationPolicy.budgetSummaryOf(budget) + "，预算档=" + budget +
+                "，模式=" + modeAtStart + "，断档补采=" + plan.forceActiveFix +
+                "，首次成功前=" + isInitial + "）",
             false,
         )
         try {
-            request(nowMs) { sample ->
+            request(nowMs, budget) { sample ->
                 gate.finish()
                 dispatch(sample, nowMs, previous, onDeliver, onSample)
             }

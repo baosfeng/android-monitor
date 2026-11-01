@@ -22,22 +22,41 @@ interface SingleFixSource {
  *
  * 预算不再按 provider 数均分：GPS 冷启动要 10–30 秒，均分出来的 2500ms 必然超时，
  * 而 network 秒级出点、越早失败越早回落。两者时间尺度差一个数量级，要用两套预算。
+ *
+ * 预算还有第二维：**档位**（[FixBudget]）。门禁探测用覆盖级（network 4s / gps 8s），
+ * 其余路径用满预算（5s / 15s）。两档的超时来源都在 [LocationPolicy]。
  */
 class ActiveFixResolver(
     private val source: SingleFixSource,
     val providers: List<String> = LocationPolicy.ACTIVE_PROVIDERS,
-    /** 单个 provider 的预算；默认按 provider 名取 [LocationPolicy.activeFixTimeoutMs]。 */
+    /** 满预算（[FixBudget.FULL]）下单 provider 的预算；默认按 provider 名取 [LocationPolicy.activeFixTimeoutMs]。 */
     val timeoutMsOf: (String) -> Long = { LocationPolicy.activeFixTimeoutMs(it) },
+    /** 覆盖级（[FixBudget.PROBE]）下单 provider 的预算；门禁探测专用。 */
+    val probeTimeoutMsOf: (String) -> Long = { LocationPolicy.activeFixTimeoutMs(it, FixBudget.PROBE) },
     /** 日志出口：纯 JVM 单测里 android.util.Log 未 mock，只能由生产侧注入。 */
     private val log: (String, Boolean) -> Unit = { _, _ -> },
 ) {
-    /** 日志用：各 provider 的预算摘要。 */
-    val budgetSummary: String
-        get() = providers.joinToString(" / ") { it + " " + timeoutMsOf(it) + "ms" }
+    /** 日志用：满预算的各 provider 预算摘要。 */
+    val budgetSummary: String get() = budgetSummaryOf(FixBudget.FULL)
 
+    /** 日志用：某档预算的摘要。 */
+    fun budgetSummaryOf(budget: FixBudget): String =
+        providers.joinToString(" / ") { it + " " + timeoutFor(it, budget) + "ms" }
+
+    /** 某个 provider 在某档预算下的超时。 */
+    fun timeoutFor(provider: String, budget: FixBudget): Long =
+        if (budget == FixBudget.PROBE) probeTimeoutMsOf(provider) else timeoutMsOf(provider)
+
+    /**
+     * 依次请求各可用 provider；拿到第一个可用点即回调。
+     *
+     * @param budget 预算档位；默认满预算（既有调用点的语义不变）
+     * @param onResult **恰好回调一次**：任一 provider 出点，或全部落空时回调 null
+     */
     fun resolve(
         nowMs: Long,
         isAvailable: (String) -> Boolean,
+        budget: FixBudget = FixBudget.FULL,
         onResult: (LocationSample?) -> Unit,
     ) {
         val queue = providers.filter(isAvailable)
@@ -54,7 +73,7 @@ class ActiveFixResolver(
                 return
             }
             val provider = queue[index++]
-            source.request(provider, timeoutMsOf(provider)) { sample ->
+            source.request(provider, timeoutFor(provider, budget)) { sample ->
                 if (sample != null && LocationPolicy.isUsable(sample, nowMs)) {
                     log("主动定位成功 provider=$provider accuracy=${sample.accuracyMeters}", false)
                     onResult(sample)

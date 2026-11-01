@@ -91,7 +91,10 @@ internal class AndroidEnv(private val context: Context) : LocationCollector.Env 
         return LocationPolicy.PROVIDER_PRIORITY.mapNotNull { provider -> readLastKnown(lm, provider) }
     }
 
-    override fun requestActiveFix(nowMs: Long, onResult: (LocationSample?) -> Unit) {
+    override fun requestActiveFix(nowMs: Long, onResult: (LocationSample?) -> Unit) =
+        requestActiveFix(nowMs, FixBudget.FULL, onResult)
+
+    override fun requestActiveFix(nowMs: Long, budget: FixBudget, onResult: (LocationSample?) -> Unit) {
         val lm = manager
         val resolver = activeFix
         if (lm == null || resolver == null) {
@@ -112,6 +115,7 @@ internal class AndroidEnv(private val context: Context) : LocationCollector.Env 
         resolver.resolve(
             nowMs = nowMs,
             isAvailable = { provider -> availability[provider] == true },
+            budget = budget,
             onResult = onResult,
         )
     }

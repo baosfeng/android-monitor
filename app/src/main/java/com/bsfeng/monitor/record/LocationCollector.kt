@@ -60,8 +60,18 @@ class LocationCollector internal constructor(
         /** 读系统缓存位置（三个 provider 各一条，可能为空）。 */
         fun readCached(): List<LocationSample>
 
-        /** 发起一次主动定位；无 LocationManager 时回调 null。 */
+        /** 发起一次主动定位（满预算）；无 LocationManager 时回调 null。 */
         fun requestActiveFix(nowMs: Long, onResult: (LocationSample?) -> Unit)
+
+        /**
+         * 带预算档位的主动定位（见 [FixBudget]）。
+         *
+         * 默认委托上一版两参方法：既有单测的假 Env 只实现两参版本，不必逐个补实现，
+         * 也不会因为「假 Env 忽略预算」而让断言失真。生产实现 [AndroidEnv] 覆盖它。
+         */
+        fun requestActiveFix(nowMs: Long, budget: FixBudget, onResult: (LocationSample?) -> Unit) {
+            requestActiveFix(nowMs, onResult)
+        }
 
         /** 诊断日志出口（纯 JVM 单测里 android.util.Log 会抛 not mocked，必须可注入）。 */
         fun log(message: String, warn: Boolean) {}
@@ -112,7 +122,7 @@ class LocationCollector internal constructor(
      * 两条驱动链叠在一起时照样会同时发起两套主动定位（实测日志相差 2 秒的两条请求）。
      */
     private val activeFixRunner = LocationActiveFixRunner(
-        request = { nowMs, onResult -> env.requestActiveFix(nowMs, onResult) },
+        request = { nowMs, budget, onResult -> env.requestActiveFix(nowMs, budget, onResult) },
         gate = activeFixGate,
         noteFailure = ::noteFailure,
         log = env::log,
@@ -244,14 +254,18 @@ class LocationCollector internal constructor(
     /**
      * 按模式间隔采集（异步）：重订阅 → 缓存 → 主动定位。
      *
-     * @param force 门禁探测专用：跳过落库节流与缓存优先，直接发起一次主动定位。
-     *   PROBING 的 180 秒探测如果被采集节流挡住（模拟器实测「定位节流中：STILL 间隔 180s 内已采过」），
+     * @param force 门禁探测专用：跳过落库节流，**允许用 ≤[LocationPolicy.PROBE_CACHE_MAX_AGE_MS] 的系统缓存点**
+     *   顶替主动定位（超过 90 秒才主动定位，见 [LocationProbePolicy.canUseCached]）。
+     *   PROBING 的探测如果被采集节流挡住（模拟器实测「定位节流中：STILL 间隔 180s 内已采过」），
      *   门禁就永远拿不到位移证据，5 分钟无证据直接回 SLEEPING —— 坐车位移 675m 也升级不了。
+     * @param budget 主动定位预算档位：门禁探测 / SLEEPING 兜底传 [FixBudget.PROBE]（覆盖级 4s+8s），
+     *   MOVING 静默补采 / 断档自愈 / 首点兜底保持默认 [FixBudget.FULL]（满预算 5s+15s）。
      * @param onResult **恰好回调一次**（缓存命中 / 被节流 / 未授权时同步，需要主动定位时异步）
      */
     fun collectThrottledAsync(
         nowMs: Long = System.currentTimeMillis(),
         force: Boolean = false,
+        budget: FixBudget = FixBudget.FULL,
         onResult: (LocationSample?) -> Unit,
     ) {
         val modeAtStart = mode
@@ -274,8 +288,15 @@ class LocationCollector internal constructor(
         if (initialFix) {
             env.log("位置订阅零投递，发起首点兜底主动定位（" + modeAtStart + "）", true)
         }
+        // 断档自愈必须用满预算：断档就是「现在真的拿不到点」，这时候砍预算只会把断档拉得更长
+        //（与首点兜底同理）。探测预算只在「常态低价值探测」上生效。
+        val effectiveBudget = if (plan.isGap) FixBudget.FULL else budget
         if (force) {
-            env.log("门禁探测：跳过采集节流与缓存，强制主动定位（" + modeAtStart + "）", false)
+            env.log(
+                "门禁探测：跳过采集节流，预算档=" + effectiveBudget +
+                    "（" + LocationPolicy.budgetSummaryOf(effectiveBudget) + "，" + modeAtStart + "）",
+                false,
+            )
         }
         // 断档时跳过节流：断档本身就是「窗口早过了却没拿到点」，再等一个窗口只会更晚恢复。
         // force（门禁探测）永远放行：拿不到「现在在哪」，门禁的位移证据链就断了。
@@ -302,6 +323,9 @@ class LocationCollector internal constructor(
         channel.restartIfSilent(nowMs)
         val cached = LocationPolicy.pick(env.readCached(), nowMs)
         val cachedFresh = cached != null && nowMs - cached.timeMs <= LocationPace.CACHE_FRESH_MS
+        // 门禁探测的缓存窗口（90 秒）比移动模式的 30 秒宽：探测周期本身是 180 秒起，
+        // 拿一个 89 秒前别人定位到的点，比再烧 12 秒射频去测「现在在哪」更划算（见基线文档）。
+        val cachedAgeMs = cached?.let { nowMs - it.timeMs }
         // 静止：缓存只要没过期就用；移动：必须够新鲜，否则主动定位一次（30 秒节奏不能被旧点糊弄）。
         // 断档时**跳过缓存**：断档就是「缓存里那些点已经不能代表现在」，拿旧缓存顶上只会把
         // 掉线的表象维持下去（用户看到的最后一条记录仍停在断档之前）。
@@ -312,21 +336,32 @@ class LocationCollector internal constructor(
             requestInitialFix(nowMs, modeAtStart, plan, cached, onResult)
             return
         }
-        // force 时不用缓存：门禁要的是「现在在哪」，缓存旧点算不出真实位移
-        if (LocationProbePolicy.canUseCached(force, cached != null, plan.isGap, modeAtStart, cachedFresh)) {
+        if (LocationProbePolicy.canUseCached(
+                force = force,
+                hasCached = cached != null,
+                isGap = plan.isGap,
+                modeAtStart = modeAtStart,
+                cachedFresh = cachedFresh,
+                cachedAgeMs = cachedAgeMs,
+            )
+        ) {
             val usable = cached!!
             if (LocationQuality.shouldAccept(usable, healthState.lastAccepted, nowMs)) {
                 env.log(
                     "定位命中缓存 provider=" + usable.provider + " accuracy=" + usable.accuracyMeters +
-                        " age=" + (nowMs - usable.timeMs) + "ms",
+                        " age=" + (nowMs - usable.timeMs) + "ms 探测=" + force,
                     false,
                 )
+                // 探测用新鲜缓存顶替主动定位时，这个点**就是**本轮探测结果：同样要进门禁证据链，
+                // 否则「缓存优先」等于把探测作废（门禁拿不到位移证据，误降级回 SLEEPING）。
+                // 非探测路径仍不喂：静止兜底的缓存点最老 30 分钟，拿来算位移是错的方向。
+                if (force) LocationGateState.offer(usable)
                 deliver(usable, nowMs, modeAtStart, onResult)
                 return
             }
             env.log("定位缓存点被质量闸拒绝 provider=" + usable.provider + " accuracy=" + usable.accuracyMeters, false)
         }
-        requestActiveFixOnce(nowMs, modeAtStart, plan, onResult)
+        requestActiveFixOnce(nowMs, modeAtStart, plan, effectiveBudget, onResult)
     }
 
     /** 断档自愈的日志出口（抽出来只为把 collectThrottledAsync 压进 70 行）。 */
@@ -345,11 +380,13 @@ class LocationCollector internal constructor(
         nowMs: Long,
         modeAtStart: SampleMode,
         plan: LocationGapHealing.Plan,
+        budget: FixBudget,
         onResult: (LocationSample?) -> Unit,
     ) = activeFixRunner.run(
         nowMs = nowMs,
         plan = plan,
         modeAtStart = modeAtStart,
+        budget = budget,
         previous = healthState.lastAccepted,
         onDeliver = { sample ->
             // 主动定位点无条件作为门禁位移证据：50 米抖动过滤 / 落库节流只影响落库，不能影响证据。
@@ -457,7 +494,13 @@ class LocationCollector internal constructor(
         cached: LocationSample?,
         onResult: (LocationSample?) -> Unit,
     ) {
-        requestActiveFixOnce(nowMs, modeAtStart, plan.copy(level = LocationGapHealing.Level.INITIAL)) { sample ->
+        // 首点兜底是「订阅零投递也必须拿到第一个点」的路径，预算一律满档（砍预算会重演掉线）
+        requestActiveFixOnce(
+            nowMs = nowMs,
+            modeAtStart = modeAtStart,
+            plan = plan.copy(level = LocationGapHealing.Level.INITIAL),
+            budget = FixBudget.FULL,
+        ) { sample ->
             when {
                 sample != null -> onResult(sample)
                 fallbackToCache(cached, nowMs) -> {
@@ -513,8 +556,9 @@ class LocationCollector internal constructor(
  * [shouldRequestActiveFix] 是 collectThrottledAsync 的节流闸：force 路径永远放行 ——
  * 门禁探测必须真的拿到「现在在哪」，否则 PROBING 的位移证据链会断（模拟器实测坐车不升级）。
  *
- * [canUseCached] 决定是否直接用系统缓存顶替主动定位：force 时一律不用，
- * 缓存旧点（age 可达数分钟）在位移判定上是错的方向。
+ * [canUseCached] 决定是否直接用系统缓存顶替主动定位：force（门禁探测）只认
+ * ≤[LocationPolicy.PROBE_CACHE_MAX_AGE_MS] 的系统缓存点 —— 90 秒内的点与刚探测出来的点
+ * 在位移判定上等价，拿它顶替一次满射频探测是纯省电；更旧的点算不出「现在在哪」。
  */
 internal object LocationProbePolicy {
 
@@ -525,12 +569,37 @@ internal object LocationProbePolicy {
         throttleAllows: Boolean,
     ): Boolean = force || planForceActiveFix || initialFix || throttleAllows
 
+    /**
+     * 是否用系统缓存顶替主动定位。
+     *
+     * - 无缓存 / 断档 → 不用（断档语义就是「缓存里的点不能代表现在」）；
+     * - force（门禁探测）→ 只认 [LocationPolicy.PROBE_CACHE_MAX_AGE_MS] 以内的点，更旧就主动定位；
+     * - 其余 → 静止模式一律可用，移动模式要求 [LocationPace.CACHE_FRESH_MS] 以内的新鲜点。
+     *
+     * 时钟回拨（age 为负）按「刚采到」处理，与 [LocationPolicy.isFresh] 同口径。
+     */
     fun canUseCached(
         force: Boolean,
         hasCached: Boolean,
         isGap: Boolean,
         modeAtStart: SampleMode,
         cachedFresh: Boolean,
-    ): Boolean = !force && hasCached && !isGap &&
-        (modeAtStart == SampleMode.STILL || cachedFresh)
+        cachedAgeMs: Long? = null,
+        forceCacheMaxAgeMs: Long = LocationPolicy.PROBE_CACHE_MAX_AGE_MS,
+    ): Boolean {
+        if (!hasCached || isGap) return false
+        if (force) return cachedAgeMs != null && cachedAgeMs <= forceCacheMaxAgeMs
+        return modeAtStart == SampleMode.STILL || cachedFresh
+    }
+
+    /**
+     * 心跳链路的预算档位：门禁 PROBING 用覆盖级，MOVING 与「门禁未知」保持满预算。
+     *
+     * 为什么心跳也要分档：心跳与前台服务的探测共用同一批 provider，谁先抢到发令闸谁发起。
+     * 只在服务里改档的话，落在 PROBING 的心跳仍会发起一轮 5s+15s 的满预算请求，
+     * 「单次探测射频上限 20s→12s」就会被这条后门打破。
+     * 门禁未知（null，服务没跑）必须满预算：那时心跳是唯一采点路径，砍预算等于制造掉线。
+     */
+    fun heartbeatBudget(state: MotionGate.State?): FixBudget =
+        if (state == null || state == MotionGate.State.MOVING) FixBudget.FULL else FixBudget.PROBE
 }

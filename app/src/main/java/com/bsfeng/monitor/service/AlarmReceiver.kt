@@ -14,6 +14,7 @@ import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
+import com.bsfeng.monitor.record.LocationProbePolicy
 import com.bsfeng.monitor.util.AppUtils
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
@@ -163,8 +164,12 @@ class AlarmReceiver : BroadcastReceiver() {
  * 任何异常都不上抛：定位失败不能影响上报、保活与无障碍主链路。
  */
 internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
+    // 预算档位跟着门禁走：PROBING（玩手机 / 室内走动）用覆盖级，MOVING 与「门禁未知」用满预算。
+    // 心跳与前台服务的探测抢同一个发令闸，只在服务里改档的话，落在 PROBING 的心跳
+    // 仍会发起一轮 5s + 15s 的满预算请求，「单次探测射频上限」就被这条后门打破了。
+    val budget = LocationProbePolicy.heartbeatBudget(LocationGateState.state)
     try {
-        LocationCollector.get(context).collectThrottledAsync { sample ->
+        LocationCollector.get(context).collectThrottledAsync(budget = budget) { sample ->
             if (sample == null) {
                 Log.w("LocationSample", "定位采样无可用点（节流中 / 未授权 / 缓存不新鲜且主动定位失败）")
                 onFinished()

@@ -26,6 +26,7 @@ import com.bsfeng.monitor.MainActivity
 import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
+import com.bsfeng.monitor.record.FixBudget
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationPace
@@ -108,6 +109,9 @@ class LocationForegroundService : Service() {
     /** 已经应用到采集器的门禁态；用于去重，避免每条传感器样本都重配订阅。 */
     @Volatile
     private var appliedGateState: MotionGate.State = MotionGate.State.SLEEPING
+
+    /** 已经写给采集器的探测间隔（0 = 当前态不看这个值），用于「同态但退避档变了」的补同步。 */
+    private var appliedProbeIntervalMs = 0L
 
     /** 观察窗到期时刻（wall clock）；0 = 没开窗。 */
     private var observingUntilMs = 0L
@@ -441,10 +445,18 @@ class LocationForegroundService : Service() {
      *
      * SLEEPING / PROBING 都显式 [stopSubscription]：未确认远行时任何残留订阅都会让
      * 定位芯片跟着「拿起手机」一直不休眠；只有 MOVING 才 [startSubscription]。
+     *
+     * 同态也要进来：PROBING → PROBING 时**探测间隔**会随退避阶梯变化（180 → 300 → 600 秒），
+     * 状态没变就早退会让退避只落在服务 tick 上、不落到采集器的 probeIntervalOverride 上。
      */
     private fun applyGateState(state: MotionGate.State, force: Boolean = false) {
-        if (!force && state == appliedGateState) return
+        val probeIntervalMs = if (state == MotionGate.State.PROBING) gate.probeIntervalMs else 0L
+        if (!force && state == appliedGateState) {
+            syncProbeInterval(probeIntervalMs)
+            return
+        }
         appliedGateState = state
+        appliedProbeIntervalMs = probeIntervalMs
         // 同步给 1 分钟心跳链路（AlarmReceiver）：它拿不到 Service 实例，只能读这个快照。
         // 不写的话心跳会绕过门禁每分钟发起一次高精度单点，「静止不定位」形同虚设。
         LocationGateState.update(state)
@@ -460,13 +472,16 @@ class LocationForegroundService : Service() {
                 Log.i(TAG, "门禁：SLEEPING（不定位）")
             }
             MotionGate.State.PROBING -> {
-                // 180s 单点探测：覆盖坐车/骑行这类传感器平稳但人在位移的场景，
-                // 又不会为玩手机持续烧定位
-                collector.setProbeIntervalOverride(LocationPace.HANDHELD_PROBE_INTERVAL_MS)
+                // 低频单点探测：覆盖坐车/骑行这类传感器平稳但人在位移的场景，
+                // 又不会为玩手机持续烧定位。间隔由门禁的退避阶梯给（180 / 300 / 600 秒）
+                collector.setProbeIntervalOverride(probeIntervalMs)
                 collector.setCaptureIntervalOverride(LocationPace.STILL_INTERVAL_MS)
                 runCatching { collector.stopSubscription() }
                     .onFailure { Log.w(TAG, "探测态释放订阅失败", it) }
-                Log.i(TAG, "门禁：PROBING（未确认远行，不建订阅）")
+                Log.i(
+                    TAG,
+                    "门禁：PROBING（未确认远行，不建订阅，探测间隔 " + (probeIntervalMs / 1000) + "s）",
+                )
             }
             MotionGate.State.MOVING -> {
                 collector.setProbeIntervalOverride(null)
@@ -478,6 +493,23 @@ class LocationForegroundService : Service() {
             }
         }
         logEvidence()
+    }
+
+    /**
+     * 同态下的间隔补同步：退避档变了就把新间隔写给采集器。
+     *
+     * 只处理非 0 值：SLEEPING / MOVING 的覆盖分别是 null 与 30 秒，由 [applyGateState] 的状态分支负责，
+     * 这里再写一次会把 MOVING 的 30 秒订阅覆盖回 180 秒。
+     */
+    private fun syncProbeInterval(intervalMs: Long) {
+        if (intervalMs <= 0L || intervalMs == appliedProbeIntervalMs) return
+        appliedProbeIntervalMs = intervalMs
+        LocationCollector.get(this).setProbeIntervalOverride(intervalMs)
+        Log.i(
+            TAG,
+            "门禁：PROBING 探测退避 → " + (intervalMs / 1000) + "s（连续 " +
+                gate.quietProbeCount + " 次无位移证据）",
+        )
     }
 
     private fun logEvidence() {
@@ -507,13 +539,15 @@ class LocationForegroundService : Service() {
                     lastFallbackAtMs = now
                 } else if (now - lastFallbackAtMs >= STILL_FALLBACK_MS) {
                     lastFallbackAtMs = now
-                    probeOnce()
+                    // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每半小时白烧 20 秒射频）
+                    probeOnce(FixBudget.PROBE)
                 }
             }
             MotionGate.State.PROBING -> {
-                if (now - lastProbeAtMs >= LocationPace.HANDHELD_PROBE_INTERVAL_MS) {
+                // 间隔读门禁的退避阶梯（180 / 300 / 600 秒），与 collector 的 probeIntervalOverride 同源
+                if (now - lastProbeAtMs >= gate.probeIntervalMs) {
                     lastProbeAtMs = now
-                    probeOnce()
+                    probeOnce(FixBudget.PROBE)
                 }
             }
             MotionGate.State.MOVING -> {
@@ -530,13 +564,17 @@ class LocationForegroundService : Service() {
     /**
      * 采一个探测点：单点定位，拿到即释放（不建订阅）。
      *
-     * 必须 force：门禁探测不能被采集节流（STILL 180s 窗口）或缓存命中挡掉，否则 PROBING
-     * 拿不到「现在在哪」，5 分钟无证据直接回 SLEEPING（模拟器实测的坐车不升级）。
+     * 必须 force：门禁探测不能被采集节流（STILL 180s 窗口）挡掉，否则 PROBING 拿不到
+     * 「现在在哪」，5 分钟无证据直接回 SLEEPING（模拟器实测的坐车不升级）。
+     * 但不为探测烧满射频：≤90 秒的系统缓存点可以直接顶替（见 [LocationProbePolicy.canUseCached]）。
      * 点位证据由采集器内部统一 offer（见 [LocationGateState]），这里只负责落库。
+     *
+     * @param budget 预算档位：PROBING 探测与 SLEEPING 兜底传 [FixBudget.PROBE]（4s + 8s）；
+     *   MOVING 的静默补采与升级瞬间补点保持满预算（5s + 15s）—— 那条路径必须真的拿到点。
      */
-    private fun probeOnce() {
+    private fun probeOnce(budget: FixBudget = FixBudget.FULL) {
         runCatching {
-            LocationCollector.get(this).collectThrottledAsync(force = true) { sample ->
+            LocationCollector.get(this).collectThrottledAsync(force = true, budget = budget) { sample ->
                 if (sample == null) return@collectThrottledAsync
                 CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
                     runCatching { serviceContainer.recordCollector.onLocation(sample) }
