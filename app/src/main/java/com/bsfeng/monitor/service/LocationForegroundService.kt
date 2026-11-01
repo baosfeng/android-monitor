@@ -31,8 +31,11 @@ import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationPace
 import com.bsfeng.monitor.record.LocationSample
+import com.bsfeng.monitor.record.LocationTickerPolicy
+import com.bsfeng.monitor.record.LocationTickerScheduler
 import com.bsfeng.monitor.record.MotionDetector
 import com.bsfeng.monitor.record.MotionGate
+import com.bsfeng.monitor.record.TickerHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -65,9 +68,6 @@ import kotlinx.coroutines.launch
 class LocationForegroundService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
-
-    /** ticker 运行标志：onStartCommand 启动、onDestroy 停止（防叠加）。 */
-    private var tickerActive = false
 
     private val sensorManager: SensorManager? by lazy {
         runCatching { getSystemService(Context.SENSOR_SERVICE) as? SensorManager }.getOrNull()
@@ -175,11 +175,40 @@ class LocationForegroundService : Service() {
 
     private val ticker = object : Runnable {
         override fun run() {
+            val versionAtTickStart = tickerScheduler.version
             runCatching { maybeSampleLocation() }
                 .onFailure { Log.w(TAG, "定位补采异常", it) }
-            if (tickerActive) handler.postDelayed(this, LocationPace.MOVING_INTERVAL_MS)
+            // 本拍期间门禁若迁移过，业务里已经重排过一拍（代次变了），这里不能重复排，
+            // 否则会多出一条 tick 链、唤醒次数翻倍。
+            tickerScheduler.afterTick(versionAtTickStart)
         }
     }
+
+    /** ticker 排程宿主：排一拍前先摘掉上一拍，保证任何时刻只有一拍在排。 */
+    private val tickerHost: TickerHost = object : TickerHost {
+        override fun schedule(delayMs: Long) {
+            handler.removeCallbacks(ticker)
+            handler.postDelayed(ticker, delayMs)
+        }
+
+        override fun cancel() {
+            handler.removeCallbacks(ticker)
+        }
+    }
+
+    /**
+     * ticker 拍子：MOVING / PROBING 30 秒；SLEEPING 最长 5 分钟（那时唯一有意义的定时事件是 30 分钟兜底）。
+     *
+     * 拍子的时序（含「状态迁移立刻重排」）在 [LocationTickerScheduler] 里，纯逻辑可单测；
+     * 这里只提供 Handler 宿主与三态 / 兜底时刻两个只读来源。
+     */
+    private val tickerScheduler: LocationTickerScheduler = LocationTickerScheduler(
+        host = tickerHost,
+        clock = { System.currentTimeMillis() },
+        stateOf = { appliedGateState },
+        lastFallbackAtMsOf = { lastFallbackAtMs },
+        log = { message -> Log.d(TAG, message) },
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -493,6 +522,13 @@ class LocationForegroundService : Service() {
             }
         }
         logEvidence()
+        // 状态迁移必须**立刻**生效，不能等（可能已被排到 5 分钟后的）ticker：
+        // 1) syncSensors 真正反注册 / 打开 16Hz 加速度计 —— SLEEPING 分支只把 observingUntilMs 清零，
+        //    不重配的话 16Hz 观察窗会跟着慢拍子多跑最多 5 分钟（SLEEPING 不该有 16Hz 加速度计）；
+        // 2) ticker 立刻按新态重排 —— PROBING / MOVING 的 30 秒探测不能被 SLEEPING 的慢拍子拖后。
+        // 本方法是门禁态的唯一应用出口（传感器 / 探测证据都会 post 到主线程再进来），同步执行即可。
+        syncSensors(System.currentTimeMillis())
+        tickerScheduler.onStateChanged()
     }
 
     /**
@@ -537,7 +573,7 @@ class LocationForegroundService : Service() {
                 // 没有兜底就会一整天零点。启动后先等满一个窗口，不在 SLEEPING 立刻采点。
                 if (lastFallbackAtMs == 0L) {
                     lastFallbackAtMs = now
-                } else if (now - lastFallbackAtMs >= STILL_FALLBACK_MS) {
+                } else if (now - lastFallbackAtMs >= LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS) {
                     lastFallbackAtMs = now
                     // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每半小时白烧 20 秒射频）
                     probeOnce(FixBudget.PROBE)
@@ -632,17 +668,10 @@ class LocationForegroundService : Service() {
         false
     }
 
-    private fun startTicker() {
-        if (tickerActive) return
-        tickerActive = true
-        handler.removeCallbacks(ticker)
-        handler.postDelayed(ticker, LocationPace.MOVING_INTERVAL_MS)
-    }
+    /** 启动 ticker（幂等）：第一拍按当前门禁态排（SLEEPING 直接 5 分钟，不再 30 秒空转）。 */
+    private fun startTicker() = tickerScheduler.start()
 
-    private fun stopTicker() {
-        tickerActive = false
-        handler.removeCallbacks(ticker)
-    }
+    private fun stopTicker() = tickerScheduler.stop()
 
     private fun buildNotification(): Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {
@@ -693,9 +722,6 @@ class LocationForegroundService : Service() {
         private const val TAG = "LocationForegroundService"
         const val CHANNEL_ID_LOCATION = "location_tracking_channel"
         private const val NOTIFICATION_ID = 5400
-
-        /** 静止期的兜底定位间隔：防传感器误判（车载/传送带）导致全天零点。 */
-        private const val STILL_FALLBACK_MS = 30 * 60_000L
 
         /** 显著运动触发后的观察窗：这段时间里用加速度计 + 步数计取证。 */
         private const val OBSERVE_WINDOW_MS = 90_000L
