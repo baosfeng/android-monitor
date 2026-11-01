@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>定位健康 · 权限四态与采集覆盖</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f5f5f7;--surface-warm:#fbfbfd;
+  --fg:#1d1d1f;--fg-2:#424245;--muted:#6e6e73;
+  --border:#d2d2d7;--border-soft:#e8e8ed;
+  --accent:#0071e3;--accent-on:#ffffff;
+  --success:#16a34a;--warn:#b45309;--danger:#dc2626;
+  --text-xs:12px;--text-sm:14px;--text-base:17px;--text-lg:21px;--text-xl:28px;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-12:48px;
+  --radius-sm:8px;--radius-md:12px;--radius-lg:18px;--radius-pill:980px;
+  --tap-min:44px;
+  --ease-standard:cubic-bezier(0.28,0,0.22,1);
+  --dur-state:180ms;--dur-press:120ms;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --font-display:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+  --font-body:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+  --text-2xl:34px;
+  --accent-hover:color-mix(in srgb,var(--accent) 88%,#000);
+  --accent-active:color-mix(in srgb,var(--accent) 76%,#000);
+  --page-bg:color-mix(in srgb,var(--fg) 5%,var(--bg));
+  --success-text:color-mix(in srgb,var(--success) 65%,var(--fg));
+  --warn-text:color-mix(in srgb,var(--warn) 45%,var(--fg));
+  --danger-text:color-mix(in srgb,var(--danger) 70%,var(--fg));
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  background:var(--page-bg);color:var(--fg);-webkit-font-smoothing:antialiased}
+.wrap{display:flex;gap:var(--space-8);padding:var(--space-8);align-items:flex-start;justify-content:center;min-height:100vh}
+
+.nav{position:sticky;top:var(--space-8);width:268px;flex:0 0 auto}
+.nav h2{font-size:var(--text-sm);color:var(--muted);font-weight:600;margin:0 0 var(--space-3);letter-spacing:.02em}
+.nav-sec{margin-bottom:var(--space-5)}
+.nav-sec p{font-size:var(--text-xs);color:var(--muted);margin:0 0 var(--space-2);font-weight:600}
+.nav button{display:block;width:100%;text-align:left;padding:10px var(--space-3);border:0;border-radius:var(--radius-md);
+  background:transparent;color:var(--fg-2);font:inherit;font-size:var(--text-sm);cursor:pointer;margin-bottom:2px;
+  transition:background var(--dur-state) var(--ease-standard)}
+.nav button:hover{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.nav button.is-on{background:var(--fg);color:var(--bg);font-weight:600}
+.nav .note{font-size:var(--text-xs);color:var(--muted);line-height:1.6;padding:var(--space-3);
+  background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md)}
+.nav .note b{color:var(--fg-2)}
+
+.phone{width:390px;height:844px;flex:0 0 auto;background:var(--bg);border-radius:44px;
+  box-shadow:0 24px 60px -20px rgba(0,0,0,.28),0 0 0 10px color-mix(in srgb,var(--fg) 9%,var(--bg)),0 0 0 11px var(--border);
+  position:relative;overflow:hidden;display:flex;flex-direction:column}
+.phone.tall{height:900px}
+.status{height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:0 var(--space-6);font-size:var(--text-xs);font-weight:600;font-family:var(--font-mono)}
+.viewport{flex:1 1 auto;min-height:0;position:relative}
+
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg)}
+.screen.is-on{display:flex}
+.screen-head{display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--space-4) var(--space-3);flex:0 0 auto}
+.back{width:32px;height:32px;display:grid;place-items:center;border:0;background:transparent;
+  border-radius:var(--radius-sm);color:var(--fg);cursor:pointer;flex:0 0 auto}
+.back svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.h1{font-size:var(--text-lg);font-weight:700;line-height:1.2;margin:0;letter-spacing:-.02em}
+.meta{font-size:var(--text-sm);color:var(--muted);margin:0}
+.meta.mt-2{margin-top:var(--space-2)}
+.fine{font-size:var(--text-xs);color:var(--muted);line-height:1.5;margin:0}
+.badge{display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;padding:0 6px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--fg) 9%,transparent);color:var(--fg-2);
+  font-size:var(--text-xs);font-weight:600;font-family:var(--font-mono);white-space:nowrap}
+.badge.ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+.badge.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-text)}
+.badge.danger{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger-text)}
+
+.content{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--space-2) var(--space-4) var(--space-12)}
+.stack{display:flex;flex-direction:column;gap:var(--space-4)}
+.group{background:var(--surface-warm);border:1px solid var(--border-soft);border-radius:var(--radius-lg);overflow:hidden}
+.group-label{font-size:var(--text-sm);color:var(--muted);font-weight:600;padding:0 var(--space-1);margin:0 0 var(--space-2)}
+.group-head{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);
+  border-bottom:1px solid var(--border-soft)}
+.group-head .row-body{gap:2px}
+.group-body{padding:var(--space-3) var(--space-4) var(--space-4)}
+
+.row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);
+  min-height:var(--tap-min);position:relative;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.row:active{background:color-mix(in srgb,var(--fg) 4%,transparent)}
+.row+.row::before{content:"";position:absolute;top:0;left:var(--space-4);right:0;height:1px;background:var(--border-soft)}
+.row.static{cursor:default}
+.row.static:active{background:transparent}
+.row-icon{flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--fg) 9%,transparent);color:var(--fg-2)}
+.row-icon.is-ok{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success-text)}
+.row-icon.is-warn{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn-text)}
+.row-icon.is-danger{background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger-text)}
+.row-icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.row-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.row-title{font-size:var(--text-base);font-weight:500;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:var(--text-sm);color:var(--muted);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub.warn{color:var(--warn-text)}
+.row-sub.danger{color:var(--danger-text)}
+.row-tail{flex:0 0 auto;font-size:var(--text-sm);color:var(--muted);font-family:var(--font-mono)}
+.chev{flex:0 0 auto;width:16px;height:16px;color:var(--muted);opacity:.7}
+.chev svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+.switch{position:relative;flex:0 0 auto;width:51px;height:31px;border-radius:var(--radius-pill);
+  border:0;padding:0;cursor:pointer;background:color-mix(in srgb,var(--fg) 18%,transparent);
+  transition:background var(--dur-state) var(--ease-standard)}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;
+  background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform var(--dur-state) var(--ease-standard)}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch[aria-checked="true"]::after{transform:translateX(20px)}
+
+.btn{min-height:var(--tap-min);padding:0 var(--space-4);border:1px solid var(--border);
+  border-radius:var(--radius-pill);background:transparent;color:var(--fg);
+  font:inherit;font-size:var(--text-sm);font-weight:600;cursor:pointer;
+  transition:transform var(--dur-press) var(--ease-standard)}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--accent);color:var(--accent-on);border-color:var(--accent)}
+.btn-ghost{background:transparent}
+.btn-sm{min-height:36px;font-size:var(--text-sm)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+
+/* ── 三步清单 ── */
+.steps{list-style:none;margin:var(--space-3) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.step{display:flex;gap:var(--space-2);align-items:flex-start}
+.step-no{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-size:var(--text-xs);font-weight:600;font-family:var(--font-mono)}
+.step.is-done .step-no{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+.step-body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.step-t{font-size:var(--text-base);font-weight:500;line-height:1.25}
+.step-s{font-size:var(--text-sm);color:var(--muted);line-height:1.3}
+
+/* ── 采集覆盖条（P0-3 核心） ── */
+.cov-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2);margin-bottom:var(--space-2)}
+.cov-pct{font-size:var(--text-lg);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.cov-bar{display:flex;width:100%;height:34px;border-radius:var(--radius-sm);overflow:hidden;
+  background:color-mix(in srgb,var(--fg) 6%,transparent);gap:1px}
+.cov-seg{height:100%;transition:flex-grow var(--dur-state) var(--ease-standard)}
+.cov-seg.is-ok{background:color-mix(in srgb,var(--success) 62%,transparent)}
+.cov-seg.is-gap{background:color-mix(in srgb,var(--warn) 58%,transparent)}
+.cov-seg.is-deep{background:color-mix(in srgb,var(--danger) 55%,transparent)}
+.cov-seg.is-off{background:color-mix(in srgb,var(--fg) 14%,transparent)}
+.cov-axis{display:flex;justify-content:space-between;font-size:var(--text-xs);color:var(--muted);
+  font-family:var(--font-mono);margin-top:var(--space-1)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-3)}
+.legend span{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--muted)}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ── 断档列表 ── */
+.gap-list{list-style:none;margin:var(--space-3) 0 0;padding:0;display:flex;flex-direction:column}
+.gap-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--space-3);
+  min-height:var(--tap-min);padding:var(--space-2) 0;border-top:1px solid var(--border-soft)}
+.gap-item:first-child{border-top:0}
+.gap-time{font-size:var(--text-sm);font-family:var(--font-mono);color:var(--fg-2);white-space:nowrap}
+.gap-mid{min-width:0;display:flex;flex-direction:column;gap:1px}
+.gap-dur{font-size:var(--text-sm);font-weight:600;font-variant-numeric:tabular-nums}
+.gap-why{font-size:var(--text-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gap-item.is-deep .gap-dur{color:var(--danger-text)}
+.gap-item.is-gap .gap-dur{color:var(--warn-text)}
+
+/* ── 行程页覆盖条 ── */
+.trip-card{background:var(--surface-warm);border:1px solid var(--border-soft);border-radius:var(--radius-lg);overflow:hidden}
+.trip-head{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4) 0}
+.trip-title{font-size:var(--text-base);font-weight:600;margin:0}
+.trip-body{padding:var(--space-3) var(--space-4) var(--space-4)}
+.trace{position:relative;height:170px;border-radius:var(--radius-md);background:var(--surface);overflow:hidden}
+.trace svg{position:absolute;inset:0;width:100%;height:100%}
+.trip-foot{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin-top:var(--space-2)}
+
+/* ── 对比说明卡 ── */
+.cmp{background:var(--surface-warm);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:var(--space-4)}
+.cmp h3{margin:0 0 var(--space-2);font-size:var(--text-base);font-weight:600}
+.cmp ul{margin:var(--space-2) 0 0;padding-left:18px;font-size:var(--text-sm);color:var(--fg-2);line-height:1.55}
+.cmp li{margin-bottom:var(--space-2)}
+.cmp .tag{display:inline-block;font-size:var(--text-xs);font-weight:600;padding:1px 6px;border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);margin-right:6px}
+.cmp .tag.no{background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--muted)}
+
+.od-ctl{position:absolute;right:var(--space-3);bottom:var(--space-3);display:flex;gap:var(--space-2);z-index:5}
+@media (max-width:920px){
+  .wrap{flex-direction:column;align-items:center;padding:var(--space-4)}
+  .nav{position:static;width:100%;max-width:390px}
+  .nav .note{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="nav">
+    <h2>定位健康 · 原型</h2>
+    <div class="nav-sec">
+      <p>P0-1 权限四态</p>
+      <button data-go="detail-ok" class="is-on">位置采集 · 已就绪</button>
+      <button data-go="detail-coarse">位置采集 · 仅大致位置</button>
+      <button data-go="detail-worse">位置采集 · 缺后台定位</button>
+    </div>
+    <div class="nav-sec">
+      <p>P0-3 采集覆盖</p>
+      <button data-go="trip">每日行程 · 覆盖条</button>
+    </div>
+    <div class="nav-sec">
+      <p>待拍板</p>
+      <button data-go="p02">P0-2 前台服务方案</button>
+    </div>
+    <div class="note">
+      <b>怎么看</b><br>
+      左侧切换四态，重点看<b>「仅大致位置」</b>：现在是绿标「已就绪」，改后是橙标「轨迹不可靠」。<br><br>
+      右下图例说明每个色块的含义。
+    </div>
+  </div>
+
+  <div class="phone tall">
+    <div class="status"><span>9:41</span><span>▲ ● ▮</span></div>
+    <div class="viewport">
+
+      <!-- ══════════ 位置采集 · 已就绪 ══════════ -->
+      <section class="screen is-on" data-screen="detail-ok" data-od-id="screen-detail-ok">
+        <div class="screen-head">
+          <button class="back" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div><p class="h1">位置采集</p></div>
+        </div>
+        <div class="content"><div class="stack">
+
+          <div class="group">
+            <div class="group-head">
+              <span class="row-icon is-ok" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">定位权限</span>
+                <span class="row-sub">精确位置 · 始终允许</span>
+              </span>
+              <span class="badge ok" data-od-id="lh-badge-ok">已就绪</span>
+            </div>
+            <div class="group-body">
+              <ol class="steps">
+                <li class="step is-done"><span class="step-no">1</span><span class="step-body"><span class="step-t">开启定位服务</span><span class="step-s">系统设置 › 位置信息</span></span></li>
+                <li class="step is-done"><span class="step-no">2</span><span class="step-body"><span class="step-t">选「始终允许」</span><span class="step-s">应用权限 › 位置信息 › 始终允许</span></span></li>
+                <li class="step is-done"><span class="step-no">3</span><span class="step-body"><span class="step-t">关掉省电限制</span><span class="step-s">电池 › 应用省电策略 › 不限制</span></span></li>
+              </ol>
+              <div class="row static" style="padding-left:0;padding-right:0;margin-top:var(--space-3);border-top:1px solid var(--border-soft);padding-top:var(--space-3)">
+                <span class="row-body">
+                  <span class="row-title">采集状态</span>
+                  <span class="row-sub">上次成功 12 秒前 (±8m) · 持续订阅在跑</span>
+                </span>
+                <span class="badge ok">采集中</span>
+              </div>
+              <div class="grid-2" style="margin-top:var(--space-3)">
+                <button class="btn btn-ghost btn-sm">重新检测</button>
+                <button class="btn btn-sm">去系统设置</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-head">
+              <span class="row-icon is-warn" aria-hidden><svg viewBox="0 0 24 24"><path d="M3 17V9m5 8V5m5 12v-6m5 6V7"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">采集覆盖</span>
+                <span class="row-sub" data-od-id="lh-cov-sub">过去 24 小时 · 断档 2 次</span>
+              </span>
+              <span class="badge warn" data-od-id="lh-cov-badge">77%</span>
+            </div>
+            <div class="group-body">
+              <div class="cov-head">
+                <span class="cov-pct">18 小时 32 分</span>
+                <span class="fine">共 24 小时</span>
+              </div>
+              <div class="cov-bar" data-od-id="lh-cov-bar">
+                <span class="cov-seg is-ok" style="flex-grow:312"></span>
+                <span class="cov-seg is-gap" style="flex-grow:35"></span>
+                <span class="cov-seg is-ok" style="flex-grow:633"></span>
+                <span class="cov-seg is-deep" style="flex-grow:47"></span>
+                <span class="cov-seg is-ok" style="flex-grow:413"></span>
+              </div>
+              <div class="cov-axis"><span>0:00</span><span>12:00</span><span>24:00</span></div>
+              <div class="legend">
+                <span><i style="background:color-mix(in srgb,var(--success) 62%,transparent)"></i>有采样</span>
+                <span><i style="background:color-mix(in srgb,var(--warn) 58%,transparent)"></i>断档 &lt;30 分</span>
+                <span><i style="background:color-mix(in srgb,var(--danger) 55%,transparent)"></i>断档 ≥30 分</span>
+                <span><i style="background:color-mix(in srgb,var(--fg) 14%,transparent)"></i>功能关闭</span>
+              </div>
+
+              <ul class="gap-list" data-od-id="lh-gap-list">
+                <li class="gap-item is-gap">
+                  <span class="gap-time">03:12</span>
+                  <span class="gap-mid"><span class="gap-dur">35 分钟</span><span class="gap-why">设备休眠 · 未唤醒</span></span>
+                  <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+                </li>
+                <li class="gap-item is-deep">
+                  <span class="gap-time">14:20</span>
+                  <span class="gap-mid"><span class="gap-dur">47 分钟</span><span class="gap-why">取点超时 · 室内无信号</span></span>
+                  <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+                </li>
+              </ul>
+              <p class="fine" style="margin-top:var(--space-2)">断档由采集器自动记录，不做补点、不猜位置。点任一条看当时的自愈动作。</p>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="row static">
+              <span class="row-body">
+                <span class="row-title">忽略电池优化</span>
+                <span class="row-sub">未加入白名单 · 息屏后可能被冻结</span>
+              </span>
+              <button class="switch" role="switch" aria-checked="false" aria-label="忽略电池优化"></button>
+            </div>
+            <div class="row static">
+              <span class="row-body">
+                <span class="row-title">采样节奏</span>
+                <span class="row-sub">移动约 10 秒 · 静止约 3 分钟</span>
+              </span>
+            </div>
+          </div>
+
+        </div></div>
+      </section>
+
+      <!-- ══════════ 位置采集 · 仅大致位置 ══════════ -->
+      <section class="screen" data-screen="detail-coarse" data-od-id="screen-detail-coarse">
+        <div class="screen-head">
+          <button class="back" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div><p class="h1">位置采集</p></div>
+        </div>
+        <div class="content"><div class="stack">
+
+          <div class="group" style="border-color:color-mix(in srgb,var(--warn) 34%,transparent)">
+            <div class="group-head">
+              <span class="row-icon is-warn" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">定位权限</span>
+                <span class="row-sub warn">仅大致位置 · 误差可达数百米</span>
+              </span>
+              <span class="badge warn" data-od-id="lh-badge-coarse">大致位置</span>
+            </div>
+            <div class="group-body">
+              <div style="background:color-mix(in srgb,var(--warn) 9%,transparent);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-3)">
+                <p style="margin:0;font-size:var(--text-sm);line-height:1.5;color:var(--fg-2)">
+                  <b>行程会很粗糙。</b>系统只会返回基站级位置（通常 500 米以上），
+                  轨迹会出现大幅漂移，很多点会因精度不足被丢弃。
+                </p>
+              </div>
+              <ol class="steps">
+                <li class="step is-done"><span class="step-no">1</span><span class="step-body"><span class="step-t">开启定位服务</span><span class="step-s">系统设置 › 位置信息</span></span></li>
+                <li class="step" style="--w:0"><span class="step-no">2</span><span class="step-body"><span class="step-t">改成「精确位置」</span><span class="step-s">应用权限 › 位置信息 › 使用精确位置</span></span></li>
+                <li class="step"><span class="step-no">3</span><span class="step-body"><span class="step-t">选「始终允许」</span><span class="step-s">应用权限 › 位置信息 › 始终允许</span></span></li>
+              </ol>
+              <div class="grid-2" style="margin-top:var(--space-3)">
+                <button class="btn btn-ghost btn-sm">仍然继续</button>
+                <button class="btn btn-primary btn-sm">去改权限</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-head">
+              <span class="row-icon is-danger" aria-hidden><svg viewBox="0 0 24 24"><path d="M3 17V9m5 8V5m5 12v-6m5 6V7"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">采集覆盖</span>
+                <span class="row-sub danger">过去 24 小时 · 大部分点被精度闸丢弃</span>
+              </span>
+              <span class="badge danger">21%</span>
+            </div>
+            <div class="group-body">
+              <div class="cov-head">
+                <span class="cov-pct">5 小时 04 分</span>
+                <span class="fine">共 24 小时</span>
+              </div>
+              <div class="cov-bar">
+                <span class="cov-seg is-ok" style="flex-grow:63"></span>
+                <span class="cov-seg is-off" style="flex-grow:280"></span>
+                <span class="cov-seg is-ok" style="flex-grow:41"></span>
+                <span class="cov-seg is-off" style="flex-grow:200"></span>
+                <span class="cov-seg is-ok" style="flex-grow:53"></span>
+                <span class="cov-seg is-off" style="flex-grow:803"></span>
+              </div>
+              <div class="cov-axis"><span>0:00</span><span>12:00</span><span>24:00</span></div>
+              <p class="fine" style="margin-top:var(--space-3)">
+                灰段 = 取到的点精度超过 500 米被丢弃。这是<b>权限问题，不是掉线问题</b>——换成精确位置即可。
+              </p>
+            </div>
+          </div>
+
+        </div></div>
+      </section>
+
+      <!-- ══════════ 缺后台定位 ══════════ -->
+      <section class="screen" data-screen="detail-worse" data-od-id="screen-detail-worse">
+        <div class="screen-head">
+          <button class="back" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div><p class="h1">位置采集</p></div>
+        </div>
+        <div class="content"><div class="stack">
+          <div class="group">
+            <div class="group-head">
+              <span class="row-icon is-warn" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">定位权限</span>
+                <span class="row-sub warn">已授权前台定位 · 后台仍被限制</span>
+              </span>
+              <span class="badge warn" data-od-id="lh-badge-bg">缺后台定位</span>
+            </div>
+            <div class="group-body">
+              <ol class="steps">
+                <li class="step is-done"><span class="step-no">1</span><span class="step-body"><span class="step-t">开启定位服务</span><span class="step-s">已完成</span></span></li>
+                <li class="step is-done"><span class="step-no">2</span><span class="step-body"><span class="step-t">精确位置</span><span class="step-s">已完成</span></span></li>
+                <li class="step"><span class="step-no">3</span><span class="step-body"><span class="step-t">选「始终允许」</span><span class="step-s">系统要求单独一次授权，不能和其他权限同批</span></span></li>
+              </ol>
+              <div class="grid-2" style="margin-top:var(--space-3)">
+                <button class="btn btn-ghost btn-sm">重新检测</button>
+                <button class="btn btn-primary btn-sm">去开「始终允许」</button>
+              </div>
+            </div>
+          </div>
+          <div class="group">
+            <div class="group-head">
+              <span class="row-icon is-danger" aria-hidden><svg viewBox="0 0 24 24"><path d="M3 17V9m5 8V5m5 12v-6m5 6V7"/></svg></span>
+              <span class="row-body">
+                <span class="row-title">采集覆盖</span>
+                <span class="row-sub danger">过去 24 小时 · 息屏后完全停止</span>
+              </span>
+              <span class="badge danger">34%</span>
+            </div>
+            <div class="group-body">
+              <div class="cov-bar">
+                <span class="cov-seg is-ok" style="flex-grow:120"></span>
+                <span class="cov-seg is-deep" style="flex-grow:380"></span>
+                <span class="cov-seg is-ok" style="flex-grow:90"></span>
+                <span class="cov-seg is-deep" style="flex-grow:850"></span>
+              </div>
+              <div class="cov-axis"><span>0:00</span><span>12:00</span><span>24:00</span></div>
+              <p class="fine" style="margin-top:var(--space-3)">深色段是息屏时段：只有前台定位权限时，系统直接不给点。</p>
+            </div>
+          </div>
+        </div></div>
+      </section>
+
+      <!-- ══════════ 每日行程 · 覆盖条 ══════════ -->
+      <section class="screen" data-screen="trip" data-od-id="screen-trip">
+        <div class="screen-head">
+          <button class="back" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div style="flex:1"><p class="h1">每日行程</p></div>
+          <span class="badge" style="font-family:inherit;font-weight:500">10月30日</span>
+        </div>
+        <div class="content"><div class="stack">
+
+          <div class="trip-card">
+            <div class="trip-head">
+              <p class="trip-title">今日轨迹</p>
+              <span class="fine" style="flex:1">样本 214 · 07:12–18:40</span>
+              <span class="badge">底图</span>
+            </div>
+            <div class="trip-body">
+              <div class="trace">
+                <svg viewBox="0 0 320 170" preserveAspectRatio="none">
+                  <path d="M28 132 C 60 128, 72 96, 104 92 S 150 104, 178 74 220 46 252 50 292 62 300 44"
+                    fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="28" cy="132" r="5" fill="var(--success)" stroke="var(--surface-warm)" stroke-width="2.5"/>
+                  <circle cx="300" cy="44" r="5" fill="var(--danger)" stroke="var(--surface-warm)" stroke-width="2.5"/>
+                </svg>
+              </div>
+              <div class="trip-foot">
+                <span class="fine">起点绿 · 终点红</span>
+                <span class="badge warn" data-od-id="trip-cov">覆盖 77%</span>
+              </div>
+
+              <!-- 新增：覆盖条嵌进轨迹卡底部 -->
+              <div style="margin-top:var(--space-3)">
+                <div class="cov-bar" style="height:14px;border-radius:4px">
+                  <span class="cov-seg is-ok" style="flex-grow:312"></span>
+                  <span class="cov-seg is-gap" style="flex-grow:35"></span>
+                  <span class="cov-seg is-ok" style="flex-grow:633"></span>
+                  <span class="cov-seg is-deep" style="flex-grow:47"></span>
+                  <span class="cov-seg is-ok" style="flex-grow:413"></span>
+                </div>
+                <div class="cov-axis"><span>0:00</span><span>12:00</span><span>24:00</span></div>
+              </div>
+              <div class="row static" style="padding:var(--space-3) 0 0;margin-top:var(--space-2);border-top:1px solid var(--border-soft)">
+                <span class="row-body">
+                  <span class="row-title" style="font-size:var(--text-sm)">今天断了 2 次</span>
+                  <span class="row-sub">03:12 起 35 分钟 · 14:20 起 47 分钟</span>
+                </span>
+                <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-head">
+              <span class="row-body"><span class="row-title">今日结论</span>
+                <span class="row-sub">停留 3 处 · 移动 2 段 · 未记录 82 分钟</span></span>
+            </div>
+            <div class="group-body">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-2)">
+                <div style="display:flex;flex-direction:column;gap:2px;padding:var(--space-2) var(--space-3);background:var(--surface);border-radius:var(--radius-md)">
+                  <span class="fine">在家</span><span style="font-weight:600;font-variant-numeric:tabular-nums">9h 12m</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px;padding:var(--space-2) var(--space-3);background:var(--surface);border-radius:var(--radius-md)">
+                  <span class="fine">在外</span><span style="font-weight:600;font-variant-numeric:tabular-nums">9h 20m</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px;padding:var(--space-2) var(--space-3);background:var(--surface);border-radius:var(--radius-md)">
+                  <span class="fine">未记录</span><span style="font-weight:600;font-variant-numeric:tabular-nums;color:var(--warn-text)">1h 22m</span></div>
+              </div>
+            </div>
+          </div>
+
+        </div></div>
+      </section>
+
+      <!-- ══════════ P0-2 方案对比 ══════════ -->
+      <section class="screen" data-screen="p02" data-od-id="screen-p02">
+        <div class="screen-head">
+          <button class="back" aria-label="返回"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+          <div><p class="h1">P0-2 待拍板</p></div>
+        </div>
+        <div class="content"><div class="stack">
+          <div class="cmp" style="border-color:color-mix(in srgb,var(--danger) 30%,transparent)">
+            <h3>先说一个调研纠正的前提</h3>
+            <ul>
+              <li>我上一轮说「前台服务是唯一稳定路径」，<b>这句话不完整</b>。</li>
+              <li>Android 14+ 规定：<b>没有 ACCESS_BACKGROUND_LOCATION 时，不能在后台启动 location 类型的前台服务</b>（security exception）。</li>
+              <li>而这恰好是最常见的坏状态（P0-1 的「缺后台定位」）。所以<b>前台服务救不了没有后台权限的用户</b>。</li>
+              <li>结论：<b>P0-1 必须排在 P0-2 之前</b>，顺序不是偏好问题。</li>
+            </ul>
+          </div>
+
+          <div class="cmp">
+            <h3>方案 A · 定位前台服务 <span class="tag">推荐</span></h3>
+            <ul>
+              <li>新增 <code>foregroundServiceType="location"</code> 常驻服务 + <code>FOREGROUND_SERVICE_LOCATION</code></li>
+              <li>前提：必须先拿到「始终允许」，否则后台创建直接抛异常</li>
+              <li>代价：<b>多一条不可关闭的常驻通知</b>（Android 强制），用户可见</li>
+              <li>与 Google Maps / Strava / Traccar 同一做法；另需返回 <code>START_STICKY</code> 让被杀后自恢复</li>
+            </ul>
+          </div>
+          <div class="cmp">
+            <h3>方案 B · 保持现状 + 提高闹钟精度</h3>
+            <ul>
+              <li><span class="tag no">不推荐</span>改 <code>setExactAndAllowWhileIdle</code>，减少 Doze 推迟</li>
+              <li>硬限制：Doze 下 <b>每 9 分钟最多一次</b>，App Standby 的 rare bucket 还会再降频</li>
+              <li>实测数据不支持单独走这条：现有 7 天里有 5 次 &gt;60 分钟断档</li>
+            </ul>
+          </div>
+          <div class="cmp">
+            <h3>方案 C · A + B 并存 <span class="tag">建议</span></h3>
+            <ul>
+              <li>前台服务为主，闹钟做二级兜底（服务被杀后仍能补点）</li>
+              <li>实现成本 ≈ A，多一层保险；<b>本原型按这个口径设计</b></li>
+              <li>另需处理 Android 13+ 的 <code>POST_NOTIFICATIONS</code>：通知被拒时任务管理器仍可见，但要先检查再承诺「正在采集」</li>
+            </ul>
+          </div>
+          <p class="fine">选 A 或 C 都需要你确认「接受一条常驻通知」。这是产品决策，我不替你定。</p>
+        </div></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var nav = document.querySelector('.nav');
+  var screens = document.querySelectorAll('.screen');
+  function go(id){
+    screens.forEach(function(s){ s.classList.toggle('is-on', s.dataset.screen === id); });
+    nav.querySelectorAll('button[data-go]').forEach(function(b){ b.classList.toggle('is-on', b.dataset.go === id); });
+  }
+  nav.addEventListener('click', function(e){
+    var b = e.target.closest('button[data-go]');
+    if (b) go(b.dataset.go);
+  });
+  document.querySelectorAll('.back').forEach(function(btn){
+    btn.addEventListener('click', function(){ go('detail-ok'); });
+  });
+  document.querySelectorAll('.switch').forEach(function(sw){
+    sw.addEventListener('click', function(){
+      sw.setAttribute('aria-checked', sw.getAttribute('aria-checked') === 'true' ? 'false' : 'true');
+    });
+  });
+})();
+</script>
+</body>
+</html>

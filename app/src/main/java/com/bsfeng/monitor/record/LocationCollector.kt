@@ -296,9 +296,11 @@ class LocationCollector internal constructor(
         if (initialFix) {
             env.log("位置订阅零投递，发起首点兜底主动定位（" + modeAtStart + "）", true)
         }
-        // 断档自愈必须用满预算：断档就是「现在真的拿不到点」，这时候砍预算只会把断档拉得更长
-        //（与首点兜底同理）。探测预算只在「常态低价值探测」上生效。
-        val effectiveBudget = if (plan.isGap) FixBudget.FULL else budget
+        // 断档自愈用满预算，但 SLEEPING 的兜底例外：断档自愈是「现在真的拿不到点」，
+        // 砍预算只会把断档拉得更长；而 SLEEPING 的 30 分钟兜底**本身就是设计好的静默**，
+        // 距上次成功必然 ≥30 分钟 —— 对它升级满预算等于把「常态低价值探测」全部变成
+        // 每 30 分钟一次 network 5s + gps 15s（室内两个 provider 都超时就是一天白烧 16 分钟射频）。
+        val effectiveBudget = LocationProbePolicy.effectiveBudget(budget, plan.isGap, LocationGateState.state)
         if (force) {
             env.log(
                 "门禁探测：跳过采集节流，预算档=" + effectiveBudget +
@@ -580,6 +582,21 @@ class LocationCollector internal constructor(
  * 在位移判定上等价，拿它顶替一次满射频探测是纯省电；更旧的点算不出「现在在哪」。
  */
 internal object LocationProbePolicy {
+
+    /**
+     * 本次主动定位真正使用的预算档位。
+     *
+     * 断档（[isGap]）默认升级到 [FixBudget.FULL]：断档就是「现在真的拿不到点」，这时候砍预算
+     * 只会把断档拉得更长（与首点兜底同理）。**唯一例外是门禁 SLEEPING**：它的 30 分钟兜底
+     * 距上次成功必然 ≥30 分钟，每次都会被判成断档 —— 那不是掉线，是省电设计本来的静默，
+     * 升级满预算只会让「什么都没发生」的半小时也烧 20 秒射频（真机实测：改前每 75~94 秒一次
+     * 满预算定位，11 小时只落 8 个点）。
+     *
+     * [gateState] 为 null（前台服务没跑、门禁未知）时仍升级：那时心跳是唯一采点路径，砍预算
+     * 等于制造漏采。
+     */
+    fun effectiveBudget(budget: FixBudget, isGap: Boolean, gateState: MotionGate.State?): FixBudget =
+        if (isGap && gateState != MotionGate.State.SLEEPING) FixBudget.FULL else budget
 
     fun shouldRequestActiveFix(
         force: Boolean,
