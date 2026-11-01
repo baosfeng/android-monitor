@@ -37,7 +37,11 @@ class TripAggregator(
 
     internal val windowMs: Long get() = dayEnd - dayStart
 
-    fun aggregate(records: List<Record>): DayTimeline {
+    /**
+     * [context] = 窗口外的记录（调用方按需多查前后各 2 小时）。只用于判定日首 / 日尾的归属，
+     * 不产生独立段；落在窗口内的部分忽略（那已由 [records] 覆盖）。
+     */
+    fun aggregate(records: List<Record>, context: List<Record> = emptyList()): DayTimeline {
         if (records.isEmpty()) return DayTimeline(dayStart = dayStart)
 
         val points = ArrayList<LocationPoint>()
@@ -56,8 +60,23 @@ class TripAggregator(
             }
         }
 
+        // 窗口外最近的定位点：只用于判定边界归属，不产生独立段
+        var before: LocationPoint? = null
+        var after: LocationPoint? = null
+        for (record in context) {
+            if (!isLocation(record, typeNameOf(record.type))) continue
+            val point = record.toPoint() ?: continue
+            if (point.ts < dayStart) {
+                val prev = before
+                if (prev == null || point.ts > prev.ts) before = point
+            } else if (point.ts >= dayEnd) {
+                val next = after
+                if (next == null || point.ts < next.ts) after = point
+            }
+        }
+
         return if (points.size >= TripAggregatorRules.MIN_POINTS_FOR_GPS) {
-            fromGps(points, usage)
+            fromGps(points, usage, before, after)
         } else {
             fromDevice(usage, wifis)
         }
@@ -68,6 +87,8 @@ class TripAggregator(
     private fun fromGps(
         points: List<LocationPoint>,
         usage: List<UsageSlice>,
+        before: LocationPoint?,
+        after: LocationPoint?,
     ): DayTimeline {
         // 先剔单点漂移再聚类：兜底定位的假点会被判 >80m 而断段，
         // 断出的单点 Run 又不满足 Run.isStay()，整段被落成 Gap——
@@ -120,7 +141,6 @@ class TripAggregator(
         }
 
         val segments = ArrayList<DaySegment>()
-        var activeMs = 0L
         var cursor = dayStart
         for (block in buildStayBlocks(spans, moves)) {
             val stayStart = block.start.coerceIn(dayStart, dayEnd)
@@ -137,19 +157,20 @@ class TripAggregator(
                         topApps = topApps(usage, stayStart, stayEnd),
                     ),
                 )
-                activeMs += stayEnd - stayStart
                 cursor = stayEnd
             }
             val move = block.followingMove
             if (move != null) {
                 segments.add(move)
-                activeMs += move.durationMs
                 cursor = maxOf(cursor, move.end)
             }
         }
 
         if (cursor < dayEnd) segments.add(Gap(cursor, dayEnd, gapReason(points, cursor, dayEnd)))
-        return DayTimeline(dayStart, segments, Basis.GPS, coveragePct(activeMs, windowMs))
+        // 日首 / 日尾的 Gap 若与窗口外的同址点相连，并入停留；已判定时长随之重算
+        val merged = mergeBoundaryGaps(segments, usage, dayStart, dayEnd, before, after)
+        val judgedMs = merged.sumOf { if (it is Gap) 0L else it.durationMs }
+        return DayTimeline(dayStart, merged, Basis.GPS, coveragePct(judgedMs, windowMs))
     }
 
     /**
