@@ -332,7 +332,8 @@ object TripTrace {
                 x = x,
                 y = y,
                 radiusDp = stayRadiusDp(stay.durationMs, maxDuration),
-                label = shortLabel(stay.place.label),
+                // 短名规则与时间轴标题共用 TripFormat.placeShortName，这一层不再自己实现
+            label = placeShortName(stay.place.label),
                 labelVisible = false,
                 durationMs = stay.durationMs,
             )
@@ -365,24 +366,10 @@ object TripTrace {
         return MIN_STAY_RADIUS_DP + (MAX_STAY_RADIUS_DP - MIN_STAY_RADIUS_DP) * ratio.toFloat()
     }
 
-    /** 地址去省 / 市 / 区县前缀，最多 12 字；去不干净时原样返回。 */
-    fun shortLabel(raw: String): String {
-        var text = raw.trim()
-        repeat(3) {
-            val index = text.indexOfFirst { it in ADMIN_SUFFIXES }
-            if (index in 0..6 && text.length - index - 1 >= 2) {
-                text = text.substring(index + 1).trim()
-            }
-        }
-        return text.take(12).ifBlank { raw }
-    }
-
     private data class Box(val left: Float, val top: Float, val right: Float, val bottom: Float) {
         fun overlaps(other: Box): Boolean =
             left < other.right && other.left < right && top < other.bottom && other.top < bottom
     }
 
     private const val EPS = 1e-9
-    // 只认「省 / 市 / 区 / 县」四级后缀：'州' 会误伤「杭州」「苏州」这类地名
-    private val ADMIN_SUFFIXES = charArrayOf('省', '市', '区', '县')
 }
