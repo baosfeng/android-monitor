@@ -23,7 +23,7 @@ object ReceivingAutoClose {
     /** 默认值：关闭。 */
     const val DEFAULT_MINUTES: Int = OFF
 
-    /** 最后一分钟改用警示色（契约：最后 60 秒）。 */
+    /** 最后一分钟改用警示色（口径：最后 60 秒）。 */
     const val WARNING_MS: Long = 60_000L
 
     /** 一分钟的毫秒数。 */

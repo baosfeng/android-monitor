@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * 分段控件键盘导航的纯函数回归（契约 s12-chip-seg「键盘」行）。
+ * 分段控件键盘导航的纯函数回归（锚点 s12-chip-seg「键盘」行）。
  *
  * 看护两条最容易回归的口径：① ← / → 到边界**夹紧不回绕**（改成取模就会从末位跳回首位）；
  * ② 跳首尾用 [Key.MoveHome] / [Key.MoveEnd]（键盘 Home / End），不是 [Key.Home]（安卓系统 Home 键）。
@@ -21,7 +21,7 @@ class SegmentNavTargetTest {
 
     @Test
     fun `左方向键到首位后夹紧不回绕`() {
-        // 回绕实现会返回 count - 1 = 4；契约要求停在 0
+        // 回绕实现会返回 count - 1 = 4；交互口径要求停在 0
         assertEquals(0, segmentNavTarget(Key.DirectionLeft, current = 0, count = 5))
     }
 
@@ -33,7 +33,7 @@ class SegmentNavTargetTest {
 
     @Test
     fun `右方向键到末位后夹紧不回绕`() {
-        // 回绕实现会返回 0；契约要求停在 count - 1 = 4
+        // 回绕实现会返回 0；交互口径要求停在 count - 1 = 4
         assertEquals(4, segmentNavTarget(Key.DirectionRight, current = 4, count = 5))
     }
 

@@ -34,7 +34,7 @@ internal fun TripSummaryCard(timeline: DayTimeline, modifier: Modifier = Modifie
     AppCard(modifier = modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             MetaText("今日结论", Modifier.weight(1f))
-            // 基准角标（契约 s16-source）：文案随 basis 变；不响应点按、不可点、不进 Tab 序
+            // 基准角标（锚点 s16-source）：文案随 basis 变；不响应点按、不可点、不进 Tab 序
             Badge(basisBadge(timeline.basis), modifier = Modifier.testTag("s16-source"))
         }
         Spacer(Modifier.height(t.space2))

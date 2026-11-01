@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * P1-6 回归（「删除后焦点没有落到相邻行」）。
  *
- * 契约 s05-del-confirm · 移除后：「焦点落在被删行的下一行，若为末行则落在上一行」。
+ * 锚点 s05-del-confirm · 移除后：「焦点落在被删行的下一行，若为末行则落在上一行」。
  * 删除发生在编辑页、返回列表后才复位焦点，所以两件事必须先算准：
  * 1. [neighborRowIdAfterDelete] —— 用**删除前**的明细顺序选出目标行（末行回退到上一行，只剩一笔时无相邻行）；
  * 2. [financeMainItemIndexOf] —— 目标行在 LazyColumn 里的项下标（懒加载列表只能滚到下标，

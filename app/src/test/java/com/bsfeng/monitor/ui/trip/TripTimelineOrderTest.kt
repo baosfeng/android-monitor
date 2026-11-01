@@ -15,7 +15,7 @@ import org.junit.Test
  * 时间轴显示顺序（trip 时间轴倒序）：升序输入 → 倒序输出，视觉位次 0 = 最新段，锚点跟随段的身份。
  *
  * 边界口径：空列表 / 单段不炸；start 相同的段保持输入相对顺序（稳定排序）；
- * 视觉第 i 行按时间序第 (段数 - 1 - i) 段查锚点表，时间序第 10 段起为 null（不打锚点，锚点集合严格等于契约 9 段）。
+ * 视觉第 i 行按时间序第 (段数 - 1 - i) 段查锚点表，时间序第 10 段起为 null（不打锚点，锚点集合严格等于账本定义的 9 段）。
  */
 class TripTimelineOrderTest {
 
@@ -43,7 +43,7 @@ class TripTimelineOrderTest {
 
     @Test
     fun `位次零是最晚段且锚点跟段身份走`() {
-        // 契约示例：9 段，时间序 0..8 对应 home-am … home-pm
+        // 口径示例：9 段，时间序 0..8 对应 home-am … home-pm
         val input = (0 until 9).map { stay(it * 60, it * 60 + 55) }
         val rows = timelineRowsNewestFirst(input)
 

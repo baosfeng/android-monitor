@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * 五态容器（契约 §8）：loading 骨架 / empty / error / populated / edge。
+ * 五态容器（交互口径 §8）：loading 骨架 / empty / error / populated / edge。
  * 每个数据面都能演示五态，W1/W2/W3 直接复用，不要各屏手写空态。
  *
  * 形态对齐原型 `.open-design/parts/00-shell.html`：

@@ -66,7 +66,7 @@ import kotlinx.coroutines.launch
  * s11-st-loading / s11-st-empty / s11-st-error / s11-st-edge。
  *
  * 空 / 错 / 边界态直接调共享 [EmptyState] / [ErrorState] / [EdgeState]（StateMessages.kt），
- * 不用 StateContainer：后者不接受块级锚点，本页每个态都要带契约锚点。
+ * 不用 StateContainer：后者不接受块级锚点，本页每个态都要带锚点。
  *
  * 「s11-list」是列表容器锚点，但列表项是 LazyColumn 的 items、没有可包住子集的容器节点，
  * 故与 s03-records 同一处置：锚点落在「应用列表」小节头那一行（见交接文档处置表）。
@@ -96,7 +96,7 @@ fun WhitelistScreen(
     }
 
     val context = LocalContext.current
-    // 三处焦点归位的落点（契约 s11-st-empty / s11-st-error / s11-none · 移除后）
+    // 三处焦点归位的落点（锚点 s11-st-empty / s11-st-error / s11-none · 移除后）
     val ctaFocus = remember { FocusRequester() }
     val retryFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
@@ -106,7 +106,7 @@ fun WhitelistScreen(
     // 是否刚离开本页去系统「使用情况访问」设置（只有这种返回才重扫，首帧不重扫）
     var awaitingUsageAccessReturn by remember { mutableStateOf(false) }
 
-    // 契约 s11-st-empty · 结果：跳转系统「使用情况访问」设置页；返回后重新扫描一次。
+    // 锚点 s11-st-empty · 结果：跳转系统「使用情况访问」设置页；返回后重新扫描一次。
     LifecycleResumeEffect(Unit) {
         if (awaitingUsageAccessReturn) {
             awaitingUsageAccessReturn = false
@@ -146,7 +146,7 @@ fun WhitelistScreen(
         }
     }
 
-    // 无结果卡「清空搜索」回位：等卡片 150ms 淡出，焦点回搜索框（契约 s11-none · 移除后）。
+    // 无结果卡「清空搜索」回位：等卡片 150ms 淡出，焦点回搜索框（锚点 s11-none · 移除后）。
     LaunchedEffect(pendingSearchFocus) {
         if (!pendingSearchFocus) return@LaunchedEffect
         restoreFocusAfterFrames(
@@ -237,9 +237,9 @@ fun WhitelistScreen(
                                 ) {
                                     AppField(
                                         value = searchQuery,
-                                        // 契约 s11-search：每字符即时回显，停手 300ms 后过滤（防抖在 VM 内）
+                                        // 锚点 s11-search：每字符即时回显，停手 300ms 后过滤（防抖在 VM 内）
                                         onValueChange = { viewModel.updateSearchQuery(it) },
-                                        // 无结果卡「清空搜索」后焦点回这里（契约 s11-none · 移除后）
+                                        // 无结果卡「清空搜索」后焦点回这里（锚点 s11-none · 移除后）
                                         focusRequester = searchFocus,
                                         placeholder = "搜索应用名或包名",
                                         leading = {
@@ -266,7 +266,7 @@ fun WhitelistScreen(
                                                         viewModel.applySearchNow(keyword)
                                                         toast.show("已筛选：" + keyword)
                                                     }
-                                                    // 契约：重置 / 筛选后滚动位置回列表顶部
+                                                    // 口径：重置 / 筛选后滚动位置回列表顶部
                                                     scope.launch { listState.animateScrollToItem(0) }
                                                 },
                                             )
@@ -290,7 +290,7 @@ fun WhitelistScreen(
                                 )
                             }
 
-                            // ── 无结果卡（契约 s11-none：150ms 淡入 / 淡出）──
+                            // ── 无结果卡（锚点 s11-none：150ms 淡入 / 淡出）──
                             item(key = "apps-empty") {
                                 // 淡入淡出包在独立 composable 里：直接写在 LazyListScope 的 item 内
                                 // 会被解析到 ColumnScope.AnimatedVisibility（扩展重载）而不是顶层重载。
@@ -363,7 +363,7 @@ fun WhitelistScreen(
 }
 
 /**
- * 无结果卡（契约 s11-none）：关键词非空且过滤结果为 0 时出现，150ms 淡入 / 淡出。
+ * 无结果卡（锚点 s11-none）：关键词非空且过滤结果为 0 时出现，150ms 淡入 / 淡出。
  *
  * 独立成 composable 是为了让 AnimatedVisibility 解析到顶层重载（LazyListScope 的 item 内
  * 没有 BoxScope 之类的无冲突接收者，扩展重载会抢解析）。

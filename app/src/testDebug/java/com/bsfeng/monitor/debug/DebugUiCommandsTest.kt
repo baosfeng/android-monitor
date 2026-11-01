@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `ui` 命令族的解析契约（纯 JVM）：合法动作 / 缺参 / 越界 / 非法组合都要有断言，
+ * `ui` 命令族的解析口径（纯 JVM）：合法动作 / 缺参 / 越界 / 非法组合都要有断言，
  * 拒绝时必须带可执行的期望值 —— 真机上点错一次就是一个来回。
  */
 class DebugUiCommandsTest {

@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 从 ui/ComponentGalleryScreen.kt 拆出：展厅的基础控件区 —— DemoSection 外壳、按钮组、chip 与分段控件、开关与徽标、行式排版、进度条。负责 s12 上半部分的陈列。
-// 契约 docs/交互设计/s12-组件与状态-交互契约.md 的 s12-buttons / s12-chip-seg / s12-switch-badge /
+// 锚点账本 的 s12-buttons / s12-chip-seg / s12-switch-badge /
 // s12-rows / s12-progress 五行：块级锚点逐字落 testTag，按下的时长与触感一律取共享基元，不手写常量。
 
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +32,7 @@ import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 小节外壳：modifier 承载契约的块级锚点（如 s12-buttons），锚点不自带在共享件里。 */
+/** 小节外壳：modifier 承载口径的块级锚点（如 s12-buttons），锚点不自带在共享件里。 */
 @Composable
 internal fun DemoSection(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val t = LocalDesignTokens.current
@@ -43,7 +43,7 @@ internal fun DemoSection(label: String, modifier: Modifier = Modifier, content: 
 }
 
 /**
- * 按钮组（契约 s12-buttons 五行）：主按钮 / 次按钮 / 禁用态 / 图标按钮 / 通栏次按钮 + 焦点与键盘。
+ * 按钮组（锚点 s12-buttons 五行）：主按钮 / 次按钮 / 禁用态 / 图标按钮 / 通栏次按钮 + 焦点与键盘。
  * 按钮本体的 0.96 按下、120ms、LIGHT 触感都由 AppButton / AppIconButton 内部基元承担。
  */
 @Composable
@@ -53,7 +53,7 @@ internal fun GalleryButtons(toast: ToastHostState) {
     DemoSection("按钮 Button", Modifier.testTag("s12-buttons")) {
         AppCard {
             Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                // 主按钮：一屏至多 1 个（契约边界）
+                // 主按钮：一屏至多 1 个（口径边界）
                 AppButton(
                     "保存",
                     { toast.show("主按钮：已保存") },
@@ -72,7 +72,7 @@ internal fun GalleryButtons(toast: ToastHostState) {
                 horizontalArrangement = Arrangement.spacedBy(t.space2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 禁用态：不可聚焦、无涟漪、无 toast；随原因文案出现（契约边界）
+                // 禁用态：不可聚焦、无涟漪、无 toast；随原因文案出现（口径边界）
                 AppButton("禁用态", {}, Modifier.weight(1f), AppButtonVariant.Ghost, enabled = false)
                 AppIconButton(Icons.Filled.Add, "更多操作", onClick = { toast.show("图标按钮") })
             }
@@ -101,7 +101,7 @@ internal fun GalleryButtons(toast: ToastHostState) {
 }
 
 /**
- * 胶囊 chip 组 + 分段控件（契约 s12-chip-seg 三行）。
+ * 胶囊 chip 组 + 分段控件（锚点 s12-chip-seg 三行）。
  *
  * 分段控件的键盘口径（Tab 只进组一次 / 左右方向键即时选中 / Home、End 跳首尾 / 环落当前选中段）
  * 由共享 SegmentedControl 的 roving tabindex + focusGroup 承担；本页只补「区间」toast。
@@ -122,7 +122,7 @@ internal fun GalleryChipsAndSegments(
             ChipRow(listOf("全部", "前台切换", "广告跳过", "充电"), chipIndex, onChip)
             Spacer(Modifier.height(t.space3))
             SegmentedControl(ranges, segIndex, { index ->
-                // 重复点当前段仍出 toast、但不重复请求（契约边界）
+                // 重复点当前段仍出 toast、但不重复请求（口径边界）
                 onSeg(index)
                 toast.show("区间：" + ranges[index])
             })
@@ -130,7 +130,7 @@ internal fun GalleryChipsAndSegments(
     }
 }
 
-/** 开关与徽标（契约 s12-switch-badge 两行）：开关切换 = LIGHT 一次（控件内收敛，调用点不再补震）。 */
+/** 开关与徽标（锚点 s12-switch-badge 两行）：开关切换 = LIGHT 一次（控件内收敛，调用点不再补震）。 */
 @Composable
 internal fun GallerySwitchesAndBadges(
     on: Boolean,
@@ -187,7 +187,7 @@ internal fun GallerySwitchesAndBadges(
 }
 
 /**
- * 列表行（契约 s12-rows 三行）：分组行（带箭头，可点）/ 紧凑行（48dp，无箭头）/ 卡内静态行（纯展示）。
+ * 列表行（锚点 s12-rows 三行）：分组行（带箭头，可点）/ 紧凑行（48dp，无箭头）/ 卡内静态行（纯展示）。
  * 行按下反馈由共享 TokenRow / ListRow 的点击语义承担，本页不重画行。
  */
 @Composable
@@ -223,7 +223,7 @@ internal fun GalleryRows(toast: ToastHostState) {
     }
 }
 
-/** 进度条（契约 s12-progress）：入屏自左向右生长一次，点按无反馈，右侧数值静态。 */
+/** 进度条（锚点 s12-progress）：入屏自左向右生长一次，点按无反馈，右侧数值静态。 */
 @Composable
 internal fun GalleryProgress() {
     val t = LocalDesignTokens.current

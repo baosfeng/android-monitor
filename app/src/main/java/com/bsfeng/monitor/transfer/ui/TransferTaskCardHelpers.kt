@@ -195,7 +195,7 @@ internal fun secondsUntil(deadlineMs: Long): Int {
 }
 
 /**
- * 本地时区 `HH:mm`（契约文案里的「14:32」）。
+ * 本地时区 `HH:mm`（口径文案里的「14:32」）。
  *
  * @param zone 单测传固定时区，避免用例随宿主时区漂移。
  */

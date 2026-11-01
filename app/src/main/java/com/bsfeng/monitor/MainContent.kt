@@ -139,7 +139,7 @@ internal fun MainContent(
             var financeEntryKey by remember { mutableIntStateOf(0) }
             // 记账表单是从哪进来的：true = 统计页空态「新增一笔」，false = 记账主页（FAB / 空态 CTA / 小组件）。
             // 之前所有子页返回都硬编码回「记账主页」，从统计空态点「新增一笔」再取消会掉回列表页，
-            // 焦点、滚动位置、「共 N 个分类」一起丢（契约 s07-empty-add · 移除后「空态卡原位保留」）。
+            // 焦点、滚动位置、「共 N 个分类」一起丢（锚点 s07-empty-add · 移除后「空态卡原位保留」）。
             var addReturnsToStats by rememberSaveable { mutableStateOf(false) }
             // 返回统计页时自增：这一屏是「被表单返回」重新组合出来的，统计页据此把焦点放回空态 CTA
             var statsReturnTick by remember { mutableIntStateOf(0) }
@@ -182,7 +182,7 @@ internal fun MainContent(
             // s16 每日行程（从概览「今日行程」卡 push）
             var showTripScreen by remember { mutableStateOf(false) }
             var showSplash by remember { mutableStateOf(true) }
-            // 跳过引擎关闭时仍允许「只读查看」规则与白名单（契约 s09:37「组内两行常驻」）：
+            // 跳过引擎关闭时仍允许「只读查看」规则与白名单（锚点 s09:37「组内两行常驻」）：
             // VM 的 init 只读本地库、不起服务，但也不该在关闭态无谓创建——首次打开覆盖层时才建。
             val skipRuleViewModel: SkipRuleViewModel? =
                 if (adSkipOn || showSkipRuleScreen) viewModel() else null
@@ -367,7 +367,7 @@ internal fun MainContent(
                 onCloseTrip = { showTripScreen = false },
                 onOpenLocationSettings = {
                     // s16-empty-cta / s16-goto-location：关覆盖层 → 切设置 Tab → 打开「功能」子页
-                    // （定位权限卡在该子页末位；契约只要求「跳到设置页定位权限项」，不额外做精确滚动）
+                    // （定位权限卡在该子页末位；口径只要求「跳到设置页定位权限项」，不额外做精确滚动）
                     showTripScreen = false
                     selectedTab = AppTab.SETTINGS
                     settingsSubPageName = SettingsSubPage.FEATURE.name

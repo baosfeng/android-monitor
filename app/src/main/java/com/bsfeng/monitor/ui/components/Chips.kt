@@ -107,7 +107,7 @@ fun Chip(
             .widthIn(min = t.tapMin)
             .height(t.tapMin)
             .pressFeedback(interaction)
-            // 键盘焦点环 2dp（契约 s01 通用口径）：与分段控件同一实现，仅键盘 / 遥控器输入时画；
+            // 键盘焦点环 2dp（锚点 s01 通用口径）：与分段控件同一实现，仅键盘 / 遥控器输入时画；
             // 放在 clip 之前，环不被圆角裁掉，也不改变选中态视觉与点击行为。
             .keyboardFocusRing(shape)
             .clip(shape)
@@ -153,7 +153,7 @@ internal fun segmentNavTarget(key: Key, current: Int, count: Int): Int? {
 /**
  * 分段控件（公共版；W2 应删掉 AddTransactionScreen 里的私有副本改调此版）。
  *
- * 键盘口径（契约 s12-chip-seg「分段控件 · 键盘」行）：
+ * 键盘口径（锚点 s12-chip-seg「分段控件 · 键盘」行）：
  *  - **Tab 只进组一次**：组挂 [focusGroup]，组内只有当前选中段可聚焦（roving tabindex，见
  *    `focusProperties { canFocus = selected }`），因此 Tab 进组即落选中段、不逐段停留；
  *  - **← / → 即时选中**、**Home / End 跳首尾**，到边界不回绕（[segmentNavTarget] 收敛夹紧）；

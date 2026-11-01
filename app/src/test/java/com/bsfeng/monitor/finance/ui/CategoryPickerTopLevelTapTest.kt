@@ -2,7 +2,7 @@ package com.bsfeng.monitor.finance.ui
 
 // 一级格子点击的展开口径自测（纯 JVM）。
 //
-// 契约 docs/交互设计/s15-自动记账浮窗-交互契约.md s15-l1-0…17 的边界写「点同一格收起面板；
+// 锚点账本 s15-l1-0…17 的边界写「点同一格收起面板；
 // 同级只展开一个，展开新的会收起旧的」。改前恒 expanded = true，点同一格收不起面板（本批 P1）。
 
 import org.junit.Assert.assertEquals

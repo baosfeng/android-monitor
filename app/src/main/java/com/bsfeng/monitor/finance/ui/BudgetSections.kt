@@ -87,7 +87,7 @@ internal fun BudgetKpiSection(
                     fraction = fraction,
                     big = pct.toString() + "%",
                     small = "已用",
-                    // B1：超支只改文本色，环保持强调色（契约 s06-ring · 边界）
+                    // B1：超支只改文本色，环保持强调色（锚点 s06-ring · 边界）
                     color = t.accent,
                     modifier = Modifier
                         .testTag("s06-ring")
@@ -185,7 +185,7 @@ internal fun BudgetListHead(modifier: Modifier = Modifier) {
     }
 }
 
-/** 分类行锚点（契约 s06-brow-0…5，逐字对应原型 data-od-id）。 */
+/** 分类行锚点（锚点 s06-brow-0…5，逐字对应原型 data-od-id）。 */
 private fun budgetRowAnchor(index: Int): Modifier = when (index) {
     0 -> Modifier.testTag("s06-brow-0")
     1 -> Modifier.testTag("s06-brow-1")
@@ -196,7 +196,7 @@ private fun budgetRowAnchor(index: Int): Modifier = when (index) {
     else -> Modifier.testTag("s06-brow-" + index)
 }
 
-/** 边界态占位数值（契约 s06-edge 写死；不读库，避免把真实账目写进代码）。 */
+/** 边界态占位数值（锚点 s06-edge 写死；不读库，避免把真实账目写进代码）。 */
 internal const val EDGE_TOTAL_BUDGET = 999_999.0
 internal const val EDGE_SPENT = 1_280_000.0
 internal const val EDGE_ROW_BUDGET = 200.0

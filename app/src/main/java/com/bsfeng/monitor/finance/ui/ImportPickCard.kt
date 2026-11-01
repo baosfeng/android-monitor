@@ -43,7 +43,7 @@ import com.bsfeng.monitor.ui.theme.accentSoftFill
 /**
  * 选择数据文件入口（锚点 s08-drop）。
  *
- * 契约：整卡全宽可点，按下缩到 0.96（共享基元）+ 底变 fg 6%（--dur-state）+ LIGHT 触感，
+ * 口径：整卡全宽可点，按下缩到 0.96（共享基元）+ 底变 fg 6%（--dur-state）+ LIGHT 触感，
  * 随即拉起系统文件选择器；键盘 Enter / Space 由 clickable 自带，focus-visible 2dp 环画在卡片内侧、
  * 不改卡片高度；导入进行中整卡不可聚焦。
  */

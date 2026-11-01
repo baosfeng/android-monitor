@@ -97,7 +97,7 @@ class TransitionsTest {
 
     @Test
     fun `折叠展开取 durOverlayIn_收起取 durOverlayOut`() {
-        // 契约 s19 与 SkipRuleRuleRow 注释都写「展开 220ms / 收起 150ms」；
+        // 锚点 s19 与 SkipRuleRuleRow 注释都写「展开 220ms / 收起 150ms」；
         // 早期误取 --dur-page（340ms），这里钉住正确口径防止回退。
         assertEquals(apple.durOverlayIn, spec(TransitionRole.ExpandEnter).durationMs)
         assertEquals(apple.durOverlayOut, spec(TransitionRole.ExpandExit).durationMs)

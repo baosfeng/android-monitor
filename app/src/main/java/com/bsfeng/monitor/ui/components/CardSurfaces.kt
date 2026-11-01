@@ -34,7 +34,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.testTag
 
-/** 页面底衬：浅色玻璃必须压在可见底衬上才成立（契约 §4）。 */
+/** 页面底衬：浅色玻璃必须压在可见底衬上才成立（交互口径 §4）。 */
 @Composable
 fun Modifier.appBackdrop(): Modifier {
     val t = LocalDesignTokens.current

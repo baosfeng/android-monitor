@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.autobook
 
 // 从 autobook/AutoBookEngine.kt 拆出：把一张草稿真正挂成浮窗，并接住三个按钮回调。
-// 关闭契约的唯一裁决点是 AutoBookDismissPolicy，这里只按裁决结果去重、落库、记忽略。
+// 关闭口径的唯一裁决点是 AutoBookDismissPolicy，这里只按裁决结果去重、落库、记忽略。
 
 import android.util.Log
 import android.widget.Toast
@@ -53,7 +53,7 @@ internal fun AutoBookEngine.display(
                 Log.d(AutoBookEngine.TAG, "遮罩点击已吞掉（closeOverlay=${effect.closeOverlay}）")
                 if (!scrimHintShown) {
                     scrimHintShown = true
-                    // 文案逐字取自 s15 契约 s15-scrim 行
+                    // 文案逐字取自 s15 锚点 s15-scrim 行
                     toast("点遮罩不会关闭，请选『记一笔』或『忽略』")
                 }
             }

@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * s10「新增订阅」的判据（契约 s10-source · 新增订阅行）。
+ * s10「新增订阅」的判据（锚点 s10-source · 新增订阅行）。
  *
  * 回归的是原实现的两个错：① 不判重（重复地址照样新增）② 新增走了 updateSubscription，
  * 隐式发起网络拉取。判重必须先于任何写盘 / 联网发生，所以单独抽成纯函数来测。

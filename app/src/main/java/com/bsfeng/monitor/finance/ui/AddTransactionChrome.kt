@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/AddTransactionScreen.kt 的顶栏与抽屉分发；职责：关闭/标题顶栏、四个互斥抽屉的装配、删除确认弹窗。
-// 契约锚点（s14a）：s14a-cat-sheet / s14a-cat-grid / s14a-receipt-sheet / s14a-receipt-close 在此装配；
+// 锚点（s14a）：s14a-cat-sheet / s14a-cat-grid / s14a-receipt-sheet / s14a-receipt-close 在此装配；
 // 账户与时间抽屉的锚点在 RecordSheetAccountSheet / RecordSheetTimeSheet。（s05）s05-del-dialog / -cancel / -confirm。
 
 import androidx.activity.compose.BackHandler
@@ -73,7 +73,7 @@ internal fun AddTransactionTopBar(
  * 四个抽屉（互斥；分类 / 账户选中即关，时间由「确定」关，单据由「关闭」关）。
  *
  * 放在屏幕层是为了让每个抽屉的「选中即关」语义与表单状态变更一次写清。
- * 分类与单据抽屉在本层装配：契约锚点 s14a-cat-sheet / s14a-cat-grid / s14a-receipt-sheet /
+ * 分类与单据抽屉在本层装配：锚点 s14a-cat-sheet / s14a-cat-grid / s14a-receipt-sheet /
  * s14a-receipt-close 需要挂在面板内容上，而共用外壳 [SheetShell] 由共享层维护、不透出 modifier。
  */
 @Composable
@@ -149,7 +149,7 @@ internal fun BoxScope.AddTransactionSheets(
 private val RECEIPT_LABEL_W = 64.dp
 
 /**
- * 单据明细内容（契约 s14a-receipt-sheet / s14a-receipt-close）。
+ * 单据明细内容（锚点 s14a-receipt-sheet / s14a-receipt-close）。
  *
  * 六行键值：商户 / 商品说明 / 付款方式 / 交易时间 / 订单号 / 平台分类；缺字段的行不显示，
  * 全部缺时给「这笔交易没有单据信息（手动录入的交易不带单据）」。

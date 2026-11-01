@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
  * [TransferSettings] / [PairingCodec] / [TransferSoundPlayer] 的本地状态测试（Robolectric）。
  *
  * 覆盖协议 §5（配对按 deviceId 持久化、可移除）与 §7（三项提示音默认值）。
- * 真正跑传输需要真机网络，本类只钉住「设置与配对」这一类纯本地契约。
+ * 真正跑传输需要真机网络，本类只钉住「设置与配对」这一类纯本地口径。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

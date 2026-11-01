@@ -221,7 +221,7 @@ internal fun RemarkRow(
                 }),
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 契约锚点 s15-note：输入框本体（点它才进编辑态；标签 s15-note-row 不单独响应）
+                    // 锚点 s15-note：输入框本体（点它才进编辑态；标签 s15-note-row 不单独响应）
                     .testTag("s15-note")
                     .focusRequester(focusRequester)
                     .onFocusChanged { state ->

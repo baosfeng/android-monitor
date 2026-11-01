@@ -3,14 +3,14 @@ package com.bsfeng.monitor.debug
 import com.bsfeng.monitor.domain.model.RecordType
 
 /**
- * 调试命令契约（**只在 debug 变体编译**，见 `app/src/debug/`）——纯逻辑，可纯 JVM 单测。
+ * 调试命令口径（**只在 debug 变体编译**，见 `app/src/debug/`）——纯逻辑，可纯 JVM 单测。
  *
  * 为什么要有这一层：把「解析 + 参数校验 + 拒绝理由」从 BroadcastReceiver 里拆出来，
  * 单测不需要 Robolectric、不需要 Intent，非法入参的处置（fail-closed）能被断言住。
  * Android 侧的 `Intent -> Map<String, Any?>` 适配放在 [DebugCommandReceiver]。
  */
 sealed interface DebugCommand {
-    /** logcat 里 `RESULT cmd=<name>` 用的稳定标识，改它等于改 CLI 契约。 */
+    /** logcat 里 `RESULT cmd=<name>` 用的稳定标识，改它等于改 CLI 口径。 */
     val name: String
 
     /** 解锁调试层（唯一的免解锁命令）。 */
@@ -237,7 +237,7 @@ object DebugCommands {
     /**
      * `RecordType` 的全部类型名（`state` 的计数要列出 0 值，不能只列「有记录的」）。
      *
-     * 直接用 [RecordType.CANONICAL_NAMES]：落库契约只有一份，新增类型时不会再出现
+     * 直接用 [RecordType.CANONICAL_NAMES]：落库口径只有一份，新增类型时不会再出现
      * 「fromString 认识、CLI 提示里没有」的两份口径。
      */
     val KNOWN_TYPES: List<String> = RecordType.CANONICAL_NAMES

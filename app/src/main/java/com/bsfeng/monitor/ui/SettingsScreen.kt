@@ -8,7 +8,7 @@ package com.bsfeng.monitor.ui
 // 二级页状态由 MainContent 持有（rememberSaveable + 枚举名），旋转 / 进程重建可恢复。
 //
 // 信息架构口径（为什么这么分）：一级页只回答「去哪儿」，六组按「运行前提 / 功能 / 数据 /
-// 观感 / 关于 / 诊断」切；二级页内不再写与页头重复的小标题，分组靠卡间隙（契约 s09 页层级）。
+// 观感 / 关于 / 诊断」切；二级页内不再写与页头重复的小标题，分组靠卡间隙（锚点 s09 页层级）。
 
 import android.content.Intent
 import android.provider.Settings
@@ -111,7 +111,7 @@ fun SettingsScreen(
     if (subPage != null) lastPage.value = subPage
     val openPage = subPage ?: lastPage.value
 
-    // 一级页滚动位置：五态切回有数据时要回到顶部（契约 s09-st-empty / -st-error「退出后滚动回顶部」）
+    // 一级页滚动位置：五态切回有数据时要回到顶部（锚点 s09-st-empty / -st-error「退出后滚动回顶部」）
     val bodyScroll = rememberScrollState()
     val headFocus = remember { FocusRequester() }
     var sawState by remember { mutableStateOf(rt.effective) }
@@ -170,7 +170,7 @@ fun SettingsScreen(
                         SettingsGroupIndex(rt, onOpenSubPage)
                     }
                 }
-                // 底部留白：导航条与悬浮操作避让（契约 screen-s09「底部留 96dp」）
+                // 底部留白：导航条与悬浮操作避让（锚点 screen-s09「底部留 96dp」）
                 Spacer(Modifier.height(96.dp))
             }
         }
@@ -263,7 +263,7 @@ private class LastOpenedPage(var value: SettingsSubPage? = null)
 private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
     val t = rt.t
     val state = rt.state
-    // 整行按压缩到 0.96 + LIGHT（契约 s09-a11y）：按压基元与 clickable 共用同一 interaction；
+    // 整行按压缩到 0.96 + LIGHT（锚点 s09-a11y）：按压基元与 clickable 共用同一 interaction；
     // 点击区仍是整行（TokenRow 不再传 onClick，避免内外两层点击各触发一次）
     val a11yInteraction = remember { MutableInteractionSource() }
     val haptic = rememberHaptic()
@@ -296,7 +296,7 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
             subtitle = "今日已记录 " + state.todayEventCount + " 条事件",
             icon = settingsPageIcon(SettingsSubPage.GENERAL),
             trailing = {
-                // 锚点落在开关本身：契约 s09-monitor 的触发是「拨开关」而不是点整行
+                // 锚点落在开关本身：锚点 s09-monitor 的触发是「拨开关」而不是点整行
                 AppSwitch(
                     checked = !rt.isPaused,
                     onCheckedChange = {
@@ -365,7 +365,7 @@ private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRunti
             tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
         )
         SettingsSubPage.DATA -> TailNum("${rt.backupCount.value} 份")
-        // 状态值直接放行尾（契约 s09：二级页状态值不藏进副标题，一级页摘要同理）
+        // 状态值直接放行尾（锚点 s09：二级页状态值不藏进副标题，一级页摘要同理）
         SettingsSubPage.APPEARANCE -> TailNum(ThemeRepository.displayName(rt.themeId))
         SettingsSubPage.ABOUT -> TailNum(BuildConfig.VERSION_NAME)
         else -> Unit

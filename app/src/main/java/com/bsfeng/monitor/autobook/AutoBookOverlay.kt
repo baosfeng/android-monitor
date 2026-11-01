@@ -53,7 +53,7 @@ import com.bsfeng.monitor.ui.theme.MonitorTheme
  * 内容用 Compose 渲染并包在 [MonitorTheme] 里 —— 因此浮窗自动跟随用户在设置里选的
  * 8 套主题（见 .open-design/24-autobook-themes.html），不写死任何色值。
  *
- * ## v2 显示契约（2026-10-17，真机反馈后重做）
+ * ## v2 显示口径（2026-10-17，真机反馈后重做）
  *
  * 1. **全屏沉浸式遮罩**：窗口不再只包住底部卡片，而是铺满整屏，遮罩盖住状态栏、挖孔区与
  *    手势条（fitInsetsTypes = 0 + LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS）。
@@ -63,13 +63,13 @@ import com.bsfeng.monitor.ui.theme.MonitorTheme
  * 3. **检测到即弹**：识别到支付成功页后立即展示（不再延迟 1s）；付款前页面由
  *    [AutoBookParser.isBillPage] 的 PRE_PAY_WORDS 挡在门外，不会提前弹。
  *
- * ## 关闭契约（2026-10-20，用户真机反馈后收紧）
+ * ## 关闭口径（2026-10-20，用户真机反馈后收紧）
  *
  * 浮窗**只能由「记一笔」或「忽略」关闭**（判定集中在 [AutoBookDismissPolicy]）：
  * 点遮罩只抖 150ms + 轻震（不关、不写忽略），点卡片内空白被吞掉，切到任何 App 都不收起，
  * 只有服务销毁（[hide]）才卸载。旧实现「点遮罩 = onDismiss」害用户误触一次就被记成忽略 7 天。
  *
- * 动效（s15 契约）：入场首帧直接完整显示（真机反馈「浮窗出现仍慢」，不再加淡入/滑入）；
+ * 动效（s15 口径）：入场首帧直接完整显示（真机反馈「浮窗出现仍慢」，不再加淡入/滑入）；
  * 退场 150ms（`dur-overlay-out`）播完才真正卸载；遮罩点击的卡片抖动 150ms（精简动效档跳过）。
  */
 class AutoBookOverlay(private val service: AccessibilityService) {
@@ -213,7 +213,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
     /**
      * 浮窗内容：全屏遮罩 + 贴底确认卡。
      *
-     * 契约锚点（docs/交互设计/s15-自动记账浮窗-交互契约.md）：
+     * 锚点（见锚点账本）：
      * - `screen-s15` 整屏拦截；`s15-layer` 遮罩+卡片的容器；`s15-scrim` 卡片以外的遮罩；
      * - `s15-sheet` 卡片本体（吞点击，不因点空白/拖拽关闭）。
      *
@@ -342,7 +342,7 @@ class AutoBookOverlay(private val service: AccessibilityService) {
         /** 遮罩点击的卡片抖动幅度（原型 @keyframes ab-shake：translateX ±4px） */
         val SCRIM_SHAKE_AMPLITUDE = 4.dp
 
-        /** 遮罩点击的卡片抖动时长（契约：150ms；设计 token 里没有这一档，故就地定义） */
+        /** 遮罩点击的卡片抖动时长（口径：150ms；设计 token 里没有这一档，故就地定义） */
         const val SCRIM_SHAKE_MS = 150
     }
 }

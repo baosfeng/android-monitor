@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * s09-skip 关闭态两行入口的副标题。
  *
- * 契约 s09:37：组内两行常驻；跳过引擎关闭时两行仍可进入，只改副标题文案。
+ * 锚点 s09:37：组内两行常驻；跳过引擎关闭时两行仍可进入，只改副标题文案。
  */
 class SettingsSkipFeatureRowsTest {
 

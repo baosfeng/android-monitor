@@ -11,7 +11,7 @@ import org.robolectric.annotation.Config
 /**
  * dump 落盘形态（Robolectric 提供真实 `org.json`）。
  *
- * 关键契约：字段名固定、文本超 200 字截断且打 `truncated` 标记、bounds 是四元组 ——
+ * 关键口径：字段名固定、文本超 200 字截断且打 `truncated` 标记、bounds 是四元组 ——
  * 校验方与后续 agent 都按这份 JSON 写脚本，字段一改就全断。
  */
 @RunWith(RobolectricTestRunner::class)
@@ -40,7 +40,7 @@ class DebugUiJsonTest {
     )
 
     @Test
-    fun `字段 - 契约字段齐全、bounds 是四元组`() {
+    fun `字段齐全、bounds 是四元组`() {
         val json = node(text = "功能开关").toJson()
         val expected = setOf(
             "index", "parent", "depth", "window", "className", "viewIdResourceName", "text",

@@ -248,7 +248,7 @@ class AutoBookEngine(internal val service: AccessibilityService) {
     /**
      * 调试入口：不经过识别链路，直接用 [AutoBookDebugDraft] 弹浮窗。
      *
-     * 模拟器里没有支付 App，唯一能验证浮窗（关闭契约 / 两级分类 / 说明输入）的办法。
+     * 模拟器里没有支付 App，唯一能验证浮窗（关闭口径 / 两级分类 / 说明输入）的办法。
      * 与真实链路共用 [display]，所以分类推荐、落库口径完全一致；只在 debug 构建的设置页调试区调用。
      */
     fun showDebugSheet() {

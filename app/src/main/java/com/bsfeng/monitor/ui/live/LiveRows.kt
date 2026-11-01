@@ -109,7 +109,7 @@ fun LiveEventRow(
     onClick: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
-    // 契约 s01-recent-1..3 / s02 行：按下整行 0.99 + alpha .9（--dur-press），
+    // 锚点 s01-recent-1..3 / s02 行：按下整行 0.99 + alpha .9（--dur-press），
     // interaction 与 clickable 共用同一实例，否则收不到 Press 事件。
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(t.radiusLg)

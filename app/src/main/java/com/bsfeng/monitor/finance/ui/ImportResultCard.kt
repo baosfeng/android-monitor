@@ -52,13 +52,13 @@ import com.bsfeng.monitor.ui.components.animatedCount
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 失败明细最多展示的条数（契约 s08-failrows）。 */
+/** 失败明细最多展示的条数（锚点 s08-failrows）。 */
 internal const val FAIL_ROWS_LIMIT = 50
 
 /**
  * 导入结果概览卡（锚点 s08-result）。
  *
- * 契约：卡上无点击响应、不提供撤销或删除入口；三格数字 620ms 滚动到终值；卡可聚焦且整体一个焦点组
+ * 口径：卡上无点击响应、不提供撤销或删除入口；三格数字 620ms 滚动到终值；卡可聚焦且整体一个焦点组
  * （三格不拆成三个 Tab 停位）；读屏一次读完「导入完成，共 1,039 条记录，成功 1,024，跳过 12，失败 3」，
  * 失败数为 0 时不朗读失败项。
  *
@@ -147,7 +147,7 @@ internal fun ImportResultSummaryCard(
 /**
  * 失败明细列表（锚点 s08-failrows）。
  *
- * 契约：行按下底变 fg 5%（--dur-state）、只展示原因不改数据；每行标题单行、原因两行内截断，
+ * 口径：行按下底变 fg 5%（--dur-state）、只展示原因不改数据；每行标题单行、原因两行内截断，
  * 第二行固定「该条已跳过，可点「重试失败项」再次导入」；超过 50 条只列前 50 条并追加提示；
  * 整块一个焦点组（Tab 进组一次），方向键在行间移动、逐行朗读。
  */

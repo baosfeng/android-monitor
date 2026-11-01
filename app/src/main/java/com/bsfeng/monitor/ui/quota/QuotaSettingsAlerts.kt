@@ -54,7 +54,7 @@ import java.math.BigDecimal
 /**
  * 额度预警总开关行。
  *
- * 开关本身是共享件（`AppSwitch`），契约要求的两件额外语义落在这一层：
+ * 开关本身是共享件（`AppSwitch`），交互口径要求的两件额外语义落在这一层：
  * 键盘焦点环 2dp（[keyboardFocusRing]，与行内 chip 同口径）与读屏报读「额度预警 + 已开启/已关闭」。
  * 开关切换后的 toast 由调用方（本屏）负责，避免共享件反向依赖页面文案。
  */
@@ -94,7 +94,7 @@ internal fun AlertSwitchRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
 /**
  * 低余额阈值行：行尾显示当前两个币种的阈值，点击开阈值弹窗。
  *
- * [focusRequester] 由本屏传入，弹窗收起后把焦点送回本行（契约「弹窗关闭后焦点回本行」）；
+ * [focusRequester] 由本屏传入，弹窗收起后把焦点送回本行（口径「弹窗关闭后焦点回本行」）；
  * 按压反馈走列表行的 0.99 + alpha .9（`RowPress.kt`），与开关的位移反馈区分。
  */
 @Composable
@@ -173,7 +173,7 @@ internal fun NotificationPermissionRow() {
                 indication = LocalIndication.current,
             ) {
                 haptic(HapticTone.LIGHT)
-                // 系统设置不可达时原地无反应，不弹错误（契约边界）
+                // 系统设置不可达时原地无反应，不弹错误（口径边界）
                 runCatching {
                     context.startActivity(
                         android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -206,7 +206,7 @@ private const val QUOTA_ALERT_CHANNEL_ID = "quota_alert"
 private const val QUOTA_TEST_NOTIFICATION_ID = 7302
 
 /**
- * 发送一条测试通知到系统的额度预警渠道（契约 s19-test）。
+ * 发送一条测试通知到系统的额度预警渠道（锚点 s19-test）。
  *
  * 只发通知、不写任何 prefs、不动预警计数；通知权限未允许时系统会静默丢弃，
  * 页面仍给出同一句 toast（用户可点「通知权限」行自查）。

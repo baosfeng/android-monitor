@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // s02 实时事件流：页头 + 类型 chip + 热力条 + 时间线 + 五态 + 详情抽屉。
-// 锚点（契约 docs/交互设计/s02-实时事件流-交互契约.md）：screen-s02 / s02-content / s02-head /
+// 锚点（锚点账本）：screen-s02 / s02-content / s02-head /
 // s02-sort / s02-chips / s02-loading / s02-empty / s02-empty-cta / s02-error / s02-error-retry /
 // s02-edge / s02-filter-tip / s02-heatwrap。
 
@@ -85,7 +85,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.delay
 
-// ── 文案口径（契约末尾「文案口径」逐字） ──
+// ── 文案口径（口径末尾「文案口径」逐字） ──
 private const val TOAST_SORTED = "已按时间倒序排列"
 private const val TOAST_WAITING = "监控中 · 等待事件"
 private const val TOAST_RECONNECT = "正在重新连接采集服务…"

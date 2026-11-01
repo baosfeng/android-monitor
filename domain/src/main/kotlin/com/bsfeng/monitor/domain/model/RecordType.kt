@@ -16,7 +16,7 @@ sealed interface RecordType {
     companion object {
 
         /**
-         * 落库契约：`records.type` 列的全部合法取值（顺序 = UI 展示顺序）。
+         * 落库口径：`records.type` 列的全部合法取值（顺序 = UI 展示顺序）。
          *
          * 用**固定字符串字面量**，不依赖 `::class.simpleName`。
          * 历史事故：release 构建被 R8 重命名 data object 的类名，库里写进了 `qg1`/`ig1`/

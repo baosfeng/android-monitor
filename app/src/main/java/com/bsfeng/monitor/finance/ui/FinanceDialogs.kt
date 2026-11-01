@@ -66,7 +66,7 @@ private fun DialogAction(
 }
 
 /**
- * 删除类确认弹窗（契约 s05-del-dialog / s05-del-cancel / s05-del-confirm）。
+ * 删除类确认弹窗（锚点 s05-del-dialog / s05-del-cancel / s05-del-confirm）。
  *
  * 与预算编辑弹窗（BudgetScreen.kt 的 BudgetEditorDialog）同一套视觉（[AppDialog] + 1fr 1fr 动作按钮），差异只有两个动作的语义：
  * 确认是不可逆动作，按口径 §三 给 REJECT 触感；取消与点遮罩 / 返回键等价。

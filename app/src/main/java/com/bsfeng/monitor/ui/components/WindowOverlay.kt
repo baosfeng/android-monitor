@@ -82,7 +82,7 @@ fun WindowOverlay(
     val t = LocalDesignTokens.current
     // 退出动画期间保持渲染：visible 转 false 后等一个浮层退场时长再卸载窗口。
     // 否则窗口在同帧销毁，内容里的 AnimatedVisibility(exit = …) 永远播不到——
-    // 契约 §7 要求「遮罩淡出 + 面板下滑 150ms」，这是它能生效的前提。
+    // 交互口径 §7 要求「遮罩淡出 + 面板下滑 150ms」，这是它能生效的前提。
     var rendered by remember { mutableStateOf(visible) }
     LaunchedEffect(visible) {
         if (visible) {

@@ -55,7 +55,7 @@ import java.math.BigDecimal
  * 额度设置（push 屏，原型 s19）。
  *
  * 三组：Provider（凭据）→ 预警（开关 / 阈值 / 通知权限）→ 刷新（后台频率）；
- * Ollama 计费模式是源码独有的第二组以外设置，排在「刷新」之后，保持契约分组顺序不被插入。
+ * Ollama 计费模式是源码独有的第二组以外设置，排在「刷新」之后，保持口径分组顺序不被插入。
  *
  * 开关、阈值、频率全部落在数据层已有的偏好上（`QuotaSettings` / 预警 prefs），
  * 页面本身不持有任何默认值：默认值写在数据层，后台调度与通知读到的才是同一份。
@@ -84,7 +84,7 @@ fun QuotaSettingsScreen(
         intervals = intervals + (id to minutes)
     }
     var thresholdOpen by remember { mutableStateOf(false) }
-    // 弹窗关闭后焦点回「低余额提醒」行（契约「弹窗关闭后焦点回本行」）
+    // 弹窗关闭后焦点回「低余额提醒」行（口径「弹窗关闭后焦点回本行」）
     var returnFocusToList by remember { mutableStateOf(false) }
     val lowBalanceFocus = remember { FocusRequester() }
     val titleFocus = remember { FocusRequester() }
@@ -97,7 +97,7 @@ fun QuotaSettingsScreen(
         }
     }
 
-    // 进入子页焦点落标题（契约 s18-settings · 键盘「进入子页后焦点落在子页标题」）；
+    // 进入子页焦点落标题（锚点 s18-settings · 键盘「进入子页后焦点落在子页标题」）；
     // 覆盖层里本页每次打开都会重新组合，LaunchedEffect(Unit) 正好一次
     LaunchedEffect(Unit) {
         runCatching { titleFocus.requestFocus() }
@@ -158,7 +158,7 @@ fun QuotaSettingsScreen(
                     providers.forEachIndexed { index, info ->
                         if (index > 0) IOSDivider()
                         // 行本体在 QuotaProviderRows.kt（s18 路写区）：锚点只能由本屏包一层承载，
-                        // 逐字沿用契约锚点，行内点击/展开行为仍由行本体负责。
+                        // 逐字沿用锚点，行内点击/展开行为仍由行本体负责。
                         Box(Modifier.fillMaxWidth().then(providerRowTagOf(info.id))) {
                             ProviderSettingsRow(
                                 info = info,
@@ -236,7 +236,7 @@ fun QuotaSettingsScreen(
                     RefreshRow(
                         selectedHours = refreshHours,
                         onSelect = { hours ->
-                            // 点已选中项不重复写盘、不重排闹钟（契约边界）
+                            // 点已选中项不重复写盘、不重排闹钟（口径边界）
                             if (hours != refreshHours) viewModel.onRefreshHoursChange(hours)
                         },
                     )
@@ -347,7 +347,7 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** 后台刷新四个选项的锚点（与契约逐字一致）。 */
+/** 后台刷新四个选项的锚点（与锚点账本逐字一致）。 */
 private fun refreshChipTagOf(hours: Int): Modifier = when (hours) {
     0 -> Modifier.testTag("s19-refresh-off")
     1 -> Modifier.testTag("s19-refresh-1h")

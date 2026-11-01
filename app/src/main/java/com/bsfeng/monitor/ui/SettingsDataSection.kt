@@ -5,7 +5,7 @@ package com.bsfeng.monitor.ui
 //
 // 为什么还原要单独一张卡：它和「备份」不同级——备份是加法（可重复、出错无损失），
 // 还原是覆盖（会替换账目与记录）。放在同一张卡里，用户扫一眼会把它当成普通一行；
-// 单独成卡 + 危险色调按钮 + ConfirmDialog 三道，误触成本才够高（契约 s09 页层级规则 3）。
+// 单独成卡 + 危险色调按钮 + ConfirmDialog 三道，误触成本才够高（锚点 s09 页层级规则 3）。
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -89,7 +89,7 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
             title = "自动备份频率",
             subtitle = "默认每周 · 最多保留 5 份，超额删最旧",
             icon = Icons.Outlined.Timer,
-            // 状态值直接放行尾（契约 s09 页层级规则 5）
+            // 状态值直接放行尾（锚点 s09 页层级规则 5）
             trailing = { TailNum(backupFrequency.label) },
         )
         ChipRow(

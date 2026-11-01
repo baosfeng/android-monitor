@@ -13,7 +13,7 @@ import com.bsfeng.monitor.ui.theme.DesignTokens
 /** 动效时长 token 名（与 DesignTokenTable 的 CSS 变量一一对应）。 */
 enum class MotionToken { Press, State, OverlayIn, OverlayOut, Page, Chart, ChartFast }
 
-/** --ease-spring：位置/缩放/旋转类 spring 观感的近似曲线（契约 §7）。 */
+/** --ease-spring：位置/缩放/旋转类 spring 观感的近似曲线（交互口径 §7）。 */
 const val EASE_SPRING_TOKEN: String = "ease-spring"
 
 /** 错峰步数上限：长列表末尾不至于等太久（24ms × 12 = 288ms）；唯一口径在 [FULL_STAGGER_MAX_STEPS]。 */
@@ -33,6 +33,6 @@ fun DesignTokens.durationMsOf(token: MotionToken): Int = when (token) {
     MotionToken.ChartFast -> durChartFast
 }
 
-/** 通用 tween：颜色/透明度/位移一律 --ease-out（契约 §7）。 */
+/** 通用 tween：颜色/透明度/位移一律 --ease-out（交互口径 §7）。 */
 fun <T> DesignTokens.tweenOf(token: MotionToken = MotionToken.Press): TweenSpec<T> =
     tween(durationMillis = durationMsOf(token), easing = easeOut)

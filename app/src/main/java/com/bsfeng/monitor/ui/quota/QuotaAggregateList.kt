@@ -54,7 +54,7 @@ fun QuotaAggregateBody(
 ) {
     val t = LocalDesignTokens.current
     Column(
-        // 契约 s18-agg：聚合态榜单区块；单家态整块不渲染
+        // 锚点 s18-agg：聚合态榜单区块；单家态整块不渲染
         modifier = modifier.fillMaxWidth().testTag("s18-agg").padding(horizontal = t.space4),
         verticalArrangement = Arrangement.spacedBy(t.space1),
     ) {
@@ -120,7 +120,7 @@ fun QuotaAggregateBody(
     }
 }
 
-/** 榜单行的位次锚点：契约只给前 3 名各一条（顺序即位次，不按 provider 名钉）。 */
+/** 榜单行的位次锚点：口径只给前 3 名各一条（顺序即位次，不按 provider 名钉）。 */
 private fun rankedRowTagOf(index: Int): Modifier = when (index) {
     0 -> Modifier.testTag("s18-agg-row-1")
     1 -> Modifier.testTag("s18-agg-row-2")
@@ -128,7 +128,7 @@ private fun rankedRowTagOf(index: Int): Modifier = when (index) {
     else -> Modifier
 }
 
-/** 灰行（不参与聚合）的锚点落在末行：契约 row-4 就是那条「deepseek —」。 */
+/** 灰行（不参与聚合）的锚点落在末行：锚点 row-4 就是那条「deepseek —」。 */
 private fun excludedRowTagOf(index: Int): Modifier =
     if (index == 0) Modifier.testTag("s18-agg-row-4") else Modifier
 

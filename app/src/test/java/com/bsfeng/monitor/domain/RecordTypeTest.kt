@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `records.type` 的序列化契约。
+ * `records.type` 的序列化口径。
  *
  * 回归背景：`toString` 曾用 `type::class.simpleName`，release 构建被 R8 重命名成
  * `qg1`/`ig1`/`kg1` 等短名落库，读回 `fromString` 不认识 → 广告页
@@ -36,7 +36,7 @@ class RecordTypeTest {
 
     @Test
     fun `规范名是固定字符串，不是类名`() {
-        // 类名在 R8 下会被改名；这里断言的是字面量契约本身
+        // 类名在 R8 下会被改名；这里断言的是字面量口径本身
         assertEquals(
             listOf(
                 "SCREEN", "CHARGING", "APP_USAGE", "WIFI", "AUDIO", "BATTERY",

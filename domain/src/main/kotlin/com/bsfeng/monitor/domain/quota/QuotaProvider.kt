@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.domain.quota
 
 /**
- * 额度 provider 契约 —— 每个云服务实现一份，UI 只依赖本接口。
+ * 额度 provider 口径 —— 每个云服务实现一份，UI 只依赖本接口。
  *
  * 扩展方式：新增实现类 → 在 `ServiceContainer` 注册进 `QuotaProviderRegistry`，
  * 额度页的 provider chip 与额度设置列表自动出现，不用改界面代码。

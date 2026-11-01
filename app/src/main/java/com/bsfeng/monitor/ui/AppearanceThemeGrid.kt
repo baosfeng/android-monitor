@@ -50,7 +50,7 @@ import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 网格列数（契约 s13-picker-grid：两列 4 行、项间距 8dp）。 */
+/** 网格列数（锚点 s13-picker-grid：两列 4 行、项间距 8dp）。 */
 private const val GRID_COLUMNS = 2
 
 /**
@@ -75,7 +75,7 @@ internal fun gridNavTarget(key: Key, index: Int, count: Int, columns: Int = GRID
 /**
  * 主题选择器区块（锚点 s13-picker；网格 s13-picker-grid）。
  *
- * 键盘口径（契约 s13-picker-grid 键盘行）：Tab 进组落在当前选中项——组挂 [focusGroup]、
+ * 键盘口径（锚点 s13-picker-grid 键盘行）：Tab 进组落在当前选中项——组挂 [focusGroup]、
  * 组内只有 [focusIndex] 项可聚焦（roving tabindex）；方向键上下左右在两列间移动焦点但**不换主题**，
  * Enter / Space 才切换；到边界不回绕；Tab 出组交给焦点系统。
  *
@@ -180,9 +180,9 @@ internal fun ThemeGridItem(
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
-            // 契约锚点逐字落 testTag（glassmorphism → s13-theme-glass，见 themeAnchor）
+            // 锚点逐字落 testTag（glassmorphism → s13-theme-glass，见 themeAnchor）
             .testTag(themeAnchor(id))
-            // 行高 ≥ 52dp（契约口径：列表行高 52dp / 点击区 ≥ 44dp）
+            // 行高 ≥ 52dp（口径口径：列表行高 52dp / 点击区 ≥ 44dp）
             .heightIn(min = t.rowMinH)
             .rowPressFeedback(interaction)
             .tokenShadow(if (selected) 1 else 0, shape)

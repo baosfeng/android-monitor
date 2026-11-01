@@ -3,7 +3,7 @@ package com.bsfeng.monitor.finance.ui
 // 来源：原 finance/ui/FinanceMainScreen.kt；职责：s04 记账首页的屏幕装配（列表结构 / 状态机 / FAB / 刷新时机）。
 // 卡片见 FinanceMainSections，明细行与五态块见 FinanceMainRows，派生纯函数见 FinanceMainDerived。
 //
-// 锚点：契约 30 行 → 30 个 testTag，整屏根锚点 screen-s04 也落在这里。
+// 锚点：锚点 30 行 → 30 个 testTag，整屏根锚点 screen-s04 也落在这里。
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -64,7 +64,7 @@ fun FinanceMainScreen(
     /** 每次进入本屏（Tab 切回来 / 路由返回）自增，用于把列表滚回顶部。 */
     entryKey: Int = 0,
     /**
-     * 删除成功返回本屏后的焦点复位请求（契约 s05-del-confirm · 移除后）。
+     * 删除成功返回本屏后的焦点复位请求（锚点 s05-del-confirm · 移除后）。
      *
      * 由删除入口（MainTabContent）给出：删的是哪一笔、焦点该落到哪一笔。本屏消费一次后
      * 通过 [onRowFocusConsumed] 清空，避免任何后续重组重复抢焦点。
@@ -178,7 +178,7 @@ fun FinanceMainScreen(
     }
     val state = control.value ?: derivedState
 
-    // 契约 s05-del-confirm · 移除后：删除并返回列表后，焦点落在被删行的下一行（末行则上一行）。
+    // 锚点 s05-del-confirm · 移除后：删除并返回列表后，焦点落在被删行的下一行（末行则上一行）。
     // 三步走，全程不抛：
     // 1) 等重载落地（被删的那笔从明细消失）——否则位次差一行，焦点落到再下一行；
     // 2) 按明细项下标把目标行滚进组合窗口（懒加载列表里没组合的项请求不到焦点）；
@@ -228,7 +228,7 @@ fun FinanceMainScreen(
             contentPadding = PaddingValues(bottom = t.fabSize + t.space4 + t.space6),
         ) {
             item(key = "head") {
-                // 页头：长按（契约 s04-head）由共享屏头承载；此处只负责锚点与「收起后焦点回标题」。
+                // 页头：长按（锚点 s04-head）由共享屏头承载；此处只负责锚点与「收起后焦点回标题」。
                 Box(
                     modifier = Modifier
                         .testTag("s04-head")
@@ -246,11 +246,11 @@ fun FinanceMainScreen(
                         title = "记账",
                         subtitle = monthDisplay + " · 共 " + transactions.size + " 笔",
                         // 月份标签统一走 monthLabelOf（与原型一致保留空格）
-                        // 契约 s04-head · 边界「正式包长按无任何反应」：演示件不可见时不接手势
+                        // 锚点 s04-head · 边界「正式包长按无任何反应」：演示件不可见时不接手势
                         // （传 null 而不是空实现：不接管指针输入才真的没有反馈，也不改任何状态）
                         onLongPress = if (demoVisible) ({ control.toggleBar() }) else null,
                         longPressTimeoutMillis = 600L,
-                        // 契约 s04-import：44dp 圆形图标按钮，按下 0.96 + LIGHT（共享壳件无 interaction 入口，
+                        // 锚点 s04-import：44dp 圆形图标按钮，按下 0.96 + LIGHT（共享壳件无 interaction 入口，
                         // 故导入按钮由本页部件提供，锚点落在按钮自身）
                         trailing = { S04ImportButton(onClick = onImportClick) },
                     )
@@ -308,7 +308,7 @@ fun FinanceMainScreen(
                 },
                 onAddClick = onAddClick,
                 onRetry = {
-                    // 契约 s04-retry：立即重查，**按真实结果**决定走向 ——
+                    // 锚点 s04-retry：立即重查，**按真实结果**决定走向 ——
                     // 成功才清演示态 + toast「已重新加载」+ 焦点/滚动回明细区标题；
                     // 再次失败时 loadFailed 保持置位（错态卡原地保留），不弹第二个 toast、不伪装成功。
                     viewModel.loadCurrentMonth { result ->
@@ -331,7 +331,7 @@ fun FinanceMainScreen(
             modifier = Modifier
                 .testTag("s04-fab")
                 .align(Alignment.BottomEnd)
-                // 契约 s04-fab：距右、距下各 16dp；固定右下、不随滚动移动
+                // 锚点 s04-fab：距右、距下各 16dp；固定右下、不随滚动移动
                 .padding(t.space4),
         )
 
@@ -342,7 +342,7 @@ fun FinanceMainScreen(
                 .padding(t.space4),
         )
 
-        // 单条 toast 通道：月份越界提示优先，其次操作结果提示（契约 1.6s 停留由 AppToast 统一）
+        // 单条 toast 通道：月份越界提示优先，其次操作结果提示（锚点 1.6s 停留由 AppToast 统一）
         AppToast(
             message = monthNotice ?: toast.message,
             onDismiss = {

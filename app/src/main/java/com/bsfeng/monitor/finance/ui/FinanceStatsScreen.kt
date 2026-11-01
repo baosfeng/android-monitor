@@ -60,7 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * s07 统计分析（契约 docs/交互设计/s07-统计分析-交互契约.md，16 个锚点）。
+ * s07 统计分析（锚点账本，16 个锚点）。
  *
  * 收支卡 + 分类支出环与图例 + 近 7 天分组柱 + 24 小时消费热力；顶栏固定、内容单列纵向滚动，
  * 底部留白 [DesignTokens.fabSize] + 8dp，滚到底时日期轴不被底部 Tab 条遮住。
@@ -78,7 +78,7 @@ fun FinanceStatsScreen(
     /** 空态 CTA「新增一笔」的目标（原型 s07-empty-add）；未传时空态只显示文案。 */
     onAddClick: (() -> Unit)? = null,
     /**
-     * 从「新增一笔」表单返回本页时自增的信号（契约 s07-empty-add · 移除后「焦点回本按钮」）。
+     * 从「新增一笔」表单返回本页时自增的信号（锚点 s07-empty-add · 移除后「焦点回本按钮」）。
      *
      * 表单页会把本页整屏卸载，返回时是**重新组合**的一屏：滚动位置与焦点都不会自动回来，
      * 所以由导航方（MainContent）在返回时把信号 +1，本页据此把焦点放回空态卡上的按钮。
@@ -99,7 +99,7 @@ fun FinanceStatsScreen(
     val control = rememberFinanceStateControl()
     var retrying by remember { mutableStateOf(false) }
     var loadTimedOut by remember { mutableStateOf(false) }
-    // 契约 s07-error「焦点落到『重新计算』」/ s07-empty「焦点落到标题」/ s07-retry「成功后回到列表首项」
+    // 锚点 s07-error「焦点落到『重新计算』」/ s07-empty「焦点落到标题」/ s07-retry「成功后回到列表首项」
     val retryFocus = remember { FocusRequester() }
     val emptyTitleFocus = remember { FocusRequester() }
     // 空态 CTA「新增一笔」的落点（s07-empty-add · 移除后焦点回本按钮）
@@ -120,7 +120,7 @@ fun FinanceStatsScreen(
     val loadingLike = (loading && transactions.isEmpty() && categoryBreakdown.isEmpty()) || retrying
     val realEmpty = !loadingLike && categoryBreakdown.isEmpty() && transactions.isEmpty()
     val derivedState = when {
-        // 契约 s07-loading：超过 8s 仍无数据 → 错误态（先于 LOADING 判定）
+        // 锚点 s07-loading：超过 8s 仍无数据 → 错误态（先于 LOADING 判定）
         loadTimedOut -> FiveState.ERROR
         loadingLike -> FiveState.LOADING
         // 真实聚合失败 → 错误态（不再落到空态卡，把「算不出来」说成「没有可统计的支出」）
@@ -130,12 +130,12 @@ fun FinanceStatsScreen(
     }
     val state = control.value ?: derivedState
     val showEmptyCard = state == FiveState.EMPTY || (state == FiveState.POPULATED && realEmpty)
-    // 契约 s07-error · 边界「完全无数据时错误卡独占列表区；部分失败时错误卡贴列表首位并保留可用图表」：
+    // 锚点 s07-error · 边界「完全无数据时错误卡独占列表区；部分失败时错误卡贴列表首位并保留可用图表」：
     // 有缓存 = 上一轮成功读到过东西（分类占比 / 当月交易 / KPI 任一非空）。
     val hasCache = categoryBreakdown.isNotEmpty() || transactions.isNotEmpty() ||
         stats.totalExpense > 0.0 || stats.totalIncome > 0.0
 
-    // 契约 s07-loading：加载超过 8s 自动转错误态
+    // 锚点 s07-loading：加载超过 8s 自动转错误态
     LaunchedEffect(loadingLike) {
         loadTimedOut = false
         if (loadingLike) {
@@ -143,7 +143,7 @@ fun FinanceStatsScreen(
             loadTimedOut = true
         }
     }
-    // 契约 s07-retry：重试结束仍在错误态 → toast「仍未取到完整数据」；否则淡回图表
+    // 锚点 s07-retry：重试结束仍在错误态 → toast「仍未取到完整数据」；否则淡回图表
     LaunchedEffect(retrying, loading) {
         if (!retrying || loading) return@LaunchedEffect
         retrying = false
@@ -155,30 +155,30 @@ fun FinanceStatsScreen(
         } else {
             loadTimedOut = false
             control.select(null)
-            // 契约 s07-retry · 移除后：焦点回原「重新计算」位置（列表首项 = 月份条「上个月」）
+            // 锚点 s07-retry · 移除后：焦点回原「重新计算」位置（列表首项 = 月份条「上个月」）
             refocusListHead = true
         }
     }
-    // 契约 s07-empty：进入空态时焦点落到标题（从表单返回的那一次除外 —— 落点是 CTA 按钮，
+    // 锚点 s07-empty：进入空态时焦点落到标题（从表单返回的那一次除外 —— 落点是 CTA 按钮，
     // 见下面的 returnFocusTick；否则两个请求会抢同一帧，谁最后跑谁生效）
     LaunchedEffect(showEmptyCard) {
         if (!showEmptyCard || returnFocusTick > 0) return@LaunchedEffect
         withFrameNanos { }
         runCatching { emptyTitleFocus.requestFocus() }
     }
-    // 契约 s07-empty-add · 移除后：表单取消返回后焦点回「新增一笔」按钮
+    // 锚点 s07-empty-add · 移除后：表单取消返回后焦点回「新增一笔」按钮
     LaunchedEffect(returnFocusTick) {
         if (returnFocusTick <= 0 || !showEmptyCard) return@LaunchedEffect
         withFrameNanos { }
         runCatching { addFocus.requestFocus() }
     }
-    // 契约 s07-error：进入错误态时焦点落到「重新计算」（错误态下 Tab 只停这一处）
+    // 锚点 s07-error：进入错误态时焦点落到「重新计算」（错误态下 Tab 只停这一处）
     LaunchedEffect(state) {
         if (state != FiveState.ERROR) return@LaunchedEffect
         withFrameNanos { }
         runCatching { retryFocus.requestFocus() }
     }
-    // 契约 s07-retry · 移除后：焦点回列表首项（月份条「上个月」，节点随错误卡卸载后重挂，延一帧）
+    // 锚点 s07-retry · 移除后：焦点回列表首项（月份条「上个月」，节点随错误卡卸载后重挂，延一帧）
     LaunchedEffect(refocusListHead) {
         if (!refocusListHead) return@LaunchedEffect
         withFrameNanos { }
@@ -224,7 +224,7 @@ fun FinanceStatsScreen(
                 // 滚到底时「近 7 天收支」的 x 轴日期与数值刻度不再被 Tab 条裁掉。
                 contentPadding = PaddingValues(bottom = t.fabSize + t.space2),
             ) {
-                // 契约 s07-error · 边界：错误态两种形态互斥 ——
+                // 锚点 s07-error · 边界：错误态两种形态互斥 ——
                 // 完全无数据 → 错误卡独占列表区；部分失败（有缓存）→ 错误条贴首位，下方图表照常可用。
                 val errorCard = financeErrorAsCard(state, hasCache)
                 when {
@@ -243,7 +243,7 @@ fun FinanceStatsScreen(
                                 vm?.loadCurrentMonth()
                             },
                             modifier = Modifier.testTag("s07-error"),
-                            // 契约 s07-error：焦点直接落到「重新计算」（focusRequester 在 clickable 之前）
+                            // 锚点 s07-error：焦点直接落到「重新计算」（focusRequester 在 clickable 之前）
                             actionModifier = Modifier
                                 .testTag("s07-retry")
                                 .focusRequester(retryFocus),
@@ -276,14 +276,14 @@ fun FinanceStatsScreen(
                                 icon = Icons.Filled.BarChart,
                                 actionLabel = if (onAddClick != null) "新增一笔" else null,
                                 onAction = onAddClick,
-                                // 契约 s07-empty：空态标题获得初始焦点；标题块兼作键盘焦点停位（2dp 环）
+                                // 锚点 s07-empty：空态标题获得初始焦点；标题块兼作键盘焦点停位（2dp 环）
                                 modifier = Modifier
                                     .testTag("s07-empty")
                                     .focusRequester(emptyTitleFocus)
                                     .padding(horizontal = t.space4)
                                     .keyboardFocusRing(RoundedCornerShape(t.radiusLg))
                                     .focusable(),
-                                // 契约 s07-empty-add · 移除后：表单取消返回后焦点回本按钮
+                                // 锚点 s07-empty-add · 移除后：表单取消返回后焦点回本按钮
                                 actionModifier = Modifier
                                     .testTag("s07-empty-add")
                                     .focusRequester(addFocus),
@@ -300,7 +300,7 @@ fun FinanceStatsScreen(
                                         .padding(vertical = t.space2)
                                         .testTag("s07-monthbar")
                                         .onPreviewKeyEvent { event ->
-                                            // 契约 s07-monthbar：条内 ← / → 等同 prev / next
+                                            // 锚点 s07-monthbar：条内 ← / → 等同 prev / next
                                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                             when (event.key) {
                                                 Key.DirectionLeft -> {
@@ -314,13 +314,13 @@ fun FinanceStatsScreen(
                                                 else -> false
                                             }
                                         },
-                                    // 重试成功后焦点回列表首项用的落点（契约 s07-retry · 移除后）
+                                    // 重试成功后焦点回列表首项用的落点（锚点 s07-retry · 移除后）
                                     previousModifier = Modifier
                                         .testTag("s07-prev")
                                         .focusRequester(monthPrevFocus),
                                     nextModifier = Modifier.testTag("s07-next"),
                                 )
-                                // 副标题随月份同步刷新（契约 s07-prev）
+                                // 副标题随月份同步刷新（锚点 s07-prev）
                                 Text(
                                     monthLabel + " · 共 " + sortedEntries.size + " 个分类",
                                     style = MaterialTheme.typography.labelSmall,
@@ -387,7 +387,7 @@ fun FinanceStatsScreen(
     }
 }
 
-/** 加载骨架：三格 KPI + 150dp 圆环 + 两张卡（契约 s07-loading）。 */
+/** 加载骨架：三格 KPI + 150dp 圆环 + 两张卡（锚点 s07-loading）。 */
 @Composable
 private fun StatsSkeleton(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
@@ -403,7 +403,7 @@ private fun StatsSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-/** 边界数据区（契约 s07-edge）：超长分类名 + 7 位以上金额 + 分类总数角标 + 缺失分类占位。 */
+/** 边界数据区（锚点 s07-edge）：超长分类名 + 7 位以上金额 + 分类总数角标 + 缺失分类占位。 */
 @Composable
 private fun FinanceStatsEdgeSection(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
@@ -419,7 +419,7 @@ private fun FinanceStatsEdgeSection(modifier: Modifier = Modifier) {
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.size(t.space2))
-                // 分类总数角标（契约：120 个分类时角标显示总数）
+                // 分类总数角标（口径：120 个分类时角标显示总数）
                 Text(
                     formatCount(EDGE_CATEGORY_COUNT),
                     style = MaterialTheme.typography.labelSmall,
@@ -451,7 +451,7 @@ private fun FinanceStatsEdgeSection(modifier: Modifier = Modifier) {
     }
 }
 
-/** 边界态占位数据（契约 s07-edge 写死；不读库，避免真实账目进代码）。 */
+/** 边界态占位数据（锚点 s07-edge 写死；不读库，避免真实账目进代码）。 */
 internal const val EDGE_CATEGORY_NAME = "人情往来 · 红白喜事与节日红包"
 internal const val EDGE_CATEGORY_COUNT = 128_430
 internal const val EDGE_AMOUNT = 12_345_678.90

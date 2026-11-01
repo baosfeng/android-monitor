@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui
 
 // 共享行 TokenRow 的按压反馈判定（纯 JVM，不依赖 Compose 运行时）。
 //
-// P1：TokenRow 只有 clickable、没有按压缩放与触感，而契约 s09-goto-* 要求
+// P1：TokenRow 只有 clickable、没有按压缩放与触感，而锚点 s09-goto-* 要求
 // 「整行按压缩到 0.96（120ms，LIGHT）」。修法是接 pressFeedback 基元 + LIGHT，
 // 但**纯展示行不能跟着缩放**（s12-rows「静态行点按无变化、不进 Tab 顺序」）——
 // 这条判定抽成纯函数后用单测钉死，避免以后一刀切给所有行加反馈。

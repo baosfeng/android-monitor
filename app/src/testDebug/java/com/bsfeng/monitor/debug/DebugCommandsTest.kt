@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `DebugCommands.parse` 的契约测试（纯 JVM，不需要 Robolectric）：
+ * `DebugCommands.parse` 的口径测试（纯 JVM，不需要 Robolectric）：
  * 合法命令 / 缺参 / 非法 cmd / 非法参数值四类都要有用例，且拒绝时必须带可执行的期望值。
  */
 class DebugCommandsTest {
@@ -119,7 +119,7 @@ class DebugCommandsTest {
         val tabIndexes = DebugScreen.entries.mapNotNull { it.appTabIndex }
         assertEquals("每个 App Tab 只能被一个调试屏占用：$tabIndexes", tabIndexes.size, tabIndexes.toSet().size)
         assertTrue("screenList 要能列出 ad：${DebugCommands.screenList()}", "ad" in DebugCommands.screenList())
-        assertEquals("KNOWN_TYPES 与落库契约同源", RecordType.CANONICAL_NAMES, DebugCommands.KNOWN_TYPES)
+        assertEquals("KNOWN_TYPES 与落库口径同源", RecordType.CANONICAL_NAMES, DebugCommands.KNOWN_TYPES)
     }
 
     // ─────────────────────────────── 缺参 ───────────────────────────────

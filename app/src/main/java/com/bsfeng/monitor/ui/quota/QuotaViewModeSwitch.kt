@@ -45,7 +45,7 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 一个分段项：显示文案 + 契约锚点（s18-mode-aggregate / s18-plan-legacy 等逐字照抄）。 */
+/** 一个分段项：显示文案 + 锚点（s18-mode-aggregate / s18-plan-legacy 等逐字照抄）。 */
 internal data class QuotaSegment(val label: String, val tagModifier: Modifier)
 
 /** 顶部视图分段的两个选项（顺序 = 显示顺序，索引 0 为聚合）。 */
@@ -62,7 +62,7 @@ private val SEGMENT_PAD = 3.dp
  * 而聚合模式下 chip 整行消失，切换器留在原地不会让内容上下跳。
  *
  * 为什么不直接用共享 [com.bsfeng.monitor.ui.components.SegmentedControl]：
- * s18 契约要求**每段各有自己的锚点**（s18-mode-aggregate / s18-mode-single），
+ * s18 交互口径要求**每段各有自己的锚点**（s18-mode-aggregate / s18-mode-single），
  * 共享件只暴露整条容器的 modifier，段级 testTag 落不下去；这里保留同一套观感
  * （胶囊 + fg 7% 底 + 24% 描边 / 120ms）与键盘行为（整组一次 Tab、← → 移动、Home/End 跳首尾）。
  */

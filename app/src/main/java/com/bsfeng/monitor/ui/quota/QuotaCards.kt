@@ -156,7 +156,7 @@ private fun PercentQuotaCard(
                     InfoLine(item.title, QuotaFormat.amount(item.remaining, item.unit))
                 }
             }
-            // 契约 s18-opendesign-cred：凭据是浏览器会话令牌而不是 API Key，说明常驻在月度额度卡里
+            // 锚点 s18-opendesign-cred：凭据是浏览器会话令牌而不是 API Key，说明常驻在月度额度卡里
             if (providerId == "opendesign") {
                 Spacer(Modifier.height(t.space3))
                 Column(Modifier.fillMaxWidth().testTag("s18-opendesign-cred")) {
@@ -297,7 +297,7 @@ private fun heroSubtitle(providerId: String, items: List<QuotaItem>): String = w
     else -> "内含 + 已购"
 }
 
-/** 百分比卡锚点：Ollama 旧版 / opencode-go / open-design 各一张卡（契约 s18-legacy-* / s18-opencode-card / s18-opendesign-card）。 */
+/** 百分比卡锚点：Ollama 旧版 / opencode-go / open-design 各一张卡（锚点 s18-legacy-* / s18-opencode-card / s18-opendesign-card）。 */
 private fun percentCardTagOf(providerId: String): Modifier = when (providerId) {
     "ollama" -> Modifier.testTag("s18-legacy-quota")
     "opencode-go" -> Modifier.testTag("s18-opencode-card")
@@ -313,7 +313,7 @@ private fun moneyCardTagOf(providerId: String): Modifier = when (providerId) {
 }
 
 /**
- * 卡片内部进度条锚点：契约按「哪一家的哪个窗口」逐条给了锚点。
+ * 卡片内部进度条锚点：口径按「哪一家的哪个窗口」逐条给了锚点。
  *
  * Ollama 旧版按条目的稳定 id（session / weekly）；opencode-go 按窗口短名（5 小时 / 每周 / 每月）；
  * open-design 只有一个窗口，锚点落在主项上（credits 明细由 detailText 承担）。
@@ -335,7 +335,7 @@ private fun meterTagOf(providerId: String, item: QuotaItem, primary: Boolean): M
     else -> Modifier
 }
 
-/** 金额卡里的信息行锚点：Ollama 的「已购余额」是契约里唯一一条固定信息行。 */
+/** 金额卡里的信息行锚点：Ollama 的「已购余额」是账本里唯一一条固定信息行。 */
 private fun moneyInfoTagOf(providerId: String, item: QuotaItem): Modifier =
     if (providerId == "ollama" && item.id == "purchased") Modifier.testTag("s18-ollama-purchased") else Modifier
 

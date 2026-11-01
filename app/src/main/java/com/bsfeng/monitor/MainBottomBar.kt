@@ -63,7 +63,7 @@ internal fun MainBottomBar(
         unselectedTextColor = tokens.muted,
     )
     NavigationBar(
-        // 契约 s21 §tabbar：底部 Tab 栏容器锚点
+        // 锚点 s21 §tabbar：底部 Tab 栏容器锚点
         modifier = Modifier.testTag("tabbar").drawWithContent {
             drawContent()
             drawLine(
@@ -83,7 +83,7 @@ internal fun MainBottomBar(
                 animationSpec = tokens.springOf<Color>(MotionToken.State),
             )
             NavigationBarItem(
-                // 契约 s21 的 tab-* 锚点；传送 Tab 契约未定义，返回 null 时不自增
+                // 锚点 s21 的 tab-* 锚点；传送 Tab 账本未定义，返回 null 时不自增
                 modifier = tab.contractAnchor()?.let { Modifier.testTag(it) } ?: Modifier,
                 colors = barColors,
                 selected = isSelected,
@@ -115,10 +115,10 @@ internal fun MainBottomBar(
 }
 
 /**
- * 契约 s21 定义的底部 Tab 锚点（原型 `.tabbar / .tab-*`）。
+ * 锚点 s21 定义的底部 Tab 锚点（原型 `.tabbar / .tab-*`）。
  *
- * 只映射契约里写明的 6 个：传送 Tab 在 s21 契约中未定义锚点，返回 null 而不是自造一个
- * `tab-transfer`——锚点集合要能与契约逐字对账。
+ * 只映射账本里写明的 6 个：传送 Tab 在 s21 账本中未定义锚点，返回 null 而不是自造一个
+ * `tab-transfer`——锚点集合要能与锚点逐字对账。
  */
 internal fun AppTab.contractAnchor(): String? = when (this) {
     AppTab.OVERVIEW -> "tab-overview"
