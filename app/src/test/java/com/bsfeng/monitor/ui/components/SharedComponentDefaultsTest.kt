@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 共享组件默认值回归（契约口径 §二 点击区 / §三 触感）。
+ * 共享组件默认值回归（口径口径 §二 点击区 / §三 触感）。
  *
  * - AppSwitch：视觉轨道 52×32 不变，点击域 ≥ 44×44（回归：改动前点击区实测 52×32）；
  * - AppButton：默认 LIGHT；主操作 SUCCESS / 破坏性 REJECT 必须由调用方显式指定

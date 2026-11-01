@@ -40,7 +40,7 @@ class AddTransactionFocusRestoreTest {
     }
 
     /**
-     * N4（契约 s05-del-dialog / s05-del-cancel · 移除后）：确认框关闭后必须真的请求一次
+     * N4（锚点 s05-del-dialog / s05-del-cancel · 移除后）：确认框关闭后必须真的请求一次
      * 「删除这笔交易」按钮的焦点，且请求发生在 key 复位（→ 协程被 forget）之前。
      */
     @Test
@@ -100,7 +100,7 @@ class AddTransactionFocusRestoreTest {
     }
 
     /**
-     * P2①（契约 s05-retry · 移除后）：重试成功后焦点回分类行 —— 表单随错态卡卸载后重挂，
+     * P2①（锚点 s05-retry · 移除后）：重试成功后焦点回分类行 —— 表单随错态卡卸载后重挂，
      * 前几帧请求打空是常态，必须逐帧重试到最后一次成功，且复位不早于请求。
      */
     @Test

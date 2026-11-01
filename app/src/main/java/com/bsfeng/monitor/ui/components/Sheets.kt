@@ -49,7 +49,7 @@ fun Scrim(visible: Boolean, onDismiss: () -> Unit) {
  * 面板：opaquePanel（surface-warm → surface → bg 合成到 100% 不透明，玻璃主题下也不透底）
  * + topStart/topEnd 圆角 + --elev-3 阴影 + grip；贴底面板加 `navigationBarsPadding()`，
  * 面板底色铺到屏幕底、内容上抬，否则「确定 / 关闭」会被手势条压住。
- * 入场 220ms 滑入 + 淡入（契约 §7）；关闭即时卸载。
+ * 入场 220ms 滑入 + 淡入（交互口径 §7）；关闭即时卸载。
  */
 @Composable
 fun BottomSheet(

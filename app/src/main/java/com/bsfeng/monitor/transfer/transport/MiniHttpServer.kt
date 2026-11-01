@@ -23,7 +23,7 @@ import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** 路由处理契约（由 `TransferEngine` 落地，服务器只负责解析与分发）。 */
+/** 路由处理口径（由 `TransferEngine` 落地，服务器只负责解析与分发）。 */
 interface TransferRoutes {
     /** `GET /info`：设备信息与能力。 */
     suspend fun info(): ApiResponse

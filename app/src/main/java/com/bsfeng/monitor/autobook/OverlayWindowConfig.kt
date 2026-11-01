@@ -13,7 +13,7 @@ import androidx.annotation.RequiresApi
 /**
  * [WindowManager.LayoutParams] 的构建与「是否可聚焦」切换。
  *
- * 两个关键契约：
+ * 两个关键口径：
  * 1. 全屏沉浸：`fitInsetsTypes = 0` + `LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS`，
  *    否则窗口被状态栏/手势条挤小，遮罩铺不满。
  * 2. 默认 `FLAG_NOT_FOCUSABLE`（不抢目标 App 输入）；编辑「说明」时临时去掉才能弹输入法，

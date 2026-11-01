@@ -25,7 +25,7 @@ import com.bsfeng.monitor.ui.theme.chartRamp
 
 /**
  * 图表基元（原 ui/components/Charts.kt 的文件级约定，随拆分保留）：
- * 全部自绘 Canvas，零第三方图表/动画库（契约 §6）；绘制时长走 --dur-chart / --dur-chart-fast，
+ * 全部自绘 Canvas，零第三方图表/动画库（交互口径 §6）；绘制时长走 --dur-chart / --dur-chart-fast，
  * 只动几何与 opacity。
  *
  * 热路径（J4）：动画值 `Animatable` 只在 **绘制期** 读（drawWithCache 的 build 块在

@@ -61,13 +61,13 @@ import kotlinx.coroutines.withContext
  * s10-legend / s10-st-loading / s10-st-empty / s10-st-error / s10-st-edge / s10-confirm。
  *
  * 空 / 错 / 边界态直接调共享 [EmptyState] / [ErrorState] / [EdgeState]（StateMessages.kt），
- * 不用 StateContainer：后者不接受块级锚点，本页每个态都要带契约锚点。
+ * 不用 StateContainer：后者不接受块级锚点，本页每个态都要带锚点。
  *
- * 空态（规则总数 = 0）复用订阅源卡与计数卡：契约 s10-st-empty 要求 CTA 把焦点与视口带到
+ * 空态（规则总数 = 0）复用订阅源卡与计数卡：锚点 s10-st-empty 要求 CTA 把焦点与视口带到
  * URL 输入框，输入框必须真实存在；空态卡接在两张卡下方，空态本身不关闭，锚点仍落 s10-st-empty。
  *
- * 「s10-all 查看全部规则」行不渲染：源码用 LazyColumn 全量渲染规则，没有契约假设的
- * 「前 N 条」折叠，契约边界「总数 ≤ 已渲染条数时整行隐藏」恒成立（见交接文档处置表）。
+ * 「s10-all 查看全部规则」行不渲染：源码用 LazyColumn 全量渲染规则，没有口径假设的
+ * 「前 N 条」折叠，口径边界「总数 ≤ 已渲染条数时整行隐藏」恒成立（见交接文档处置表）。
  */
 @Composable
 fun SkipRuleScreen(
@@ -78,7 +78,7 @@ fun SkipRuleScreen(
     // s10 只有一个 toast 宿主（下方 AppToast 绑它）。页面级动作（开关 / 复制 / 新增 / 快照）
     // 直接 toast.show(...)；ViewModel 侧的一次性结果（订阅更新 / 拉取失败）经 LaunchedEffect
     // 搬进同一个宿主 —— 原实现把 AppToast 绑在 state.message 上，toast 状态永远没人渲染，
-    // 契约要求的四句提示一句都出不来。
+    // 交互口径要求的四句提示一句都出不来。
     val toast = rememberToastHostState()
     val clipboard = LocalClipboardManager.current
     val haptic = rememberHaptic()
@@ -100,7 +100,7 @@ fun SkipRuleScreen(
         if (first != null && urlInput == DEFAULT_SUBSCRIPTION_URL) urlInput = first
     }
 
-    // 五态的真实来源（契约 s10-st-empty · 前置「规则总数 = 0」）：demoState 仍可覆盖演示；
+    // 五态的真实来源（锚点 s10-st-empty · 前置「规则总数 = 0」）：demoState 仍可覆盖演示；
     // 规则库为空（含「有订阅源但规则为 0」）即空态，而不是渲染一张 0 行的有数据态。
     val effective = skipRuleEffectiveState(
         demoState = demoState,
@@ -125,10 +125,10 @@ fun SkipRuleScreen(
     val expandedRuleIds = remember { mutableStateMapOf<String, Boolean>() }
 
     val scope = rememberCoroutineScope()
-    // 空态与有数据态各用一份列表状态：空态 CTA 要把视口滚回顶部让订阅源卡可见（契约 s10-st-empty）。
+    // 空态与有数据态各用一份列表状态：空态 CTA 要把视口滚回顶部让订阅源卡可见（锚点 s10-st-empty）。
     val emptyListState = rememberLazyListState()
     val bodyListState = rememberLazyListState()
-    // 三处焦点归位落点（契约 s10-st-empty / s10-confirm / s10-st-error）
+    // 三处焦点归位落点（锚点 s10-st-empty / s10-confirm / s10-st-error）
     val urlFocus = remember { FocusRequester() }
     val updateFocus = remember { FocusRequester() }
     val errorRetryFocus = remember { FocusRequester() }
@@ -147,7 +147,7 @@ fun SkipRuleScreen(
         )
     }
 
-    // 确认浮层关闭后焦点回「更新订阅」（契约 s10-confirm · 取消 / 确认更新）。
+    // 确认浮层关闭后焦点回「更新订阅」（锚点 s10-confirm · 取消 / 确认更新）。
     // 确认更新会让按钮转禁用（不可聚焦）→ 等更新结束再请求，不提前消费信号。
     LaunchedEffect(pendingUpdateFocus, showConfirm, updating, effective) {
         if (!pendingUpdateFocus) return@LaunchedEffect
@@ -164,7 +164,7 @@ fun SkipRuleScreen(
     }
 
     // 错误态「重试」：仍失败 → 焦点回「重试」；恢复成有数据态 / 空态（两者都有订阅源卡）→ 回
-    // 「更新订阅」；边界态没有触发按钮的落点 → 作废（契约 s10-st-error · 错误态被新结果替换后消失）。
+    // 「更新订阅」；边界态没有触发按钮的落点 → 作废（锚点 s10-st-error · 错误态被新结果替换后消失）。
     LaunchedEffect(pendingErrorRetryFocus, effective, updating) {
         if (!pendingErrorRetryFocus) return@LaunchedEffect
         when (val next = retryFocusTarget(effective, updating)) {
@@ -187,7 +187,7 @@ fun SkipRuleScreen(
             .fillMaxSize()
             .pageBackdrop()
             .testTag("screen-s10")
-            // Esc：先收起全部已展开明细，再按一次才交给页面返回（契约 s10-rules 键盘行边界）。
+            // Esc：先收起全部已展开明细，再按一次才交给页面返回（锚点 s10-rules 键盘行边界）。
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyUp && event.key == Key.Escape && expandedRuleIds.isNotEmpty()) {
                     expandedRuleIds.clear()
@@ -228,7 +228,7 @@ fun SkipRuleScreen(
                                 toast.show("正在重新拉取订阅源…")
                                 viewModel.updateSubscription(urlInput)
                             },
-                            // 重试后仍在错态 → 焦点回这颗「重试」按钮（契约 s10-st-error · 移除后）
+                            // 重试后仍在错态 → 焦点回这颗「重试」按钮（锚点 s10-st-error · 移除后）
                             actionModifier = Modifier.focusRequester(errorRetryFocus),
                             modifier = Modifier.testTag("s10-st-error"),
                         )
@@ -240,14 +240,14 @@ fun SkipRuleScreen(
                             SkipRuleEdgeContent()
                         }
 
-                        // 空态与有数据态共用同一张订阅源卡：契约 s10-st-empty 要求 CTA 把
+                        // 空态与有数据态共用同一张订阅源卡：锚点 s10-st-empty 要求 CTA 把
                         // 「焦点与视口带到订阅源 URL 输入框」，URL 输入框必须真实存在；字段由本卡的
                         // urlFocusRequester 接入。空态卡接在订阅源卡下方，空态本身不关闭。
                         FiveState.POPULATED, FiveState.EMPTY -> {
                             val empty = effective == FiveState.EMPTY
                             LazyColumn(
                                 state = if (empty) emptyListState else bodyListState,
-                                // s10-body 是有数据态的内容列锚点：空态不渲染（契约 s10-body 边界）
+                                // s10-body 是有数据态的内容列锚点：空态不渲染（锚点 s10-body 边界）
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .then(if (empty) Modifier else Modifier.testTag("s10-body")),
@@ -265,7 +265,7 @@ fun SkipRuleScreen(
                                         snapshotPath = state.snapshotPath,
                                         onRequestUpdate = { showConfirm = true },
                                         // 新增订阅走本地语义（判重 + 清单 +1），不发起网络拉取；
-                                        // 需要拉规则时用户再点「更新订阅」（契约 s10-source · 新增订阅行）
+                                        // 需要拉规则时用户再点「更新订阅」（锚点 s10-source · 新增订阅行）
                                         onAddSubscription = { viewModel.addSubscriptionLocally(urlInput) },
                                         onRequestSnapshot = { viewModel.requestSnapshot() },
                                         urlFocusRequester = urlFocus,
@@ -290,7 +290,7 @@ fun SkipRuleScreen(
                                             text = "添加订阅源后点击「更新订阅」，规则会自动合并到本地规则库。",
                                             title = "还没有任何规则",
                                             actionLabel = "去添加订阅源",
-                                            // 契约 s10-st-empty：只把焦点与视口带到 URL 输入框，不建规则、不关空态
+                                            // 锚点 s10-st-empty：只把焦点与视口带到 URL 输入框，不建规则、不关空态
                                             onAction = {
                                                 toast.show("请在订阅源卡片填写 URL")
                                                 pendingUrlFocus = true
@@ -381,7 +381,7 @@ fun SkipRuleScreen(
                 showConfirm = false
                 // 浮层关闭后焦点回「更新订阅」；确认更新会让按钮转禁用，等更新结束再落点
                 pendingUpdateFocus = true
-                // 确认类操作给 SUCCESS 触感（契约 s10-confirm「确认更新」行）；取消不给触感。
+                // 确认类操作给 SUCCESS 触感（锚点 s10-confirm「确认更新」行）；取消不给触感。
                 haptic(HapticTone.SUCCESS)
                 viewModel.updateSubscription(urlInput)
             },
@@ -403,10 +403,10 @@ private fun SkipRuleStateSkeleton(modifier: Modifier = Modifier) {
 }
 
 /**
- * s10 五态的真实来源（契约 s10-st-empty · 前置「规则总数 = 0」）。
+ * s10 五态的真实来源（锚点 s10-st-empty · 前置「规则总数 = 0」）。
  *
  * demoState 仍可覆盖演示（切到 loading / error / edge）；真实数据里只有「规则库为空」会进空态 ——
- * 契约边界写明「有订阅源但规则为 0 时用同一文案」，故判据只看规则数、不看订阅源数。
+ * 口径边界写明「有订阅源但规则为 0 时用同一文案」，故判据只看规则数、不看订阅源数。
  */
 internal fun skipRuleEffectiveState(
     demoState: FiveState,
@@ -453,7 +453,7 @@ internal fun retryFocusTarget(state: FiveState, updating: Boolean): RetryFocus =
     else -> RetryFocus.DROP
 }
 
-/** 契约 s10-url：URL 输入上限 2048 字符（超长截断，不报错）。 */
+/** 锚点 s10-url：URL 输入上限 2048 字符（超长截断，不报错）。 */
 private const val URL_MAX_CHARS = 2048
 
 private const val DEFAULT_SUBSCRIPTION_URL =

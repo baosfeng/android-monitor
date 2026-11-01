@@ -31,7 +31,7 @@ class SettingsDemoGateTest {
 
     @Test
     fun `release 构建下 demoVisible 恒为 false`() {
-        // rememberDemoVisible() 内部已含 BuildConfig.DEBUG；这里锁定「没有第二条判据」的契约
+        // rememberDemoVisible() 内部已含 BuildConfig.DEBUG；这里锁定「没有第二条判据」的口径
         assertFalse(demoEntryVisible(demoVisible = false))
     }
 }

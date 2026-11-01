@@ -49,13 +49,13 @@ internal fun pressScale(pressed: Boolean): Float {
 
 internal enum class AppButtonVariant { Primary, Ghost }
 
-/** AppButton 默认触感（契约 §三）：普通按钮 = LIGHT；主操作 SUCCESS / 破坏性 REJECT 由调用方显式指定。 */
+/** AppButton 默认触感（交互口径 §三）：普通按钮 = LIGHT；主操作 SUCCESS / 破坏性 REJECT 由调用方显式指定。 */
 internal val DEFAULT_APP_BUTTON_TONE: HapticTone = HapticTone.LIGHT
 
 /**
  * 主/次按钮（原型 .btn / .btn-ghost / .btn-block / :disabled）。
  *
- * 触感（契约 §三）：默认 [HapticTone.LIGHT]（普通按钮）；**主操作确认**由调用方显式传
+ * 触感（交互口径 §三）：默认 [HapticTone.LIGHT]（普通按钮）；**主操作确认**由调用方显式传
  * `tone = HapticTone.SUCCESS`，**破坏性操作**（删除 / 取消传输）传 `tone = HapticTone.REJECT`。
  * 同一操作不重复震动：调用方不要再自己补震。
  */
@@ -110,7 +110,7 @@ internal fun AppButton(
 /**
  * 图标按钮（原型 .icon-btn，44dp 触达）。
  *
- * 触感（契约 §三）与 [AppButton] 同口径：默认 [HapticTone.LIGHT]（普通按钮）；
+ * 触感（交互口径 §三）与 [AppButton] 同口径：默认 [HapticTone.LIGHT]（普通按钮）；
  * 主操作确认传 [HapticTone.SUCCESS]，破坏性操作传 [HapticTone.REJECT]。
  */
 @Composable

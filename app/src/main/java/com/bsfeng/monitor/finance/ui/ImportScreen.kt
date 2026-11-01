@@ -101,7 +101,7 @@ fun ImportScreen(
     var readError by remember { mutableStateOf("") }
     // 连点防护：点击后到 StateFlow 回填 importing 之间可能有一点间隔
     var submitting by remember { mutableStateOf(false) }
-    // 重试失败项：结果返回后按「重试前失败数」给 toast（契约 s08-retry-failed）
+    // 重试失败项：结果返回后按「重试前失败数」给 toast（锚点 s08-retry-failed）
     var pendingRetry by remember { mutableStateOf(false) }
     var retryBase by remember { mutableStateOf(0) }
     // 焦点迁移 tick：节点要等重组后才存在，延一帧再 requestFocus
@@ -112,7 +112,7 @@ fun ImportScreen(
     val fileFocus = remember { FocusRequester() }
     val resultFocus = remember { FocusRequester() }
     val againFocus = remember { FocusRequester() }
-    // 契约 s08-empty「焦点落标题」/ s08-error「焦点直接落在『重试』」/ s08-fail「落在『重新选择文件』」
+    // 锚点 s08-empty「焦点落标题」/ s08-error「焦点直接落在『重试』」/ s08-fail「落在『重新选择文件』」
     val emptyTitleFocus = remember { FocusRequester() }
     val errorRetryFocus = remember { FocusRequester() }
     val failRetryFocus = remember { FocusRequester() }
@@ -171,7 +171,7 @@ fun ImportScreen(
     val state = control.value ?: derivedState
     val hasResult = result != null && !importing && !failed
 
-    // 进度：无真实进度事件，按契约 120ms 线性步进爬到 92%，结果返回即落 1f
+    // 进度：无真实进度事件，按锚点 120ms 线性步进爬到 92%，结果返回即落 1f
     val progress = remember { Animatable(0f) }
     LaunchedEffect(importing) {
         if (importing) {
@@ -226,13 +226,13 @@ fun ImportScreen(
         }
     }
 
-    // 契约 s08-empty：首次进入页面即为空态，焦点落到空态标题（之后交给 pick/file/result 的焦点迁移）
+    // 锚点 s08-empty：首次进入页面即为空态，焦点落到空态标题（之后交给 pick/file/result 的焦点迁移）
     LaunchedEffect(Unit) {
         withFrameNanos { }
         runCatching { emptyTitleFocus.requestFocus() }
     }
 
-    // 契约 s08-error / s08-fail：错误卡与中断卡本身不进 Tab 序列，焦点直接落到卡上那颗按钮
+    // 锚点 s08-error / s08-fail：错误卡与中断卡本身不进 Tab 序列，焦点直接落到卡上那颗按钮
     LaunchedEffect(failed, parseFailed) {
         if (!failed) return@LaunchedEffect
         withFrameNanos { }
@@ -246,7 +246,7 @@ fun ImportScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 叠层顶栏的**空隙**也要吞点击（契约 s05-empty-import · 边界）：本页是压在「记一笔」
+                    // 叠层顶栏的**空隙**也要吞点击（锚点 s05-empty-import · 边界）：本页是压在「记一笔」
                     // 表单之上的兄弟节点，标题与两侧之间的空白原先没有指针处理，点击会穿透到下层
                     // AddTransactionTopBar 的标题 → DEBUG 里静默掀开被遮住的五态条（关掉叠层才看见）。
                     // 用 pointerInput 而不是 clickable：clickable 会让 TalkBack 把整条顶栏读成按钮，
@@ -365,7 +365,7 @@ fun ImportScreen(
                                                 (result?.errors?.firstOrNull()?.let { " " + it } ?: "")
                                         },
                                         modifier = Modifier.testTag("s08-error"),
-                                        // 契约 s08-error：焦点直接落到「重试」上
+                                        // 锚点 s08-error：焦点直接落到「重试」上
                                         actionModifier = Modifier
                                             .testTag("s08-error-retry")
                                             .focusRequester(errorRetryFocus),
@@ -385,7 +385,7 @@ fun ImportScreen(
                                         text = "本次写入已回滚，本地账目未被修改。" +
                                             (result?.errors?.firstOrNull()?.let { " " + it } ?: ""),
                                         modifier = Modifier.testTag("s08-fail"),
-                                        // 契约 s08-fail：焦点直接落到「重新选择文件」上
+                                        // 锚点 s08-fail：焦点直接落到「重新选择文件」上
                                         actionModifier = Modifier
                                             .testTag("s08-fail-retry")
                                             .focusRequester(failRetryFocus),
@@ -428,7 +428,7 @@ fun ImportScreen(
                                     title = "还没有选择文件",
                                     text = "先在熊猫记账里「我的 → 导出账单」，再回到这里选择该文件",
                                     icon = Icons.Filled.Description,
-                                    // 契约 s08-empty：焦点落标题；标题块兼作键盘焦点停位（2dp 环）
+                                    // 锚点 s08-empty：焦点落标题；标题块兼作键盘焦点停位（2dp 环）
                                     modifier = Modifier
                                         .testTag("s08-empty")
                                         .focusRequester(emptyTitleFocus)
@@ -541,7 +541,7 @@ fun ImportScreen(
 /**
  * 边界数据区（锚点 s08-edge）：超长文件名 + 128,430 条记录。
  *
- * 契约：文件名单行省略号；右侧角标等宽不换行；副行带「已超过 20 MB 建议上限」警示色；
+ * 口径：文件名单行省略号；右侧角标等宽不换行；副行带「已超过 20 MB 建议上限」警示色；
  * 超 20 MB 仍允许选择、不拦截。纯展示、无 CTA。
  */
 @Composable

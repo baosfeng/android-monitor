@@ -29,7 +29,7 @@ import com.bsfeng.monitor.ui.theme.sparkHeight
 @Composable
 internal fun SkipRuleKpiRow(ruleCount: Int, hits: SkipHits, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
-    // 千分位 + 入屏从 0 滚到终值（契约 s10-summary）；时长取 --dur-chart（token 里最接近的原型 700/900ms）。
+    // 千分位 + 入屏从 0 滚到终值（锚点 s10-summary）；时长取 --dur-chart（token 里最接近的原型 700/900ms）。
     val shownRules = animatedCount(ruleCount)
     val shownHits = animatedCount(hits.total)
     Row(

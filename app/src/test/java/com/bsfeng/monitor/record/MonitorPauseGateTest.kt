@@ -15,7 +15,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * 监控暂停闸门（契约 s09-monitor「暂停后停止写新事件、实时流不再增长」）。
+ * 监控暂停闸门（锚点 s09-monitor「暂停后停止写新事件、实时流不再增长」）。
  *
  * 走真实 SQLite（Robolectric），断言的是**事件表里的行数**而不是某个内存标志 ——
  * 这一条正是原实现的假反馈所在：标志改了、库还在涨。

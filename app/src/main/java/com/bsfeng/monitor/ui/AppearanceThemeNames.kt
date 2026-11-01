@@ -40,9 +40,9 @@ internal fun themeLabel(id: String): String =
     if (id == ThemeRepository.DEFAULT_THEME) themeNameEn(id) else themeNameCn(id) + " " + themeNameEn(id)
 
 /**
- * 主题 id → 契约锚点（原型 data-od-id）。
+ * 主题 id → 锚点（原型 data-od-id）。
  *
- * 契约锚点按原型逐字沿用：glassmorphism 在契约里叫 `s13-theme-glass`（不是 s13-theme-glassmorphism），
+ * 锚点按原型逐字沿用：glassmorphism 在账本里叫 `s13-theme-glass`（不是 s13-theme-glassmorphism），
  * 其余 7 个与 id 同名。改号会断开与原型、评审、实现的对应链，故只在表里转写、不在调用点拼字符串。
  */
 private val THEME_ANCHOR: Map<String, String> = mapOf(

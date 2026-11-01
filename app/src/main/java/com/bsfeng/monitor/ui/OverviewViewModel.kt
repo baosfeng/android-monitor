@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 /**
- * 错态描述（契约 s01-error 逐字）：
+ * 错态描述（锚点 s01-error 逐字）：
  * 「本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。」
  *
  * 异常原文（含 SQLite 错误码 / 表名）只进日志，上屏一律这句。
@@ -124,7 +124,7 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * 错态「重试」：**先回到骨架态**再拉数据（契约 s01-error-retry「整块换成加载骨架」）。
+     * 错态「重试」：**先回到骨架态**再拉数据（锚点 s01-error-retry「整块换成加载骨架」）。
      *
      * 只调 [load] 是不够的：错态块会原地留着、按钮还能连点。置 isLoading=true 的那一刻
      * 错态块连同按钮一起卸载，物理上无法连点；再失败时 [load] 的 catch 落回错态。
@@ -144,7 +144,7 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             throw e
         } catch (e: Exception) {
             // 异常原文只进日志：e.message 是内部实现细节（SQLite 错误码 / 表名 / 路径），
-            // 直接上屏既泄漏实现细节、又和契约写死的错态文案对不上。
+            // 直接上屏既泄漏实现细节、又和口径写死的错态文案对不上。
             Log.w("OverviewViewModel", "加载概览数据失败", e)
             _state.value = _state.value.copy(isLoading = false, loadError = LOAD_ERROR_DESC)
         }

@@ -41,9 +41,9 @@ private val TOAST_RISE: Dp = 12.dp
 private val TOAST_DROP: Dp = 8.dp
 
 /**
- * Toast：总时长 1.6s 自动消失（契约 §5）。
+ * Toast：总时长 1.6s 自动消失（交互口径 §5）。
  *
- * 进出场取契约口径：入场 \`--dur-overlay-in\` 220ms + \`--ease-out\`，退场 \`--dur-overlay-out\` 150ms +
+ * 进出场取口径口径：入场 \`--dur-overlay-in\` 220ms + \`--ease-out\`，退场 \`--dur-overlay-out\` 150ms +
  * \`--ease-in\`，位移复用原型 od-toast-in / od-toast-out（12 / 8）。**停留窗口仍是 1.6s 总时长**，
  * 淡出占最后 150ms，故 [onDismiss] 在「1.6s − 退场时长」时触发，退场动画结束后组件才移除。
  * 动效档为 [MotionTier.REDUCED]（用户选「精简」或系统「动画时长缩放 = 0」）时不播动画，直接落终态。
@@ -79,7 +79,7 @@ fun AppToast(
     val risePx = with(density) { TOAST_RISE.roundToPx() }
     val dropPx = with(density) { TOAST_DROP.roundToPx() }
 
-    // 契约 s21 §toast-host：全局 Toast 承载层锚点（常驻，toast 不可见时也在）
+    // 锚点 s21 §toast-host：全局 Toast 承载层锚点（常驻，toast 不可见时也在）
     Box(modifier = modifier.testTag("toast-host"), contentAlignment = Alignment.Center) {
         AnimatedVisibility(
             visible = message != null,

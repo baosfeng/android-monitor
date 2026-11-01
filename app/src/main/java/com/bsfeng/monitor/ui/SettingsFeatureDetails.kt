@@ -5,7 +5,7 @@ package com.bsfeng.monitor.ui
 // 一级页「功能开关」只管开不开（见 ui/SettingsFeatureIndexSection.kt），
 // 每项功能的专属设置全在这里；正文直接复用各功能卡，不复制一份 UI。
 //
-// 每页 ≤ 7 项（契约 s09 页层级规则 2）：超过的（传送）再拆一页，
+// 每页 ≤ 7 项（锚点 s09 页层级规则 2）：超过的（传送）再拆一页，
 // 而不是把 30 多行塞回同一屏。
 
 import androidx.compose.runtime.Composable

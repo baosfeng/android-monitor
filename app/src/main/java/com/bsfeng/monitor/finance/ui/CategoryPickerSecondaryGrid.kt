@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.ui.components.CategoryIcon
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 二级网格第一格的固定文案：只用一级分类、不写入二级（契约 s14a-cat-grid） */
+/** 二级网格第一格的固定文案：只用一级分类、不写入二级（锚点 s14a-cat-grid） */
 private const val TOP_ONLY_LABEL = "不细分"
 
 /**

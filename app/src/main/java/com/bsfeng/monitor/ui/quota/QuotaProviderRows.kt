@@ -62,20 +62,20 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
 /**
- * 未接入 provider 的行该长什么样（契约 s19:18/19 的「无反应、不展开」档）。
+ * 未接入 provider 的行该长什么样（锚点 s19:18/19 的「无反应、不展开」档）。
  *
  * 抽成纯函数是为了可单测：这条档位一旦被误触发，用户会对着一个填了也不生效的输入框白忙
  * （真写 Keystore、真发请求），所以判据必须能被断言锁住，而不是散在 Compose 分支里。
  *
  * @param available 该 provider 是否真的能配置凭据（由 provider 注册表决定，见 [ProviderSettingsRow] 的形参说明）；
- * @param unavailableBadge 未接入时的行尾角标（契约原文「下次接入」/「手动」）。
+ * @param unavailableBadge 未接入时的行尾角标（交互口径原文「下次接入」/「手动」）。
  */
 internal data class ProviderRowAffordance(
     /** 整行是否可点（false = 不进入按压态、不展开、不发 toast）。 */
     val interactive: Boolean,
-    /** 是否显示右箭头（未接入行按契约「无 chevron」）。 */
+    /** 是否显示右箭头（未接入行按口径「无 chevron」）。 */
     val showChevron: Boolean,
-    /** 整行透明度（契约：未接入行 0.85 读作不可用）。 */
+    /** 整行透明度（口径：未接入行 0.85 读作不可用）。 */
     val alpha: Float,
     /** 行尾角标：已接入走连接态角标（由调用方渲染），未接入走这里的角标文案。 */
     val unavailableBadge: String?,
@@ -107,10 +107,10 @@ internal fun providerRowAffordance(
 /** 已接入 provider 恒可用：设置页所有已注册 provider 走这档（见 [providerRowAffordance]）。 */
 internal const val UNAVAILABLE_BADGE_DEFAULT: String = "下次接入"
 
-/** 未接入行的整行透明度（契约 s19:18「整行 opacity 0.85 读作不可用」）。 */
+/** 未接入行的整行透明度（锚点 s19:18「整行 opacity 0.85 读作不可用」）。 */
 internal const val UNAVAILABLE_ROW_ALPHA: Float = 0.85f
 
-/** 未接入行的副行说明（契约 s19:19 逐字：「无公开接口 · 手动录入」）。 */
+/** 未接入行的副行说明（锚点 s19:19 逐字：「无公开接口 · 手动录入」）。 */
 internal const val UNAVAILABLE_HINT: String = "无公开接口 · 手动录入"
 
 /**
@@ -118,7 +118,7 @@ internal const val UNAVAILABLE_HINT: String = "无公开接口 · 手动录入"
  *
  * 展开态不做二级页面：凭据只有 1～2 条，push 一层反而让「改一条 Key」变成三次导航。
  *
- * 交互口径（契约 s19-provider-*）：
+ * 交互口径（锚点 s19-provider-*）：
  * - 整行按下 120ms 缩到 0.96（--dur-press）+ LIGHT；展开 220ms / 收起 150ms（--dur-overlay-in / out）；
  * - 收起后焦点回本行：展开区卸载会把焦点一起带走，走 pendingFocus 等重组收起后再请求；
  * - 保存期间按钮锁一次（连点只存一次），失败保留输入并就地提示（见 [saveRowState]）；
@@ -128,8 +128,8 @@ internal const val UNAVAILABLE_HINT: String = "无公开接口 · 手动录入"
  * @param available 该 provider 是否真的能配置凭据。**由 provider 注册表决定，不按 id 写死**：
  *   今天四家（ollama / deepseek / opencode-go / opendesign）都在 ServiceContainer 里注册了真实
  *   拉取实现，所以调用方一律传 true 即可；将来接入空壳 provider 时传 false 就自动变成禁用态。
- *   契约 s19:18/19 原本要求 opencode-go / opendesign 走禁用档，但那两家已是真实 provider
- *   （各有 fetchItems 实现与单测），且 docs/交互设计/_口径/契约矛盾清单.md:44 已裁决
+ *   锚点 s19:18/19 原本要求 opencode-go / opendesign 走禁用档，但那两家已是真实 provider
+ *   （各有 fetchItems 实现与单测），且 历史裁决记录 已裁决
  *   「以源码为准，行可展开」—— 所以这里不做按 id 的硬编码禁用。
  */
 @Composable
@@ -146,7 +146,7 @@ internal fun ProviderSettingsRow(
     saveError: String? = null,
     /** false = 该 provider 未接入（见 KDoc）；默认 true，已注册 provider 全走这档。 */
     available: Boolean = true,
-    /** 未接入时的行尾角标文案（契约 s19 原文）。 */
+    /** 未接入时的行尾角标文案（锚点 s19 原文）。 */
     unavailableBadge: String = UNAVAILABLE_BADGE_DEFAULT,
 ) {
     val t = LocalDesignTokens.current
@@ -173,7 +173,7 @@ internal fun ProviderSettingsRow(
         Modifier
             .fillMaxWidth()
             .clip(rowShape)
-            // 未接入行不进入按压态、不展开、不发 toast（契约 s19:18/19）：
+            // 未接入行不进入按压态、不展开、不发 toast（锚点 s19:18/19）：
             // pressFeedback / clickable 都吃 enabled，禁用态下点击区仍在但无任何反馈
             .pressFeedback(interaction, enabled = affordance.interactive)
             .keyboardFocusRing(rowShape)
@@ -219,8 +219,8 @@ internal fun ProviderSettingsRow(
                 )
             }
         }
-        // 展开 220ms / 收起 150ms（--dur-overlay-in / out，契约 s19 头部时长口径）。
-        // 不用 foundation 的 expandEnter()：那个角色取 --dur-page（340ms），与本页契约不一致。
+        // 展开 220ms / 收起 150ms（--dur-overlay-in / out，锚点 s19 头部时长口径）。
+        // 不用 foundation 的 expandEnter()：那个角色取 --dur-page（340ms），与本页口径不一致。
         AnimatedVisibility(
             visible = shownExpanded,
             enter = expandVertically(tween(t.durOverlayIn, easing = t.easeOut)) +
@@ -275,7 +275,7 @@ internal fun ProviderSettingsRow(
                 )
                 if (saveError != null) {
                     Spacer(Modifier.height(t.space2))
-                    // 就地提示：保存 / 查询失败时输入保留，改一改再点保存即可（契约 s19 边界）
+                    // 就地提示：保存 / 查询失败时输入保留，改一改再点保存即可（锚点 s19 边界）
                     Text(
                         "保存后查询失败：" + saveError + " · 输入已保留，可修改后重试",
                         style = MaterialTheme.typography.bodySmall,
@@ -336,7 +336,7 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
 /**
  * 刷新间隔小 chip（1 / 3 / 5 / 10 / 15 分钟）。
  *
- * 三处口径（契约 s19-provider-* · 刷新间隔）：选中底 120ms 过渡（--dur-state）、点击区 ≥44dp、
+ * 三处口径（锚点 s19-provider-* · 刷新间隔）：选中底 120ms 过渡（--dur-state）、点击区 ≥44dp、
  * 点已选中的 chip 不重复落盘也不发请求。
  */
 @Composable
@@ -385,7 +385,7 @@ private fun IntervalChips(selected: Int, onSelect: (Int) -> Unit) {
 /**
  * 点刷新间隔 chip 是否算一次真实改动。
  *
- * 点已选中的 chip 不重复落盘（契约 s19-provider-* · 刷新间隔边界）：不算改动 → 不写盘、不震、
+ * 点已选中的 chip 不重复落盘（锚点 s19-provider-* · 刷新间隔边界）：不算改动 → 不写盘、不震、
  * 不重排闹钟。
  */
 internal fun intervalSelectionChanged(minutes: Int, selected: Int): Boolean = minutes != selected
@@ -394,7 +394,7 @@ internal fun intervalSelectionChanged(minutes: Int, selected: Int): Boolean = mi
 internal enum class QuotaSaveRowState { WAIT, KEEP_OPEN, COLLAPSE }
 
 /**
- * 保存结束后收不收起这一行（契约 s19 · 「保存并查询」移除后 / 边界）。
+ * 保存结束后收不收起这一行（锚点 s19 · 「保存并查询」移除后 / 边界）。
  *
  * - 在途：等（连点只存一次，不重复收起）；
  * - 失败：留展开并保留输入（就地提示在按钮下方），不能把错误吞掉还收行；
@@ -410,8 +410,8 @@ internal fun saveRowState(
     else -> QuotaSaveRowState.COLLAPSE
 }
 // ───────────────────── 单家态 · provider chip 行 ─────────────────────
-// 从 QuotaCards.kt 迁来并补契约锚点：共享件只给容器 modifier，chip 级 testTag 落不下去，
-// 而 s18 契约要求 4 个 chip 各有锚点（s18-provider-ollama / -deepseek / -opencode / -opendesign）。
+// 从 QuotaCards.kt 迁来并补锚点：共享件只给容器 modifier，chip 级 testTag 落不下去，
+// 而 s18 交互口径要求 4 个 chip 各有锚点（s18-provider-ollama / -deepseek / -opencode / -opendesign）。
 
 /**
  * provider 横向 chip 行（原型 .s18-providers）：可横滑、已配置带绿点、选中态互斥。
@@ -441,7 +441,7 @@ internal fun QuotaProviderChips(
     }
 }
 
-/** chip 锚点按 provider id 逐字映射到契约（不改号、不新增）；字面量落在这里才能被锚点对账扫到。 */
+/** chip 锚点按 provider id 逐字映射到口径（不改号、不新增）；字面量落在这里才能被锚点对账扫到。 */
 private fun chipTagOf(providerId: String): Modifier = when (providerId) {
     "ollama" -> Modifier.testTag("s18-provider-ollama")
     "deepseek" -> Modifier.testTag("s18-provider-deepseek")

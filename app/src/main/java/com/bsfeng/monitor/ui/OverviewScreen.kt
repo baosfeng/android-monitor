@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// s01 今日概览 —— 整页实现（锚点见 docs/交互设计/s01-今日概览-交互契约.md，41 个 testTag 逐字照抄）。
+// s01 今日概览 —— 整页实现（41 个 testTag 逐字照抄锚点账本）。
 // 本文件自包含：页头 / 时间范围分段 / 五态 / 今日 · 近 7 天 · 近 30 天 三段面板，全部锚点落在本文件内。
 // 底座复用：PressFeedback(0.96) · RowPress(0.99) · FocusRing(仅键盘) · Haptics(tone) · Toast(1.6s)
 //          FiveState/StateSkeleton · Stagger(24ms) · AnimatedText · Bar/Line/Pie Charts · Legend。
@@ -113,13 +113,13 @@ import com.bsfeng.monitor.ui.trip.tripCoverageNote
 import com.bsfeng.monitor.ui.trip.tripHeadline
 import java.util.Locale
 
-/** 单日展示上限：到达即进边界态（契约 s01-edge「10,842 条 / 已达单日展示上限」）。 */
+/** 单日展示上限：到达即进边界态（锚点 s01-edge「10,842 条 / 已达单日展示上限」）。 */
 private const val EDGE_DAILY_LIMIT = 10_000
 
-/** 最近事件最多三行（契约 s01-recent-1/2/3）。 */
+/** 最近事件最多三行（锚点 s01-recent-1/2/3）。 */
 private const val RECENT_ROWS = 3
 
-/** 空态描述（契约 s01-empty 文案口径逐字）：已授权 / 未授权两套。 */
+/** 空态描述（锚点 s01-empty 文案口径逐字）：已授权 / 未授权两套。 */
 private const val EMPTY_DESC_READY = "开启无障碍服务后，屏幕、应用、网络与充电事件会自动汇总到这里。"
 private const val EMPTY_DESC_DENIED =
     "无障碍服务未授权（设置 → 无障碍服务 → 去开启）。开启后，屏幕、应用、网络与充电事件会自动汇总到这里。"
@@ -169,7 +169,7 @@ fun OverviewScreen(
                 onSelect = {
                     if (it != rangeIndex) {
                         rangeIndex = it
-                        // 契约 s01-range：切换后内容滚回顶部
+                        // 锚点 s01-range：切换后内容滚回顶部
                         scope.launch { listState.scrollToItem(0) }
                     }
                 },
@@ -183,7 +183,7 @@ fun OverviewScreen(
                     // 块级锚点进 modifier、CTA 锚点进 actionModifier，页面不再自持第二份规格。
                     FiveState.LOADING -> LoadingBlock()
                     FiveState.EMPTY -> {
-                        // 已授权时空态不出现 CTA（契约 s01-empty-cta 边界）：回调给 null 即整颗不渲染
+                        // 已授权时空态不出现 CTA（锚点 s01-empty-cta 边界）：回调给 null 即整颗不渲染
                         val cta = onOpenSettings.takeUnless { state.accessibilityEnabled }
                         EmptyState(
                             text = if (state.accessibilityEnabled) EMPTY_DESC_READY else EMPTY_DESC_DENIED,
@@ -196,7 +196,7 @@ fun OverviewScreen(
                         )
                     }
                     FiveState.ERROR -> ErrorState(
-                        // 契约文案逐字；异常原文只在 ViewModel 日志里
+                        // 文案逐字；异常原文只在 ViewModel 日志里
                         text = state.loadError ?: LOAD_ERROR_DESC,
                         title = "统计加载失败",
                         // 触感由共享 GhostButton 内部发 LIGHT，这里不再补一次（同一操作不重复震）
@@ -277,7 +277,7 @@ private fun OverviewHead(dateText: String, onBell: () -> Unit) {
     }
 }
 
-/** 44dp 图标按钮：0.96 按下 + LIGHT 触感 + 仅键盘可见焦点环（契约 s01-bell）。 */
+/** 44dp 图标按钮：0.96 按下 + LIGHT 触感 + 仅键盘可见焦点环（锚点 s01-bell）。 */
 @Composable
 private fun OverviewIconButton(
     icon: ImageVector,
@@ -309,7 +309,7 @@ private fun OverviewIconButton(
 
 /**
  * 时间范围分段：三选一互斥、切换 120ms（--dur-state）、LIGHT 触感、44dp 段高 + 外框 4dp。
- * 键盘：左右方向键即时切换，Tab 只落在当前选中项（契约 s01-range 的 click / 键盘 / focus 三行）。
+ * 键盘：左右方向键即时切换，Tab 只落在当前选中项（锚点 s01-range 的 click / 键盘 / focus 三行）。
  */
 @Composable
 private fun RangeSegment(
@@ -412,7 +412,7 @@ private fun LoadingBlock() {
 }
 
 /**
- * 边界态内容（契约 s01-edge）：万级徽标 + **真实**最长标题（单行省略）+ 真实字段行（缺失写「—」）。
+ * 边界态内容（锚点 s01-edge）：万级徽标 + **真实**最长标题（单行省略）+ 真实字段行（缺失写「—」）。
  *
  * 事件量过万是真实用户可达态，不是调试演示：这里不写任何具体应用名 / 事件内容，
  * 只展示库里真实存在的那一条最长的记录，字段缺失就写「—」，不补 0 也不猜。
@@ -443,7 +443,7 @@ private fun EdgeBody(count: Int, longest: Record?) {
     )
 }
 
-/** 边界态字段行：时间 · 类型 · 时长；任一字段缺失写「—」（契约 s01-edge「字段缺失显示「—」」）。 */
+/** 边界态字段行：时间 · 类型 · 时长；任一字段缺失写「—」（锚点 s01-edge「字段缺失显示「—」」）。 */
 private fun edgeMetaOf(record: Record?): String {
     if (record == null) return PLACEHOLDER
     val duration = record.duration
@@ -843,7 +843,7 @@ private fun DeltaText(text: String, tone: DeltaTone, modifier: Modifier = Modifi
     )
 }
 
-/** 可点 KPI 卡：0.96 按下 + LIGHT 触感 + 键盘焦点环；点击只重播数字滚动（契约 s01-kpi-* click）。 */
+/** 可点 KPI 卡：0.96 按下 + LIGHT 触感 + 键盘焦点环；点击只重播数字滚动（锚点 s01-kpi-* click）。 */
 @Composable
 private fun OverviewKpiCard(
     label: String,
@@ -905,7 +905,7 @@ private fun OverviewKpiCard(
     }
 }
 
-/** 近 7 / 30 天 KPI：静态数值，不重播滚动、不跳转（契约 s01-k7-* / s01-k30-*）。 */
+/** 近 7 / 30 天 KPI：静态数值，不重播滚动、不跳转（锚点 s01-k7-* / s01-k30-*）。 */
 @Composable
 private fun StaticKpiCard(
     label: String,
@@ -952,7 +952,7 @@ private fun RollingInt(value: Int, replay: Int, t0Fg: Color) {
     }
 }
 
-/** h 与 m 两段同步从 0 滚入（契约 s01-kpi-active）。 */
+/** h 与 m 两段同步从 0 滚入（锚点 s01-kpi-active）。 */
 @Composable
 private fun RollingActive(minutes: Long, replay: Int) {
     val t = LocalDesignTokens.current
@@ -978,7 +978,7 @@ private fun RollingActive(minutes: Long, replay: Int) {
     }
 }
 
-/** 带 ¥ 前缀的金额滚动（千分位，契约 s01-kpi-spend / 「¥0」）。 */
+/** 带 ¥ 前缀的金额滚动（千分位，锚点 s01-kpi-spend / 「¥0」）。 */
 @Composable
 private fun RollingMoney(value: Double, replay: Int) {
     val t = LocalDesignTokens.current
@@ -1015,7 +1015,7 @@ private fun RingBlock(slices: List<TypeSlice>, modifier: Modifier = Modifier) {
     }
 }
 
-/** 主按钮：44dp、满宽、--accent 底、0.96 按下 + 指定触感（契约 s01-quick-live / s01-empty-cta）。 */
+/** 主按钮：44dp、满宽、--accent 底、0.96 按下 + 指定触感（锚点 s01-quick-live / s01-empty-cta）。 */
 @Composable
 private fun PrimaryTextButton(
     text: String,
@@ -1050,7 +1050,7 @@ private fun PrimaryTextButton(
     }
 }
 
-/** 幽灵按钮：按下底色变浅一档（1.2 倍不透明度） + LIGHT 触感（契约 s01-quick-finance / s01-error-retry）。 */
+/** 幽灵按钮：按下底色变浅一档（1.2 倍不透明度） + LIGHT 触感（锚点 s01-quick-finance / s01-error-retry）。 */
 @Composable
 private fun GhostTextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
@@ -1080,7 +1080,7 @@ private fun GhostTextButton(text: String, onClick: () -> Unit, modifier: Modifie
 
 /**
  * 今日行程卡（锚点 s01-trip / s01-trip-source / trip-band）。
- * 角标与时间带不单独拦截点击，统一穿透到整卡 → 进每日行程页（契约三行同结果）。
+ * 角标与时间带不单独拦截点击，统一穿透到整卡 → 进每日行程页（口径三行同结果）。
  */
 @Composable
 private fun TripCardS01(
@@ -1154,11 +1154,11 @@ private fun TripCardS01(
     }
 }
 
-// ───────────────────────────── 格式化（契约文案逐字） ─────────────────────────────
+// ───────────────────────────── 格式化（文案逐字） ─────────────────────────────
 
 private fun thousands(value: Int): String = String.format(Locale.US, "%,d", value)
 
-/** 契约「较昨日 +18 / 较昨日 0 / 较昨日 -4」：0 不带符号。 */
+/** 口径「较昨日 +18 / 较昨日 0 / 较昨日 -4」：0 不带符号。 */
 private fun signedDelta(delta: Int): String = when {
     delta > 0 -> "+" + delta
     delta < 0 -> delta.toString()
@@ -1166,7 +1166,7 @@ private fun signedDelta(delta: Int): String = when {
 }
 
 /**
- * 事件类环比副行（契约 s01-k7-events「较上周 +6.2%」/ s01-k30-events「较上月 +9.8%」）。
+ * 事件类环比副行（锚点 s01-k7-events「较上周 +6.2%」/ s01-k30-events「较上月 +9.8%」）。
  *
  * 基数来自数据层真实 COUNT（上一段同长度窗口）；基数为 0 时比例没有定义 → 写「—」，
  * 不用 100% 之类编出来的数字充数。
@@ -1180,7 +1180,7 @@ private fun eventDeltaText(prefix: String, current: Int, previous: Int): String 
     return "$prefix $shown"
 }
 
-/** 跳过类环比副行（契约 s01-k7-skip「较上周 +31」/ s01-k30-skip「较上月 +122」）：给计数差。 */
+/** 跳过类环比副行（锚点 s01-k7-skip「较上周 +31」/ s01-k30-skip「较上月 +122」）：给计数差。 */
 private fun countDeltaText(prefix: String, current: Int, previous: Int): String =
     "$prefix " + signedDelta(current - previous)
 
@@ -1188,11 +1188,11 @@ private fun countDeltaText(prefix: String, current: Int, previous: Int): String 
 private fun deltaToneOf(current: Int, previous: Int, percent: Boolean): DeltaTone =
     if (percent && previous <= 0) DeltaTone.MUTED else toneOf(current - previous)
 
-/** 「42h 05m」：时分两段等宽（契约 s01-k7-active）。 */
+/** 「42h 05m」：时分两段等宽（锚点 s01-k7-active）。 */
 private fun hoursMinutes(minutes: Long): String =
     (minutes / 60).toString() + "h " + String.format(Locale.US, "%02d", minutes % 60) + "m"
 
-/** 「日均 6h01m」（契约 s01-k7-active / s01-k30-active）。 */
+/** 「日均 6h01m」（锚点 s01-k7-active / s01-k30-active）。 */
 private fun dailyHoursMinutes(totalMinutes: Long, days: Int): String {
     val perDay = if (days <= 0) 0L else totalMinutes / days
     return (perDay / 60).toString() + "h" + String.format(Locale.US, "%02d", perDay % 60) + "m"

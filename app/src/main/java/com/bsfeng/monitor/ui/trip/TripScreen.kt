@@ -6,7 +6,7 @@ package com.bsfeng.monitor.ui.trip
 // → 日视图时间轴（停留 / 移动 / 未记录）→ 口径说明；无定位时最后补一行「开启定位后可显示距离与地址」。
 // 点停留段开底部抽屉看期间应用；无定位时整屏按设备活动推算，角标如实标注。
 //
-// 交互契约：docs/交互设计/s16-每日行程-交互契约.md。页级锚点（testTag）：
+// 交互口径：锚点账本。页级锚点（testTag）：
 // screen-s16 / s16-head / s16-prev / s16-next / s16-content / s16-empty / s16-empty-cta /
 // s16-summary / s16-timeline / s16-rules / s16-goto-location。
 // 时间轴逐段锚点（s16-timeline-list / 9 个 s16-seg-*）落在 TripTimeline.kt，摘要角标（s16-source）落在
@@ -14,8 +14,8 @@ package com.bsfeng.monitor.ui.trip
 //
 // 「在地图中查看」入口（ui/maps/MapEntryCard.kt）挂在轨迹卡下方，只有当天有坐标时才渲染：
 // 恰好一个候选（典型 = 只装了高德）直接打开；多个候选弹选择；一个都没有 toast 说明。
-// 该入口**不新增锚点** —— 契约锚点集合要求逐字对账（scripts/check-anchors.mjs 的自增为硬错误），
-// 新锚点须先在 docs/交互设计/s16-每日行程-交互契约.md 登记，故交互由纯逻辑单测覆盖。
+// 该入口**不新增锚点** —— 锚点集合要求逐字对账（scripts/check-anchors.mjs 的自增为硬错误），
+// 新锚点须先在 锚点账本 登记，故交互由纯逻辑单测覆盖。
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -98,7 +98,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 空态说明：契约固定文案，不随数据变。 */
+/** 空态说明：口径固定文案，不随数据变。 */
 private const val EMPTY_TEXT = "停留与移动由设备活动推算；采集中断的时间标成「未记录」，不做推断。"
 
 /** 空态标题。 */
@@ -107,7 +107,7 @@ private const val EMPTY_TITLE = "这一天还没有行程"
 /** 空态 CTA：只在定位权限未开且已接线设置页时出现。 */
 private const val EMPTY_CTA = "去开启定位权限"
 
-/** 无定位时的提示行（契约 s16-goto-location 固定文案）。 */
+/** 无定位时的提示行（锚点 s16-goto-location 固定文案）。 */
 private const val LOCATION_HINT_TITLE = "开启定位后可显示距离与地址"
 private const val LOCATION_HINT_TEXT = "现在按设备活动推算，地点名来自网络名与使用簇"
 
@@ -143,13 +143,13 @@ fun TripScreen(
     var exporting by remember { mutableStateOf(false) }
     // 底图开关：默认关，落盘到 SharedPreferences（TripBasemap）；开着时轨迹卡与导出图都带底图
     var basemap by remember { mutableStateOf(TripBasemap.isEnabled(context)) }
-    // 跨换日保留滚动位置（契约 s16-prev「列表滚动位置保留、不强制回顶」；离开页面才丢弃）
+    // 跨换日保留滚动位置（锚点 s16-prev「列表滚动位置保留、不强制回顶」；离开页面才丢弃）
     val listState = rememberLazyListState()
 
     // 首帧 state.dayStart 还是 0：先按今天渲染，等 VM 回填后再对齐
     val dayStart = state.dayStart.takeIf { it > 0L } ?: TripDays.today(now)
     val isToday = dayStart == TripDays.today(now)
-    // 定位权限已开时，空态不再给「去开启定位权限」（契约 s16-empty-cta 边界）
+    // 定位权限已开时，空态不再给「去开启定位权限」（锚点 s16-empty-cta 边界）
     val locationGranted = remember(context) {
         context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -157,7 +157,7 @@ fun TripScreen(
     val emptyAction = onOpenLocationSettings?.takeIf { !locationGranted }
 
     LaunchedEffect(Unit) { viewModel.ensureLoaded() }
-    // 换天时收起停留抽屉，避免抽屉里还是上一天的数据；换日不回段焦点（契约 s16-prev：焦点回到箭头）
+    // 换天时收起停留抽屉，避免抽屉里还是上一天的数据；换日不回段焦点（锚点 s16-prev：焦点回到箭头）
     LaunchedEffect(state.dayStart) {
         restoreRowFocus = false
         selected = null
@@ -187,7 +187,7 @@ fun TripScreen(
     val mapPoint = remember(state.trace, mapStays) { MapEntryPoint.pick(state.trace, mapStays) }
     val mapLabel = remember(state.trace, mapStays) { MapEntryPoint.label(state.trace, mapStays) }
 
-    // 当日采集覆盖（契约 trip-cov）：轨迹卡底部的细覆盖条 + 「今天断了 N 次」。
+    // 当日采集覆盖（锚点 trip-cov）：轨迹卡底部的细覆盖条 + 「今天断了 N 次」。
     // 与设置页「采集覆盖」卡用同一个数据源与同一套分段算法（CoverageTimeline），
     // 只是窗口换成「这一天」（历史日期整日，今天截到此刻）；进程内缓存按分钟键，不重复读库。
     val coverageReader = rememberCoverageReader()
@@ -246,7 +246,7 @@ fun TripScreen(
         }
     }
 
-    // 整屏容器：不可聚焦、不进 Tab 序，点按空白无高亮无 toast（契约 screen-s16）
+    // 整屏容器：不可聚焦、不进 Tab 序，点按空白无高亮无 toast（锚点 screen-s16）
     Box(
         modifier
             .fillMaxSize()
@@ -254,7 +254,7 @@ fun TripScreen(
             .testTag("screen-s16"),
     ) {
         Column(Modifier.fillMaxSize()) {
-            // 页头常驻不随内容滚出；页头文字不可点，只有前后箭头可点（契约 s16-head / s16-prev / s16-next）
+            // 页头常驻不随内容滚出；页头文字不可点，只有前后箭头可点（锚点 s16-head / s16-prev / s16-next）
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -278,7 +278,7 @@ fun TripScreen(
                     },
                 )
             }
-            // 内容区：只有这一块跟手滚动，页头与日期条不动（契约 s16-content）
+            // 内容区：只有这一块跟手滚动，页头与日期条不动（锚点 s16-content）
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when {
                     state.error != null -> ErrorState(
@@ -366,7 +366,7 @@ fun TripScreen(
                                 modifier = Modifier.testTag("s16-rules"),
                             )
                         }
-                        // 无定位时才提示去开定位；有坐标时整行不渲染（契约 s16-goto-location 边界）
+                        // 无定位时才提示去开定位；有坐标时整行不渲染（锚点 s16-goto-location 边界）
                         if (timeline.basis == Basis.DEVICE && onOpenLocationSettings != null) {
                             item(key = "trip-goto-location") {
                                 TripLocationHint(onClick = onOpenLocationSettings)
@@ -402,7 +402,7 @@ private const val DEFAULT_ERROR_TEXT = "本地数据库暂时不可用（SQLITE_
 /**
  * 日期切换条：前一天 / 日期文案 / 后一天。
  *
- * 换日时日期文案 150ms 交叉淡入（契约 s16-prev「内容 150ms 内整体替换，不播整页转场」）；
+ * 换日时日期文案 150ms 交叉淡入（锚点 s16-prev「内容 150ms 内整体替换，不播整页转场」）；
  * 内容本身的替换跟着数据走，不额外套转场，避免把滚动位置一起重置。
  */
 @Composable
@@ -462,7 +462,7 @@ private fun dayCaption(dayStart: Long, now: Long): String =
     if (dayStart == TripDays.today(now)) "今天 · 可回看最近 30 天" else "历史日期 · 右箭头回今天"
 
 /**
- * 日期箭头：点击区 44dp，按下 0.96 + LIGHT（契约 s16-prev / s16-next）。
+ * 日期箭头：点击区 44dp，按下 0.96 + LIGHT（锚点 s16-prev / s16-next）。
  *
  * 边界：已是最早一天 / 今天 → 底色 fgFade(4)、图标 muted、不可点、不弹提示（原因由灰态表达）。
  */
@@ -503,7 +503,7 @@ private fun DayArrow(
 }
 
 /**
- * 「开启定位后可显示距离与地址」提示行（契约 s16-goto-location）。
+ * 「开启定位后可显示距离与地址」提示行（锚点 s16-goto-location）。
  *
  * click：行底色 120ms 加深 + LIGHT，右侧 › 不动画 → 跳设置页定位权限项；
  * 未接线（[onClick] 无来源）时整行不渲染，不伪造跳转。

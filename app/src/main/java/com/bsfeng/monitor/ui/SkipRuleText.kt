@@ -55,11 +55,11 @@ internal fun selectorKindCount(rules: List<SkipRule>, pick: (MatchRule) -> Int):
 internal fun hostOf(url: String): String =
     url.substringAfter("://", url).substringBefore("/").ifEmpty { "未填写订阅源" }
 
-/** 订阅源卡底「镜像」段：URL 为空显示「—」（契约 s10-url 输入行边界）。 */
+/** 订阅源卡底「镜像」段：URL 为空显示「—」（锚点 s10-url 输入行边界）。 */
 internal fun mirrorHostOf(url: String): String =
     url.substringAfter("://", url).substringBefore("/").ifEmpty { "—" }
 
-/** 千分位整数（契约 s10-summary：超 9,999 用千分位，字号不变）。 */
+/** 千分位整数（锚点 s10-summary：超 9,999 用千分位，字号不变）。 */
 internal fun formatRuleCount(value: Int): String = String.format(Locale.CHINA, "%,d", value)
 
 internal fun formatSyncTime(atMs: Long): String =

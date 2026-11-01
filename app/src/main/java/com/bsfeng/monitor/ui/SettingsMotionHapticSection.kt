@@ -5,7 +5,7 @@ package com.bsfeng.monitor.ui
 // 为什么合成一页：这三项都在回答「界面长什么样、动起来什么手感」，
 // 而且改动都要立刻可见 —— 用户切换后会退回这一页反复比，分两个二级页要来回跳。
 //
-// 状态值一律放行尾（契约 s09 页层级规则 5）：当前主题名、当前档位、触觉开没开都在行尾，
+// 状态值一律放行尾（锚点 s09 页层级规则 5）：当前主题名、当前档位、触觉开没开都在行尾，
 // 副标题只写「这一项是什么」，不写「当前是什么」。
 
 import androidx.compose.foundation.LocalIndication
@@ -53,7 +53,7 @@ import com.bsfeng.monitor.ui.theme.ThemeRepository
 internal fun SettingsAppearanceSection(rt: SettingsScreenRuntime) {
     val t = rt.t
     // 锚点 s09-appearance 原本落在「通用」页的外观分组容器上；本次外观行搬进本页，
-    // 锚点跟着落在同一张卡上（契约锚点不随信息架构变更而消失）。
+    // 锚点跟着落在同一张卡上（锚点不随信息架构变更而消失）。
     AppCard(
         Modifier
             .padding(horizontal = t.space4)
@@ -154,7 +154,7 @@ internal fun SettingsAppearanceSection(rt: SettingsScreenRuntime) {
 /**
  * 外观与主题行：跳 s13 外观屏，尾部显示当前主题名。
  *
- * 契约 s13-head · 退出后：焦点回本行、滚动位置保持。外观屏是覆盖层（设置页收不到关闭回调），
+ * 锚点 s13-head · 退出后：焦点回本行、滚动位置保持。外观屏是覆盖层（设置页收不到关闭回调），
  * 由 [AppearanceFocusReturn] 的代次信号衔接；代次在「本行组合期间」新增才回焦。
  */
 @Composable

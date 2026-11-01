@@ -285,7 +285,7 @@ internal fun TripMapCard(
             if (precision.hasLowConfidence) TraceConfidenceKey()
             if (precision.isCoarseDay) TraceCoarseDayNote()
         }
-        // 当日采集覆盖条（契约 trip-cov）：没有样本时不画 —— 空条会被读成「一整天都没采到」
+        // 当日采集覆盖条（锚点 trip-cov）：没有样本时不画 —— 空条会被读成「一整天都没采到」
         if (coverage != null && samples.isNotEmpty() && !coverage.isEmpty) {
             TripCoverageFooter(window = coverage, gaps = gaps, isToday = isToday)
         }
@@ -504,7 +504,7 @@ private fun traceNote(timeline: DayTimeline, samples: List<TraceSample>): String
         "停留圆按停留时长放大，名字超出画布或重叠时省略。"
     }
 }
-// ===== 当日覆盖条（契约锚点 trip-cov）=====
+// ===== 当日覆盖条（锚点 trip-cov）=====
 //
 // 轨迹卡底部的 14dp 细覆盖条 + 「今天断了 N 次」行：与设置页「采集覆盖」卡同一套分段算法
 // （CoverageTimeline）与同一组配色占比，只把粗条压细、图例省掉 —— 行程页主角是轨迹，
@@ -517,7 +517,7 @@ private val TRIP_BAR_HEIGHT = 14.dp
 private const val TRIP_GAP_PREVIEW = 3
 
 /**
- * 轨迹卡底部覆盖条 + 断档汇总行（契约 trip-cov）。
+ * 轨迹卡底部覆盖条 + 断档汇总行（锚点 trip-cov）。
  *
  * @param window 当天窗口的覆盖分段
  * @param gaps 当天断档（已按时间倒序、最新在前、已截断）

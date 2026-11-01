@@ -49,7 +49,7 @@ import com.bsfeng.monitor.ui.theme.fgFade
 /**
  * 已选文件卡（锚点 s08-file / s08-file-clear）。
  *
- * 契约：卡按下底变 fg 5%（--dur-state）、抬指无进一步动作；文件名单行省略；副行「已就绪 · 可开始导入」，
+ * 口径：卡按下底变 fg 5%（--dur-state）、抬指无进一步动作；文件名单行省略；副行「已就绪 · 可开始导入」，
  * 读取失败转红「读取失败」；移除按钮按下底变深一档 + LIGHT，导入中置灰不可点且不进 Tab 序列
  * （读屏「移除文件，不可用，导入进行中」）。
  */
@@ -111,7 +111,7 @@ internal fun ImportFileCard(
                         Text(
                             " · " + meta,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                // 契约 s08-file：记录数超 10,000 用等宽字体 + 千分位
+                                // 锚点 s08-file：记录数超 10,000 用等宽字体 + 千分位
                                 fontFamily = if ((recordCount ?: 0) > 10_000) FontFamily.Monospace else FontFamily.Default,
                             ),
                             color = t.muted,
@@ -177,7 +177,7 @@ private fun RemoveFileButton(importing: Boolean, onRemove: () -> Unit) {
 /**
  * 导入进度条（锚点 s08-progress）。
  *
- * 契约：无点击响应、不可拖动、长按无响应；文案三段推进；进度停在 92% 直到结果返回。
+ * 口径：无点击响应、不可拖动、长按无响应；文案三段推进；进度停在 92% 直到结果返回。
  */
 @Composable
 internal fun ImportProgressCard(

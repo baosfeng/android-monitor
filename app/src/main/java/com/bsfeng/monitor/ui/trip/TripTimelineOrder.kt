@@ -7,11 +7,11 @@ package com.bsfeng.monitor.ui.trip
 import com.bsfeng.monitor.domain.trip.DaySegment
 
 /**
- * 契约 9 段锚点表，按**时间序**（0 = 当天最早一段）保存，与原型块的段身份一致：
+ * 锚点 9 段锚点表，按**时间序**（0 = 当天最早一段）保存，与原型块的段身份一致：
  * s16-seg-home-pm 就是「家 15:00–24:00」那一块。
  *
  * 锚点名的唯一真源；[timelineAnchorFor] 把视觉位次换算回时间序位次再查这张表。
- * 第 10 段起没有锚点：锚点集合严格等于契约定义，不新增自增号（一经发布不改号、不新增）。
+ * 第 10 段起没有锚点：锚点集合严格等于账本定义，不新增自增号（一经发布不改号、不新增）。
  */
 private val SEGMENT_ANCHOR_BY_TIME_INDEX: List<String> = listOf(
     "s16-seg-home-am",

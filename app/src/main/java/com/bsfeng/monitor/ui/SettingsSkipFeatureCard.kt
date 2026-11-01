@@ -78,7 +78,7 @@ if (adSkipOn) {
         subtitle = "切换 App 后 " + (watchWindowMs / 1000) + " 秒内匹配跳过按钮",
         icon = Icons.Outlined.Timer,
     )
-    // 监控时长窗口 chip 组：锚点落组容器（契约 s09-window）；Chip 内置 0.96 + LIGHT，
+    // 监控时长窗口 chip 组：锚点落组容器（锚点 s09-window）；Chip 内置 0.96 + LIGHT，
     // 调用点不再补一次触感（否则同一次点击震两下）
     Row(
         Modifier
@@ -100,7 +100,7 @@ if (adSkipOn) {
     }
 }
 // 关闭态不渲染「监控时长窗口」行与 chip 组（引擎不跑，窗口值无可调语义），
-// 但两行入口必须照常出现 —— 契约 s09-skip · 边界：组内两行常驻，关闭时两行仍可进入，只改副标题文案。
+// 但两行入口必须照常出现 —— 锚点 s09-skip · 边界：组内两行常驻，关闭时两行仍可进入，只改副标题文案。
 // 副标题由两个纯函数产出（关闭态写「已关闭」），便于单测锁定措辞。
 TokenDivider(first = false)
 TokenRow(
@@ -143,7 +143,7 @@ Spacer(Modifier.height(t.space1))
 /**
  * s09-goto-rules 行副标题。
  *
- * 关闭态也保留入口：只把副标题改成「已关闭」前缀（契约 s09-skip 边界「组内两行常驻；
+ * 关闭态也保留入口：只把副标题改成「已关闭」前缀（锚点 s09-skip 边界「组内两行常驻；
  * 跳过引擎关闭时两行仍可进入，只改副标题文案」），不删行、不禁用、不改锚点。
  */
 internal fun skipRulesRowSubtitle(adSkipOn: Boolean, subscriptionCount: Int): String =

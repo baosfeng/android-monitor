@@ -101,7 +101,7 @@ fun QuotaScreen(
     val toast = rememberToastHostState()
     val listState = rememberLazyListState()
     val info = providers.firstOrNull { it.id == selectedId }
-    // 两个回焦点（契约 s18-retry 移除后 / s18-settings 键盘）：页头是这两条回位信号的终点
+    // 两个回焦点（锚点 s18-retry 移除后 / s18-settings 键盘）：页头是这两条回位信号的终点
     val refreshFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     // 点过「重试」后等错误条真正收起再回焦：错误条还在时刷新按钮不该抢走焦点；
@@ -143,7 +143,7 @@ fun QuotaScreen(
         fetchedAtEpochSecond = state.fetchedAtEpochSecond,
     )
     // 切 provider / 进聚合视图时拉一次；repository 自带节流，来回切不会打满限流。
-    // 同一次切换里把列表滚回顶部（契约「滚动回顶部」）：换面板后停在上一家的深度位置会看到空白。
+    // 同一次切换里把列表滚回顶部（口径「滚动回顶部」）：换面板后停在上一家的深度位置会看到空白。
     LaunchedEffect(selectedId, aggregateMode) {
         if (aggregateMode) viewModel.onAggregateVisible() else viewModel.onProviderVisible()
         listState.scrollToItem(0)
@@ -233,7 +233,7 @@ fun QuotaScreen(
                             plan = plan,
                             onOpenSettings = onOpenSettings,
                             onRetry = {
-                                // 先登记「错误条收起后回刷新按钮」，再下发请求（契约 s18-retry 移除后）
+                                // 先登记「错误条收起后回刷新按钮」，再下发请求（锚点 s18-retry 移除后）
                                 retryArmed = true
                                 retrySawLoading = false
                                 viewModel.onRefresh()
@@ -306,7 +306,7 @@ private fun QuotaHead(
         QuotaHeadIcon(
             icon = Icons.Outlined.Refresh,
             contentDescription = "刷新额度",
-            // 错误条收起后的回焦点落在这里（契约 s18-retry 移除后）
+            // 错误条收起后的回焦点落在这里（锚点 s18-retry 移除后）
             tagModifier = Modifier.testTag("s18-refresh").focusRequester(refreshFocus),
             tone = HapticTone.MEDIUM,
             rotating = refreshing,
@@ -316,7 +316,7 @@ private fun QuotaHead(
         QuotaHeadIcon(
             icon = Icons.Outlined.Settings,
             contentDescription = "额度设置",
-            // 从额度设置返回后的回焦点落在这里（契约 s18-settings 键盘行）
+            // 从额度设置返回后的回焦点落在这里（锚点 s18-settings 键盘行）
             tagModifier = Modifier.testTag("s18-settings").focusRequester(settingsFocus),
             tone = HapticTone.LIGHT,
             onClick = onOpenSettings,
@@ -328,7 +328,7 @@ private fun QuotaHead(
  * 页头图标按钮：44dp 圆底 + 按压 0.96 + 键盘焦点环。
  *
  * 不复用 `ui/live/ScreenHeaders.kt` 的 HeadIconButton：那个只有 clickable，
- * 没有按压反馈与 2dp 焦点环（s18 契约两行都要），且它的 modifier 落在 size 之前，
+ * 没有按压反馈与 2dp 焦点环（s18 口径两行都要），且它的 modifier 落在 size 之前，
  * 加不上「先定尺寸再画环」的顺序。
  */
 @Composable
@@ -433,7 +433,7 @@ private fun QuotaBody(
     val hasData = state.items.isNotEmpty() || state.usage != null
     val now = System.currentTimeMillis() / 1000L
     // 凭据输入提到卡片外面：保存失败后配置卡随状态一起卸载，再回来时已输入的 Key 不能丢
-    // （契约 s18-save 边界「Key 无效时已输入的 Key 不清空」）。
+    // （锚点 s18-save 边界「Key 无效时已输入的 Key 不清空」）。
     var balanceInput by remember(info?.id) { mutableStateOf("") }
     var usageInput by remember(info?.id) { mutableStateOf("") }
     // 错误态里点过「修改 Key」：只回配置卡（保留输入 + 就地提示），不与错误块并列成两个入口
@@ -591,7 +591,7 @@ private fun QuotaDataBody(
 internal enum class QuotaFocusAction { IDLE, WAIT, REQUEST, DROP }
 
 /**
- * 点过错误条的「重试」后，焦点什么时候回「刷新额度」（契约 s18-retry · 移除/关闭后）。
+ * 点过错误条的「重试」后，焦点什么时候回「刷新额度」（锚点 s18-retry · 移除/关闭后）。
  *
  * 必须等这一次请求真的跑完：
  * - 还没登记 → 不管；
@@ -616,7 +616,7 @@ internal fun retryFocusAction(
 internal enum class QuotaBodyMode { NO_PROVIDER, LOADING, EDIT_KEY, CONFIG, ERROR, DATA }
 
 /**
- * 主面板状态判定（契约 s18-content「四个状态互斥渲染」）。
+ * 主面板状态判定（锚点 s18-content「四个状态互斥渲染」）。
  *
  * 「修改 Key」优先于错误态：进编辑后只留配置卡一个入口（错误原因就地提示、重试在提示行），
  * 不允许错误块与配置卡并列——那等于同一件事给两个入口，还会让人以为配置卡是新的一次配置
@@ -642,7 +642,7 @@ internal fun quotaBodyMode(
 /**
  * 无数据失败态：错误块 + 「修改 Key」。
  *
- * 契约只给了「查询失败 + 重试」；没有「修改 Key」时，保存时输入的 Key 随配置卡一起卸载，
+ * 口径只给了「查询失败 + 重试」；没有「修改 Key」时，保存时输入的 Key 随配置卡一起卸载，
  * 用户只能对着错误块发呆。两个动作互斥可选：进配置卡就不再并排出错误块。
  */
 @Composable
@@ -673,7 +673,7 @@ private fun QuotaErrorBlock(
 }
 
 /**
- * 面板容器锚点：按 provider（Ollama 再按返回结构分新旧两种面板）逐字映射契约。
+ * 面板容器锚点：按 provider（Ollama 再按返回结构分新旧两种面板）逐字映射口径。
  *
  * 分支里写字面量 testTag：锚点对账是 grep 源码的，拼字符串扫不到。
  */
@@ -685,7 +685,7 @@ private fun panelTagOf(providerId: String, hasPercent: Boolean): Modifier = when
     else -> Modifier
 }
 
-/** 用量卡用哪一套锚点（三家的卡面不同，契约各给一组锚点）。 */
+/** 用量卡用哪一套锚点（三家的卡面不同，口径各给一组锚点）。 */
 private fun usageVariantOf(providerId: String, hasPercent: Boolean): UsageCardVariant = when {
     providerId == "deepseek" -> UsageCardVariant.DEEPSEEK
     // Ollama 旧版计划只返回百分比限额，用量侧也只有请求次数
@@ -702,11 +702,11 @@ private fun costUnitOf(state: QuotaRepository.ProviderState): QuotaUnit {
     return if (unit == QuotaUnit.CNY || unit == QuotaUnit.USD) unit else QuotaUnit.USD
 }
 
-/** open-design 的 provider id（契约里写作 open-design，注册 id 是 opendesign）。 */
+/** open-design 的 provider id（账本里写作 open-design，注册 id 是 opendesign）。 */
 private const val OPEN_DESIGN_ID = "opendesign"
 
 /**
- * 额度设置退出后「焦点回齿轮」的一次性信号（契约 s18-settings · 键盘行）。
+ * 额度设置退出后「焦点回齿轮」的一次性信号（锚点 s18-settings · 键盘行）。
  *
  * 为什么需要跨文件信号：额度设置是宿主导航用覆盖层打开的（MainOverlays.kt:94-99），
  * 额度页拿不到「覆盖层已关闭」的回调；两端都在本批写区内，用最小代次信号衔接，不动共享导航件

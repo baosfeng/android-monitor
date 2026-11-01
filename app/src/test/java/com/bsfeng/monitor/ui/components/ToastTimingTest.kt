@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Toast 时间口径单测（契约 §5：总停留 1.6s，淡出占最后 150ms，入场 220ms）。
+ * Toast 时间口径单测（交互口径 §5：总停留 1.6s，淡出占最后 150ms，入场 220ms）。
  *
  * 不测动画帧（JVM 里没有帧回调），测「常量 → 时间推导」的自洽：
  * AppToast 用 `delay(durationMs - durOverlayOut)` 触发 onDismiss，默认 durationMs = 1600，

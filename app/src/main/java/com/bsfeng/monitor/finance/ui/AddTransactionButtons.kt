@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/AddTransactionScreen.kt 的按钮；职责：主按钮（含按压缩放、禁用态与连点闸门）与幽灵按钮。
-// 本文件两个按钮只服务本屏吸底条（AddTransactionActionBar），故契约锚点 s14a-save / s05-del 直接落在组件内。
+// 本文件两个按钮只服务本屏吸底条（AddTransactionActionBar），故锚点 s14a-save / s05-del 直接落在组件内。
 
 import android.os.SystemClock
 import androidx.compose.animation.animateColorAsState
@@ -40,7 +40,7 @@ import com.bsfeng.monitor.ui.theme.fgFade
 /**
  * 连点窗口（毫秒）：主按钮在窗口内的补点一律不放行。
  *
- * 契约 s14a-save 边界「连续点只写一次」的硬闸门 —— 屏幕层的提交态要等一帧重组才把按钮置灰，
+ * 锚点 s14a-save 边界「连续点只写一次」的硬闸门 —— 屏幕层的提交态要等一帧重组才把按钮置灰，
  * 这中间的补点靠它兜住（保存成功后页面还要 260ms 才返回，窗口比它略长）。
  */
 internal const val SUBMIT_DOUBLE_TAP_MS = 300L
@@ -62,7 +62,7 @@ internal fun acceptSubmitClick(
 /**
  * 吸底主按钮：按下缩放 + 禁用走中性配方（保证对比度）。
  *
- * 契约 s14a-save：按下缩到 0.97（120ms，SUCCESS 触感）；禁用时点击无反应、不弹错误、不抖动。
+ * 锚点 s14a-save：按下缩到 0.97（120ms，SUCCESS 触感）；禁用时点击无反应、不弹错误、不抖动。
  * 提交中由调用方把 [enabled] 置 false（见 AddTransactionScreen 的 submitting）；[acceptSubmitClick]
  * 再兜一道「状态还没重组完」的补点，两层合起来保证 300ms 内连点 N 次只写 1 笔。
  */
@@ -92,12 +92,12 @@ internal fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) 
             // 只有 2.04:1，低于 WCAG AA；中性配方同时把两态的差别从「深浅」变成「有没有色」。
             .background(if (enabled) t.accent else t.fgFade(12))
             .testTag("s14a-save")
-            // 禁用态连 Press 事件都不收：不缩放、不震、不触发点击（契约 s14a-save 边界）
+            // 禁用态连 Press 事件都不收：不缩放、不震、不触发点击（锚点 s14a-save 边界）
             .clickable(interactionSource = interaction, indication = null, enabled = enabled) {
                 val now = SystemClock.uptimeMillis()
                 if (acceptSubmitClick(now, lastAccepted.longValue)) {
                     lastAccepted.longValue = now
-                    // 主操作确认用 SUCCESS（契约 s14a-save）；禁用态不震
+                    // 主操作确认用 SUCCESS（锚点 s14a-save）；禁用态不震
                     haptic(HapticTone.SUCCESS)
                     onClick()
                 }
@@ -115,7 +115,7 @@ internal fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) 
 }
 
 /**
- * 幽灵按钮（删除这笔交易等破坏性次级动作）。契约 s05-del：编辑态才出现，按下 120ms 变浅一档。
+ * 幽灵按钮（删除这笔交易等破坏性次级动作）。锚点 s05-del：编辑态才出现，按下 120ms 变浅一档。
  *
  * @param focusRequester 焦点落点槽。渲染容器自身带 `clickable`（因此本来就在焦点树里），
  *   请求器必须挂在 `clickable` **之前**才落到同一节点上 —— s05-del-dialog / s05-del-cancel 的

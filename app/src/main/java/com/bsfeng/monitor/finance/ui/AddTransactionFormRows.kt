@@ -52,8 +52,8 @@ internal val FIELD_LABEL_W: Dp = 44.dp
 /**
  * 一手可点：标签 + 值 + ▸（原型 .s14-toggle）。
  *
- * 契约 s14a-*-row：按住时整行底色转 fg 5%（120ms）、LIGHT 触感，抬指才开抽屉。
- * [focusRequester] 用于抽屉关闭后把焦点送回本行（契约「移除/关闭后」列）。
+ * 锚点 s14a-*-row：按住时整行底色转 fg 5%（120ms）、LIGHT 触感，抬指才开抽屉。
+ * [focusRequester] 用于抽屉关闭后把焦点送回本行（口径「移除/关闭后」列）。
  */
 @Composable
 internal fun FieldRow(

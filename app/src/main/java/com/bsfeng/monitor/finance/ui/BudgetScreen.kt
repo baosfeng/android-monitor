@@ -72,7 +72,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import kotlinx.coroutines.delay
 
 /**
- * s06 预算设置（契约 docs/交互设计/s06-预算设置-交互契约.md，24 个锚点）。
+ * s06 预算设置（锚点账本，24 个锚点）。
  *
  * 总预算圆环 + 6 条分类进度条；修改任意一行后**总预算 = 分类预算之和**、圆环百分比与
  * 剩余额度都由真实数据重算（见 [FinanceViewModel.setCategoryBudget]）。
@@ -98,7 +98,7 @@ fun BudgetScreen(
 
     val control = rememberFinanceStateControl()
     var editingTarget by remember { mutableStateOf<BudgetEditorTarget?>(null) }
-    // 契约 s06-dlg-save · 边界：写入失败时弹窗不关、输入保留，并在弹窗内提示「保存失败，请重试」
+    // 锚点 s06-dlg-save · 边界：写入失败时弹窗不关、输入保留，并在弹窗内提示「保存失败，请重试」
     var saveError by remember { mutableStateOf(false) }
     var refocusRow by remember { mutableStateOf<Int?>(null) }
     var refocusCta by remember { mutableStateOf(false) }
@@ -107,7 +107,7 @@ fun BudgetScreen(
     var loadTimedOut by remember { mutableStateOf(false) }
     val totalFocus = remember { FocusRequester() }
     val ctaFocus = remember { FocusRequester() }
-    // 契约 s06-empty「焦点落到标题」/ s06-error「焦点落到『重新加载』」的两个入口。
+    // 锚点 s06-empty「焦点落到标题」/ s06-error「焦点落到『重新加载』」的两个入口。
     // 空态标题是共享 EmptyState 的标题块（不可改共享件），焦点挂在整个标题块上：读屏先读标题再读描述。
     val emptyTitleFocus = remember { FocusRequester() }
     val retryFocus = remember { FocusRequester() }
@@ -138,7 +138,7 @@ fun BudgetScreen(
     // 下方的分类行也照常渲染并可直接编辑，保证未设预算的库也能完成一次设置。
     val realEmpty = !loadingLike && budgets.isEmpty() && categorySum <= 0.0
     val derivedState = when {
-        // 契约 s06-loading：超过 8s 仍无数据 → 错误态（先于 LOADING 判定，否则永远停在骨架）
+        // 锚点 s06-loading：超过 8s 仍无数据 → 错误态（先于 LOADING 判定，否则永远停在骨架）
         loadTimedOut -> FiveState.ERROR
         loadingLike -> FiveState.LOADING
         // 真实读取失败（与 s04 同一口径）：加载结束后仍失败 → 错误态，
@@ -149,14 +149,14 @@ fun BudgetScreen(
     val state = control.value ?: derivedState
     // EMPTY 只作为演示态：内容仍按 POPULATED 渲染，空态卡画在列表里
     val showEmptyCard = state == FiveState.EMPTY || (state == FiveState.POPULATED && realEmpty)
-    // 契约 s06-error · 边界「有缓存时错误条贴在列表首位、下方数值可读不可改」：
+    // 锚点 s06-error · 边界「有缓存时错误条贴在列表首位、下方数值可读不可改」：
     // 「有缓存」不能只看 budgets —— 没设预算但有支出的月份同样有可读数值（KPI / 分类行），
     // 所以按本屏会渲染的数据整体判：预算、本月支出、分类三者任一非空即算有缓存。
     val hasCache = budgets.isNotEmpty() || spentTotal > 0.0 || expenseCategories.isNotEmpty()
     /**
      * 打开预算编辑弹窗的唯一入口。
      *
-     * 错误态下**不打开**（读不出来时写预算等于在坏数据上覆盖真实值，契约要求「可读不可改」），
+     * 错误态下**不打开**（读不出来时写预算等于在坏数据上覆盖真实值，交互口径要求「可读不可改」），
      * 但给可解释的 toast，而不是让按钮静默失效（可解释原则：禁用必须有原因）。
      */
     fun openEditor(target: BudgetEditorTarget) {
@@ -167,7 +167,7 @@ fun BudgetScreen(
         editingTarget = target
     }
 
-    // 契约 s06-loading：加载超过 8s 自动转错误态
+    // 锚点 s06-loading：加载超过 8s 自动转错误态
     LaunchedEffect(loadingLike) {
         loadTimedOut = false
         if (loadingLike) {
@@ -175,7 +175,7 @@ fun BudgetScreen(
             loadTimedOut = true
         }
     }
-    // 契约 s06-retry：按**真实读取结果**分流 —— 失败保持错误态并 toast「仍未读取到预算数据」，
+    // 锚点 s06-retry：按**真实读取结果**分流 —— 失败保持错误态并 toast「仍未读取到预算数据」，
     // 成功才淡回列表；不再用「预算是否为空」猜成败（读库失败时预算同样为空，会被误判成成功）。
     LaunchedEffect(retrying, loading) {
         if (!retrying || loading) return@LaunchedEffect
@@ -185,14 +185,14 @@ fun BudgetScreen(
         } else {
             loadTimedOut = false
             control.select(null)
-            // 契约 s06-retry · 移除后：错误态消失后焦点回原「重新加载」位置（列表首项 = 总预算卡）
+            // 锚点 s06-retry · 移除后：错误态消失后焦点回原「重新加载」位置（列表首项 = 总预算卡）
             refocusTotal = true
         }
     }
     // 每次打开 / 关闭弹窗都清掉上一次的写入失败提示（失败只在当前这一次保存里成立）
     LaunchedEffect(editingTarget) { saveError = false }
 
-    // 契约 s06-empty-set · 移除后：弹窗关闭后焦点回 CTA
+    // 锚点 s06-empty-set · 移除后：弹窗关闭后焦点回 CTA
     LaunchedEffect(refocusCta) {
         if (!refocusCta) return@LaunchedEffect
         // CTA 可能刚随空态卡重挂（重试成功 / 保存 0 后空态卡回来），延一帧等它进入焦点树
@@ -200,20 +200,20 @@ fun BudgetScreen(
         runCatching { ctaFocus.requestFocus() }
         refocusCta = false
     }
-    // 契约 s06-retry · 移除后：错误态消失后焦点回原「重新加载」位置（列表首项 = 总预算卡）
+    // 锚点 s06-retry · 移除后：错误态消失后焦点回原「重新加载」位置（列表首项 = 总预算卡）
     LaunchedEffect(refocusTotal) {
         if (!refocusTotal) return@LaunchedEffect
         withFrameNanos { }
         runCatching { totalFocus.requestFocus() }
         refocusTotal = false
     }
-    // 契约 s06-empty：进入空态时焦点落到标题（只在该卡出现时请求，不抢输入焦点）
+    // 锚点 s06-empty：进入空态时焦点落到标题（只在该卡出现时请求，不抢输入焦点）
     LaunchedEffect(showEmptyCard) {
         if (!showEmptyCard) return@LaunchedEffect
         withFrameNanos { }
         runCatching { emptyTitleFocus.requestFocus() }
     }
-    // 契约 s06-error：进入错误态时焦点落到「重新加载」（错误态下 Tab 只停这一处）
+    // 锚点 s06-error：进入错误态时焦点落到「重新加载」（错误态下 Tab 只停这一处）
     LaunchedEffect(state) {
         if (state != FiveState.ERROR) return@LaunchedEffect
         withFrameNanos { }
@@ -255,7 +255,7 @@ fun BudgetScreen(
                     .fillMaxWidth()
                     .testTag("s06-content"),
             ) {
-                // 契约 s06-error · 边界：错误态两种形态互斥 ——
+                // 锚点 s06-error · 边界：错误态两种形态互斥 ——
                 // 无缓存 → 错态卡整块占据列表区（不显示任何数字）；
                 // 有缓存 → 错误条贴列表首位，下方 KPI / 分类行照常渲染（可读不可改，闸门在 openEditor）。
                 val errorCard = financeErrorAsCard(state, hasCache)
@@ -283,7 +283,7 @@ fun BudgetScreen(
                                 viewModel.loadCurrentMonth()
                             },
                             modifier = Modifier.testTag("s06-error"),
-                            // 契约 s06-error：焦点直接落到「重新加载」（focusRequester 必须在 clickable 之前）
+                            // 锚点 s06-error：焦点直接落到「重新加载」（focusRequester 必须在 clickable 之前）
                             actionModifier = Modifier
                                 .testTag("s06-retry")
                                 .focusRequester(retryFocus),
@@ -324,7 +324,7 @@ fun BudgetScreen(
                                         )
                                     )
                                 },
-                                // 契约 s06-empty：空态标题获得初始焦点；标题块同时是键盘焦点停位，带 2dp 焦点环
+                                // 锚点 s06-empty：空态标题获得初始焦点；标题块同时是键盘焦点停位，带 2dp 焦点环
                                 modifier = Modifier
                                     .testTag("s06-empty")
                                     .focusRequester(emptyTitleFocus)
@@ -346,7 +346,7 @@ fun BudgetScreen(
                                     .padding(vertical = t.space2)
                                     .testTag("s06-monthbar")
                                     .onPreviewKeyEvent { event ->
-                                        // 契约 s06-monthbar：条内 ← / → 等同 prev / next，边界只出 toast
+                                        // 锚点 s06-monthbar：条内 ← / → 等同 prev / next，边界只出 toast
                                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                         when (event.key) {
                                             Key.DirectionLeft -> {
@@ -485,7 +485,7 @@ fun BudgetScreen(
                             if (targetName.isEmpty()) "已更新总预算为 " + yen(amount, 0)
                             else "已更新 " + targetName + " 预算为 " + yen(amount, 0)
                         )
-                        // 契约 s06-dlg-save：保存完成给 SUCCESS 触感
+                        // 锚点 s06-dlg-save：保存完成给 SUCCESS 触感
                         haptic(HapticTone.SUCCESS)
                         editingTarget = null
                         if (targetName.isEmpty()) refocusCta = true
@@ -519,7 +519,7 @@ private fun BudgetEditorDialog(
     initialValue: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
-    /** 上一次保存写入失败（契约 s06-dlg-save · 边界）：弹窗不关，在输入框下显示失败文案。 */
+    /** 上一次保存写入失败（锚点 s06-dlg-save · 边界）：弹窗不关，在输入框下显示失败文案。 */
     saveError: Boolean = false,
     /** 用户重新输入：清掉上一次的失败提示，回到正常校验提示。 */
     onInputChange: () -> Unit = {},
@@ -531,11 +531,11 @@ private fun BudgetEditorDialog(
     val focus = remember { FocusRequester() }
     val raw = field.text
     val amount = raw.trim().toDoubleOrNull()
-    // 空 = 清零（契约：清空后保存视为该分类预算清零）；"." / 负数 / 超长 → 非法
+    // 空 = 清零（口径：清空后保存视为该分类预算清零）；"." / 负数 / 超长 → 非法
     val valid = raw.isBlank() || (amount != null && amount >= 0.0)
     val shape = RoundedCornerShape(t.radiusMd)
 
-    // 打开即聚焦并全选当前值（契约 s06-card · click）
+    // 打开即聚焦并全选当前值（锚点 s06-card · click）
     LaunchedEffect(Unit) { focus.requestFocus() }
 
     AppDialog(
@@ -547,12 +547,12 @@ private fun BudgetEditorDialog(
             Modifier.onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    // 契约 s06-dialog · 键盘：Esc 等同取消
+                    // 锚点 s06-dialog · 键盘：Esc 等同取消
                     Key.Escape -> {
                         onDismiss()
                         true
                     }
-                    // 契约 s06-dlg-save · 键盘：Enter 合法即保存；不合法则焦点留在输入框
+                    // 锚点 s06-dlg-save · 键盘：Enter 合法即保存；不合法则焦点留在输入框
                     Key.Enter, Key.NumPadEnter -> {
                         if (valid) onSave(raw) else focus.requestFocus()
                         true

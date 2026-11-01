@@ -190,7 +190,7 @@ fun SettingsRow(
  * 替代各页面手写的 Row + IconButton 组合。
  *
  * @param titleModifier 标题节点的 modifier 入口（默认 [Modifier]，零行为变化）。
- *   用于「进入子页后焦点落在子页标题」这类契约：调用方传
+ *   用于「进入子页后焦点落在子页标题」这类口径：调用方传
  *   `Modifier.focusRequester(f).focusable()`，标题即可成为焦点 / 读屏落点。
  */
 @Composable

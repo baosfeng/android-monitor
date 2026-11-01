@@ -6,7 +6,7 @@ package com.bsfeng.monitor.ui
 // 关闭态的功能会折成一堆「开启后可用」占位行，六项叠加后正文 37 行（约 4.7 屏），
 // 用户要滚很久才能找到真正想改的那一项。现在一屏六行、关闭态也一眼看得完。
 //
-// 广告跳过开关只在**这里**：一级页快捷区不再重复第二个（契约 s09 重复项只留一处）。
+// 广告跳过开关只在**这里**：一级页快捷区不再重复第二个（锚点 s09 重复项只留一处）。
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -74,7 +74,7 @@ private class FeatureIndexRow(
  * 六行开关的状态与摘要。
  *
  * 关闭态副标题写「已关闭：…」，并保留 chevron 可进 —— 细则页里的规则 / 白名单 / 凭据
- * 在关闭时仍是可维护的只读配置（契约 s09-skip「组内两行常驻」）。
+ * 在关闭时仍是可维护的只读配置（锚点 s09-skip「组内两行常驻」）。
  */
 private fun featureIndexRows(rt: SettingsScreenRuntime): List<FeatureIndexRow> = listOf(
     FeatureIndexRow(

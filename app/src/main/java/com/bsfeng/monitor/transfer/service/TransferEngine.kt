@@ -233,7 +233,7 @@ class TransferEngine internal constructor(
     /**
      * C-17 / C-08：按原文件与原目标重发一条终态发送任务（旧记录保留在「最近完成」）。
      *
-     * 实现在 [TransferResend]：源文件已不在本机 / 对方不在线时给契约逐字口径的失败，
+     * 实现在 [TransferResend]：源文件已不在本机 / 对方不在线时给逐字口径的失败，
      * 不会静默什么都不做。
      */
     fun resendTask(task: TransferTask, onResult: (Result<Unit>) -> Unit = {}) =

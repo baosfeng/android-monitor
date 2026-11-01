@@ -2,7 +2,7 @@ package com.bsfeng.monitor.transfer.ui
 
 // 附近设备行（C-11 选中 / C-12 移除配对）。
 //
-// 契约要点：
+// 口径要点：
 //  - 选中：边框 --border-soft → --accent（含 1dp 描边）+ 右侧对勾 + LIGHT 触感；再点取消选中；
 //  - 离线：整行降到 45% 不透明、不可选中，副行写「离线 · 上次 HH:mm」；
 //  - 已配对：行内「已配对」徽标 + 行尾「移除配对」（C-12），点击只开确认框，确认后才删 pairingKey。
@@ -150,7 +150,7 @@ internal fun DeviceRow(
     }
 }
 
-/** 设备副行：在线「在线 · ip:port」；离线「离线 · 上次 HH:mm」（契约 C-11 边界文案）。 */
+/** 设备副行：在线「在线 · ip:port」；离线「离线 · 上次 HH:mm」（锚点 C-11 边界文案）。 */
 internal fun deviceSubtitle(device: PeerDevice, clock: (Long) -> String = ::formatClock): String =
     if (device.online) {
         "在线 · " + device.hostAddress.ifBlank { "未知地址" } + ":" + device.port

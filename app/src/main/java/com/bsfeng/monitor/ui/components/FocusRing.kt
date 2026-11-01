@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui.components
 
-// 键盘焦点环（契约 s01 头部通用口径）：2dp、对比 ≥3:1，仅键盘 / 遥控器操作时出现。
+// 键盘焦点环（锚点 s01 头部通用口径）：2dp、对比 ≥3:1，仅键盘 / 遥控器操作时出现。
 // 触屏点击即便让控件获得焦点也不画环（InputMode.Touch），避免「点一下留个框」。
 
 import androidx.compose.foundation.border
@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 焦点环线宽（契约：2dp）。 */
+/** 焦点环线宽（口径：2dp）。 */
 val FOCUS_RING_WIDTH = 2.dp
 
 /**

@@ -6,7 +6,7 @@ package com.bsfeng.monitor.transfer.ui
 // 点「撤销」会把已清空的行插回来，「分组变空态」不成立。修复口径 = 清空前先把窗口内快照
 // commit 掉（与连续删除分支一致）。这里锁住两件事：
 //  1. 清空前必须落定待撤销快照（commitUndoId）；
-//  2. 批量删除的目标只有终态记录，进行中任务不受影响（契约 C-16 边界）。
+//  2. 批量删除的目标只有终态记录，进行中任务不受影响（锚点 C-16 边界）。
 // 数据用占位值（设备名「Pixel 8」、文件名「IMG_0001.jpg」），不写真实设备信息。
 
 import com.bsfeng.monitor.domain.transfer.DeletedTask

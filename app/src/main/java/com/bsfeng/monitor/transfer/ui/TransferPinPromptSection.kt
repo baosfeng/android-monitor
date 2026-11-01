@@ -54,19 +54,19 @@ import kotlinx.coroutines.delay
 /** PIN 长度（协议 §5）。 */
 internal const val PIN_LENGTH: Int = 4
 
-/** C-15 按钮转圈时长（契约：200ms 内完成）。 */
+/** C-15 按钮转圈时长（口径：200ms 内完成）。 */
 private const val PIN_SUBMIT_SPIN_MS: Long = 200L
 
-/** 连续错误多少次后标题追加提示（契约 C-15）。 */
+/** 连续错误多少次后标题追加提示（锚点 C-15）。 */
 internal const val PIN_ERROR_HINT_AFTER: Int = 3
 
-/** C-15 请求超时（契约：15s 后恢复按钮并提示）。 */
+/** C-15 请求超时（口径：15s 后恢复按钮并提示）。 */
 private const val PIN_TIMEOUT_MS: Long = 15_000L
 
 /** 发送端 PIN 错误文案（引擎经 prompt.message 下发，逐字）。 */
 internal const val PIN_ERROR_TEXT: String = "PIN 不正确，请重试"
 
-/** 超时提示（契约 C-15 边界）。 */
+/** 超时提示（锚点 C-15 边界）。 */
 internal const val PIN_TIMEOUT_TEXT: String = "网络超时，请重试"
 
 /** PIN 弹层入口：按方向分发到接收端展示 / 发送端输入。 */
