@@ -22,6 +22,12 @@ object DebugSeed {
     /** 供 CLI 与文档复用的来源标记。 */
     const val SOURCE = "debug_seed"
 
+    /** 既有场景的坐标位数：3 位小数（≈110m），等价于老数据 —— 演示「历史粗坐标」时正好。 */
+    const val COARSE_DECIMALS = 3
+
+    /** 带噪声场景的坐标位数：6 位（与 `LocationPolicy.quantize` 同口径），±30m 抖动才留得住。 */
+    const val FINE_DECIMALS = 6
+
     private const val MINUTE_MS = 60_000L
     private const val DAY_MS = 86_400_000L
 
@@ -64,6 +70,7 @@ object DebugSeed {
             SeedScenario.STAY -> stayScenario(start, end)
             SeedScenario.MOVE -> moveScenario(start, end)
             SeedScenario.GAP -> gapScenario(start, end)
+            SeedScenario.NOISE -> noiseScenario(start, end)
         }.sortedBy { it.timestamp }
     }
 
@@ -152,6 +159,118 @@ object DebugSeed {
         return out
     }
 
+    // ───────────────────── 带噪声移动（精度表达的对照件）─────────────────────
+
+    /** 步行两端：直线 ≈1.8km，落在与家/公司同一座城市里。 */
+    private val WALK_FROM = Spot(39.9500, 116.3500, "家")
+    private val WALK_TO = Spot(39.9630, 116.3680, "公司")
+
+    /** 步行采样步长：2 分钟一步、约 120m，远小于聚合器 60 分钟的空档阈值。 */
+    private const val NOISE_WALK_STEP_MS = 2 * MINUTE_MS
+
+    /** 步行段时长与端点停留：各 10 分钟以上，聚合器才能切出「停留 → 移动 → 停留」。 */
+    private const val NOISE_WALK_MS = 30 * MINUTE_MS
+    private const val NOISE_INDOOR_MS = 20 * MINUTE_MS
+    private const val NOISE_INDOOR_STEP_MS = 5 * MINUTE_MS
+
+    /** 步行抖动（米）：GPS 在开阔地也有的量级。 */
+    private const val WALK_JITTER_METERS = 30.0
+
+    /** 室内抖动（米）：network 点位在同一个格子里来回跳，但精度本身很差。 */
+    private const val INDOOR_JITTER_METERS = 20.0
+
+    private const val METERS_PER_DEGREE = 111_320.0
+
+    /**
+     * 带噪声移动：停在起点 10 分钟 → 沿直线走到终点（±30m 抖动、accuracy 15~60m）
+     * → 室内 20 分钟（network，accuracy 250~450m）。
+     *
+     * 为什么两条腿都要造：步行段 accuracy 全是高置信，轨迹卡不会出现虚线段；
+     * 室内那段 accuracy 差才是「虚线 = 精度 > 100m」的证据。坐标按 6 位小数落库
+     * （与 `LocationPolicy.quantize` 同口径），抖动才不会被 3 位小数网格吃掉。
+     */
+    private fun noiseScenario(start: Long, end: Long): List<Record> {
+        val out = ArrayList<Record>()
+        val jitter = Jitter(seed = start)
+        val walkStart = start + STAY_STEP_MS
+        out += stayPoints(start, walkStart, WALK_FROM, decimals = FINE_DECIMALS)
+
+        var ts = walkStart
+        val walkEnd = minOf(walkStart + NOISE_WALK_MS, end)
+        while (ts < walkEnd) {
+            val progress = (ts - walkStart).toDouble() / NOISE_WALK_MS
+            out += noisyLocation(
+                ts = ts,
+                base = interpolate(WALK_FROM, WALK_TO, progress),
+                jitterMeters = WALK_JITTER_METERS,
+                accuracyMeters = 15 + jitter.unit01() * 45,
+                provider = "gps",
+                jitter = jitter,
+            )
+            ts += NOISE_WALK_STEP_MS
+        }
+
+        // 室内：坐标只在小范围里跳（聚合器仍判成一段停留），精度却差一个数量级
+        val indoorEnd = minOf(ts + NOISE_INDOOR_MS, end)
+        while (ts < indoorEnd) {
+            out += noisyLocation(
+                ts = ts,
+                base = WALK_TO,
+                jitterMeters = INDOOR_JITTER_METERS,
+                accuracyMeters = 250 + jitter.unit01() * 200,
+                provider = "network",
+                jitter = jitter,
+            )
+            ts += NOISE_INDOOR_STEP_MS
+        }
+        // 室内也在用手机：让停留段有 App 使用记录可看
+        out += usage(walkStart + NOISE_WALK_MS / 2, "高德地图", "com.autonavi.minimap", 15 * MINUTE_MS)
+        out += usage(indoorEnd - 5 * MINUTE_MS, "微信", "com.tencent.mm", 4 * MINUTE_MS)
+        return out
+    }
+
+    private fun interpolate(from: Spot, to: Spot, ratio: Double): Spot = Spot(
+        lat = from.lat + (to.lat - from.lat) * ratio,
+        lng = from.lng + (to.lng - from.lng) * ratio,
+        label = "路上",
+        address = "移动中",
+    )
+
+    /** 在 [base] 周围加 ±[jitterMeters] 的抖动；纬度与经度各自换算，经度按 cos 纬度压缩。 */
+    private fun noisyLocation(
+        ts: Long,
+        base: Spot,
+        jitterMeters: Double,
+        accuracyMeters: Double,
+        provider: String,
+        jitter: Jitter,
+    ): Record {
+        val lat = base.lat + jitter.unit() * jitterMeters / METERS_PER_DEGREE
+        val lngScale = METERS_PER_DEGREE * Math.cos(Math.toRadians(base.lat))
+        val lng = base.lng + jitter.unit() * jitterMeters / lngScale
+        return location(
+            ts = ts,
+            spot = Spot(lat, lng, base.label, base.address),
+            accuracy = accuracyMeters.toInt().toString(),
+            provider = provider,
+            decimals = FINE_DECIMALS,
+        )
+    }
+
+    /** 固定种子：同一时刻 seed 出来的抖动必须一模一样，测试与截图才可复现。 */
+    private class Jitter(seed: Long) {
+        private var state = seed * 6_364_136_223_846_793_005L + 1_442_695_040_888_963_407L
+
+        /** [-1, 1) 的均匀分布。 */
+        fun unit(): Double = unit01() * 2.0 - 1.0
+
+        /** [0, 1) 的均匀分布。 */
+        fun unit01(): Double {
+            state = state * 6_364_136_223_846_793_005L + 1_442_695_040_888_963_407L
+            return (state ushr 11).toDouble() / (1L shl 53).toDouble()
+        }
+    }
+
     /** 两段停留之间留 >1 小时空档：验证「采样空档」不被算成移动。 */
     private fun gapScenario(start: Long, end: Long): List<Record> {
         val span = end - start
@@ -173,15 +292,15 @@ object DebugSeed {
      * 落库坐标量化到 3 位小数（≈111m），抖动哪怕只有 40m 也会在量化后跨格，
      * 让 `TripAggregator` 判成「离开」而把一段停留拆成好几段。演示数据要的是稳定可复现。
      */
-    private fun stayPoints(start: Long, end: Long, spot: Spot): List<Record> {
+    private fun stayPoints(start: Long, end: Long, spot: Spot, decimals: Int = COARSE_DECIMALS): List<Record> {
         if (end <= start) return emptyList()
         val out = ArrayList<Record>()
         var ts = start
         while (ts < end) {
-            out += location(ts, spot)
+            out += location(ts, spot, decimals = decimals)
             ts += STAY_STEP_MS
         }
-        out += location(end, spot)
+        out += location(end, spot, decimals = decimals)
         return out
     }
 
@@ -201,7 +320,13 @@ object DebugSeed {
         return out
     }
 
-    private fun location(ts: Long, spot: Spot): Record =
+    private fun location(
+        ts: Long,
+        spot: Spot,
+        accuracy: String = "25",
+        provider: String = "gps",
+        decimals: Int = COARSE_DECIMALS,
+    ): Record =
         Record(
             id = UUID.randomUUID().toString(),
             type = RecordType.LOCATION,
@@ -209,10 +334,10 @@ object DebugSeed {
             timestamp = ts,
             label = spot.label,
             detail = mapOf(
-                "lat" to quantize(spot.lat),
-                "lng" to quantize(spot.lng),
-                "provider" to "gps",
-                "accuracy_m" to "25",
+                "lat" to quantize(spot.lat, decimals),
+                "lng" to quantize(spot.lng, decimals),
+                "provider" to provider,
+                "accuracy_m" to accuracy,
                 "address" to spot.address,
                 "source" to SOURCE,
             ),
@@ -233,10 +358,16 @@ object DebugSeed {
         Record(UUID.randomUUID().toString(), RecordType.SCREEN, "OFF", ts + durationMs, durationMs, "熄屏", mapOf("source" to SOURCE)),
     )
 
-    /** 与 `LocationPolicy.quantize` 同口径：3 位小数（≈110m），-0.000 归一成 0.000。 */
-    internal fun quantize(value: Double): String {
-        val factor = 1_000.0
+    /**
+     * 量化到 [decimals] 位小数，-0.000 归一成 0.000。
+     *
+     * 默认 [COARSE_DECIMALS]（3 位 ≈110m）：既有场景靠它演示「历史粗坐标」的阶梯，
+     * 与老数据的落库口径一致。需要保留抖动时传 [FINE_DECIMALS]。
+     */
+    internal fun quantize(value: Double, decimals: Int = COARSE_DECIMALS): String {
+        val factor = Math.pow(10.0, decimals.toDouble())
         val rounded = Math.round(value * factor) / factor
-        return if (rounded == 0.0) "0.000" else String.format(Locale.US, "%.3f", rounded)
+        val format = "%." + decimals + "f"
+        return if (rounded == 0.0) String.format(Locale.US, format, 0.0) else String.format(Locale.US, format, rounded)
     }
 }

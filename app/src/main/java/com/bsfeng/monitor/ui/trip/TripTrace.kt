@@ -75,7 +75,7 @@ object TripTrace {
     private const val EARTH_METERS_PER_DEGREE = 111_320.0
 
     /**
-     * 记录 → 采样点（升序 → 离群剔除 → 平滑 → 去重 → 几何抽稀 → 上限）。
+     * 记录 → 采样点（升序 → 离群剔除 → 平滑 → 去重 → 几何抽稀 → 上限）；历史粗坐标日跳过平滑。
      *
      * 为什么是这个顺序：
      * - 先按时间升序，离群判据才有「上一点」可比；
@@ -89,7 +89,10 @@ object TripTrace {
         val parsed = parse(records)
         val accuracies = accuracies(parsed)
         val cleaned = TripDenoise.rejectOutliers(parsed, accuracies)
-        val smoothed = TripDenoise.smooth(cleaned, accuracies)
+        // 历史粗坐标日（坐标只存 3 位小数 ≈110m）不做平滑：平滑会把量化的台阶揉成斜线，
+        // 等于凭空造出「走过这段直线」的精度。阶梯本身就是「这天只准到 110m」的证据，
+        // 由轨迹卡的提示行说明，不靠算法抹掉。
+        val smoothed = if (TracePrecision.isCoarseDay(cleaned)) cleaned else TripDenoise.smooth(cleaned, accuracies)
         return cap(TripDenoise.simplify(dedupe(smoothed)))
     }
 
