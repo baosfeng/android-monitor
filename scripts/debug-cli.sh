@@ -5,7 +5,7 @@
 #   scripts/debug-cli.sh unlock                 # 一次性解锁调试层（CI / 新装机第一步）
 #   scripts/debug-cli.sh state                  # 功能开关 + 定位权限 + 各类型当日计数
 #   scripts/debug-cli.sh locate                 # 立刻采一次位置（绕过节流）
-#   scripts/debug-cli.sh seed [day|stay|move|gap]
+#   scripts/debug-cli.sh seed [day|stay|move|noise|gap]
 #   scripts/debug-cli.sh dump [limit] [TYPE]
 #   scripts/debug-cli.sh reset [TYPE]           # 删「当日」某类型（默认 PAGE）
 #   scripts/debug-cli.sh reset all              # 清空全表（所有类型、所有日期）
