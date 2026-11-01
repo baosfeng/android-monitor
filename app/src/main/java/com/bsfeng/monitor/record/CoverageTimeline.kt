@@ -131,8 +131,8 @@ object CoverageTimeline {
     /**
      * 省电待机上限：35 分钟。
      *
-     * 取值为服务层兜底节奏 [com.bsfeng.monitor.service.LocationForegroundService.STILL_FALLBACK_MS]
-     * （30 分钟）+ 5 分钟调度余量：兜底是 30 秒 tick 触发的，实测落在 30:00~30:30；
+     * 取值为服务层兜底节奏 [LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS]（30 分钟）+ 5 分钟调度余量：
+     * 兜底由门禁 ticker 触发（SLEEPING 最长 5 分钟一拍，到期前会按剩余时间排最后一拍），实测落在 30:00~30:30；
      * 不留余量会把每次兜底晚到 20 秒判成断档，比不修还吵。
      *
      * 边界是「动作阈值 vs 呈现阈值」的分工：超过它就是真没采到点（服务被杀、权限被撤、
