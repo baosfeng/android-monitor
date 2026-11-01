@@ -1,13 +1,15 @@
 package com.bsfeng.monitor.ui.trip
 
-// 轨迹清洗：离群点剔除 + 按几何误差抽稀（Douglas–Peucker）。
+// 轨迹清洗：离群点剔除 + 精度加权平滑 + 按几何误差抽稀（Douglas–Peucker）。
 // 纯逻辑、不依赖 Android / Compose，可在纯 JVM 单测里逐条验证（TripDenoiseTest）。
 //
 // 为什么需要这一层（对应「定位过程中画的地图不准」）：
 // - 定位点带 accuracy，室内 NETWORK 常到几百米，这种点会把折线拽出一个尖角；
 // - 相邻两点时间差 10 秒，实际位移却上千米 —— 物理上不可能，是 provider 切换或基站抖动；
+// - 静止漂移的点围着真值乱跳，抽稀只会保留极值顶点，锯齿被原样画出来 —— 只有平滑能压掉；
 // - 原始点密到几十米一个，画在 180dp 高的画布上就是一条锯齿，看不出路网走向。
 
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -39,6 +41,27 @@ object TripDenoise {
 
     /** 抽稀阈值的上界（米）：再粗就会把真实拐弯抹平。 */
     private const val SIMPLIFY_MAX_METERS = 40.0
+
+    /** 平滑窗口的时间半宽（毫秒）：跨度再大，两端就不是「同一个位置」了。 */
+    private const val SMOOTH_HALF_WINDOW_MS = 60_000L
+
+    /** 平滑窗口的点数半宽：窗口最多 5 个点，再宽会把真实拐弯磨圆。 */
+    private const val SMOOTH_HALF_WINDOW_POINTS = 2
+
+    /** 跨这个时长（5 分钟）就是断档：两侧不属于同一次移动，平滑会把断档两头拉近。 */
+    private const val SMOOTH_MAX_GAP_MS = 300_000L
+
+    /** 缺精度时按这个噪声地板算权重（米）。 */
+    private const val DEFAULT_ACCURACY_METERS = 50.0
+
+    /** 精度下限（米）：防止 1/accuracy² 权重因 0.x 米精度炸掉。 */
+    private const val MIN_ACCURACY_METERS = 1.0
+
+    /** 拐点保护的地板（米）：小于这个偏移在 180dp 画布上看不出来。 */
+    private const val TURN_PROTECT_MIN_METERS = 10.0
+
+    /** 拐点保护的噪声倍数：偏离弦超过「噪声地板 × 这个倍数」就不是抖动，是真几何。 */
+    private const val TURN_PROTECT_NOISE_FACTOR = 2.0
 
     /** 一度纬度对应的米数（等距圆柱近似，与 [TripTrace.meters] 同口径）。 */
     private const val METERS_PER_DEGREE = 111_320.0
@@ -81,6 +104,119 @@ object TripDenoise {
         val allowed = max(ALWAYS_KEEP_METERS, MAX_SPEED_MPS * gapSeconds + slack)
         val distance = TripTrace.meters(previous.lat, previous.lng, candidate.lat, candidate.lng)
         return distance <= allowed
+    }
+
+    /**
+     * 精度加权滑动平均：把静止漂移的锯齿压平。
+     *
+     * 权重 ∝ 1/accuracy²（缺精度按 [DEFAULT_ACCURACY_METERS]）—— 精度好的点说话算数，
+     * 室内几百米的点几乎不参与。窗口同时受时间（±[SMOOTH_HALF_WINDOW_MS]）与点数
+     * （±[SMOOTH_HALF_WINDOW_POINTS]）约束：时间保证「窗口里的点确实在同一位置附近」，
+     * 点数保证实时补采时不会一次平均掉半分钟的路。
+     *
+     * 三条不变量（下游 dedupe / simplify / cap 全靠它们）：
+     * - 点数、顺序、时间戳、label、accuracy 一律不动，只改 lat / lng；
+     * - 每段首尾坐标不动（段的端点代表真实到达位置，被平均就是凭空缩短轨迹）；
+     * - 拐点保护：点偏离「窗口两端连成的弦」超过 max(10m, 2 × 噪声地板) 时保留原坐标
+     *   —— 直角拐弯、绕行匝道这类真几何不能被平均掉。
+     *
+     * 跨 [SMOOTH_MAX_GAP_MS]（5 分钟）以上断档分段，段与段之间互不平滑：把断档两侧的点
+     * 平均到一起，会让「10 分钟前在 A、现在在 B」变成一条根本不存在的连线。
+     *
+     * @param accuracies 时间戳 → 精度（米）；[TraceSample.accuracyM] 优先，其次查这张表
+     */
+    fun smooth(
+        samples: List<TraceSample>,
+        accuracies: Map<Long, Float> = emptyMap(),
+    ): List<TraceSample> {
+        if (samples.size < 3) return samples
+        val accuracyOf = { sample: TraceSample ->
+            val raw = sample.accuracyM?.toDouble() ?: accuracies[sample.timestamp]?.toDouble()
+            if (raw == null || raw.isNaN() || raw < MIN_ACCURACY_METERS) DEFAULT_ACCURACY_METERS else raw
+        }
+        val out = ArrayList<TraceSample>(samples.size)
+        for (segment in segments(samples)) {
+            out.add(samples[segment.first])
+            val threshold = turnProtectMeters(samples, segment, accuracyOf)
+            for (index in segment.first + 1 until segment.last) {
+                out.add(smoothAt(samples, segment, index, threshold, accuracyOf))
+            }
+            if (segment.last > segment.first) out.add(samples[segment.last])
+        }
+        return out
+    }
+
+    /** 按断档把下标切成若干段；时间不倒序（含相等）也算断开，避免窗口跨乱序点取值。 */
+    private fun segments(samples: List<TraceSample>): List<IntRange> {
+        val ranges = ArrayList<IntRange>()
+        var start = 0
+        for (index in 1 until samples.size) {
+            val gap = samples[index].timestamp - samples[index - 1].timestamp
+            if (gap > SMOOTH_MAX_GAP_MS || gap < 0L) {
+                ranges.add(start until index)
+                start = index
+            }
+        }
+        ranges.add(start until samples.size)
+        return ranges
+    }
+
+    /** 段内噪声地板取精度的中位数（抗单个坏点污染），拐点阈值 = max(10m, 2 × 地板)。 */
+    private fun turnProtectMeters(
+        samples: List<TraceSample>,
+        segment: IntRange,
+        accuracyOf: (TraceSample) -> Double,
+    ): Double {
+        val sorted = segment.map { accuracyOf(samples[it]) }.sorted()
+        val floor = sorted[sorted.size / 2]
+        return max(TURN_PROTECT_MIN_METERS, TURN_PROTECT_NOISE_FACTOR * floor)
+    }
+
+    /** 段内第 [index] 个点的平滑结果；窗口与拐点保护都没命中时返回原点。 */
+    private fun smoothAt(
+        samples: List<TraceSample>,
+        segment: IntRange,
+        index: Int,
+        threshold: Double,
+        accuracyOf: (TraceSample) -> Double,
+    ): TraceSample {
+        val origin = samples[index]
+        val from = windowEdge(samples, segment, index, -1)
+        val to = windowEdge(samples, segment, index, 1)
+        if (from >= to) return origin
+        if (TripDenoise.perpendicularMeters(samples[from], samples[to], origin) > threshold) return origin
+        var sumWeight = 0.0
+        var sumLat = 0.0
+        var sumLng = 0.0
+        for (j in from..to) {
+            val accuracy = accuracyOf(samples[j])
+            val weight = 1.0 / (accuracy * accuracy)
+            sumWeight += weight
+            sumLat += samples[j].lat * weight
+            sumLng += samples[j].lng * weight
+        }
+        if (sumWeight <= 0.0) return origin
+        return origin.copy(lat = sumLat / sumWeight, lng = sumLng / sumWeight)
+    }
+
+    /** 从 [index] 向 [step] 方向扩窗口，停在段边界、时间半宽或点数半宽上。 */
+    private fun windowEdge(
+        samples: List<TraceSample>,
+        segment: IntRange,
+        index: Int,
+        step: Int,
+    ): Int {
+        val anchor = samples[index].timestamp
+        var edge = index
+        var count = 0
+        while (count < SMOOTH_HALF_WINDOW_POINTS) {
+            val next = edge + step
+            if (next !in segment) break
+            if (abs(samples[next].timestamp - anchor) > SMOOTH_HALF_WINDOW_MS) break
+            edge = next
+            count++
+        }
+        return edge
     }
 
     /**

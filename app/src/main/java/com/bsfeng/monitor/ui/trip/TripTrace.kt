@@ -4,8 +4,9 @@ package com.bsfeng.monitor.ui.trip
 // 不依赖 Android / Compose，可在 JVM 单测里直接验证（TripTraceTest）。
 //
 // 口径：
-// - 只取 LOCATION 记录（detail: lat / lng / address），按 timestamp 升序；
-// - 相邻两点 < 5m 视为原地抖动，去重；最后按上限均匀抽稀到 500 点（保留首尾）；
+// - 只取 LOCATION 记录（detail: lat / lng / address / accuracy_m），按 timestamp 升序；
+// - 剔除物理上不可能的跳点 → 精度加权平滑压掉静止漂移 → 相邻 < 5m 去重 → 几何抽稀
+//   → 按上限均匀抽稀到 500 点（保留首尾）；
 // - 投影用等距圆柱（x = lng · cos(meanLat)，y = -lat），等比缩放到画布并留 padding；
 // - 单点或全部重合时居中；画布宽高非法（<= 0）直接返回空投影，不产生 NaN / 负坐标。
 
@@ -17,12 +18,18 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** 一个轨迹采样点（与数据库记录解耦，便于单测）。 */
+/**
+ * 一个轨迹采样点（与数据库记录解耦，便于单测）。
+ *
+ * [accuracyM] 是该点的定位精度（米），缺精度时（老记录 / provider 没给）为 null：
+ * 平滑用它做权重，null 时按 [TripDenoise] 的默认噪声地板处理，不参与任何硬门槛。
+ */
 data class TraceSample(
     val timestamp: Long,
     val lat: Double,
     val lng: Double,
     val label: String? = null,
+    val accuracyM: Float? = null,
 )
 
 /** 画布坐标：x 向右、y 向下（与 Canvas 一致）。 */
@@ -68,21 +75,28 @@ object TripTrace {
     private const val EARTH_METERS_PER_DEGREE = 111_320.0
 
     /**
-     * 记录 → 采样点（升序 → 离群剔除 → 去重 → 几何抽稀 → 上限）。
+     * 记录 → 采样点（升序 → 离群剔除 → 平滑 → 去重 → 几何抽稀 → 上限）。
      *
      * 为什么是这个顺序：
      * - 先按时间升序，离群判据才有「上一点」可比；
      * - 离群剔除要在去重之前：跳变点和上一点往往离得很远，先去重不会影响它、但先剔除能少算一遍；
+     * - 平滑要在去重之前：静止漂移的点彼此相隔十几米、去重管不到，只有先平均回真值附近，
+     *   去重才有机会把它们收拢；反之先去重会先把「能用来平均的邻居」丢掉；
      * - 去重要在抽稀之前：重合点的垂距为 0，留着只会让抽稀多做无用的段判定；
      * - 抽稀按几何误差（Douglas–Peucker）而不是等步长：等步长会把真实拐点抹掉、却保留直线上的冗余点。
      */
-    fun samples(records: List<Record>): List<TraceSample> =
-        cap(TripDenoise.simplify(dedupe(TripDenoise.rejectOutliers(parse(records), accuracies(records)))))
+    fun samples(records: List<Record>): List<TraceSample> {
+        val parsed = parse(records)
+        val accuracies = accuracies(parsed)
+        val cleaned = TripDenoise.rejectOutliers(parsed, accuracies)
+        val smoothed = TripDenoise.smooth(cleaned, accuracies)
+        return cap(TripDenoise.simplify(dedupe(smoothed)))
+    }
 
-    /** 时间戳 → 精度（米）；只有带 accuracy_m 的记录才参与离群判定。 */
-    private fun accuracies(records: List<Record>): Map<Long, Float> = records.mapNotNull { record ->
-        val accuracy = record.detail?.get("accuracy_m")?.toFloatOrNull() ?: return@mapNotNull null
-        if (accuracy <= 0f) null else record.timestamp to accuracy
+    /** 时间戳 → 精度（米）；只有 accuracy_m > 0 的点才参与离群判定与平滑权重。 */
+    private fun accuracies(samples: List<TraceSample>): Map<Long, Float> = samples.mapNotNull { sample ->
+        val accuracy = sample.accuracyM?.takeIf { it > 0f && !it.isNaN() } ?: return@mapNotNull null
+        sample.timestamp to accuracy
     }.toMap()
 
     private fun parse(records: List<Record>): List<TraceSample> = records
@@ -100,6 +114,7 @@ object TripTrace {
             lat = lat,
             lng = lng,
             label = detail["address"]?.takeIf { it.isNotBlank() },
+            accuracyM = detail["accuracy_m"]?.toFloatOrNull()?.takeIf { it > 0f && !it.isNaN() },
         )
     }
 
