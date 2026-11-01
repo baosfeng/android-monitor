@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
+import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.TripAggregator
 import kotlinx.coroutines.CancellationException
@@ -84,12 +85,15 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
             return TripState(isLoading = false, timeline = null, dayStart = dayStart, dayEnd = dayEnd)
         }
         return try {
-            val day = TripCache.obtain(dayStart, dayEnd) {
-                // 同一批 records 同时喂给聚合器与轨迹提取：不二次读库，轨迹与时间轴口径一致
-                val records = store.queryByDate(dayStart, dayEnd)
+            val contextStart = dayStart - BOUNDARY_CONTEXT_MS
+            val contextEnd = dayEnd + BOUNDARY_CONTEXT_MS
+            val day = TripCache.obtain(dayStart, dayEnd, contextStart, contextEnd) {
+                // 一次读库：窗口内的记录喂聚合器与轨迹提取（口径一致），
+                // 窗口外前后各 2 小时只作跨天边界上下文，不产生独立段
+                val (inWindow, context) = splitByWindow(store.queryByDate(contextStart, contextEnd), dayStart, dayEnd)
                 TripDay(
-                    timeline = TripAggregator(dayStart, dayEnd).aggregate(records),
-                    samples = TripTrace.samples(records),
+                    timeline = TripAggregator(dayStart, dayEnd).aggregate(inWindow, context),
+                    samples = TripTrace.samples(inWindow),
                 )
             }
             TripState(
@@ -159,12 +163,29 @@ internal object TripDays {
 }
 
 /**
- * 进程内 LRU（最多 [MAX_DAYS] 个键，访问顺序淘汰）。
- *
- * 键含「分钟」：今天的时间轴每分钟随新记录变化；历史日期的键在同一天内固定，命中即秒开。
+ * 跨天边界上下文窗口：前后各多查 2 小时，只用于判定日首 / 日尾归属。
+ * 必须与 domain 的 TripAggregatorRules.BOUNDARY_CONTEXT_MS 同值（跨模块 internal 不可见，无法直接引用）。
  */
+private const val BOUNDARY_CONTEXT_MS = 2 * 60 * 60_000L
+
+/**
+ * 把「窗口 + 边界上下文」的查询结果切成（窗口内, 窗口外）两份：窗口内按 [dayStart, dayEnd) 半开区间。
+ * 窗口外的只作为跨天边界上下文交给聚合器，不参与轨迹与统计。
+ */
+internal fun splitByWindow(
+    records: List<Record>,
+    dayStart: Long,
+    dayEnd: Long,
+): Pair<List<Record>, List<Record>> =
+    records.partition { it.timestamp >= dayStart && it.timestamp < dayEnd }
+
 private data class TripDay(val timeline: DayTimeline, val samples: List<TraceSample>)
 
+/**
+ * 进程内 LRU（最多 [MAX_DAYS] 个键，访问顺序淘汰）。
+ *
+ * 键含「分钟」与边界上下文窗口：今天的时间轴每分钟随新记录变化；历史日期的键在同一天内固定，命中即秒开。
+ */
 private object TripCache {
     // 历史日期可翻 30 天：缓存 8 天，来回翻几天仍能秒开，又不至于把内存堆满
     private const val MAX_DAYS = 8
@@ -175,8 +196,16 @@ private object TripCache {
     }
 
     @Synchronized
-    fun obtain(dayStart: Long, dayEnd: Long, compute: () -> TripDay): TripDay {
-        val key = dayStart.toString() + ":" + (dayEnd / 60_000L)
+    fun obtain(
+        dayStart: Long,
+        dayEnd: Long,
+        contextStart: Long,
+        contextEnd: Long,
+        compute: () -> TripDay,
+    ): TripDay {
+        // 键含边界上下文窗口：今天 dayEnd 与窗口每分钟都在变；历史日两者都固定，命中即秒开
+        val key = dayStart.toString() + ":" + (dayEnd / 60_000L) +
+            ":" + (contextStart / 60_000L) + ":" + (contextEnd / 60_000L)
         entries[key]?.let { return it }
         val day = compute()
         entries[key] = day
