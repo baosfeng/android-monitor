@@ -70,9 +70,49 @@ object LocationPolicy {
     fun activeFixTimeoutMs(provider: String): Long =
         if (provider == "gps") GPS_FIRST_FIX_BUDGET_MS else ACTIVE_FIX_BUDGET_MS
 
+    /**
+     * 覆盖级（探测）network 预算：4 秒。
+     *
+     * 只给门禁探测用（PROBING 低频探测 / SLEEPING 30 分钟兜底）。network 靠基站与 WiFi 秒级出点，
+     * 4 秒已是常态上限；等满 5 秒换不来更准的点，只换来更长的射频开启。
+     */
+    const val PROBE_FIX_BUDGET_MS = 4_000L
+
+    /**
+     * 覆盖级（探测）gps 预算：8 秒。
+     *
+     * 探测的 gps 通常是热启动（几分钟前刚定位过），8 秒足够出点；按满预算等 15 秒，
+     * 每轮要多烧 7 秒射频，而门禁探测只关心「现在大概在哪」。
+     */
+    const val PROBE_GPS_FIX_BUDGET_MS = 8_000L
+
+    /**
+     * 探测允许用系统缓存顶替主动定位的年龄上限：90 秒。
+     *
+     * 真机基线（8 天 2176 个点：passive 2134 / network 38 / gps 4）说明系统缓存几乎总是新鲜的。
+     * 90 秒内的缓存点与「刚探测出来的点」在位移判定上等价（探测周期本身就是 180 秒起），
+     * 超过 90 秒说明最近没有别的定位，缓存不能代表「现在在哪」，必须主动定位。
+     */
+    const val PROBE_CACHE_MAX_AGE_MS = 90_000L
+
     /** 一次主动定位的预算摘要（日志用：实际是按 provider 逐个计时，不是总和）。 */
     val ACTIVE_FIX_BUDGET_SUMMARY: String
-        get() = ACTIVE_PROVIDERS.joinToString(" / ") { it + " " + activeFixTimeoutMs(it) + "ms" }
+        get() = budgetSummaryOf(FixBudget.FULL)
+
+    /**
+     * 按预算档位取单 provider 超时。
+     *
+     * 两档必须分开：满预算那几条路径（MOVING 补采 / 断档自愈 / 首点兜底）砍预算就是重演
+     * 「GPS 必然 timeout」的掉线；探测那几条砍预算则是把「什么都没发生」的射频代价直接降四成。
+     */
+    fun activeFixTimeoutMs(provider: String, budget: FixBudget): Long = when (budget) {
+        FixBudget.FULL -> activeFixTimeoutMs(provider)
+        FixBudget.PROBE -> if (provider == "gps") PROBE_GPS_FIX_BUDGET_MS else PROBE_FIX_BUDGET_MS
+    }
+
+    /** 某档预算的摘要（日志用，便于对照 timeout 证据）。 */
+    fun budgetSummaryOf(budget: FixBudget): String =
+        ACTIVE_PROVIDERS.joinToString(" / ") { it + " " + activeFixTimeoutMs(it, budget) + "ms" }
 
     /** 时间新鲜度；时钟回拨（now < time）不算 stale。 */
     fun isFresh(timeMs: Long, nowMs: Long): Boolean = nowMs - timeMs <= MAX_AGE_MS
@@ -185,8 +225,40 @@ object LocationPace {
      * 用户拿起手机玩时加速度计一样会抖，但**这不等于在移动**（没有真实位移）。
      * 这一档只做低频探测：既能在坐车/匀速行驶这类「传感器平稳但人在位移」的场景下
      * 用位移发现异常，又不会为玩手机持续烧定位。
+     *
+     * 这是退避阶梯的**起点**：连续 3 次 / 6 次拿不到位移证据会拉到 300 / 600 秒
+     * （见 [probeIntervalMsFor]），任何运动证据立刻回到这个值。
      */
     const val HANDHELD_PROBE_INTERVAL_MS = 180_000L
+
+    /** 探测退避中档：连续 3~5 次拿不到位移证据后，间隔拉到 300 秒。 */
+    const val HANDHELD_PROBE_INTERVAL_MID_MS = 300_000L
+
+    /** 探测退避封顶：连续 ≥6 次拿不到位移证据后，间隔拉到 600 秒。 */
+    const val HANDHELD_PROBE_INTERVAL_MAX_MS = 600_000L
+
+    /** 退避档位：连续无位移证据的探测次数达到它，间隔升到 [HANDHELD_PROBE_INTERVAL_MID_MS]。 */
+    const val PROBE_BACKOFF_MID_STREAK = 3
+
+    /** 退避封顶档位：连续无位移证据的探测次数达到它，间隔升到 [HANDHELD_PROBE_INTERVAL_MAX_MS]。 */
+    const val PROBE_BACKOFF_MAX_STREAK = 6
+
+    /**
+     * 探测间隔阶梯（纯函数）：0~2 次 180s / 3~5 次 300s / ≥6 次 600s。
+     *
+     * 为什么按「连续无位移证据的探测次数」退避：探测存在的唯一意义是抓「传感器平稳但人在位移」
+     * （坐车 / 骑行）。连续几轮都拿不到位移证据，说明大概率没在远行，而此时门禁还停在 PROBING
+     * （有抖动 / 步态一类弱证据在手），会按 180 秒一直烧到 5 分钟无证据降级为止。
+     * 退避把「什么都没发生」这一段的一小时探测次数从 20 次压到个位数。
+     *
+     * 任何运动证据（步数增量 / 步态 / 抖动 / 位移过噪声地板）立刻回 180 秒：
+     * 人真的走起来时探测必须恢复灵敏，否则「坐车 3 分钟升级」会变成 10 分钟。
+     */
+    fun probeIntervalMsFor(quietProbeStreak: Int): Long = when {
+        quietProbeStreak >= PROBE_BACKOFF_MAX_STREAK -> HANDHELD_PROBE_INTERVAL_MAX_MS
+        quietProbeStreak >= PROBE_BACKOFF_MID_STREAK -> HANDHELD_PROBE_INTERVAL_MID_MS
+        else -> HANDHELD_PROBE_INTERVAL_MS
+    }
 
     /**
      * 首次成功前的主动定位重试间隔（30 秒）：**固定值，不做指数退避**。
