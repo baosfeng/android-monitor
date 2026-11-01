@@ -22,6 +22,9 @@ internal object TripAggregatorRules {
     const val MAX_SAMPLE_GAP_MS = 60 * 60_000L
     const val USAGE_MERGE_GAP_MS = 5 * 60_000L
 
+    /** 跨天边界归并窗口：窗口外的参照点与 dayStart/dayEnd 相距、以及待吞掉的边界 Gap，都不得超过 2 小时。 */
+    const val BOUNDARY_CONTEXT_MS = 2 * 60 * 60_000L
+
     const val UNKNOWN_APP = "未知应用"
     const val USAGE_PLACE_LABEL = "使用中"
     const val GEO_ID_PREFIX = "geo:"
