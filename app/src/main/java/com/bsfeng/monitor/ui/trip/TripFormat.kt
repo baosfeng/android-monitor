@@ -4,6 +4,7 @@ import com.bsfeng.monitor.domain.trip.Basis
 import com.bsfeng.monitor.domain.trip.DaySegment
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.Gap
+import com.bsfeng.monitor.domain.trip.GapReason
 import com.bsfeng.monitor.domain.trip.Move
 import com.bsfeng.monitor.domain.trip.Place
 import com.bsfeng.monitor.domain.trip.Stay
@@ -123,7 +124,12 @@ fun placeDisplayName(place: Place): String =
 
 fun placeDisplayName(stay: Stay): String = placeDisplayName(stay.place)
 
-/** 时间轴行副标题。 */
+/**
+ * 时间轴行副标题。
+ *
+ * 未记录分两级（[GapReason]）：区间内没有定位采样 = 「采集中断」（本来就不知道发生了什么）；
+ * 有采样但判不出 = 「定位不足」（定位漂移 / 断档 / 覆盖不够）。两者都不推断期间内容，只换成因措辞。
+ */
 fun segmentSubtitle(segment: DaySegment): String = when (segment) {
     is Stay -> "停留 " + formatSpanText(segment.durationMs)
     is Move -> {
@@ -134,7 +140,10 @@ fun segmentSubtitle(segment: DaySegment): String = when (segment) {
             base
         }
     }
-    is Gap -> "采集中断 " + formatSpanText(segment.durationMs) + " · 不做推断"
+    is Gap -> when (segment.reason) {
+        GapReason.INTERRUPTED -> "采集中断 " + formatSpanText(segment.durationMs) + " · 不做推断"
+        GapReason.UNRESOLVED -> "定位不足 " + formatSpanText(segment.durationMs) + " · 不做推断"
+    }
 }
 
 /** 停留抽屉里「期间应用」最多列几条，其余折成一行汇总（长列表会把抽屉撑出屏）。 */
