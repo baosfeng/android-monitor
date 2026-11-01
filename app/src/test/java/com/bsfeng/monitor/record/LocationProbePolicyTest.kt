@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.record
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,6 +56,37 @@ class LocationProbePolicyTest {
     fun `force 探测没有缓存或断档时仍主动定位`() {
         assertFalse(LocationProbePolicy.canUseCached(true, false, false, SampleMode.STILL, true, 0L))
         assertFalse("断档时缓存不能代表现在", LocationProbePolicy.canUseCached(true, true, true, SampleMode.STILL, true, 10_000L))
+    }
+
+    @Test
+    fun `断档时升级满预算但门禁 SLEEPING 的兜底不升级`() {
+        // 真机对照：SLEEPING 的 30 分钟兜底距上次成功必然 ≥30 分钟，每次都会被判成断档。
+        // 不拦的话它每次都跑 network 5s + gps 15s（室内双超时 = 一天白烧 16 分钟射频）。
+        assertEquals(
+            "SLEEPING 兜底保持覆盖级预算",
+            FixBudget.PROBE,
+            LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, MotionGate.State.SLEEPING),
+        )
+        assertEquals(
+            "PROBING 的断档要救，升级满预算",
+            FixBudget.FULL,
+            LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, MotionGate.State.PROBING),
+        )
+        assertEquals(
+            "MOVING 的断档同样升级",
+            FixBudget.FULL,
+            LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, MotionGate.State.MOVING),
+        )
+        assertEquals(
+            "门禁未知（服务没跑）时心跳是唯一路径，不能砍预算",
+            FixBudget.FULL,
+            LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, null),
+        )
+        assertEquals(
+            "非断档一律按调用方给的档位",
+            FixBudget.PROBE,
+            LocationProbePolicy.effectiveBudget(FixBudget.PROBE, false, MotionGate.State.MOVING),
+        )
     }
 
     @Test
