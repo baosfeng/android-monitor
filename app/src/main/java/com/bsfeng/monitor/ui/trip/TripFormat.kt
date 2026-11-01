@@ -101,12 +101,17 @@ private fun topPlacePhrase(timeline: DayTimeline): String {
     return head + " " + formatSpanText(summary.topPlaceMs)
 }
 
-/** 时间轴行标题。移动没有两端地名时只说「移动」，不编造地点名。 */
+/**
+ * 时间轴行标题。移动没有两端地名时只说「移动」，不编造地点名。
+ *
+ * 标题用**短名**（[placeShortName]）：一行只有一行的宽度，「上海市闵行区华漕镇牛 New 寿喜烧」
+ * 这种全名会把「A → B」整段挤掉，只剩行政区划前缀。全名仍在抽屉标题、地图标签、导出里可查。
+ */
 fun segmentTitle(segment: DaySegment): String = when (segment) {
-    is Stay -> placeDisplayName(segment.place)
+    is Stay -> placeShortName(placeDisplayName(segment.place))
     is Move -> {
-        val from = segment.from?.let { placeDisplayName(it) }.orEmpty()
-        val to = segment.to?.let { placeDisplayName(it) }.orEmpty()
+        val from = segment.from?.let { placeShortName(placeDisplayName(it)) }.orEmpty()
+        val to = segment.to?.let { placeShortName(placeDisplayName(it)) }.orEmpty()
         if (from.isNotBlank() && to.isNotBlank()) "$from → $to" else "移动"
     }
     is Gap -> "未记录"
@@ -123,6 +128,42 @@ fun placeDisplayName(place: Place): String =
     if (place.source == Basis.DEVICE && place.label == USAGE_CLUSTER_PLACE) DEVICE_ACTIVE_LABEL else place.label
 
 fun placeDisplayName(stay: Stay): String = placeDisplayName(stay.place)
+
+/**
+ * 地名短名（时间轴标题、轨迹卡停留标签共用这一处，不要在别处再写一份）。
+ *
+ * 规则：依次去掉「省 / 市 / 区 / 县 / 镇」后缀及其前缀（最多三轮，且剩余至少 2 字才去），
+ * 然后截到 12 字；去不干净或全空时回退原名。
+ *
+ * 为什么只认这几个单字后缀：'州' 会误伤「杭州」「苏州」这类地名本身；多字后缀（'街道'）
+ * 需要另做多字匹配，而 12 字截断通常已够一行放下，先不加。剩余至少 2 字的门槛也挡住
+ * 「镇江」「镇海」这类被当成后缀误伤的正式地名。
+ */
+fun placeShortName(raw: String): String {
+    var text = raw.trim()
+    var round = 0
+    while (round < 3) {
+        // 按行政层级（省 → 市 → 区 → 县 → 镇）找第一个可去掉的后缀，而不是取字符串里最靠前的后缀字符：
+        // 「镇江市」里 '镇' 出现在 '市' 之前，按位置切会切出「江市」。
+        // 下标从 1 起：'镇'/'区'/'市' 打头的正式地名（镇江、镇海）不能被当成后缀切掉。
+        var cut = -1
+        for (suffix in ADMIN_SUFFIXES) {
+            val at = text.indexOf(suffix)
+            if (at in 1..6 && text.length - at - 1 >= 2) {
+                cut = at
+                break
+            }
+        }
+        if (cut < 0) break
+        text = text.substring(cut + 1).trim()
+        round++
+    }
+    // 回退原名时也 trim：全空白的地名在时间轴上就是空标题，不能画出一串空格
+    return text.take(12).ifBlank { raw.trim() }
+}
+
+/** 「省 / 市 / 区 / 县 / 镇」五个单字后缀（顺序无关，命中最靠前的一个）。 */
+private val ADMIN_SUFFIXES = charArrayOf('省', '市', '区', '县', '镇')
 
 /**
  * 时间轴行副标题。
