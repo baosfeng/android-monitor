@@ -384,13 +384,11 @@ val pureComposableSources = listOf(
     "com/bsfeng/monitor/ui/quota/QuotaAggregateRow",
     "com/bsfeng/monitor/ui/quota/QuotaAtoms",
     "com/bsfeng/monitor/ui/quota/QuotaSettingsAlerts",
-    "com/bsfeng/monitor/ui/quota/QuotaSettingsProviders",
     "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen",
     "com/bsfeng/monitor/ui/quota/QuotaStateViews",
     "com/bsfeng/monitor/ui/quota/QuotaUsageCard",
     "com/bsfeng/monitor/ui/quota/QuotaViewModeSwitch",
     "com/bsfeng/monitor/ui/theme/Components",
-    "com/bsfeng/monitor/ui/trip/TripCard",
     "com/bsfeng/monitor/finance/ui/FinanceDialogs",
 )
 
