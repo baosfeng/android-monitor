@@ -87,7 +87,7 @@ internal fun formatAmount(value: Double): String =
     String.format(java.util.Locale.CHINA, "%.2f", value)
 
 /**
- * 弹窗预填文本：契约要求「预填 1200 / 400 / 1000」——不带千分位、不留 `.0` 尾巴。
+ * 弹窗预填文本：交互口径要求「预填 1200 / 400 / 1000」——不带千分位、不留 `.0` 尾巴。
  * 1200.0 → `1200`；1200.5 → `1200.5`；0.0 → ``（未设置时留空，占位 `0.00`）。
  */
 internal fun budgetInputText(value: Double): String = when {
@@ -97,7 +97,7 @@ internal fun budgetInputText(value: Double): String = when {
 }
 
 /**
- * 金额输入过滤（契约 s06-dialog · 输入）：只留数字与第一个小数点，整数位最多 9 位。
+ * 金额输入过滤（锚点 s06-dialog · 输入）：只留数字与第一个小数点，整数位最多 9 位。
  * 返回过滤后的文本；非法字符直接丢弃（不弹错，由 [BudgetEditorDialog] 的校验行兜底）。
  */
 internal fun filterBudgetAmountInput(raw: String): String {
@@ -136,7 +136,7 @@ internal fun BudgetKpiLine(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(t.radiusMd)
-    // 契约 s06-card：按下时整行底色变 fg 5%（120ms = --dur-press）
+    // 锚点 s06-card：按下时整行底色变 fg 5%（120ms = --dur-press）
     val background by animateColorAsState(
         targetValue = if (onClick != null && pressed) t.fgFade(5) else Color.Transparent,
         animationSpec = t.tweenOf(MotionToken.Press),
@@ -172,7 +172,7 @@ internal fun BudgetKpiLine(
 /**
  * 单行预算：名称 + 预算额 + 进度条 + 已支出/剩余。
  *
- * 交互按契约 s06-brow-0…5：按下 0.99 + 透明度 .9（[rowPressFeedback]）、底变 fg 5%、
+ * 交互按锚点 s06-brow-0…5：按下 0.99 + 透明度 .9（[rowPressFeedback]）、底变 fg 5%、
  * 触感 LIGHT、键盘 2dp 焦点环；行内进度条 600ms 长到比例（--dur-chart-fast）。
  */
 @Composable
@@ -229,7 +229,7 @@ internal fun BudgetRow(
                 style = MaterialTheme.typography.titleSmall,
                 color = t.fg,
                 maxLines = 1,
-                // 契约 s06-list：分类名超长单行省略号，不挤压右侧金额
+                // 锚点 s06-list：分类名超长单行省略号，不挤压右侧金额
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).testTag("row.budget"),
             )
@@ -280,7 +280,7 @@ private fun BudgetProgressBar(fraction: Float, isOver: Boolean) {
 }
 
 /**
- * 边界分类行（契约 s06-edge-brow）：与普通分类行同一套交互，超支副行转红、名称单行省略号。
+ * 边界分类行（锚点 s06-edge-brow）：与普通分类行同一套交互，超支副行转红、名称单行省略号。
  * 数值是边界态占位数据（不读库）。
  */
 @Composable

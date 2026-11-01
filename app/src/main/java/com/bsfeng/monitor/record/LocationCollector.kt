@@ -28,7 +28,7 @@ import android.content.Context
  * 驱动方两条：[com.bsfeng.monitor.service.LocationForegroundService] 的前台服务定时器（MOVING 时补采）+ [com.bsfeng.monitor.service.AlarmReceiver]
  * 1 分钟心跳（兜底；服务被杀后订阅不存在，走缓存 → 主动定位）。
  *
- * 异常契约：未授权 / 无 LocationManager / provider 不可用 / 系统抛 SecurityException
+ * 异常口径：未授权 / 无 LocationManager / provider 不可用 / 系统抛 SecurityException
  * 一律回调 null，不向调用方抛异常（心跳与轮询链路不能被定位拖垮）。
  */
 class LocationCollector internal constructor(

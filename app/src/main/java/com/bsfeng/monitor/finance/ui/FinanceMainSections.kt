@@ -2,7 +2,7 @@ package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/FinanceMainScreen.kt 的三段列表项；职责：页头导入按钮、月份条、KPI 卡、双入口卡、明细标题行。
 //
-// s04 契约（docs/交互设计/s04-记账-交互契约.md）要求**逐控件锚点 + 逐控件按下反馈**，
+// s04 口径（锚点账本）要求**逐控件锚点 + 逐控件按下反馈**，
 // 共享壳件 FinanceScreenChrome / FinanceMainCards 没有可注入的 interactionSource，
 // 因此本文件按共享基元（PressFeedback / Haptics / FocusRing）就地组合出本页专属部件；
 // 与共享件的关系：按共享基元复用，按下尺度与基建唯一取值 0.96 的差 ≤0.03。
@@ -60,14 +60,14 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 月份标签弹回时的起点缩放（契约 s04-prev/s04-next：月份文字从 0.86 弹回 1）。 */
+/** 月份标签弹回时的起点缩放（锚点 s04-prev/s04-next：月份文字从 0.86 弹回 1）。 */
 private const val MONTH_LABEL_BUMP_FROM = 0.86f
 
 /**
- * 页头右侧「数据导入」圆形图标按钮（契约 s04-import）。
+ * 页头右侧「数据导入」圆形图标按钮（锚点 s04-import）。
  *
  * 44×44（tap-min）、accent 下载箭头、按下走共享基元 [pressFeedback]（0.96 / --dur-press，精简档自动省略）
- * + LIGHT 触觉。契约写的 0.94 与基建唯一取值 0.96 的差记在交接文档。
+ * + LIGHT 触觉。口径写的 0.94 与基建唯一取值 0.96 的差记在交接文档。
  */
 @Composable
 internal fun S04ImportButton(onClick: () -> Unit) {
@@ -100,9 +100,9 @@ internal fun S04ImportButton(onClick: () -> Unit) {
 }
 
 /**
- * 月份条（契约 s04-monthbar / s04-prev / s04-next）。
+ * 月份条（锚点 s04-monthbar / s04-prev / s04-next）。
  *
- * 胶囊自身不接收点击（契约：点胶囊中部或描边无任何反馈），只有两侧 44dp 箭头是命中目标；
+ * 胶囊自身不接收点击（口径：点胶囊中部或描边无任何反馈），只有两侧 44dp 箭头是命中目标；
  * 胶囊高 52dp 由 44dp 箭头 + 上下各 space-1（4dp）自然撑出。
  */
 @Composable
@@ -190,9 +190,9 @@ private fun S04MonthArrow(
 }
 
 /**
- * KPI 卡 + 今日一行摘要（契约 s04-kpis / s04-ring）。
+ * KPI 卡 + 今日一行摘要（锚点 s04-kpis / s04-ring）。
  *
- * 卡片与圆环都不可点（契约：无按下反馈、点击不跳转），锚点只做定位用。
+ * 卡片与圆环都不可点（口径：无按下反馈、点击不跳转），锚点只做定位用。
  * 金额走 [animatedAmount] 做滚动数字；预算进度用 accent（与 BudgetScreen 同一口径）。
  */
 @Composable
@@ -230,7 +230,7 @@ internal fun FinanceMainKpiSection(
                 Spacer(Modifier.width(t.space3))
                 Box(Modifier.testTag("s04-ring")) {
                     FinanceRingGauge(
-                        // 契约：无预算 0% / 超 100% 环描满一圈、环心仍显示真实值
+                        // 口径：无预算 0% / 超 100% 环描满一圈、环心仍显示真实值
                         fraction = stats.budgetProgress,
                         big = ((stats.budgetProgress * 100).toInt()).toString() + "%",
                         small = "预算",
@@ -258,7 +258,7 @@ internal fun FinanceMainKpiSection(
 }
 
 /**
- * 双入口卡：统计分析 / 预算设置（契约 s04-entries / s04-entry-stats / s04-entry-budget）。
+ * 双入口卡：统计分析 / 预算设置（锚点 s04-entries / s04-entry-stats / s04-entry-budget）。
  *
  * 两卡之间 12dp 间隙（space-3）不属于任何卡，点击无反馈；整卡按下 [pressFeedback] + LIGHT。
  */
@@ -365,10 +365,10 @@ private fun S04EntryCard(
 }
 
 /**
- * 明细标题行（契约 s04-list）：左「交易明细」+ 右「最近 3 天 · X 笔 / 共 X 笔 / 暂无记录」。
+ * 明细标题行（锚点 s04-list）：左「交易明细」+ 右「最近 3 天 · X 笔 / 共 X 笔 / 暂无记录」。
  *
- * 标题与计数都不可点（契约：无按下反馈）；[modifier] 供调用方挂焦点请求
- * （契约 s04-retry「错态卡消失后焦点回明细区标题」）。
+ * 标题与计数都不可点（口径：无按下反馈）；[modifier] 供调用方挂焦点请求
+ * （锚点 s04-retry「错态卡消失后焦点回明细区标题」）。
  */
 @Composable
 internal fun FinanceMainListHead(

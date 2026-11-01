@@ -70,7 +70,7 @@ import com.bsfeng.monitor.ui.theme.fgFade
  * 失败条与数据卡分开：刷新失败时**保留上次成功数据**（数据层已把 stale 与 fetchedAt 标好），
  * 页面只负责在数据上方补一条「数据停在 HH:mm」，而不是把整屏换成错误页。
  *
- * 每个可交互节点都带契约锚点（`s18-*`）：契约的 82 行按锚点逐条对账，
+ * 每个可交互节点都带锚点（`s18-*`）：口径的 82 行按锚点逐条对账，
  * 锚点只在对应状态下渲染 —— 同一时刻只存在一份，不会出现同名节点。
  */
 
@@ -347,7 +347,7 @@ fun QuotaUsageUnavailableCard(
     }
 }
 
-/** 用量区该渲染哪一块：契约里「有用量数据」才出用量卡，其余落点各有各的说法。 */
+/** 用量区该渲染哪一块：账本里「有用量数据」才出用量卡，其余落点各有各的说法。 */
 internal enum class QuotaUsageSlot { DATA, LOADING, FAILED, MISSING_CREDENTIAL, NONE }
 
 /**
@@ -413,7 +413,7 @@ fun QuotaUsageFailedCard(
 /**
  * 卡内 / 错态里的次级文字动作：44dp 点击区 + 按压反馈 + LIGHT 触感。
  *
- * 契约没给这类新增动作锚点，按「不新增 testTag」的口径处理（锚点集合要与契约逐字对账）。
+ * 账本没给这类新增动作锚点，按「不新增 testTag」的口径处理（锚点集合要与锚点逐字对账）。
  */
 @Composable
 internal fun QuotaInlineAction(
@@ -450,7 +450,7 @@ internal fun QuotaInlineAction(
  * 单行凭据输入（密码遮罩；明文只在内存里出现）。
  *
  * 光标取主色、框底与描边不变；**键盘焦点**进来时换成 2dp 焦点环（触摸聚焦不画环，
- * 与全站 keyboardFocusRing 口径一致）。占位符 s18 契约固定 `sk-****`。
+ * 与全站 keyboardFocusRing 口径一致）。占位符 s18 口径固定 `sk-****`。
  */
 @Composable
 fun QuotaTextField(

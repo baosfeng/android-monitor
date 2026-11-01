@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.transfer.ui
 
-// 「传送」Tab（契约 docs/交互设计/s22-局域网互传-交互契约.md，锚点 C-01…C-18）。
+// 「传送」Tab（锚点账本，锚点 C-01…C-18）。
 //
 // 四段结构：**接收状态**（C-10）→ **附近设备**（C-11 选中 / C-12 移除配对 / C-18 重新扫描）→
 // **发送**（C-13）→ **进行中**（C-01 取消 → C-02 / C-03 面板，C-09 全部取消，C-08 回执条）→
@@ -47,10 +47,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** 接收开关的落定窗口（契约 C-10：按钮即时转圈，1s 内完成）。 */
+/** 接收开关的落定窗口（锚点 C-10：按钮即时转圈，1s 内完成）。 */
 private const val RECEIVING_SETTLE_MS: Long = 1_000L
 
-/** 重新扫描的落定窗口（契约 C-18 降级口径：800ms 内给出结果）。 */
+/** 重新扫描的落定窗口（锚点 C-18 降级口径：800ms 内给出结果）。 */
 private const val SCAN_SETTLE_MS: Long = 800L
 
 /** 批量删除事件的兜底复位（事件少于预期时不能永久抑制撤销条）。 */
@@ -220,7 +220,7 @@ fun TransferScreen(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents(),
     ) { uris ->
-        // 选择器取消返回：不建任务、不出 toast（契约 C-13）
+        // 选择器取消返回：不建任务、不出 toast（锚点 C-13）
         if (uris.isNotEmpty()) {
             if (uris.size > MAX_FILES_PER_SEND) {
                 page.showToast("最多一次发送 $MAX_FILES_PER_SEND 个文件")
@@ -318,7 +318,7 @@ fun TransferScreen(
                 viewModel.resendTask(target) { result ->
                     page.dismissSheet()
                     result.onSuccess {
-                        // 契约 C-17：1:1 新批次卡片立即出现在「进行中」顶部，焦点落到新批次卡
+                        // 锚点 C-17：1:1 新批次卡片立即出现在「进行中」顶部，焦点落到新批次卡
                         page.showToast("已重新发送")
                         page.requestScroll("hint-active")
                     }.onFailure { error ->
@@ -398,7 +398,7 @@ fun TransferScreen(
  * 两件事都必须在批量删除**之前**定下来：
  * 1. [commitUndoId] —— 窗口内那张单条撤销快照要落定。否则「先删一条（撤销条还在）→ 5s 内清空」
  *    之后旧撤销条仍可点，一撤销就把已清空的行插回来，C-16 的「分组变空态」不成立；
- * 2. [targets] —— 只清终态记录（进行中任务不受影响，契约 C-16 边界）。
+ * 2. [targets] —— 只清终态记录（进行中任务不受影响，锚点 C-16 边界）。
  */
 internal data class ClearFinishedPlan(
     val commitUndoId: String?,

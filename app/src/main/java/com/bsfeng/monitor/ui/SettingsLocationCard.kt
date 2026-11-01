@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui
 
 // 功能细则页「位置采集」的卡：开关 + 三态权限引导。
 // 负责位置开关的三态权限引导：未申请先弹运行时权限、缺「始终允许」单独引导、少数 ROM 的兜底入口。
-// 引导卡（location-guide）按契约 s09 的 11 个锚点落地：摘要行可折叠、三步清单、自检行、
+// 引导卡（location-guide）按锚点 s09 的 11 个锚点落地：摘要行可折叠、三步清单、自检行、
 // 「重新检测」「去系统设置」两个动作；三态文案与原型逐字一致。
 
 import android.Manifest
@@ -90,7 +90,7 @@ internal fun SettingsLocationCard(
     val locationPermission = locationPermissionState.value
     // 文案由 LocationHealthText 统一生成（纯逻辑、纯 JVM 单测覆盖），这里只负责渲染
     val copy = LocationHealthText.locationCopyOf(locationPermission)
-    // 默认展开；折叠状态不持久化（契约 s09-loc-summary）
+    // 默认展开；折叠状态不持久化（锚点 s09-loc-summary）
     var expanded by remember { mutableStateOf(true) }
     var rechecking by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -127,7 +127,7 @@ internal fun SettingsLocationCard(
             .testTag("s09-location"),
         padding = 0.dp,
     ) {
-        // 位置采集开关（源码现状：开关 + 功能说明，契约未覆盖但保留为产品基准）
+        // 位置采集开关（源码现状：开关 + 功能说明，口径未覆盖但保留为产品基准）
         TokenRow(
             title = "位置采集",
             subtitle = if (locationOn) {

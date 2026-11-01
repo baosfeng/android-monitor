@@ -14,13 +14,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** 「新增订阅」的结果（契约 s10-source · 新增订阅行）。 */
+/** 「新增订阅」的结果（锚点 s10-source · 新增订阅行）。 */
 internal enum class LocalSubscriptionOutcome { ADDED, DUPLICATE, BLANK, NOT_HTTPS }
 
 /**
  * 「新增订阅」的判据（纯函数，可单测）。
  *
- * 判重是契约明文要求（「URL 与已有源重复时不新增，toast『该订阅源已存在』，计数不变」），
+ * 判重是口径明文要求（「URL 与已有源重复时不新增，toast『该订阅源已存在』，计数不变」），
  * 且必须发生在任何写盘 / 联网之前 —— 原实现直接走 updateSubscription，
  * 既没判重、又隐式发起了拉取。
  */
@@ -181,10 +181,10 @@ class SkipRuleViewModel : ViewModel() {
     }
 
     /**
-     * 「新增订阅」：以当前 URL **本地**新增一条订阅源，不发起网络拉取（契约 s10-source）。
+     * 「新增订阅」：以当前 URL **本地**新增一条订阅源，不发起网络拉取（锚点 s10-source）。
      *
      * 与 [updateSubscription] 的分工是硬的：
-     * - 更新订阅 = 联网拉取 + 合并（契约 s10-confirm）；
+     * - 更新订阅 = 联网拉取 + 合并（锚点 s10-confirm）；
      * - 新增订阅 = 只在本地的订阅源清单里加一条 0 规则的源，「N 个源」+1，
      *   之后用户仍要自己点「更新订阅」才会真正拉规则。
      *

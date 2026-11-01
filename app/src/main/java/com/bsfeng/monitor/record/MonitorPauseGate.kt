@@ -5,9 +5,9 @@ import androidx.core.content.edit
 import com.bsfeng.monitor.MonitorApp
 
 /**
- * 「前台应用监控」暂停闸门（契约 s09-monitor）。
+ * 「前台应用监控」暂停闸门（锚点 s09-monitor）。
  *
- * 契约要求暂停后**停止写新事件、实时流不再增长**，恢复后继续采集。实现取「写入侧短路」：
+ * 交互口径要求暂停后**停止写新事件、实时流不再增长**，恢复后继续采集。实现取「写入侧短路」：
  * - 不靠停无障碍服务 —— 停服务会摘掉系统授权，还会连带停掉开屏跳过与记账；
  * - 不靠 UI 内存标志 —— 设置页的 ViewModel 与采集侧（Service / Receiver）是两个对象，标志传不过去。
  *

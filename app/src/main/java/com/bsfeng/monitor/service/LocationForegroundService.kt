@@ -291,7 +291,7 @@ class LocationForegroundService : Service() {
             else -> AccelMode.BATCHED
         }
         setAccelMode(desiredAccel)
-        // 步数计在 PROBING 期间保持注册（契约：PROBING 每 30s 读一次增量）：
+        // 步数计在 PROBING 期间保持注册（口径：PROBING 每 30s 读一次增量）：
         // 只在观察窗里读的话，正常步行 3 分钟才 250m 左右，永远够不到 500m 的升级线；
         // 步数计是硬件累计值 + 30s batching，功耗远低于定位，PROBING 期间值得开着。
         setStepCounterActive(windowActive || appliedGateState == MotionGate.State.PROBING)
@@ -399,7 +399,7 @@ class LocationForegroundService : Service() {
         if (stepCounterRegistered) return
         val sensor = stepCounterSensor ?: return
         val ok = runCatching {
-            // 步数计是累计值，30s 一次上报就够（契约：PROBING 期间每 30s 读一次），
+            // 步数计是累计值，30s 一次上报就够（口径：PROBING 期间每 30s 读一次），
             // 不需要每条事件唤醒 CPU
             manager.registerListener(
                 stepCounterListener,

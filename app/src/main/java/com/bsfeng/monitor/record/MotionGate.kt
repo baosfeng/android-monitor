@@ -10,7 +10,7 @@ import kotlin.math.sqrt
  * 就建订阅 —— 用户拿起手机玩一小时，定位芯片一小时不休眠，正是用户抱怨的耗电来源。
  * 手持抖动、室内走动、摇晃都**不是**远行证据；只有步数距离、探测点位移、持续移动时长才是。
  *
- * 三态（契约冻结）：
+ * 三态（口径冻结）：
  * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（兜底在服务层）。
  * - [State.PROBING]：有真实运动证据（步态 / 步数 / 位移）但未确认远行。**不建订阅**，
  *   只做低频单点探测（180 秒起；连续拿不到位移证据按 [probeIntervalMs] 退避到 300 / 600 秒），
@@ -424,7 +424,7 @@ class MotionGate(
     private fun metersText(value: Double): String = Math.round(value).toString() + "m"
 
     private companion object {
-        /** 成人步行步幅：契约给定的 0.7m/步。 */
+        /** 成人步行步幅：口径给定的 0.7m/步。 */
         const val STEP_LENGTH_M = 0.7
 
         /** 降级：连续无活动（静止，或无步数无位移）5 分钟。 */

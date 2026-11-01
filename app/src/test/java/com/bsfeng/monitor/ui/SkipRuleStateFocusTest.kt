@@ -22,7 +22,7 @@ class SkipRuleStateFocusTest {
 
     @Test
     fun `有订阅源但规则为 0 时仍是空态`() {
-        // 契约 s10-st-empty · 边界：有订阅源但规则为 0 时用同一文案，此时计数卡仍显示 0。
+        // 锚点 s10-st-empty · 边界：有订阅源但规则为 0 时用同一文案，此时计数卡仍显示 0。
         // 因此判据只看规则数，不看订阅源数。
         assertEquals(
             FiveState.EMPTY,

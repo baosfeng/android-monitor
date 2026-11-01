@@ -10,7 +10,7 @@ import androidx.compose.runtime.Composable
 /**
  * 一个二级页的正文。
  *
- * 每页 ≤ 7 项（契约 s09 页层级）：「功能开关」页只有 6 行开关 + chevron，
+ * 每页 ≤ 7 项（锚点 s09 页层级）：「功能开关」页只有 6 行开关 + chevron，
  * 各功能自己的设置一律下钻到 *_DETAIL 页，不在同一屏堆 37 行。
  */
 @Composable

@@ -6,7 +6,7 @@ package com.bsfeng.monitor.transfer.ui
 //  - [TransferPageState]：只属于这一屏的状态（哪个面板开着、撤销条、toast、焦点回归标记）；
 //  - 纯函数：面板标题 / 副行 / 按钮 / 回执条文案 —— 可直接 JVM 单测，UI 里不拼字符串。
 //
-// 破坏性操作口径（契约第 5 行）：「能撤销给撤销，不能撤销才二次确认」。
+// 破坏性操作口径（口径第 5 行）：「能撤销给撤销，不能撤销才二次确认」。
 //  - 撤销：删除记录（C-05/C-07）→ 5s 撤销条（C-06）；
 //  - 二次确认：清空已结束（C-16，不可撤销）、解除配对（C-12）、关闭接收中断传输（C-10 边界）、
 //    删除「接收 + 已完成」记录（C-05，会一并删 Downloads 里的文件）。
@@ -27,7 +27,7 @@ import com.bsfeng.monitor.domain.transfer.TransferFormat
 import com.bsfeng.monitor.domain.transfer.TransferStatus
 import com.bsfeng.monitor.domain.transfer.TransferTask
 
-/** 单次发送上限（契约 C-13 边界）。 */
+/** 单次发送上限（锚点 C-13 边界）。 */
 internal const val MAX_FILES_PER_SEND: Int = 50
 
 // ───────────── 取消面板 / 动作面板 ─────────────
@@ -63,7 +63,7 @@ internal fun cancelTargetOf(tasks: List<TransferTask>, sessionId: String?): Canc
 internal fun cancelTitle(target: CancelTarget): String =
     if (target.all) "取消全部 ${target.fileCount} 个传输？" else "取消 ${target.fileCount} 个传输？"
 
-/** C-02 / C-09 面板副行；已传 0 B 时不出现「已传 x」那一段（契约 C-02 边界）。 */
+/** C-02 / C-09 面板副行；已传 0 B 时不出现「已传 x」那一段（锚点 C-02 边界）。 */
 internal fun cancelBody(target: CancelTarget): String =
     if (target.sentBytes <= 0L) {
         "取消后需要重新发送。"
@@ -110,7 +110,7 @@ internal fun receiptFileLine(task: TransferTask, clock: (Long) -> String = ::for
         statusLabel(task)
     }
 
-// ───────────── 终态卡片副行（契约 §文案口径） ─────────────
+// ───────────── 终态卡片副行（交互口径 §文案口径） ─────────────
 
 /** 单条完成副行：发送「对方已收到 · 14:32」/ 接收「已保存到 Downloads/局域网互传 · 14:32」。 */
 internal fun finishedSubtitle(task: TransferTask, clock: (Long) -> String = ::formatClock): String = when {
@@ -133,7 +133,7 @@ internal fun deleteConfirmTitle(fileName: String): String = "删除「$fileName�
 internal const val DELETE_CONFIRM_MESSAGE: String =
     "同时会删除 Downloads/局域网互传/ 里的文件，撤销只能恢复记录。"
 
-/** C-16 标题：条数写进标题（契约「清空 24 条记录？」）。 */
+/** C-16 标题：条数写进标题（口径「清空 24 条记录？」）。 */
 internal fun clearConfirmTitle(count: Int): String = "清空 $count 条记录？"
 
 /** C-16 副行：写清后果与将删文件数；「不可撤销」由 [clearConfirmBody] 的「清空后无法恢复」承载。 */
@@ -210,7 +210,7 @@ internal class TransferPageState {
     var scrollTarget by mutableStateOf<String?>(null)
         private set
 
-    /** 刚移动到「最近完成」的任务 key：卡片高亮 1.2s（契约 C-02 / C-06）。 */
+    /** 刚移动到「最近完成」的任务 key：卡片高亮 1.2s（锚点 C-02 / C-06）。 */
     var highlight by mutableStateOf<String?>(null)
         private set
 
@@ -226,7 +226,7 @@ internal class TransferPageState {
     var receivingBusy by mutableStateOf(false)
         private set
 
-    /** 批量删除（C-16）在途：期间到达的删除事件不弹撤销条（契约明写不可撤销）。 */
+    /** 批量删除（C-16）在途：期间到达的删除事件不弹撤销条（口径明写不可撤销）。 */
     var bulkRemaining by mutableStateOf(0)
         private set
 

@@ -41,14 +41,14 @@ import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import kotlinx.coroutines.launch
 
-/** 下滑关闭的距离判据：超过卡高 40%（契约 trip-detail-sheet 边界）。 */
+/** 下滑关闭的距离判据：超过卡高 40%（锚点 trip-detail-sheet 边界）。 */
 private const val SHEET_DISMISS_FRACTION: Float = 0.4f
 
-/** 下滑关闭的速度判据：300dp/s（契约 trip-detail-sheet 边界）。 */
+/** 下滑关闭的速度判据：300dp/s（锚点 trip-detail-sheet 边界）。 */
 private val SHEET_DISMISS_VELOCITY = 300.dp
 
 /**
- * 停留详情抽屉（契约 trip-detail-sheet / -2 / -3）。
+ * 停留详情抽屉（锚点 trip-detail-sheet / -2 / -3）。
  *
  * @param placeOrdinal 该段地点在当天的位次（0 起，见 placeOrdinal）——原型三个抽屉实例
  *   （「家」「某某咖啡」「公司」）按地点映射；第 4 个地点起不打锚点。
@@ -139,10 +139,10 @@ internal fun TripStaySheet(
 }
 
 /**
- * 抽屉锚点（契约 trip-detail-sheet / trip-detail-sheet-2 / trip-detail-sheet-3）。
+ * 抽屉锚点（trip-detail-sheet / trip-detail-sheet-2 / trip-detail-sheet-3）。
  *
  * 原型三个抽屉分别对应「家」「某某咖啡」「公司」三个地点；实现按地点首次出现的位次
- * （ordinal）映射，是结构位置不是数据身份。第 4 个地点起不打锚点：锚点集合严格等于契约定义。
+ * （ordinal）映射，是结构位置不是数据身份。第 4 个地点起不打锚点：锚点集合严格等于账本定义。
  */
 private fun Modifier.sheetTag(ordinal: Int): Modifier = when (ordinal) {
     0 -> testTag("trip-detail-sheet")
@@ -154,7 +154,7 @@ private fun Modifier.sheetTag(ordinal: Int): Modifier = when (ordinal) {
 /**
  * 该停留段所属地点在当天的位次（0 起，按首次出现排序）。
  *
- * 抽屉内容按「段」而非按「地点」（契约 s16-seg-home-noon 边界：同名地点多段各自独立开抽屉），
+ * 抽屉内容按「段」而非按「地点」（锚点 s16-seg-home-noon 边界：同名地点多段各自独立开抽屉），
  * 只有锚点按地点映射——与原型三个抽屉实例一致。
  */
 internal fun placeOrdinal(timeline: DayTimeline, stay: Stay): Int =

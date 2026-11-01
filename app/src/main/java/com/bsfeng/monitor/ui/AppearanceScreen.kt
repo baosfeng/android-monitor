@@ -64,13 +64,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * s13 外观（原型 s13-appearance.html / 契约 docs/交互设计/s13-外观-交互契约.md）：8 套主题两列选择器 +
+ * s13 外观（原型 s13-appearance.html / 锚点账本）：8 套主题两列选择器 +
  * 实时预览 + 说明卡 + 五态。选项即生效：选中即时切换、无保存按钮、无二次确认。
  *
  * 主题状态的唯一来源是 W0 的 ThemeRepository（setTheme 切换 + 持久化），本屏不写任何存储、
  * 不含任何按主题分叉的样式——差异全部由 token 承载。
  *
- * 19 个契约锚点逐字落 `Modifier.testTag`：screen-s13 / s13-head / s13-body / s13-picker /
+ * 19 个锚点逐字落 `Modifier.testTag`：screen-s13 / s13-head / s13-body / s13-picker /
  * s13-picker-grid / s13-theme-{apple,glass,notion,stripe,claude,ibm,kami,bento} / s13-preview /
  * s13-note / s13-st-{loading,empty,error,edge}。
  */
@@ -87,7 +87,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     /**
      * 退出外观屏：先登记「焦点回设置页『外观与主题』行」的一次性信号，再退页。
-     * 契约 s13-head · 退出后：退出后焦点回设置页「外观与主题」行（按钮 / 返回手势等效）。
+     * 锚点 s13-head · 退出后：退出后焦点回设置页「外观与主题」行（按钮 / 返回手势等效）。
      */
     val requestBack: () -> Unit = {
         AppearanceFocusReturn.request()
@@ -113,7 +113,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         keyboardMoving = false
     }
 
-    // 状态退出后的焦点迁移（契约「移除/关闭后」：空态 → Apple 项；错误态 → 当前主题项）
+    // 状态退出后的焦点迁移（口径「移除/关闭后」：空态 → Apple 项；错误态 → 当前主题项）
     LaunchedEffect(focusTarget, state) {
         val target = focusTarget ?: return@LaunchedEffect
         if (state != FiveState.POPULATED) return@LaunchedEffect
@@ -136,11 +136,11 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    /** 选项即生效：同一主题不重复写盘，仍出触感与同一条 toast（契约 s13-theme-*）。 */
+    /** 选项即生效：同一主题不重复写盘，仍出触感与同一条 toast（锚点 s13-theme-*）。 */
     fun pickTheme(id: String) {
         haptic(HapticTone.LIGHT)
         if (id != current) {
-            // 未知 id fail-open：回落到默认主题，不抛错（契约边界「未知主题 id 一律回落到 Apple」）
+            // 未知 id fail-open：回落到默认主题，不抛错（口径边界「未知主题 id 一律回落到 Apple」）
             if (!ThemeRepository.setTheme(id)) ThemeRepository.setTheme(ThemeRepository.DEFAULT_THEME)
         }
         toast.show("已切换到 " + themeLabel(id))
@@ -208,7 +208,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 onRetry = { if (!retrying) retrying = true },
                             )
                         }
-                        // 本态下网格仍然可用：换主题即重试（契约边界）
+                        // 本态下网格仍然可用：换主题即重试（口径边界）
                         AppearanceThemePicker(
                             ids = ids,
                             current = current,
@@ -253,7 +253,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** 「重新应用」转 loading 的最长窗口（契约 s13-st-error：最长 800ms）。 */
+/** 「重新应用」转 loading 的最长窗口（锚点 s13-st-error：最长 800ms）。 */
 private const val RETRY_APPLY_MS = 800L
 
 /** 选择器区块装配：锚点 s13-picker（区块）/ s13-picker-grid（两列网格）。 */
@@ -448,7 +448,7 @@ private fun EdgeSampleRow(title: String, subtitle: String, trailing: String) {
 }
 
 /**
- * s13 退出后「焦点回设置页『外观与主题』行」的一次性信号（契约 s13-head · 退出后）。
+ * s13 退出后「焦点回设置页『外观与主题』行」的一次性信号（锚点 s13-head · 退出后）。
  *
  * 为什么需要跨文件信号：外观屏由宿主导航以**覆盖层**打开（MainOverlays / SettingsScreen 的
  * 兜底桥），设置页拿不到「外观屏已关闭」的回调；两个页面都在本批写区内，用最小的代次信号衔接，

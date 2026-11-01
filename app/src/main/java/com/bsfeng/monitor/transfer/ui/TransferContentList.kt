@@ -3,7 +3,7 @@ package com.bsfeng.monitor.transfer.ui
 // 传送页的滚动内容区：接收卡 → 附近设备 → 发送按钮 → 进行中 → 最近完成。
 //
 // 列表结构先摊平成 [TransferRow] 再交给 LazyColumn：这样「撤销后滚动到被恢复的行」
-// （契约 C-06）与「LazyColumn key 稳定」都能按行 key 直接定位，不靠 index 心算。
+// （锚点 C-06）与「LazyColumn key 稳定」都能按行 key 直接定位，不靠 index 心算。
 // 行拼装是纯函数 [buildTransferRows]，单测直接覆盖分组 / 计数 / 回执条去留。
 
 import androidx.compose.foundation.background
@@ -76,7 +76,7 @@ internal data class TransferRow(
     enum class TitleAction { CANCEL_ALL, CLEAR_FINISHED }
 }
 
-/** 「进行中 · N」之外的「最近完成」标题（契约 C-16 的 N 与展示条数一致）。 */
+/** 「进行中 · N」之外的「最近完成」标题（锚点 C-16 的 N 与展示条数一致）。 */
 internal fun finishedTitle(count: Int): String = if (count == 0) "最近完成" else "最近完成 · $count"
 
 /** 附近设备标题。 */
@@ -263,7 +263,7 @@ internal fun TransferContentList(
                     onFocusConsumed = page::consumeFocus,
                 )
                 TransferRow.Kind.RECEIPT -> {
-                    // 可重试的失败项：发送方向 + 终态非完成 + 源文件仍可读（契约 C-08 边界）
+                    // 可重试的失败项：发送方向 + 终态非完成 + 源文件仍可读（锚点 C-08 边界）
                     val retryable = row.tasks.filter { task ->
                         task.direction == TransferDirection.SEND &&
                             task.status.isTerminal &&
@@ -278,7 +278,7 @@ internal fun TransferContentList(
                         onRetryFailed = {
                             if (retryable.isEmpty()) return@BatchReceiptBar
 
-                            // 逐条重发：成功的自行出现在「进行中」，失败的按契约口径 toast 一次
+                            // 逐条重发：成功的自行出现在「进行中」，失败的按口径口径 toast 一次
                             var failedReason: String? = null
                             var started = 0
                             retryable.forEach { task ->
@@ -360,7 +360,7 @@ internal fun requestDelete(
     // 面板关闭时置上的焦点回归标记先消费掉：本次是删除，行随即消失，不能让焦点闪回已删节点
     page.consumeFocus()
     if (needsDeleteConfirm(task)) {
-        // 先确认再删：焦点去向暂存，确认框关闭后落焦（契约 C-05「焦点落到下一条」）
+        // 先确认再删：焦点去向暂存，确认框关闭后落焦（锚点 C-05「焦点落到下一条」）
         page.stageDeleteFocus(nextFocus)
         page.ask(TransferConfirm.DeleteReceived(task))
         return
@@ -370,7 +370,7 @@ internal fun requestDelete(
 }
 
 /**
- * 删除后焦点去向（契约 C-05「记录行移除后焦点落到下一条；最后一条落到分组标题」）。
+ * 删除后焦点去向（锚点 C-05「记录行移除后焦点落到下一条；最后一条落到分组标题」）。
  *
  * 按「最近完成」的展示顺序（与列表一致）取被删行的下一条；没有下一条时落到分组标题。
  */
@@ -508,7 +508,7 @@ private fun DevicesEmptyBlock(
     }
 }
 
-/** 发送按钮三态（契约 C-13 边界 + C-11 边界）。 */
+/** 发送按钮三态（锚点 C-13 边界 + C-11 边界）。 */
 internal enum class SendButtonState { NO_DEVICE, OFFLINE, READY }
 
 /**

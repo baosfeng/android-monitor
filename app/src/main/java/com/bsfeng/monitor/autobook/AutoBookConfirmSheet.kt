@@ -50,8 +50,8 @@ import com.bsfeng.monitor.ui.theme.MonitorSpacing
 import com.bsfeng.monitor.ui.theme.opaquePanel
 
 /**
- * 一级分类格的契约锚点前缀：格子由共享 [CategoryPicker] 渲染，按阅读顺序贴
- * `s15-l1-0` … `s15-l1-17`（契约 docs/交互设计/s15-自动记账浮窗-交互契约.md）。
+ * 一级分类格的锚点前缀：格子由共享 [CategoryPicker] 渲染，按阅读顺序贴
+ * `s15-l1-0` … `s15-l1-17`（锚点账本）。
  *
  * 传 null 的页面（老调用点）不产生任何 testTag 节点，因此叶子树的形状不变。
  */
@@ -63,7 +63,7 @@ internal const val AUTO_BOOK_L1_TAG_PREFIX: String = "s15-l1-"
  * 信息层级：来源胶囊 + 提示 → 金额 → 商户 → 只读字段（账户/支付方式/时间）→ 说明 → 分类 → 操作按钮。
  * 所有颜色 / 圆角 / 间距都走设计 token，因此 8 套主题下自动成立。
  *
- * **关闭契约（2026-10-20）**：卡片里只有「记一笔」和「忽略」两个按钮能让浮窗消失；
+ * **关闭口径（2026-10-20）**：卡片里只有「记一笔」和「忽略」两个按钮能让浮窗消失；
  * 说明行只进入编辑态，绝不关闭浮窗；点卡片内的空白处由浮窗外层吞掉（不关、不失焦）。
  *
  * @param modifier 浮窗层传入的容器修饰（锚点 s15-sheet / 退场位移 / 抖动 / 吞点击都在那层）
@@ -279,7 +279,7 @@ fun AutoBookConfirmSheet(
                     iconSize = PANEL_CATEGORY_ICON_SIZE,
                     // 浮窗也用 6 列 3 行的图标网格（与记账页一致），不再是一行横向 chips
                     topStyle = com.bsfeng.monitor.finance.ui.CategoryPickerTopStyle.GRID,
-                    // 一级格子的契约锚点 s15-l1-0..17：由共享网格按阅读顺序贴 tag
+                    // 一级格子的锚点 s15-l1-0..17：由共享网格按阅读顺序贴 tag
                     topLevelTagPrefix = AUTO_BOOK_L1_TAG_PREFIX,
                 )
             }

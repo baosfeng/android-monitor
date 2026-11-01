@@ -51,9 +51,9 @@ internal const val ERROR_ACTION_DEFAULT = "重试"
 /**
  * 空态：居中列 + 44dp 图标 + 17sp 标题 + 14sp 描述 + 可选 CTA（原型 .st-empty）。
  *
- * @param modifier 块级锚点入口：调用方按契约传 `Modifier.testTag("sNN-empty")`，本组件不自带 tag。
+ * @param modifier 块级锚点入口：调用方按口径传 `Modifier.testTag("sNN-empty")`，本组件不自带 tag。
  * @param actionLabel CTA 文案；与 [onAction] 任一为 null 时整颗按钮不渲染（未接线不伪造跳转）。
- * @param onAction CTA 回调；非 null 时按钮按契约给按下 0.96 + LIGHT 触感。
+ * @param onAction CTA 回调；非 null 时按钮按口径给按下 0.96 + LIGHT 触感。
  * @param actionModifier CTA 级锚点入口（如 `sNN-empty-cta`），只在按钮渲染时生效。
  */
 @Composable
@@ -114,7 +114,7 @@ fun ErrorState(
 /**
  * 边界态：超长文案 + 10000+ 计数；[content] 可替换默认极值样例。
  *
- * 纯展示、无 CTA（契约里边界态不接点击）；[modifier] 是块级锚点入口（`sNN-edge`）。
+ * 纯展示、无 CTA（账本里边界态不接点击）；[modifier] 是块级锚点入口（`sNN-edge`）。
  */
 @Composable
 fun EdgeState(
@@ -200,7 +200,7 @@ private fun StateColumn(
 /**
  * 幽灵按钮（原型 .btn-ghost）：透明底 + 1px --border 描边 + min-height 48 + 17sp/600。
  *
- * 反馈按契约走现成基元：[pressFeedback] 按下 0.96（时长取 --dur-press、精简档自动省略）、
+ * 反馈按口径走现成基元：[pressFeedback] 按下 0.96（时长取 --dur-press、精简档自动省略）、
  * 触发时 [HapticTone.LIGHT]；两者都不手写常量。
  */
 @Composable
@@ -213,7 +213,7 @@ private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier =
         modifier = modifier
             .heightIn(min = 48.dp)
             .pressFeedback(interaction)
-            // 键盘焦点环 2dp（契约头部通用口径）：放在剪裁之前，环不被圆角裁掉；
+            // 键盘焦点环 2dp（口径头部通用口径）：放在剪裁之前，环不被圆角裁掉；
             // 只在输入方式是键盘 / 遥控器时绘制，触屏点击视觉零变化。
             .keyboardFocusRing(shape)
             .clip(shape)

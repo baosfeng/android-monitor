@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.record
 
 // 持续订阅通道：按模式调速的 requestLocationUpdates 封装 + 生命周期状态机（纯逻辑可单测）。
-// 生产实现见 AndroidLocationSubscriber；这里只定义契约、provider 计划与幂等主管。
+// 生产实现见 AndroidLocationSubscriber；这里只定义口径、provider 计划与幂等主管。
 
 /**
  * 持续位置订阅的抽象。
@@ -9,7 +9,7 @@ package com.bsfeng.monitor.record
  * 抽成接口是为了让「订阅生命周期（幂等建立 / 幂等释放 / 静默重建 / 模式变速）」
  * 能在纯 JVM 单测里跑，生产实现是 AndroidLocationSubscriber。
  *
- * 契约：
+ * 口径：
  * - [start] 成功返回 true 并开始持续回调 [onSample]；失败（无 provider / 未授权）返回 false 且不抛异常；
  * - 已在订阅时再调 [start] 由调用方（LocationSubscriptionSupervisor）保证只在新配置下才触发；
  * - [stop] 幂等：未订阅时调用是空操作；

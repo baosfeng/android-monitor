@@ -4,7 +4,7 @@ package com.bsfeng.monitor.transfer.ui
 //
 // 只在「同一 sessionId 下的文件数 ≥ 2」时出现（一次多选）；单文件批次整条隐藏，
 // 避免每个单文件任务头上都压一条「1 个文件」的噪音。
-// 展开/收起只改本屏状态，不动任务数据，也不计入任何计数（契约 C-08）。
+// 展开/收起只改本屏状态，不动任务数据，也不计入任何计数（锚点 C-08）。
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -157,7 +157,7 @@ internal fun BatchReceiptBar(
                         }
                     }
                 }
-                // 契约 C-08 边界：部分失败时明细里给「重试失败项」—— 失败项必须有一个
+                // 锚点 C-08 边界：部分失败时明细里给「重试失败项」—— 失败项必须有一个
                 // 可见可执行的出口，否则用户只能整批重来。
                 if (retryable.isNotEmpty()) {
                     Spacer(Modifier.height(t.space2))
@@ -172,10 +172,10 @@ internal fun BatchReceiptBar(
 }
 
 /**
- * 回执条展开明细里的「重试失败项」按钮（契约 C-08 边界）。
+ * 回执条展开明细里的「重试失败项」按钮（锚点 C-08 边界）。
  *
  * 单独的可见出口而不是藏进每行的更多菜单：失败项在本屏原本没有任何可执行动作，
- * 用户看到「2 个失败」却不知道能做什么，是这条契约要消掉的死路。
+ * 用户看到「2 个失败」却不知道能做什么，是这条口径要消掉的死路。
  */
 @Composable
 private fun ReceiptRetryRow(count: Int, onClick: () -> Unit) {

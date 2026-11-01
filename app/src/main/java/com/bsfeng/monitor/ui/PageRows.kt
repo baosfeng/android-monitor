@@ -68,7 +68,7 @@ internal fun tokenRowPressFeedback(onClick: (() -> Unit)?, onLongClick: (() -> U
  * 列表行（原型 .row：左图标 + 标题 / 副标题 + 右侧尾部）。
  *
  * 可点 / 可长按时整行按下缩到 0.96（[pressFeedback]，时长取 --dur-press）并触发 LIGHT
- * ——契约 s09-goto-* 的「整行按压缩到 0.96（120ms，LIGHT）」。缩放只走绘制期，不改布局与点击语义；
+ * ——锚点 s09-goto-* 的「整行按压缩到 0.96（120ms，LIGHT）」。缩放只走绘制期，不改布局与点击语义；
  * s12-rows 写的「按下底色转 fg 5%」不另做：共享行只有一套行为，s09 为主口径。
  */
 @OptIn(ExperimentalFoundationApi::class)

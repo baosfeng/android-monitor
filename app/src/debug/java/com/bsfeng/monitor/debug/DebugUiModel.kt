@@ -43,7 +43,7 @@ data class UiNode(
     fun boundsJson(): JSONArray = JSONArray().put(left).put(top).put(right).put(bottom)
 
     /**
-     * 落盘形态。字段名与文档契约一致（`viewIdResourceName` 保留原名，值已去掉 `pkg:id/` 前缀）。
+     * 落盘形态。字段名与文档口径一致（`viewIdResourceName` 保留原名，值已去掉 `pkg:id/` 前缀）。
      *
      * `truncated` 只表示「这条节点的文本被砍过」，不是整棵树被砍（那是 dump 顶层的
      * `truncatedNodes`）—— 两个截断混在一起会让 agent 误判自己看到的是不是完整页面。

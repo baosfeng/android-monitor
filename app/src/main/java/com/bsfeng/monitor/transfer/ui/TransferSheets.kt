@@ -93,7 +93,7 @@ internal fun CancelSheet(
 /**
  * C-04：动作面板（终态任务）。
  *
- * 菜单顺序按契约：重新发送 → 删除记录 → 取消。
+ * 菜单顺序按口径：重新发送 → 删除记录 → 取消。
  * 「重新发送」按 [ResendAvailability] 渲染三态：不渲染（接收方向 / 未终态）、
  * 置灰并说明原因（源文件已不在本机 / 对方不在线）、可点。
  */
@@ -125,7 +125,7 @@ internal fun ActionsSheet(
         )
         Spacer(Modifier.height(t.space4))
         // 三态：Hidden 不渲染；Blocked 置灰 + 说明原因（不给假入口，也不把入口藏掉）；
-        // Ready 真重发。原因文案逐字取契约 s22 C-17 边界。
+        // Ready 真重发。原因文案逐字取锚点 s22 C-17 边界。
         if (resend != ResendAvailability.Hidden) {
             val enabled = resend is ResendAvailability.Ready
             MenuRow(
@@ -285,7 +285,7 @@ internal fun TransferSheetButton(
  * 动作面板的一行菜单：min-height 52、--surface 底、危险项用 --danger；锚点由调用方显式给出。
  *
  * @param enabled false = 禁用（点击区保留但无反馈、不震）；[hint] 是禁用原因，
- *   渲染在标签下方 —— 契约要求「置灰并说明」而不是只置灰。
+ *   渲染在标签下方 —— 交互口径要求「置灰并说明」而不是只置灰。
  */
 @Composable
 private fun MenuRow(
@@ -334,7 +334,7 @@ private fun MenuRow(
             )
             if (!enabled && hint != null) {
                 Spacer(Modifier.height(t.space1))
-                // 契约 s22 C-17 边界：置灰时必须说明为什么（源文件已不在本机 / 对方不在线）
+                // 锚点 s22 C-17 边界：置灰时必须说明为什么（源文件已不在本机 / 对方不在线）
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = t.meta)
             }
         }

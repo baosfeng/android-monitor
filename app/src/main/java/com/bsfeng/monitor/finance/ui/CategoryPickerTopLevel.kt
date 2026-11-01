@@ -96,7 +96,7 @@ private fun TopLevelCell(
             // 选中：2dp accent 描边 + 淡底（原型 .cat-l1[aria-pressed] 的 accent-text + outline）
             .background(if (selected) t.accent.copy(alpha = SELECTED_BG_ALPHA) else Color.Transparent)
             .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
-            // 点一级只换网格：轻震一次（口径同全部格子点击；s15 契约 s15-l1-* 的「轻震」）
+            // 点一级只换网格：轻震一次（口径同全部格子点击；s15 锚点 s15-l1-* 的「轻震」）
             .testTag("cell.category.l1")
             .clickable {
                 haptic(HapticTone.LIGHT)

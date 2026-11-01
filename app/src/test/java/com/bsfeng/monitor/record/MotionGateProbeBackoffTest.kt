@@ -39,7 +39,7 @@ class MotionGateProbeBackoffTest {
     }
 
     @Test
-    fun `默认探测间隔仍是 180 秒 与既有契约一致`() {
+    fun `默认探测间隔仍是 180 秒 与既有口径一致`() {
         val gate = MotionGate()
         assertEquals(0, gate.quietProbeCount)
         assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
