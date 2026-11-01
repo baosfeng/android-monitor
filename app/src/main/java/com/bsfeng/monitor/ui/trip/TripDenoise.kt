@@ -33,6 +33,12 @@ object TripDenoise {
     /** 无论如何都放行的位移（米）：这个尺度内的点不可能是噪点。 */
     private const val ALWAYS_KEEP_METERS = 60.0
 
+    /** 「跳出去」的半径（米）：与 domain 的 STAY_RADIUS_M 同口径，一步跨出这个圈算跳出。 */
+    private const val DRIFT_RADIUS_METERS = 80.0
+
+    /** 「跳回来」的桥接容差（米）：前后两点相距不超过 1.5 倍半径，才算被一个假点夹住。 */
+    private const val DRIFT_BRIDGE_METERS = DRIFT_RADIUS_METERS * 1.5
+
     /** 抽稀阈值相对轨迹尺度的分母（包围盒对角线 / N）。 */
     private const val SIMPLIFY_SCALE_DIVISOR = 150.0
 
@@ -119,6 +125,41 @@ object TripDenoise {
         val allowed = max(ALWAYS_KEEP_METERS, MAX_SPEED_MPS * gapSeconds + slack)
         val distance = TripTrace.meters(previous.lat, previous.lng, candidate.lat, candidate.lng)
         return distance <= allowed
+    }
+
+    /**
+     * 剔除「跳出去又立刻跳回」的单点漂移（与 domain 的 dropOutliers 同口径）。
+     *
+     * 为什么需要这一步（[rejectOutliers] 管不了）：速度判据的下限是时间差 × 36 m/s，
+     * 两次定位哪怕只隔一分钟也允许 2km 以上位移，于是「原地不动 + 兜底定位周期性南跳 90m」
+     * 每一点都物理上可能，一个都剔不掉；而平滑会把这种单点平均进邻居，只在两端留下半截尾巴。
+     * 真机证据：一天 25 个点全在同一栋楼，03:20/04:20/06:50 三次南跳 84–97m 又立刻跳回。
+     *
+     * 三点判据（改判定前先读）：
+     * - 前→当前 > [DRIFT_RADIUS_METERS]（跳出去）；
+     * - 当前→后 > [DRIFT_RADIUS_METERS]（跳回来）；
+     * - 前→后 ≤ [DRIFT_BRIDGE_METERS]（这两点本来是同一个位置，当前点是夹在中间的假点）。
+     *
+     * 不变量与 domain 一致：首尾不参与判定（没有两侧邻居）；邻居取**原始序列**而不是已保留的点，
+     * 所以连续两个同址的假点不被连坐（彼此相距 0，第二条件不成立）；真实移动点也不剔除
+     * （连续过渡时前→后本身就很远，第三条件不成立）。
+     */
+    fun dropDriftSpikes(samples: List<TraceSample>): List<TraceSample> {
+        if (samples.size < 3) return samples
+        val out = ArrayList<TraceSample>(samples.size)
+        out.add(samples.first())
+        for (index in 1 until samples.size - 1) {
+            val prev = samples[index - 1]
+            val current = samples[index]
+            val next = samples[index + 1]
+            val jumpedOut = TripTrace.meters(prev.lat, prev.lng, current.lat, current.lng) > DRIFT_RADIUS_METERS
+            val jumpedBack = TripTrace.meters(current.lat, current.lng, next.lat, next.lng) > DRIFT_RADIUS_METERS
+            val bridged = TripTrace.meters(prev.lat, prev.lng, next.lat, next.lng) <= DRIFT_BRIDGE_METERS
+            if (jumpedOut && jumpedBack && bridged) continue
+            out.add(current)
+        }
+        out.add(samples.last())
+        return out
     }
 
     /**
