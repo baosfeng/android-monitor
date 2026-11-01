@@ -124,7 +124,8 @@ class LocationProbeCacheTest {
         val collector = LocationCollector(env, clock = { now })
 
         collector.collectThrottledAsync(now, budget = FixBudget.PROBE) { }
-        collector.collectThrottledAsync(now + 60_000L) { }
+        // 第二次必须等满发令闸的最小间隔（静止 180 秒），否则会被闸挡掉、看不到第二档预算
+        collector.collectThrottledAsync(now + LocationPace.STILL_INTERVAL_MS) { }
         assertEquals(listOf(FixBudget.PROBE, FixBudget.FULL), env.budgets)
     }
 

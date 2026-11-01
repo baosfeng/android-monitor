@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.record
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -14,6 +15,12 @@ import org.junit.Test
  * 和用户抱怨的「拿起手机定位一直开着」是同一类耗电 —— 门禁不能留这条后门。
  */
 class LocationGateStateTest {
+
+    /** 快照是进程内全局状态：每个用例后复位，避免污染同一 JVM 里的其它用例。 */
+    @After
+    fun resetSnapshot() {
+        LocationGateState.update(null)
+    }
 
     @Test
     fun `SLEEPING 时心跳跳过定位采样`() {
@@ -39,6 +46,26 @@ class LocationGateStateTest {
         // 服务没跑（null）时心跳是唯一采点路径：读不到状态就跳过会制造新的漏采
         LocationGateState.update(null)
         assertTrue(LocationGateState.allowsHeartbeatSample())
+    }
+
+    // ===== 订阅重建闸（C 根因）=====
+
+    @Test
+    fun `只有 MOVING 或门禁未知才允许重建订阅`() {
+        assertFalse("SLEEPING 下 DEEP 断档不许把订阅重建起来", LocationGateState.allowsSubscription(MotionGate.State.SLEEPING))
+        assertFalse("PROBING 也不建订阅（它只做低频探测）", LocationGateState.allowsSubscription(MotionGate.State.PROBING))
+        assertTrue(LocationGateState.allowsSubscription(MotionGate.State.MOVING))
+        assertTrue("服务没跑时心跳是唯一采点路径", LocationGateState.allowsSubscription(null))
+    }
+
+    @Test
+    fun `订阅重建闸读的是当前快照`() {
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        assertFalse(LocationGateState.allowsSubscription())
+        LocationGateState.update(MotionGate.State.MOVING)
+        assertTrue(LocationGateState.allowsSubscription())
+        LocationGateState.update(null)
+        assertTrue(LocationGateState.allowsSubscription())
     }
 
     @Test

@@ -134,7 +134,12 @@ class LocationCollectorFixTest {
         // 零投递会持续成立（deliveryCount 恒为 0），没有退避的话每个 tick 都会发起一次
         val source = FakeSource()
         val env = FakeEnv(source = source, cached = emptyList(), onActive = { _, cb -> cb(null) })
-        val collector = LocationCollector(env, clock = { now })
+        // 移动模式：首点兜底的 30 秒退避在这里可见（静止模式由 180 秒主导）
+        val collector = LocationCollector(
+            env,
+            modeTracker = LocationModeTracker(SampleMode.MOVING),
+            clock = { now },
+        )
         collector.startSubscription(now) { }
         val due = now + LocationSubscriptionPlan.silentTimeoutMsOf(SampleMode.STILL)
 
@@ -162,10 +167,11 @@ class LocationCollectorFixTest {
 
     @Test
     fun `订阅静默时真的触发重建并打出可观测日志`() {
-        // 旧实现：needsRestart 在生产代码里一次都没被调用 —— 静默重建形同虚设
+        // 旧实现：needsRestart 在生产代码里一次都没被调用 —— 静默重建形同虚设。
+        // 订阅重建现在要过门禁闸（只有 MOVING 放行），本用例只关心「静默重建」本身。
         val source = FakeSource()
         val env = FakeEnv(source = source, cached = emptyList())
-        val collector = LocationCollector(env, clock = { now })
+        val collector = LocationCollector(env, clock = { now }, subscriptionAllowed = { true })
         collector.startSubscription(now) { }
         val startsBefore = source.starts
 
@@ -175,6 +181,39 @@ class LocationCollectorFixTest {
             "日志要能看出是「订阅静默重建」",
             env.logs.any { it.contains("订阅静默重建") },
         )
+    }
+
+    // ===== B 根因：主动定位最小间隔 =====
+
+    @Test
+    fun `单小时一分钟心跳正好 20 次主动定位 改前约 40 次`() {
+        // 真机实测改前约 40 次/小时（断档自愈每分钟强制一次满预算，11 小时只落 8 个点）。
+        // 改后：所有发起都受最小间隔约束（静止 180 秒）→ 一小时最多 20 次。
+        val env = FakeEnv(cached = listOf(sample()), onActive = { _, cb -> cb(null) })
+        val collector = LocationCollector(env, clock = { now }, subscriptionAllowed = { true })
+        // 先成功一次，建立「上次成功时间」
+        collector.collectThrottledAsync(now) { }
+        env.cached = emptyList()
+
+        var cursor = now
+        repeat(60) {
+            cursor += 60_000L
+            collector.collectThrottledAsync(cursor) { }
+        }
+        // 静止模式最小间隔 180 秒：一小时正好 20 次（改前约 40 次，11 小时只落 8 个点）
+        assertEquals("一小时 20 次（每 180 秒一次），实际 " + env.activeRequests, 20, env.activeRequests)
+    }
+
+    @Test
+    fun `静止模式下断档补采失败后不会每分钟重试`() {
+        val env = FakeEnv(cached = emptyList(), onActive = { _, cb -> cb(null) })
+        val collector = LocationCollector(env, clock = { now })
+        collector.collectThrottledAsync(now) { }
+        collector.collectThrottledAsync(now + 60_000L) { }
+        collector.collectThrottledAsync(now + 120_000L) { }
+        assertEquals("180 秒最小间隔内只许发起一次", 1, env.activeRequests)
+        collector.collectThrottledAsync(now + 180_000L) { }
+        assertEquals("满 180 秒才允许第二次", 2, env.activeRequests)
     }
 
     // ===== A3 并发让路 =====
@@ -197,15 +236,17 @@ class LocationCollectorFixTest {
     }
 
     @Test
-    fun `前一次主动定位结束后可以再次发起`() {
+    fun `前一次主动定位结束后 要等满最小间隔才能再次发起`() {
         var pending: ((LocationSample?) -> Unit)? = null
         val env = FakeEnv(cached = emptyList(), onActive = { _, cb -> pending = cb })
         val collector = LocationCollector(env)
 
         collector.collectThrottledAsync(now) { }
         pending?.invoke(null)
-        // 已结束：后续 tick 仍可发起（失败不占窗口，见节流用例）
+        // 已结束但闸仍占位：静止模式 180 秒内不许再发起（失败也占位，见 B 根因用例）
         collector.collectThrottledAsync(now + 60_000L) { }
+        assertEquals("60 秒还在最小间隔内", 1, env.activeRequests)
+        collector.collectThrottledAsync(now + LocationPace.STILL_INTERVAL_MS) { }
         assertEquals(2, env.activeRequests)
     }
 
@@ -223,8 +264,9 @@ class LocationCollectorFixTest {
 
     @Test
     fun `首次成功前每30秒才发起一次 不再每10秒死循环`() {
+        // 移动模式：INITIAL 的 30 秒下限在这里生效（静止模式由 180 秒主导，见 LocationActiveFixGateTest）
         val env = FakeEnv(cached = emptyList(), onActive = { _, cb -> cb(null) })
-        val collector = LocationCollector(env)
+        val collector = LocationCollector(env, modeTracker = LocationModeTracker(SampleMode.MOVING))
 
         // 模拟 10 秒 tick 连打 6 次（共 50 秒）：旧实现每次都 forceActiveFix，会发起 6 次
         var tick = now
@@ -252,7 +294,7 @@ class LocationCollectorFixTest {
     fun `连续失败也不会把重试推远 固定30秒`() {
         // 防饥饿：GPS 冷启动前几次超时是常态，指数退避会让首次出点越推越远
         val env = FakeEnv(cached = emptyList(), onActive = { _, cb -> cb(null) })
-        val collector = LocationCollector(env)
+        val collector = LocationCollector(env, modeTracker = LocationModeTracker(SampleMode.MOVING))
         collector.collectThrottledAsync(now) { }
         collector.collectThrottledAsync(now + 30_000L) { }
         collector.collectThrottledAsync(now + 60_000L) { }

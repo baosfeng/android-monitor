@@ -63,7 +63,8 @@ import kotlinx.coroutines.launch
  * - SLEEPING / PROBING 一律 `stopSubscription()`：没有确认远行就绝不建订阅，
  *   否则定位芯片会跟着「拿起手机」一直不休眠 —— 用户抱怨的耗电来源；
  * - 传感器按能力降级：显著运动（一次性、硬件 hub）常驻；没有它才退化为加速度计常开 + 30s batching；
- *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册，SLEEPING 不注册。
+ *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册（显著运动 / 抖动提示后 3 分钟），
+ *   SLEEPING 平时不注册 —— 提示只买一个「判出 GAIT 的机会」，不是活动证据。
  */
 class LocationForegroundService : Service() {
 
@@ -116,6 +117,9 @@ class LocationForegroundService : Service() {
     /** 观察窗到期时刻（wall clock）；0 = 没开窗。 */
     private var observingUntilMs = 0L
 
+    /** 已经处理过的提示型唤醒时刻（显著运动 / 抖动）：同一次提示不重复延长观察窗。 */
+    private var appliedHintAtMs = 0L
+
     /** 最近一次 SLEEPING 兜底探测的时刻。 */
     private var lastFallbackAtMs = 0L
 
@@ -163,8 +167,10 @@ class LocationForegroundService : Service() {
             if (event.sensor.type != Sensor.TYPE_SIGNIFICANT_MOTION) return
             significantRegistered = false
             val now = System.currentTimeMillis()
-            observingUntilMs = now + OBSERVE_WINDOW_MS
+            // 显著运动只开观察窗（16Hz 加速度计），**不改门禁态**：拿起手机就会触发，
+            // 把它当活动证据会让「无步数无位移 5 分钟降级」永远不到点（见 MotionGate 的 KDoc）
             val state = gate.onSignificantMotion(now)
+            applyObservationHint(now)
             applyGateState(state)
             syncSensors(now)
             Log.i(TAG, "门禁传感器：显著运动触发，开 " + (OBSERVE_WINDOW_MS / 1000) + "s 观察窗")
@@ -286,7 +292,7 @@ class LocationForegroundService : Service() {
         }
         setAccelMode(desiredAccel)
         // 步数计在 PROBING 期间保持注册（契约：PROBING 每 30s 读一次增量）：
-        // 只在 90 秒观察窗里读的话，正常步行 90 秒才 100m 左右，永远够不到 500m 的升级线；
+        // 只在观察窗里读的话，正常步行 3 分钟才 250m 左右，永远够不到 500m 的升级线；
         // 步数计是硬件累计值 + 30s batching，功耗远低于定位，PROBING 期间值得开着。
         setStepCounterActive(windowActive || appliedGateState == MotionGate.State.PROBING)
     }
@@ -454,17 +460,37 @@ class LocationForegroundService : Service() {
                     " 样本数=" + motion.windowSize + " 状态=" + motionState,
             )
         }
-        // 退化模式（BATCHED，5Hz）：MotionDetector 判不出步态（≥16Hz 才行），
-        // 用「标准差持续偏高」作独立唤醒信号，否则这类设备永远停在 SLEEPING。
-        // 样本时刻取 event.timestamp：batching 一次投递一批样本，调用时刻的墙钟不变，
-        // 用它量「持续 5 秒」会永远不满足。
+        // 退化模式（BATCHED，5Hz）：MotionDetector 判不出步态（≥16Hz 才行）。
+        // 抖动只是「可能有人在动」的提示：开 16Hz 观察窗让步态判据有机会跑起来，
+        // 门禁是否升级仍只认 GAIT / 步数 / 位移。样本时刻取 event.timestamp：
+        // batching 一次投递一批样本，调用时刻的墙钟不变，用它量「持续 5 秒」会永远不满足。
         if (accelMode == AccelMode.BATCHED) {
             gate.onShake(motion.lastStdDev, event.timestamp / 1_000_000L, wall)
+            applyObservationHint(wall)
         }
         // 运动判定只当门禁的证据：手持抖动不刷新活动时间，玩手机 5 分钟无步数无位移就回 SLEEPING
         gate.onMotionState(motionState, wall)
         val state = gate.onAccelerometer(x, y, z, wall)
         applyGateState(state)
+        // 观察窗到期立刻关（不等 ticker 的慢拍子）：SLEEPING 不该留着 16Hz 加速度计
+        if (accelMode == AccelMode.WINDOW && observingUntilMs in 1 until wall &&
+            appliedGateState == MotionGate.State.SLEEPING
+        ) {
+            syncSensors(wall)
+        }
+    }
+
+    /**
+     * 提示型唤醒（显著运动 / 抖动）只开观察窗，不改门禁态。
+     *
+     * 提示只说明「可能有人在动」：16Hz 加速度计（1–3mW）比 GPS（几十 mW）便宜两个数量级，
+     * 用它换「判出 GAIT 的机会」是划算的；没判出就如实什么都不做（见 [MotionGate] 的 KDoc）。
+     */
+    private fun applyObservationHint(nowMs: Long) {
+        val hint = gate.observationHintAtMs
+        if (hint <= appliedHintAtMs) return
+        appliedHintAtMs = hint
+        observingUntilMs = maxOf(observingUntilMs, nowMs + OBSERVE_WINDOW_MS)
     }
 
     // ===== 门禁态 → 定位行为 =====
@@ -723,8 +749,14 @@ class LocationForegroundService : Service() {
         const val CHANNEL_ID_LOCATION = "location_tracking_channel"
         private const val NOTIFICATION_ID = 5400
 
-        /** 显著运动触发后的观察窗：这段时间里用加速度计 + 步数计取证。 */
-        private const val OBSERVE_WINDOW_MS = 90_000L
+        /**
+         * 显著运动 / 抖动提示后的观察窗：这段时间里用 16Hz 加速度计 + 步数计取证。
+         *
+         * 取 3 分钟而不是 90 秒：步态判据要 5 秒稳定步频才成立，而「拿起手机→放下→出门走路」
+         * 往往隔着一两分钟；90 秒窗会在人刚开始走时刚好关掉，步行 3 分钟内必判出 GAIT。
+         * 16Hz 加速度计约 1–3mW，比 GPS 小两个数量级，放宽窗口的代价可以忽略。
+         */
+        private const val OBSERVE_WINDOW_MS = 180_000L
 
         /** 无显著运动传感器时加速度计的 batching 延迟（微秒）：30 秒。 */
         private const val BATCH_LATENCY_US = 30_000_000

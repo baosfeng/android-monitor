@@ -21,9 +21,6 @@ internal class LocationActiveFixRunner(
     /** 是否有请求在飞（采集入口让路与订阅重建都读它）。 */
     val isInFlight: Boolean get() = gate.isInFlight
 
-    /** 清空退避基线（深断档后调用：断档就是「现在没点」，不该再等一个退避窗口）。 */
-    fun reset() = gate.reset()
-
     /**
      * 发起一次主动定位。
      *
@@ -41,15 +38,17 @@ internal class LocationActiveFixRunner(
         onDeliver: (LocationSample) -> Unit,
         onSample: (LocationSample?) -> Unit,
     ) {
-        // 首次成功前走固定 30 秒退避：INITIAL 会跳过模式节流，不闸一道就是每 tick 一次的死循环
-        // （每次还跑满两段超时，正是「掉线 + 耗电」的第二个根因）。退避固定不增长，防首次出点饿死。
+        // 全路径最小间隔（静止 180s / 移动 30s，首次成功前不短于 30s）：INITIAL 与断档自愈都会
+        // 跳过采集节流，不闸一道就是每 tick 一次的死循环（每次还跑满两段超时）——
+        // 实测每小时约 40 次满预算主动定位、11 小时只落 8 个点，绝大多数探测是白跑的。
         val isInitial = plan.level == LocationGapHealing.Level.INITIAL
-        if (!gate.tryBegin(nowMs, isInitial)) {
-            noteFailure(LocationFailureReason.THROTTLED, "首次成功前退避中")
+        if (!gate.tryBegin(nowMs, modeAtStart, isInitial)) {
+            noteFailure(LocationFailureReason.THROTTLED, "最小间隔未到")
             val since = gate.lastAttemptAtMs()?.let { (nowMs - it) / 1000 } ?: -1L
             log(
-                "定位主动定位跳过：退避 " + (LocationPace.INITIAL_ACTIVE_FIX_RETRY_MS / 1000) +
-                    "s 未到（上次发起 " + since + "s 前）",
+                "定位主动定位跳过：最小间隔 " +
+                    (LocationActiveFixGate.minIntervalMs(modeAtStart, isInitial) / 1000) +
+                    "s 未到（" + modeAtStart + "，上次发起 " + since + "s 前）",
                 false,
             )
             onSample(null)

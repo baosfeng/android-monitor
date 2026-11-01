@@ -174,10 +174,11 @@ class LocationCollectorSubscriptionTest {
     }
 
     @Test
-    fun `深断档重建订阅并清掉节流基线`() {
+    fun `MOVING 时深断档重建订阅并清掉节流基线`() {
         val source = FakeSource()
         val env = FakeEnv(source = source, cached = listOf(sample()), onActive = { _, cb -> cb(sample()) })
-        val collector = LocationCollector(env)
+        // 门禁闸显式注入：本用例只关心「允许重建」这一侧
+        val collector = LocationCollector(env, subscriptionAllowed = { true })
         collector.startSubscription(now) { }
         collector.collectThrottledAsync(now) { }
         val startsBefore = source.starts
@@ -185,6 +186,43 @@ class LocationCollectorSubscriptionTest {
         collector.collectThrottledAsync(now + 45 * 60_000L) { }
         assertTrue("深断档必须重建订阅", source.starts > startsBefore)
         assertEquals("重建前先释放", startsBefore, source.stops)
+    }
+
+    @Test
+    fun `非 MOVING 时深断档不重建订阅`() {
+        // C 根因：SLEEPING 下 DEEP 断档把订阅重建起来，而 SLEEPING 不再有迁移去关它 ——
+        // 定位芯片就此常亮。闸用真实的 LocationGateState 判定，不只测一个假 lambda。
+        val source = FakeSource()
+        val env = FakeEnv(source = source, cached = listOf(sample()), onActive = { _, cb -> cb(sample()) })
+        val collector = LocationCollector(
+            env,
+            subscriptionAllowed = { LocationGateState.allowsSubscription(MotionGate.State.PROBING) },
+        )
+        collector.startSubscription(now) { }
+        collector.collectThrottledAsync(now) { }
+        val startsBefore = source.starts
+
+        collector.collectThrottledAsync(now + 45 * 60_000L) { }
+        assertEquals("PROBING / SLEEPING 一律不许重建订阅", startsBefore, source.starts)
+        assertTrue(
+            "日志要能看出是门禁挡住了重建",
+            env.logs.any { it.contains("位置订阅不重建") },
+        )
+    }
+
+    @Test
+    fun `MOVING 时订阅静默重建仍然放行`() {
+        val source = FakeSource()
+        val env = FakeEnv(source = source, cached = emptyList())
+        val collector = LocationCollector(
+            env,
+            subscriptionAllowed = { LocationGateState.allowsSubscription(MotionGate.State.MOVING) },
+        )
+        collector.startSubscription(now) { }
+        val startsBefore = source.starts
+
+        collector.collectThrottledAsync(now + LocationSubscriptionPlan.silentTimeoutMsOf(SampleMode.STILL) + 1_000L) { }
+        assertTrue("MOVING 下静默重建照常工作", source.starts > startsBefore)
     }
 
     @Test

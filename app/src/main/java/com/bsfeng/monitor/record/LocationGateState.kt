@@ -62,6 +62,19 @@ object LocationGateState {
     }
 
     /**
+     * 是否允许**重建位置订阅**：只有 [MotionGate.State.MOVING]（或门禁未知 null）放行。
+     *
+     * 为什么需要：DEEP 断档（≥30 分钟）会在 SLEEPING 下重建订阅（见 [LocationGapHealing]），
+     * 而 SLEEPING 不会再有状态迁移去关它 —— 断档自愈自己制造了「定位一直开着」。
+     * null 放行与服务没跑时的口径一致（那时心跳是唯一采点路径，跳过只会制造漏采）。
+     */
+    fun allowsSubscription(): Boolean = allowsSubscription(state)
+
+    /** 纯判定（单测直接钉边界，不依赖全局快照）。 */
+    fun allowsSubscription(state: MotionGate.State?): Boolean =
+        state == null || state == MotionGate.State.MOVING
+
+    /**
      * 心跳是否允许采点：只有明确 [MotionGate.State.SLEEPING] 才跳过。
      *
      * 纯函数、无副作用，边界在单测里钉死（SLEEPING 跳过 / PROBING 放行 / MOVING 放行 / null 放行）。

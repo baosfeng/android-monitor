@@ -6,13 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 探测间隔自适应退避：连续拿不到位移证据就把探测间隔从 180 秒拉到 300 / 600 秒，任何运动证据立刻回 180 秒。
+ * 探测间隔自适应退避：连续拿不到位移证据就把探测间隔从 180 秒拉到 300 / 600 秒。
  *
- * 为什么需要：PROBING（玩手机 / 室内走动）只要有弱活动证据就能一直停着，按 180 秒一轮探测，
- * 一小时 20 次、每次最多 20 秒射频 —— 而这一小时往往什么都没发生。
- *
- * 注意「保持 PROBING 不降级」需要活动证据，而唯一不影响退避阶梯的活动证据是显著运动：
- * 步数 / 步态 / 抖动 / 位移全都属于「运动证据」，会立刻把阶梯清零（这是设计，不是漏洞）。
+ * 注意门禁层的现实：PROBING 靠**真实证据**（步态 / 步数 / 位移）维持，而这类证据都会把阶梯清零；
+ * 显著运动与抖动不再是证据（拿起手机就会触发，见 [MotionGate] 的 KDoc）。因此「连续无位移探测」
+ * 最多走两轮就会被「5 分钟无证据降级」接管 —— 300 / 600 档只在纯函数层面成立。
  */
 class MotionGateProbeBackoffTest {
 
@@ -20,6 +18,14 @@ class MotionGateProbeBackoffTest {
 
     private fun sample(atMs: Long, meters: Double, accuracy: Float = 10f) =
         LocationSample("gps", 31.2304 + meters / 111_000.0, 121.4737, accuracy, atMs)
+
+    /** 进 PROBING 的合法入口：步数增量（显著运动不再唤醒门禁）。返回最后一条证据的时刻。 */
+    private fun enterProbing(gate: MotionGate): Long {
+        gate.onStepCounter(1_000L, start)
+        gate.onStepCounter(1_010L, start + 1_000L)
+        assertEquals(MotionGate.State.PROBING, gate.state)
+        return start + 1_000L
+    }
 
     /** 阶梯本身（纯函数边界）。 */
     @Test
@@ -35,154 +41,105 @@ class MotionGateProbeBackoffTest {
     @Test
     fun `默认探测间隔仍是 180 秒 与既有契约一致`() {
         val gate = MotionGate()
-        gate.onSignificantMotion(start)
         assertEquals(0, gate.quietProbeCount)
         assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
     }
 
     @Test
-    fun `连续无位移证据的探测按 180 到 300 到 600 阶梯退避`() {
+    fun `无位移探测累计一次 再来一轮就按 5 分钟无证据降级`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        val ladder = mutableListOf<Long>()
-        repeat(8) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ladder += gate.probeIntervalMs
-            ts += 60_000L
-            // 反复拿起手机：有活动（不降级），但不是位移证据（不重置阶梯）
-            gate.onSignificantMotion(ts)
-        }
-        assertEquals(
-            listOf(180_000L, 180_000L, 300_000L, 300_000L, 300_000L, 600_000L, 600_000L, 600_000L),
-            ladder,
-        )
-        assertEquals(8, gate.quietProbeCount)
-        assertEquals("退避期间仍是 PROBING，不建订阅", false, gate.wantsSubscription)
+        val t0 = enterProbing(gate)
+        assertEquals("步数增量不是位移，阶梯从 0 起算", 0, gate.quietProbeCount)
+
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
+        assertEquals("原地没挪：算一次无位移证据的探测", 1, gate.quietProbeCount)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
+
+        // 再一轮就到 5 分钟无证据：如实降级（阶梯清零，SLEEPING 由 30 分钟兜底接管）
+        gate.onProbeSample(sample(t0 + 360_000L, 0.0))
+        assertEquals(MotionGate.State.SLEEPING, gate.state)
+        assertEquals(0, gate.quietProbeCount)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
     }
 
     @Test
     fun `步数增量立刻把探测间隔打回 180 秒`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        gate.onStepCounter(1_000L, ts)
-        repeat(6) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-            gate.onSignificantMotion(ts)
-        }
-        assertEquals(600_000L, gate.probeIntervalMs)
+        val t0 = enterProbing(gate)
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
+        assertEquals(1, gate.quietProbeCount)
 
-        gate.onStepCounter(1_010L, ts)
+        gate.onStepCounter(1_020L, t0 + 200_000L)
         assertEquals(0, gate.quietProbeCount)
-        assertEquals(180_000L, gate.probeIntervalMs)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
         assertEquals("走了 10 步还不够远行", MotionGate.State.PROBING, gate.state)
     }
 
     @Test
     fun `步态证据立刻把探测间隔打回 180 秒`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        repeat(6) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-            gate.onSignificantMotion(ts)
-        }
-        assertEquals(600_000L, gate.probeIntervalMs)
+        val t0 = enterProbing(gate)
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
+        assertEquals(1, gate.quietProbeCount)
 
-        gate.onMotionState(MotionDetector.State.GAIT, ts)
-        assertEquals(180_000L, gate.probeIntervalMs)
+        gate.onMotionState(MotionDetector.State.GAIT, t0 + 200_000L)
+        assertEquals(0, gate.quietProbeCount)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
     }
 
     @Test
-    fun `抖动证据立刻把探测间隔打回 180 秒`() {
+    fun `显著运动与抖动不是证据 不动阶梯也不刷活动时间`() {
+        // A 根因的回归：拿起手机（显著运动）与手里晃动都不能当成「有人在动」的证据
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        repeat(6) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-            gate.onSignificantMotion(ts)
-        }
-        assertEquals(600_000L, gate.probeIntervalMs)
+        val t0 = enterProbing(gate)
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
+        assertEquals(1, gate.quietProbeCount)
 
-        gate.onShake(1.5, ts, ts)
-        assertEquals(180_000L, gate.probeIntervalMs)
+        repeat(10) { gate.onSignificantMotion(t0 + 190_000L + it * 1_000L) }
+        repeat(10) { gate.onShake(1.5, t0 + 190_000L + it * 1_000L, t0 + 190_000L + it * 1_000L) }
+
+        assertEquals("显著运动 / 抖动不许清阶梯", 1, gate.quietProbeCount)
+        assertEquals("活动时间必须停在最后一次真实证据", t0, gate.lastActivityAtMs)
+        assertEquals(MotionGate.State.PROBING, gate.state)
     }
 
     @Test
-    fun `位移过噪声地板才是证据 噪声内的位移继续退避`() {
+    fun `位移在噪声地板内继续累计 过地板才清零`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        gate.onProbeSample(sample(ts, 0.0)) // 锚点
+        gate.onProbeSample(sample(start, 0.0)) // 锚点，算一次无位移证据的探测
         // 20m < 噪声地板（max(30, 10+10)）：原地抖动，不算位移证据
-        ts += 180_000L
-        gate.onSignificantMotion(ts)
-        gate.onProbeSample(sample(ts, 20.0))
+        gate.onProbeSample(sample(start + 60_000L, 20.0))
         assertEquals(2, gate.quietProbeCount)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
 
         // 100m ≥ 噪声地板：真挪了地方，阶梯清零
-        ts += 180_000L
-        gate.onSignificantMotion(ts)
-        gate.onProbeSample(sample(ts, 100.0))
+        gate.onProbeSample(sample(start + 120_000L, 100.0))
         assertEquals(0, gate.quietProbeCount)
-        assertEquals(180_000L, gate.probeIntervalMs)
-    }
-
-    @Test
-    fun `降级回 SLEEPING 时阶梯清零`() {
-        val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        repeat(5) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-        }
-        assertEquals(300_000L, gate.probeIntervalMs)
-
-        // 5 分钟没有任何活动证据 → 降级（SLEEPING 由 30 分钟兜底接管，阶梯重新起算）
-        gate.onTick(ts + LocationPace.STILL_INTERVAL_MS)
-        assertEquals(MotionGate.State.SLEEPING, gate.state)
-        assertEquals(0, gate.quietProbeCount)
-        assertEquals(180_000L, gate.probeIntervalMs)
+        assertEquals(MotionGate.State.PROBING, gate.state)
     }
 
     @Test
     fun `reset 清空阶梯`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        repeat(6) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-            gate.onSignificantMotion(ts)
-        }
+        val t0 = enterProbing(gate)
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
         assertTrue(gate.quietProbeCount > 0)
 
         gate.reset()
         assertEquals(0, gate.quietProbeCount)
-        assertEquals(180_000L, gate.probeIntervalMs)
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
         assertFalse(gate.wantsSubscription)
     }
 
     @Test
     fun `退避不改变三态语义 位移 500 米仍升级 MOVING`() {
         val gate = MotionGate()
-        var ts = start
-        gate.onSignificantMotion(ts)
-        repeat(6) {
-            gate.onProbeSample(sample(ts, 0.0))
-            ts += 30_000L
-            gate.onSignificantMotion(ts)
-        }
-        assertEquals(600_000L, gate.probeIntervalMs)
-        assertEquals(MotionGate.State.PROBING, gate.state)
+        val t0 = enterProbing(gate)
+        gate.onProbeSample(sample(t0 + 180_000L, 0.0))
+        assertEquals(1, gate.quietProbeCount)
 
         // 坐车走远：探测位移 500m 照样升级，退避不影响升级判据
-        gate.onProbeSample(sample(ts + 60_000L, 500.0))
+        gate.onProbeSample(sample(t0 + 240_000L, 500.0))
         assertEquals(MotionGate.State.MOVING, gate.state)
         assertTrue(gate.wantsSubscription)
         assertEquals(0, gate.quietProbeCount)

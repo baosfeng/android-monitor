@@ -310,10 +310,14 @@ class LocationCollectorTest {
         assertNull(result)
         assertEquals(1, env.activeRequests)
 
-        // 失败（超时/过滤空）不占用窗口：下一个心跳会重新发起
+        // 失败不占用**落库**窗口，但仍受发令闸的最小间隔约束（静止 180 秒）：
+        // 不闸一道的话，1 分钟心跳会把每次失败都变成一次满预算重试（真机实测约 40 次/小时）
         collector.collectThrottledAsync(now + 60_000L) { result = it }
         assertNull(result)
-        assertEquals("超时后下一次心跳仍应重新请求", 2, env.activeRequests)
+        assertEquals("最小间隔内不许重试", 1, env.activeRequests)
+        collector.collectThrottledAsync(now + LocationPace.STILL_INTERVAL_MS) { result = it }
+        assertNull(result)
+        assertEquals("满 180 秒才重新请求", 2, env.activeRequests)
     }
 
     @Test
