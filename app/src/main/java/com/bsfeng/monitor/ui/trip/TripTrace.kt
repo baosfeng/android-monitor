@@ -5,8 +5,8 @@ package com.bsfeng.monitor.ui.trip
 //
 // 口径：
 // - 只取 LOCATION 记录（detail: lat / lng / address / accuracy_m），按 timestamp 升序；
-// - 剔除物理上不可能的跳点 → 精度加权平滑压掉静止漂移 → 相邻 < 5m 去重 → 几何抽稀
-//   → 按上限均匀抽稀到 500 点（保留首尾）；
+// - 剔除物理上不可能的跳点 → 剔除「跳出去又跳回」的单点漂移 → 精度加权平滑压掉静止漂移
+//   → 相邻 < 5m 去重 → 几何抽稀 → 按上限均匀抽稀到 500 点（保留首尾）；
 // - 投影用等距圆柱（x = lng · cos(meanLat)，y = -lat），等比缩放到画布并留 padding；
 // - 单点或全部重合时居中；画布宽高非法（<= 0）直接返回空投影，不产生 NaN / 负坐标。
 
@@ -75,11 +75,22 @@ object TripTrace {
     private const val EARTH_METERS_PER_DEGREE = 111_320.0
 
     /**
+     * 最小可视跨度（米，见方）：轨迹跨度不足这个值时按它居中投影。
+     *
+     * 为什么是 300：室内静止漂移的量级是几十米，而一天真实出行的位移通常以公里计；
+     * 300m 见方的下限把「原地一天」画成画布中央一小团（约 1/8 宽），
+     * 又不至于把日常通勤（2km 以上）压缩成看不清细节的小图形。
+     */
+    private const val MIN_PROJECT_SPAN_METERS = 300.0
+
+    /**
      * 记录 → 采样点（升序 → 离群剔除 → 平滑 → 去重 → 几何抽稀 → 上限）；历史粗坐标日跳过平滑。
      *
      * 为什么是这个顺序：
      * - 先按时间升序，离群判据才有「上一点」可比；
      * - 离群剔除要在去重之前：跳变点和上一点往往离得很远，先去重不会影响它、但先剔除能少算一遍；
+     * - 单点漂移剔除要紧接在离群剔除之后、平滑之前：平滑会把假点平均进邻居，
+     *   只在轨迹两端留下半截「跳出去」的尾巴（真机上表现为一条竖线）；
      * - 平滑要在去重之前：静止漂移的点彼此相隔十几米、去重管不到，只有先平均回真值附近，
      *   去重才有机会把它们收拢；反之先去重会先把「能用来平均的邻居」丢掉；
      * - 去重要在抽稀之前：重合点的垂距为 0，留着只会让抽稀多做无用的段判定；
@@ -88,7 +99,8 @@ object TripTrace {
     fun samples(records: List<Record>): List<TraceSample> {
         val parsed = parse(records)
         val accuracies = accuracies(parsed)
-        val cleaned = TripDenoise.rejectOutliers(parsed, accuracies)
+        val plausible = TripDenoise.rejectOutliers(parsed, accuracies)
+        val cleaned = TripDenoise.dropDriftSpikes(plausible)
         // 历史粗坐标日（坐标只存 3 位小数 ≈110m）不做平滑：平滑会把量化的台阶揉成斜线，
         // 等于凭空造出「走过这段直线」的精度。阶梯本身就是「这天只准到 110m」的证据，
         // 由轨迹卡的提示行说明，不靠算法抹掉。
@@ -211,20 +223,23 @@ object TripTrace {
                 ) { _, _ -> cx to cy },
             )
         }
-        // 等比缩放：取两个方向里更紧的那个；单方向无跨度时按另一方向铺满
-        val scale = when {
-            spanX < EPS -> innerH / spanY
-            spanY < EPS -> innerW / spanX
-            else -> min(innerW / spanX, innerH / spanY)
-        }
-        val drawnW = (spanX * scale).toFloat()
-        val drawnH = (spanY * scale).toFloat()
-        val offsetX = (widthPx - drawnW) / 2f
-        val offsetY = (heightPx - drawnH) / 2f
+        // 最小可视跨度：抖动跨度不足 MIN_PROJECT_SPAN_METERS 见方时，按该下限居中扩展「视野」，
+        // 只改缩放基准、不改真实坐标——原地不动的一天画成中央一小团，而不是被铺满整张画布。
+        val minSpan = MIN_PROJECT_SPAN_METERS / EARTH_METERS_PER_DEGREE
+        val viewSpanX = max(spanX, minSpan)
+        val viewSpanY = max(spanY, minSpan)
+        val originX = (minX + maxX) / 2.0 - viewSpanX / 2.0
+        val originY = (minY + maxY) / 2.0 - viewSpanY / 2.0
+        // 等比缩放：取两个方向里更紧的那个（视野两方向都非 0，不再有单方向铺满的分支）
+        val scale = min(innerW / viewSpanX, innerH / viewSpanY)
+        val viewW = (viewSpanX * scale).toFloat()
+        val viewH = (viewSpanY * scale).toFloat()
+        val offsetX = (widthPx - viewW) / 2f
+        val offsetY = (heightPx - viewH) / 2f
         val points = samples.mapIndexed { i, sample ->
             TracePoint(
-                x = offsetX + ((rawX[i] - minX) * scale).toFloat(),
-                y = offsetY + ((rawY[i] - minY) * scale).toFloat(),
+                x = offsetX + ((rawX[i] - originX) * scale).toFloat(),
+                y = offsetY + ((rawY[i] - originY) * scale).toFloat(),
                 timestamp = sample.timestamp,
             )
         }
@@ -240,8 +255,8 @@ object TripTrace {
                 charPx = charPx,
                 labelHeightPx = labelHeightPx,
             ) { lat, lng ->
-                val x = offsetX + ((lng * locatedCos - minX) * scale).toFloat()
-                val y = offsetY + ((-lat - minY) * scale).toFloat()
+                val x = offsetX + ((lng * locatedCos - originX) * scale).toFloat()
+                val y = offsetY + ((-lat - originY) * scale).toFloat()
                 x to y
             },
         )
