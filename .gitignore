@@ -117,6 +117,8 @@ tools/
 .open-design/shots/s18-*
 .open-design/shots/s20-*
 .open-design/shots/s21-*
+# 轨迹卡精度表达三版原型（结论已提炼进 31-variants.md，逐版截图按取证产物处理）
+.open-design/shots/t31-*
 
 ## ==============================
 ## 交互契约的评审过程记录
