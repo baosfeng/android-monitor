@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.cos
 
 /**
  * 每日轨迹投影（TripTrace）单元测试。
@@ -176,6 +177,39 @@ class TripTraceTest {
         assertEquals("家", TripTrace.shortLabel("家"))
         assertEquals("", TripTrace.shortLabel(""))
         assertTrue(TripTrace.shortLabel("浙江省杭州市西湖区文三路 100 号").length <= 12)
+    }
+
+    // ==================== 最小可视跨度（原地不动的一天） ====================
+
+    private fun latAt(meters: Double) = 31.2176 + meters / 111_320.0
+
+    private fun lngAt(meters: Double) = 121.2579 + meters / (111_320.0 * cos(Math.toRadians(31.2176)))
+
+    @Test
+    fun `二十五米的抖动只占画布八分之一以内`() {
+        // 一天 25 个点全在同一栋楼，最远点相距 25m
+        val samples = (0 until 9).map { index ->
+            val step = 25.0 * index / 8.0
+            TraceSample(index * 60_000L, latAt(step), lngAt(step))
+        }
+        val p = TripTrace.project(samples, emptyList(), 300f, 180f, 16f)
+        assertEquals(9, p.points.size)
+        val spanX = p.points.maxOf { it.x } - p.points.minOf { it.x }
+        val spanY = p.points.maxOf { it.y } - p.points.minOf { it.y }
+        assertTrue("x 跨度 ${spanX}px 应 ≤ 300/8", spanX <= 300f / 8f)
+        assertTrue("y 跨度 ${spanY}px 应 ≤ 180/8", spanY <= 180f / 8f)
+        p.points.forEach { assertTrue(it.x in 0f..300f && it.y in 0f..180f) }
+    }
+
+    @Test
+    fun `两公里的真实出行仍撑满画布`() {
+        val samples = (0 until 21).map { index ->
+            TraceSample(index * 60_000L, latAt(index * 100.0), 121.2579)
+        }
+        val p = TripTrace.project(samples, emptyList(), 300f, 180f, 16f)
+        val spanY = p.points.maxOf { it.y } - p.points.minOf { it.y }
+        val inner = 180f - 2f * 16f
+        assertEquals("纵向应撑满留白内的画布", inner.toDouble(), spanY.toDouble(), inner.toDouble() * 0.05)
     }
 
     @Test
