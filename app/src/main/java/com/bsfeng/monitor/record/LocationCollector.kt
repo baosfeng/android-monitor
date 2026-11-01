@@ -20,8 +20,9 @@ import android.content.Context
  * 3. **主动定位兜底**：缓存不新鲜 / 无可用点时发起一次（network 5 秒 → gps 15 秒，
  *    预算按 provider 独立计，见 [LocationPolicy.activeFixTimeoutMs]；编排见 [LocationActiveFixRunner]）。
  *
- * 断档自愈（[LocationGapHealing]）：距上次成功采样超过 1.5 倍间隔就强制补一次主动定位，
- * 超过 30 分钟还要重建订阅并清空节流与模式基线。
+ * 断档自愈（[LocationGapHealing]）：距上次成功采样超过 1.5 倍间隔就强制补一次主动定位
+ * （受发令闸最小间隔约束，静止 180 秒 / 移动 30 秒），超过 30 分钟还要重建订阅并清空节流与模式基线
+ * （重建订阅要过门禁闸，见 [LocationGateState.allowsSubscription]）。
  * 订阅「活着但零投递」另有兜底：静默重建 + 首点主动定位（见 [LocationSubscriptionChannel]）。
  *
  * 驱动方两条：[com.bsfeng.monitor.service.LocationForegroundService] 的前台服务定时器（MOVING 时补采）+ [com.bsfeng.monitor.service.AlarmReceiver]
@@ -36,6 +37,13 @@ class LocationCollector internal constructor(
     private val modeTracker: LocationModeTracker = LocationModeTracker(),
     /** 时钟：订阅回调没有调用方的 `nowMs`，且单测要能控制时间（否则造的点一律判 stale）。 */
     private val clock: () -> Long = { System.currentTimeMillis() },
+    /**
+     * 订阅重建的闸：只有门禁 MOVING（或门禁未知）才允许重建订阅。
+     *
+     * 默认读 [LocationGateState] 的进程内快照（心跳链路拿不到 Service 实例）；
+     * 单测注入常量，避免依赖那个全局快照。
+     */
+    private val subscriptionAllowed: () -> Boolean = { LocationGateState.allowsSubscription() },
 ) {
 
     /**
@@ -313,14 +321,25 @@ class LocationCollector internal constructor(
             onResult(null)
             return
         }
-        if (plan.restartSubscription) {
-            // 深断档重建订阅：先把退避基线清掉，重建后立刻允许补一次（断档就是「现在没点」）
-            activeFixGate.reset()
-            channel.restart(nowMs)
+        // 订阅重建必须过门禁闸：SLEEPING / PROBING 都不该有订阅。DEEP 断档（≥30 分钟）原来会在
+        // SLEEPING 下重建订阅，而 SLEEPING 不再有状态迁移去关它 —— 定位芯片就此常亮。
+        // 门禁未知（null，服务没跑）放行：那时心跳是唯一采点路径。
+        if (!subscriptionAllowed()) {
+            env.log(
+                "位置订阅不重建：门禁 " + LocationGateState.state + "（只有 MOVING 允许订阅）",
+                false,
+            )
+        } else {
+            if (plan.restartSubscription) {
+                // 深断档重建订阅。这里**不再**清发令闸：DEEP 期间心跳每分钟都判断档，
+                // 一重置就变成每分钟一次满预算主动定位（实测约 40 次/小时白跑）；
+                // 最小间隔由闸按模式兜住（静止 180s / 移动 30s）。
+                channel.restart(nowMs)
+            }
+            // 订阅「活着但零投递」也要重建：fused 在部分设备/模拟器上从不派点给订阅者，
+            // 状态一直显示「活跃」，只有投递计数能拆穿。旧实现根本没调过 needsRestart。
+            channel.restartIfSilent(nowMs)
         }
-        // 订阅「活着但零投递」也要重建：fused 在部分设备/模拟器上从不派点给订阅者，
-        // 状态一直显示「活跃」，只有投递计数能拆穿。旧实现根本没调过 needsRestart。
-        channel.restartIfSilent(nowMs)
         val cached = LocationPolicy.pick(env.readCached(), nowMs)
         val cachedFresh = cached != null && nowMs - cached.timeMs <= LocationPace.CACHE_FRESH_MS
         // 门禁探测的缓存窗口（90 秒）比移动模式的 30 秒宽：探测周期本身是 180 秒起，

@@ -251,8 +251,9 @@ object LocationPace {
      * （有抖动 / 步态一类弱证据在手），会按 180 秒一直烧到 5 分钟无证据降级为止。
      * 退避把「什么都没发生」这一段的一小时探测次数从 20 次压到个位数。
      *
-     * 任何运动证据（步数增量 / 步态 / 抖动 / 位移过噪声地板）立刻回 180 秒：
+     * 任何运动证据（步数增量 / 步态 / 位移过噪声地板）立刻回 180 秒：
      * 人真的走起来时探测必须恢复灵敏，否则「坐车 3 分钟升级」会变成 10 分钟。
+     * 显著运动与抖动**不是**证据（拿起手机就会触发），不动阶梯。
      */
     fun probeIntervalMsFor(quietProbeStreak: Int): Long = when {
         quietProbeStreak >= PROBE_BACKOFF_MAX_STREAK -> HANDHELD_PROBE_INTERVAL_MAX_MS

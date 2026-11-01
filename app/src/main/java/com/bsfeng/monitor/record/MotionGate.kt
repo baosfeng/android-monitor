@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  *
  * 三态（契约冻结）：
  * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（兜底在服务层）。
- * - [State.PROBING]：有动作但未确认远行（玩手机 / 室内走动 / 摇晃）。**不建订阅**，
+ * - [State.PROBING]：有真实运动证据（步态 / 步数 / 位移）但未确认远行。**不建订阅**，
  *   只做低频单点探测（180 秒起；连续拿不到位移证据按 [probeIntervalMs] 退避到 300 / 600 秒），
  *   拿到点即释放。
  * - [State.MOVING]：已确认远行。建订阅，30 秒一次。
@@ -33,11 +33,17 @@ import kotlin.math.sqrt
  * 随机抖动同样会反复越过峰值线，不加步频门控时玩 10 分钟手机能凑出几千「步」，
  * 门禁会被直接顶到 MOVING —— 那比原来的功耗 bug 更糟。
  *
- * 抖动唤醒（[onShake]）：没有显著运动传感器、加速度计只能 5Hz batching 的设备上，
- * [MotionDetector] 判不出步态（步态判定要求 ≥16Hz），软件步数与步态证据全废 ——
- * 门禁会永远停在 SLEEPING。这种设备只能靠「模长标准差持续偏高」当唤醒信号：
- * 唤醒到 PROBING 不建订阅、不烧定位，代价可以忽略，所以判据故意放宽（[shakeStdDev] +
- * [shakeConfirmMs]）。抖动**不是**远行证据，唤醒后仍要靠步数 / 位移升级。
+ * **为什么显著运动与抖动都不是活动证据**：TYPE_SIGNIFICANT_MOTION 在「拿起手机」时就触发
+ * （23127PN0CC 实测：20 分钟内被拿起手机触发 6 次）。旧实现把它当活动证据刷新
+ * [lastActivityAtMs]，于是「无步数且无位移满 [sleepDownMs]」的降级永远不到点 —— MOVING 的
+ * 30 秒 GPS 订阅跟着「玩手机」挂了 33 分钟（同期 gps provider 以 HIGH_ACCURACY 连续注册），
+ * 正是用户抱怨的耗电。现在它只做两件事：记录 [lastSignificantMotionAtMs]（诊断）与
+ * [observationHintAtMs]（让服务开 16Hz 观察窗，等 [MotionDetector] 的步态判据说话）。
+ * 抖动（[onShake]）同理：模长标准差高只说明「有人在动手机」，走路的判据是**稳定步频**。
+ *
+ * 唤醒 / 升级只认三样：步态 [MotionDetector.State.GAIT]、步数增量、探测位移过噪声地板。
+ * 没有显著运动传感器、加速度计只能 5Hz batching 的设备（判不出步态）也走这条路：
+ * 抖动提示 → 服务开 16Hz 观察窗 → 判出 GAIT 才升级。
  *
  * 纯逻辑、无 Android 依赖：传感器事件与时钟由服务层注入，全部边界在单测里钉死。
  */
@@ -96,15 +102,33 @@ class MotionGate(
      *
      * 服务 tick 与 collector 的 probeIntervalOverride 都读这一个值（两处读同一来源，
      * 否则「服务按 600 秒 tick、订阅却按 180 秒派点」这种错位会再出现）。
-     * 任何运动证据（步数增量 / 步态 / 抖动 / 位移过噪声地板）都把阶梯打回 180 秒。
+     * 任何运动证据（步数增量 / 步态 / 位移过噪声地板）都把阶梯打回 180 秒；显著运动与抖动
+     * 不是证据，不动阶梯（见类 KDoc）。
      */
     val probeIntervalMs: Long get() = LocationPace.probeIntervalMsFor(quietProbeCount)
 
     /** 服务据此开关订阅：只有 MOVING 才允许 startSubscription。 */
     val wantsSubscription: Boolean get() = state == State.MOVING
 
-    /** 最近一次「真实活动」证据的时刻（步数 / 探测位移 / 显著运动 / 步态）。 */
+    /** 最近一次「真实活动」证据的时刻（步数 / 探测位移 / 步态）。显著运动与抖动**不算**。 */
     var lastActivityAtMs: Long = 0L
+        private set
+
+    /** 最近一次显著运动触发时刻（纯诊断：它只说明「手机被拿起来了」）。 */
+    var lastSignificantMotionAtMs: Long = 0L
+        private set
+
+    /** 最近一次确认抖动（模长标准差持续偏高）的时刻（纯诊断）。 */
+    var lastShakeAtMs: Long = 0L
+        private set
+
+    /**
+     * 最近一次「提示型唤醒」（显著运动 / 抖动）的时刻。
+     *
+     * 服务读它开 16Hz 观察窗：提示只说明「可能有人在动」，门禁态与活动时间都不受它影响；
+     * 观察窗里判出 [MotionDetector.State.GAIT] 才算证据（见类 KDoc）。
+     */
+    var observationHintAtMs: Long = 0L
         private set
 
     /** 最近一次评估的时刻（诊断用）。 */
@@ -149,11 +173,13 @@ class MotionGate(
     /**
      * 显著运动传感器触发（硬件 hub，一次性）。
      *
-     * 这是 SLEEPING 里唯一能零功耗唤醒的手段：只有它能把门禁从 SLEEPING 拉到 PROBING。
+     * **不改门禁态、不刷新活动时间**：它只说明「手机被拿起来了」，在真机上「拿起手机」就会触发
+     * （见类 KDoc）。这里只记 [lastSignificantMotionAtMs] 与 [observationHintAtMs]；
+     * 服务拿提示开 16Hz 观察窗，判出 GAIT / 拿到步数或位移才升级。
      */
     fun onSignificantMotion(nowMs: Long): State {
-        noteActivity(nowMs)
-        if (state == State.SLEEPING) transition(State.PROBING, "显著运动触发")
+        lastSignificantMotionAtMs = nowMs
+        observationHintAtMs = nowMs
         return evaluate(nowMs)
     }
 
@@ -178,31 +204,26 @@ class MotionGate(
     }
 
     /**
-     * 抖动唤醒：把「加速度模长标准差持续偏高」当作从 SLEEPING 起来的唯一可用信号。
+     * 抖动提示：模长标准差持续偏高（[shakeStdDev] 持续 [shakeConfirmMs]）。
      *
-     * 为什么需要：没有显著运动传感器、加速度计只能 5Hz batching 的设备上，
-     * [MotionDetector] 判不出步态（KDoc 里写死的 ≥16Hz 约束），软件步数永远是 0，
-     * 门禁会一直停在 SLEEPING —— 用户走一整天都不升级。
-     *
-     * 抖动**不刷新**活动时间、也不算远行证据：唤醒后仍要靠步数/位移升级，
-     * 5 分钟内一无所获就如实降回 SLEEPING。已在 PROBING/MOVING 时不重复迁移（不覆盖原因）。
+     * 抖动**不改门禁态、不刷新活动时间、不动探测阶梯**：玩手机、拿起来看、口袋里晃都会抖，
+     * 但它不是远行证据（见类 KDoc）。它唯一的作用是给出 [observationHintAtMs]，
+     * 让服务在没有显著运动传感器的设备上开 16Hz 观察窗 —— 观察窗里判出 GAIT 才算证据。
      *
      * @param stdDev 最近窗口的模长标准差（[MotionDetector.lastStdDev]）
      * @param sampleTsMs 样本时刻（单调时钟）。batching 一次投递一批样本时墙钟不变，
      *   必须用样本自身的时间跨度量「持续多久」，不能用调用时刻
-     * @param nowMs 墙钟，用于唤醒后从 PROBING 的 5 分钟空闲降级起算
+     * @param nowMs 墙钟（记录提示时刻）
      */
     fun onShake(stdDev: Double, sampleTsMs: Long, nowMs: Long): State {
         if (stdDev < shakeStdDev) {
             shakeSinceSampleMs = 0L
             return state
         }
-        // 明显抖动同样是运动证据（它是唯一在 5Hz 设备上可用的运动信号）：探测间隔回 180 秒
-        quietProbeCount = 0
         if (shakeSinceSampleMs == 0L) shakeSinceSampleMs = sampleTsMs
-        if (state == State.SLEEPING && sampleTsMs - shakeSinceSampleMs >= shakeConfirmMs) {
-            noteActivity(nowMs)
-            transition(State.PROBING, "明显抖动")
+        if (sampleTsMs - shakeSinceSampleMs >= shakeConfirmMs) {
+            lastShakeAtMs = nowMs
+            observationHintAtMs = nowMs
         }
         return evaluate(nowMs)
     }
@@ -301,6 +322,9 @@ class MotionGate(
         shakeSinceSampleMs = 0L
         movingSinceMs = 0L
         lastActivityAtMs = 0L
+        lastSignificantMotionAtMs = 0L
+        lastShakeAtMs = 0L
+        observationHintAtMs = 0L
         lastEvaluatedAtMs = 0L
         quietProbeCount = 0
         hardwareBaselineSet = false
