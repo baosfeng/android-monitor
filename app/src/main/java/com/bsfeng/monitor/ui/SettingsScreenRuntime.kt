@@ -78,6 +78,7 @@ internal fun rememberSettingsScreenRuntime(
     onNavigateToAppearance: (() -> Unit)?,
     onNavigateToGallery: (() -> Unit)?,
     onNavigateToQuotaSettings: () -> Unit,
+    onNavigateToTotp: (Boolean) -> Unit,
 ): SettingsScreenRuntime {
     val t = LocalDesignTokens.current
     val context = LocalContext.current
@@ -93,6 +94,7 @@ internal fun rememberSettingsScreenRuntime(
     val transportOn = enabledFeatures[Feature.TRANSPORT] == true
     val locationOn = enabledFeatures[Feature.LOCATION] == true
     val quotaOn = enabledFeatures[Feature.QUOTA] == true
+    val totpOn = enabledFeatures[Feature.TOTP] == true
     val quotaSettings = remember { QuotaSettings(context) }
     val quotaAlertsOnState = remember { mutableStateOf(quotaSettings.alertsEnabled) }
     val quotaRefreshHoursState = remember { mutableStateOf(quotaSettings.refreshIntervalHours) }
@@ -223,6 +225,7 @@ internal fun rememberSettingsScreenRuntime(
         transportOn = transportOn,
         locationOn = locationOn,
         quotaOn = quotaOn,
+        totpOn = totpOn,
         quotaSettings = quotaSettings,
         quotaAlertsOnState = quotaAlertsOnState,
         quotaRefreshHoursState = quotaRefreshHoursState,
@@ -274,5 +277,6 @@ internal fun rememberSettingsScreenRuntime(
         onNavigateToAppearance = onNavigateToAppearance,
         onNavigateToGallery = onNavigateToGallery,
         onNavigateToQuotaSettings = onNavigateToQuotaSettings,
+        onNavigateToTotp = onNavigateToTotp,
     )
 }

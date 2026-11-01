@@ -1763,6 +1763,9 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 #s01.is-active .chart-dot{animation:od-fade var(--dur-chart-fast) var(--ease-out) 320ms forwards}
 #s01.is-active .heat-cell{animation:od-fade 260ms var(--ease-out) var(--heat-d,0ms) forwards}
 
+/* 顶部栏图标组：验证器入口 + 今日提醒并排（.icon-btn 自带 44px 点击区） */
+.s01-head-actions{display:flex;align-items:center;gap:var(--space-2)}
+
 /* 开屏未结束时先不播入场，等开屏收起再播（:has 不支持时自动退回「立即播」） */
 .device-screen:has(#odSplash:not([hidden])) #s01 *{animation:none}
 </style>
@@ -2205,6 +2208,12 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s09 .s09-quota-body .row-sub{white-space:normal}
 .screen.s09 .s09-quota-body .badge{flex:0 0 auto;white-space:nowrap}
 .screen.s09 .s09-quota-body .s09-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+
+/* ── 验证器（TOTP）：安全开关行描述需要换行 ─────────────────────── */
+.screen.s09 .s09-totp .row-sub{white-space:normal}
+.screen.s09 .s09-totp > .row:first-child{border-top:1px solid var(--border-soft)}
+.screen.s09 .s09-totp .badge{flex:0 0 auto;white-space:nowrap}
+.screen.s09 .s09-totp-note{display:block;line-height:1.45}
 </style>
 
 <style data-for="s10">
@@ -3333,6 +3342,284 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .device-screen:has(#odSplash:not([hidden])) #s21 *{animation:none}
 </style>
 
+<style data-for="s22">
+/* ── s22 验证器首页 ─────────────────────────────────────────────── */
+.screen.s22{font-size:max(var(--text-sm),14px)}
+.screen.s22 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s22 :is(.meta,.row-sub,.row-tail,.chip,.st-desc,.group-label){font-size:max(var(--text-sm),14px)}
+.screen.s22 :is(button,input){font-family:inherit}
+.screen.s22 button:focus-visible,
+.screen.s22 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s22-searchbox{display:flex;align-items:center;gap:var(--space-2);height:calc(var(--tap-min) + 2px);padding:0 var(--space-3);
+  border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border-soft)}
+.s22-searchbox svg{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:var(--muted);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s22-search{flex:1 1 auto;min-width:0;height:var(--tap-min);padding:0;border:0;background:transparent;color:var(--fg);
+  font-size:max(var(--text-base),14px)}
+.s22-search::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.s22-search::placeholder{color:var(--muted)}
+.s22-searchbox:focus-within{border-color:var(--accent);box-shadow:var(--focus-ring)}
+
+/* 账户行：平台首字色块 + 平台/账号 + 右侧验证码与倒计时 */
+.totp-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:64px;padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.totp-row:first-child{border-top:0}
+.totp-row:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.totp-ava{width:34px;height:34px;border-radius:var(--radius-sm);display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600;line-height:1}
+.totp-tail{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:96px}
+.totp-code{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:var(--text-xl);font-weight:600;letter-spacing:.02em;line-height:1.1;color:var(--fg)}
+.totp-code--wide{font-size:var(--text-lg)}
+.totp-meta{display:inline-flex;align-items:center;gap:var(--space-2)}
+.totp-sec{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--text-xs);
+  color:var(--muted);min-width:2.6em;text-align:right}
+.totp-ring{--c:var(--fg-2);position:relative;flex:0 0 auto;width:18px;height:18px;border-radius:50%;
+  background:conic-gradient(var(--c) calc(var(--p,100) * 1%),color-mix(in srgb,var(--fg) 13%,transparent) 0)}
+.totp-ring::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--surface)}
+.totp-row.is-warn .totp-ring{--c:var(--warn)}
+.totp-row.is-warn .totp-sec{color:var(--warn-text)}
+.totp-paused{opacity:.55}
+.totp-paused .totp-code{text-decoration:line-through}
+
+.s22-actions{display:grid;gap:var(--space-2);padding-top:var(--space-3)}
+.s22-actions .btn{width:100%}
+.s22-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s22-empty-hit{display:none}
+.s22-in{opacity:0}
+.s22.is-active .s22-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s22.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s22.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s22.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.s22.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
+.device-screen:has(#odSplash:not([hidden])) .s22 *{animation:none}
+
+/* 长按菜单（sheet） */
+.s22-menu .sheet{display:block}
+.s22-menu-item{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:var(--tap-min);
+  padding:var(--space-3) var(--space-2);border:0;background:transparent;color:var(--fg);
+  font-size:max(var(--text-base),14px);text-align:left;cursor:pointer;border-radius:var(--radius-md)}
+.s22-menu-item:active{background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.s22-menu-item svg{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s22-menu-title{font-size:max(var(--text-sm),14px);color:var(--muted);padding:var(--space-2) var(--space-2) var(--space-1)}
+</style>
+
+<style data-for="s23">
+/* ── s23 添加账户 ───────────────────────────────────────────────── */
+.screen.s23{font-size:max(var(--text-sm),14px)}
+.screen.s23 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s23 :is(.meta,.row-sub,.row-tail,.group-label,.st-desc,.fine){font-size:max(var(--text-sm),14px)}
+.screen.s23 button:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s23-intro{display:block;margin:0 0 var(--space-3);line-height:1.5}
+.s23-entry{display:grid;grid-template-columns:44px minmax(0,1fr) 18px;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-3) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s23-entry:first-child{border-top:0}
+.s23-entry:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s23-entry .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s23-chev{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s23-card{margin-top:var(--space-3)}
+.s23-card .row + .row{border-top:0}
+.s23-kv{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--border-soft)}
+.s23-kv:first-child{border-top:0}
+.s23-kv .num{white-space:nowrap}
+.s23-detail{display:block;line-height:1.5}
+.s23-in{opacity:0}
+.s23.is-active .s23-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s23.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s23.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s23.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s23 *{animation:none}
+</style>
+
+<style data-for="s24">
+/* ── s24 扫码添加 ───────────────────────────────────────────────── */
+.screen.s24{font-size:max(var(--text-sm),14px)}
+.screen.s24 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s24 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.s24-hint){font-size:max(var(--text-sm),14px)}
+.screen.s24 button:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s24-view{padding:var(--space-2) 0 var(--space-3)}
+.s24-lens{position:relative;width:100%;aspect-ratio:1/1;max-height:260px;border-radius:var(--radius-lg);
+  background:color-mix(in srgb,var(--fg) 88%,var(--bg));overflow:hidden;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s24-lens::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(120% 90% at 50% 0%,color-mix(in srgb,var(--bg) 12%,transparent),transparent 70%)}
+.s24-scanline{position:absolute;left:8%;right:8%;top:18%;height:2px;border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--bg) 78%,transparent);
+  animation:od-scan 2.6s var(--ease-standard) infinite}
+@keyframes od-scan{0%{top:18%;opacity:.15}45%{opacity:.85}100%{top:82%;opacity:.15}}
+.s24-frame{position:absolute;inset:14%;border-radius:var(--radius-md)}
+.s24-frame span{position:absolute;width:26px;height:26px;border:2px solid color-mix(in srgb,var(--bg) 82%,transparent)}
+.s24-frame span:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:var(--radius-sm) 0 0 0}
+.s24-frame span:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 var(--radius-sm) 0 0}
+.s24-frame span:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-radius:0 0 0 var(--radius-sm)}
+.s24-frame span:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-radius:0 0 var(--radius-sm) 0}
+.s24-lens.is-torch{background:color-mix(in srgb,var(--fg) 62%,var(--bg))}
+.s24-hint{display:block;text-align:center;margin-top:var(--space-3);color:var(--muted);line-height:1.45}
+.s24-alert{margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--danger) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--danger) 26%,transparent)}
+.s24-alert .row-title{color:var(--danger-text)}
+.s24-alert .row-sub{white-space:normal;color:var(--fg-2)}
+.s24-tools{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-3)}
+.s24-tools .btn{width:100%}
+.s24-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  min-height:var(--tap-min);padding:var(--space-2) 0}
+.s24-row .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s24-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s24-in{opacity:0}
+.s24.is-active .s24-in{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s24.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s24.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s24.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s24 *{animation:none}
+@media (prefers-reduced-motion: reduce){.s24-scanline{animation:none;top:50%;opacity:.6}}
+</style>
+
+<style data-for="s25">
+/* ── s25 手动输入 ───────────────────────────────────────────────── */
+.screen.s25{font-size:max(var(--text-sm),14px)}
+.screen.s25 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s25 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s25-err){font-size:max(var(--text-sm),14px)}
+.screen.s25 button:focus-visible,
+.screen.s25 input:focus-visible,
+.screen.s25 summary:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s25-form{display:grid;gap:var(--space-3);padding:var(--space-3) 0 var(--space-4)}
+.s25-field{display:grid;gap:var(--space-1)}
+.s25-label{font-size:max(var(--text-sm),14px);color:var(--fg-2);font-weight:500}
+.s25-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s25-in::placeholder{color:var(--muted)}
+.s25-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s25-in[aria-invalid="true"]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border))}
+.s25-in.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.s25-err{display:flex;align-items:center;gap:var(--space-2);color:var(--danger-text);line-height:1.4}
+.s25-err svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s25-hint{color:var(--muted);line-height:1.4}
+.s25-adv{border-top:1px solid var(--border-soft);margin-top:var(--space-2);padding-top:var(--space-2)}
+.s25-adv summary{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);
+  min-height:var(--tap-min);cursor:pointer;list-style:none;font-size:max(var(--text-base),14px)}
+.s25-adv summary::-webkit-details-marker{display:none}
+.s25-adv summary svg{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;transition:transform var(--dur-state) var(--ease-standard)}
+.s25-adv[open] summary svg{transform:rotate(90deg)}
+.s25-adv-body{display:grid;gap:var(--space-3);padding:var(--space-2) 0 var(--space-1)}
+.s25-seg-label{font-size:max(var(--text-sm),14px);color:var(--muted)}
+.s25-preview{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s25-preview .totp-code{font-size:var(--text-xl)}
+.s25-preview .meta{line-height:1.4}
+.s25-actions{display:grid;gap:var(--space-2);padding-top:var(--space-2)}
+.s25-actions .btn{width:100%}
+.s25-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s25-foot{display:block;padding-top:var(--space-3);line-height:1.5}
+.device-screen:has(#odSplash:not([hidden])) .s25 *{animation:none}
+</style>
+
+<style data-for="s26">
+/* ── s26 账户详情 ───────────────────────────────────────────────── */
+.screen.s26{font-size:max(var(--text-sm),14px)}
+.screen.s26 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s26 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s26-label){font-size:max(var(--text-sm),14px)}
+.screen.s26 button:focus-visible,
+.screen.s26 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s26-hero{display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-3);align-items:center;padding:var(--space-3) 0}
+.s26-ava{width:44px;height:44px;border-radius:var(--radius-md);display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:var(--text-base);font-weight:600;line-height:1}
+.s26-code{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  padding:var(--space-3);border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 5%,transparent);margin-top:var(--space-2)}
+.s26-code .totp-code{font-size:var(--text-xl)}
+.s26-meta-line{display:inline-flex;align-items:center;gap:var(--space-2)}
+.s26-grid{display:grid;gap:var(--space-3);padding:var(--space-3) 0}
+.s26-field{display:grid;gap:var(--space-1)}
+.s26-label{color:var(--fg-2);font-weight:500}
+.s26-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s26-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s26-in.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.s26-mask-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:center}
+.s26-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--border-soft)}
+.s26-kv:first-child{border-top:0}
+.s26-kv .num{text-align:right}
+.s26-order{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);padding:var(--space-2) 0}
+.s26-order .btn{width:100%}
+.s26-save{display:grid;gap:var(--space-2);padding:var(--space-3) 0 var(--space-4)}
+.s26-save .btn{width:100%}
+.s26-danger{border-top:1px solid var(--border-soft);padding-top:var(--space-3);margin-top:var(--space-2)}
+.s26-danger .row-title{color:var(--danger-text)}
+.s26-danger .btn{width:100%;color:var(--danger-text);border-color:color-mix(in srgb,var(--danger) 34%,transparent)}
+.s26-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s26-in-anim{opacity:0}
+.s26.is-active .s26-in-anim{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s26.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s26.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s26.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s26 *{animation:none}
+.s26-del-desc{line-height:1.5;margin:0 0 var(--space-3)}
+.s26-del-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.s26-del-actions .btn{width:100%}
+.s26-del-actions .btn.is-danger{background:var(--danger);color:var(--bg);border-color:transparent}
+</style>
+
+<style data-for="s27">
+/* ── s27 备份与导入 ─────────────────────────────────────────────── */
+.screen.s27{font-size:max(var(--text-sm),14px)}
+.screen.s27 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s27 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s27-label){font-size:max(var(--text-sm),14px)}
+.screen.s27 button:focus-visible,
+.screen.s27 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s27-intro{display:block;margin:0 0 var(--space-3);line-height:1.5}
+.s27-block{padding:var(--space-3) 0}
+.s27-block + .s27-block{border-top:1px solid var(--border-soft)}
+.s27-label{color:var(--fg-2);font-weight:500;display:block;margin-bottom:var(--space-2)}
+.s27-field{display:grid;gap:var(--space-1)}
+.s27-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s27-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s27-in.num{font-family:var(--font-mono);letter-spacing:.06em}
+.s27-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s27-row:first-of-type{border-top:0}
+.s27-row:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s27-row .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s27-row[aria-disabled="true"]{cursor:default;opacity:.6}
+.s27-btn{width:100%;margin-top:var(--space-3)}
+.s27-note{display:block;padding-top:var(--space-2);line-height:1.45}
+.s27-warn{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-3);
+  border-radius:var(--radius-md);background:color-mix(in srgb,var(--warn) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);line-height:1.45}
+.s27-warn svg{width:18px;height:18px;flex:0 0 auto;margin-top:1px;fill:none;stroke:var(--warn-text);
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s27-warn span{color:var(--fg-2)}
+.s27-in-anim{opacity:0}
+.s27.is-active .s27-in-anim{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s27.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s27.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s27.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s27 *{animation:none}
+.s27-dialog-desc{margin:0 0 var(--space-3);line-height:1.5}
+.s27-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-3)}
+.s27-dialog-actions .btn{width:100%}
+.s27-err{display:flex;gap:var(--space-2);align-items:center;color:var(--danger-text);line-height:1.4;margin-top:var(--space-2)}
+.s27-err svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+</style>
+
 </head>
 <body>
 <div class="od-stage" data-od-id="stage">
@@ -3420,9 +3707,14 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <p class="meta">2025 年 10 月 14 日 · 星期二</p>
           <h1 class="h1 mt-2">今日概览</h1>
         </div>
-        <button class="icon-btn" type="button" aria-label="今日提醒" onclick="App.toast('今日已记录 128 条事件')" data-od-id="s01-bell">
-          <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
-        </button>
+        <div class="s01-head-actions">
+          <button class="icon-btn" type="button" aria-label="今日提醒" onclick="App.toast('今日已记录 128 条事件')" data-od-id="s01-bell">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
+          </button>
+          <button class="icon-btn" type="button" aria-label="验证器" data-goto="s22" data-od-id="s01-goto-totp">
+            <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><circle cx="12" cy="10.4" r="1.6"/><path d="M12 12v3.2"/></svg>
+          </button>
+        </div>
       </header>
 
       <div class="pad" data-od-id="s01-range">
@@ -5904,6 +6196,79 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-totp">
+        <p class="group-label">验证器</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><rect x="4.4" y="2.6" width="15.2" height="18.8" rx="3"/><path d="M9.4 17.4h5.2"/><path d="M12 7.4v5.2"/><path d="M9.4 10h5.2"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">验证器（TOTP）</span>
+              <span class="row-sub">5 个账户 · 概览卡片已显示前 3 个</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="验证器" data-toggle
+                    data-on-msg="验证器已开启 · 概览与设置均可进入" data-off-msg="验证器已关闭 · 本地密钥保留，不再计算验证码" data-od-id="s09-totp-switch"></button>
+          </div>
+          <div class="s09-totp" data-od-id="s09-totp-body">
+            <button class="row" type="button" data-goto="s22" data-od-id="s09-goto-totp">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3 7h.5"/><path d="M3 12h.5"/><path d="M3 17h.5"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">管理账户</span>
+                <span class="row-sub">扫码 / 手动添加 / 排序 / 删除</span>
+              </span>
+              <span class="row-tail"><span class="num">5 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <button class="row" type="button" data-goto="s27" data-od-id="s09-goto-totp-backup">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">备份与导入</span>
+                <span class="row-sub">加密导出 · 从 Aegis / 2FAS 导入</span>
+              </span>
+              <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><rect x="6" y="2.6" width="12" height="18.8" rx="2.6"/><path d="M9.4 17.6h5.2"/><path d="M9.4 8.2l2 2 3.2-3.4"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">防止截屏</span>
+                <span class="row-sub">验证码页禁止截屏与录屏（FLAG_SECURE）</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="防止截屏" data-toggle
+                      data-on-msg="已禁止截屏 · 验证码页不可截图" data-off-msg="已允许截屏 · 验证码可能出现在截图里" data-od-id="s09-totp-flag-secure"></button>
+            </div>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M12 4V2.4"/><path d="M6.4 8.6 4 7.2"/><path d="M6.4 15.4 4 16.8"/><path d="M17.6 8.6 20 7.2"/><path d="M17.6 15.4 20 16.8"/><path d="M10.6 12h2.8"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">复制即焚</span>
+                <span class="row-sub">复制后 30 秒清空剪贴板（含系统「已复制」提示残留）</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="复制即焚" data-toggle
+                      data-on-msg="已开启 · 30 秒后自动清空剪贴板" data-off-msg="已关闭 · 复制的验证码会留在剪贴板" data-od-id="s09-totp-clip-clear"></button>
+            </div>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M2.4 12s3.6-6.4 9.6-6.4S21.6 12 21.6 12s-3.6 6.4-9.6 6.4S2.4 12 2.4 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">后台遮罩</span>
+                <span class="row-sub">切到后台时盖住验证码，回到前台再显示</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="后台遮罩" data-toggle
+                      data-on-msg="已开启 · 后台与多任务卡片不显示验证码" data-off-msg="已关闭 · 多任务卡片可能露出验证码" data-od-id="s09-totp-blur"></button>
+            </div>
+          </div>
+        </div>
+        <p class="fine mt-2 s09-totp-note" data-od-min-fs>三项安全开关默认全开且关闭不放行；密钥用 Android Keystore 加密，只存本机、不进日志、不上传。</p>
       </div>
 
       <div class="set-group" data-od-id="s09-granularity">
@@ -10438,6 +10803,1129 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         return;
       }
     });
+  })();
+  </script>
+</section>
+
+<section class="screen s22" data-screen="s22" data-title="验证器" id="s22" data-od-id="screen-s22">
+  <div class="content pad" data-od-id="s22-content">
+
+    <!-- 加载态 -->
+    <div class="st-loading" data-state-when="loading" data-od-id="s22-loading">
+      <div class="card">
+        <div class="sk w-60 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-40"></div>
+      </div>
+      <div class="card mt-3">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <!-- 空态 -->
+    <div class="st-empty" data-state-when="empty" data-od-id="s22-empty">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><rect x="4.4" y="2.6" width="15.2" height="18.8" rx="3"/><path d="M9.4 17.4h5.2"/><path d="M12 7.4v5.2"/><path d="M9.4 10h5.2"/></svg></span>
+      <p class="st-title">还没有验证器账户</p>
+      <p class="st-desc">扫码或手动输入 Base32 密钥，验证码只在本机计算，不上传、不联网。</p>
+      <button class="btn" type="button" data-goto="s23" data-od-id="s22-empty-cta">添加第一个账户</button>
+      <button class="btn btn-ghost" type="button" data-goto="s27" data-od-id="s22-empty-import">从 Aegis / 2FAS 导入</button>
+    </div>
+
+    <!-- 错误态 -->
+    <div class="st-error" data-state-when="error" data-od-id="s22-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg></span>
+      <p class="st-title">账户列表读取失败</p>
+      <p class="st-desc">加密存储暂时不可用（Keystore 未解锁）。系统解锁后重试即可，账户不会丢失。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('正在重新读取本地账户…')" data-od-id="s22-error-retry">重试</button>
+    </div>
+
+    <!-- 边界态：超长平台名 / 8 位码 / 60 秒周期 / 剩余 ≤5 秒 -->
+    <div class="pad" data-state-when="edge" data-od-id="s22-edge">
+      <div class="group">
+        <div class="totp-row is-warn totp-paused" data-od-id="s22-edge-long">
+          <span class="totp-ava" aria-hidden>腾</span>
+          <span class="row-body">
+            <span class="row-title">腾讯云 · 重庆区域对象存储管理控制台</span>
+            <span class="row-sub">ops+backup-2024@acme-enterprise-cn.cn</span>
+          </span>
+          <span class="totp-tail">
+            <span class="totp-code totp-code--wide">4829 1376</span>
+            <span class="totp-meta" data-od-min-fs>
+              <span class="totp-ring" aria-hidden></span>
+              <span class="totp-sec">5s</span>
+            </span>
+          </span>
+        </div>
+        <div class="totp-row" data-od-id="s22-edge-paused">
+          <span class="totp-ava" aria-hidden>A</span>
+          <span class="row-body">
+            <span class="row-title">AWS（已暂停）</span>
+            <span class="row-sub">root@acme</span>
+          </span>
+          <span class="totp-tail">
+            <span class="totp-code">— — —</span>
+            <span class="totp-meta" data-od-min-fs><span class="totp-sec">暂停</span></span>
+          </span>
+        </div>
+      </div>
+      <p class="fine mt-2" data-od-min-fs>超长平台名与账号单行截断；8 位码降一档字号；暂停账户不参与倒计时。</p>
+    </div>
+
+    <!-- 正常态 -->
+    <div data-state-hide="loading empty error edge" data-od-id="s22-body">
+
+      <div class="s22-in od-d1" data-od-id="s22-search">
+        <div class="s22-searchbox">
+          <svg viewBox="0 0 24 24" aria-hidden><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 20.4 20.4"/></svg>
+          <input class="s22-search" type="search" id="s22Search" placeholder="搜索平台或账户" autocomplete="off" aria-label="搜索平台或账户" />
+        </div>
+      </div>
+
+      <div class="mt-3 s22-in od-d2" data-od-id="s22-list">
+        <p class="group-label">云服务 · 3 个</p>
+        <div class="group">
+          <button class="totp-row" type="button" data-totp-row data-search="腾讯云 ops@acme.cn"
+                  data-period="30" data-left="23" data-code="482913" data-issuer="腾讯云" data-account="ops@acme.cn"
+                  aria-label="腾讯云 ops@acme.cn，验证码 482913" data-od-id="s22-row-tencent">
+            <span class="totp-ava" aria-hidden>腾</span>
+            <span class="row-body">
+              <span class="row-title">腾讯云</span>
+              <span class="row-sub">ops@acme.cn</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>482 913</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="阿里云 dev@acme.cn"
+                  data-period="30" data-left="18" data-code="705214" data-issuer="阿里云" data-account="dev@acme.cn"
+                  aria-label="阿里云 dev@acme.cn，验证码 705214" data-od-id="s22-row-aliyun">
+            <span class="totp-ava" aria-hidden>阿</span>
+            <span class="row-body">
+              <span class="row-title">阿里云</span>
+              <span class="row-sub">dev@acme.cn</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>705 214</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="AWS root@acme"
+                  data-period="30" data-left="9" data-code="118002" data-issuer="AWS" data-account="root@acme"
+                  aria-label="AWS root@acme，验证码 118002" data-od-id="s22-row-aws">
+            <span class="totp-ava" aria-hidden>A</span>
+            <span class="row-body">
+              <span class="row-title">AWS</span>
+              <span class="row-sub">root@acme</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>118 002</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <p class="group-label mt-4">代码与账号 · 2 个</p>
+        <div class="group">
+          <button class="totp-row" type="button" data-totp-row data-search="GitHub alice@acme.com"
+                  data-period="30" data-left="27" data-code="936140" data-issuer="GitHub" data-account="alice@acme.com"
+                  aria-label="GitHub alice@acme.com，验证码 936140" data-od-id="s22-row-github">
+            <span class="totp-ava" aria-hidden>G</span>
+            <span class="row-body">
+              <span class="row-title">GitHub</span>
+              <span class="row-sub">alice@acme.com</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>936 140</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+          <button class="totp-row" type="button" data-totp-row data-search="Google alice.work@gmail.com"
+                  data-period="30" data-left="4" data-code="250478" data-issuer="Google" data-account="alice.work@gmail.com"
+                  aria-label="Google alice.work@gmail.com，验证码 250478" data-od-id="s22-row-google">
+            <span class="totp-ava" aria-hidden>G</span>
+            <span class="row-body">
+              <span class="row-title">Google</span>
+              <span class="row-sub">alice.work@gmail.com</span>
+            </span>
+            <span class="totp-tail">
+              <span class="totp-code" data-code>250 478</span>
+              <span class="totp-meta" data-od-min-fs>
+                <span class="totp-ring" aria-hidden></span>
+                <span class="totp-sec" data-sec aria-hidden></span>
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <div class="st-empty s22-noresult" hidden data-od-id="s22-noresult">
+          <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8 20.4 20.4"/></svg></span>
+          <p class="st-title">没有匹配的账户</p>
+          <p class="st-desc">换个平台名或邮箱片段试试；也可以直接添加一个新账户。</p>
+          <button class="btn btn-ghost" type="button" data-clear-search data-od-id="s22-noresult-clear">清空搜索</button>
+        </div>
+      </div>
+
+      <div class="s22-actions s22-in od-d3" data-od-id="s22-actions">
+        <button class="btn" type="button" data-goto="s23" data-od-id="s22-add">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M12 5.4v13.2"/><path d="M5.4 12h13.2"/></svg>
+          <span>添加账户</span>
+        </button>
+        <button class="btn btn-ghost" type="button" data-goto="s27" data-od-id="s22-backup">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/></svg>
+          <span>备份与导入</span>
+        </button>
+      </div>
+
+      <p class="fine s22-note s22-in od-d4" data-od-min-fs>点按账户即复制验证码，30 秒后自动清空剪贴板；长按可编辑或暂停账户。验证码在本机计算，不联网、不上传。</p>
+    </div>
+  </div>
+
+  <!-- 长按菜单 -->
+  <div class="scrim is-bottom s22-menu" id="s22-menu" hidden data-od-id="s22-menu">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="账户操作" data-od-id="s22-menu-sheet">
+      <span class="sheet-grip" aria-hidden></span>
+      <p class="s22-menu-title" id="s22MenuTitle">GitHub · alice@acme.com</p>
+      <div class="grid-2">
+        <button class="btn btn-ghost" type="button" data-menu-copy data-od-id="s22-menu-copy">复制验证码</button>
+        <button class="btn btn-ghost" type="button" data-menu-pause data-od-id="s22-menu-pause">暂停账户</button>
+      </div>
+      <button class="s22-menu-item mt-2" type="button" data-menu-edit data-od-id="s22-menu-edit">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M4.5 19.5h4l10-10-4-4-10 10z"/><path d="M13.5 6.5l4 4"/></svg>
+        <span>查看与编辑账户</span>
+      </button>
+      <button class="s22-menu-item" type="button" data-close="#s22-menu" data-od-id="s22-menu-cancel">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
+        <span>取消</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  /* s22：账号搜索、复制、长按菜单、30s 倒计时（≤5s 切 --warn）。
+     行是真实 button；长按走 pointerdown 计时，pointerup 后抑制随后的 click。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var rows = Array.prototype.slice.call(sec.querySelectorAll('[data-totp-row]'));
+    var search = sec.querySelector('#s22Search');
+    var menu = sec.querySelector('#s22-menu');
+    var menuTitle = sec.querySelector('#s22MenuTitle');
+    var pressTimer = null;
+    var suppressClick = false;
+    var target = null;
+
+    function openMenu(row) {
+      target = row;
+      if (menuTitle) {
+        menuTitle.textContent = (row.getAttribute('data-issuer') || '') + ' · ' + (row.getAttribute('data-account') || '');
+      }
+      if (menu) menu.hidden = false;
+    }
+    if (menu) {
+      menu.addEventListener('click', function (e) {
+        if (e.target === menu) menu.hidden = true;
+      });
+    }
+
+    function copyCode(row) {
+      var code = row.getAttribute('data-code') || '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code);
+      } catch (err) { /* 原型不阻塞反馈 */ }
+      if (window.App) App.toast('已复制，30 秒后自动清空');
+    }
+
+    function tick() {
+      rows.forEach(function (r) {
+        if (r.classList.contains('totp-paused')) return;
+        var period = Number(r.getAttribute('data-period')) || 30;
+        var left = Number(r.getAttribute('data-left')) - 1;
+        if (!(left > 0) || left > period) left = period;
+        r.setAttribute('data-left', String(left));
+        var ring = r.querySelector('.totp-ring');
+        if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+        var s = r.querySelector('[data-sec]');
+        if (s) s.textContent = left + 's';
+        r.classList.toggle('is-warn', left <= 5);
+      });
+    }
+    rows.forEach(function (r) {
+      var period = Number(r.getAttribute('data-period')) || 30;
+      var left = Number(r.getAttribute('data-left')) || period;
+      var ring = r.querySelector('.totp-ring');
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      var s = r.querySelector('[data-sec]');
+      if (s) s.textContent = left + 's';
+      r.classList.toggle('is-warn', left <= 5);
+    });
+    window.setInterval(tick, 1000);
+
+    function filter() {
+      var q = (search && search.value ? search.value : '').trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (r) {
+        var hay = (r.getAttribute('data-search') || '').toLowerCase();
+        var hit = !q || hay.indexOf(q) >= 0;
+        r.hidden = !hit;
+        if (hit) shown++;
+      });
+      var empty = sec.querySelector('.s22-noresult');
+      if (empty) empty.hidden = shown > 0;
+    }
+    if (search) {
+      search.addEventListener('input', filter);
+      search.addEventListener('search', filter);
+    }
+    var clearBtn = sec.querySelector('[data-clear-search]');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        if (search) { search.value = ''; filter(); search.focus(); }
+      });
+    }
+
+    /* 长按 500ms 打开账户菜单；右键 / 长按同等对待 */
+    sec.addEventListener('pointerdown', function (e) {
+      var row = e.target.closest && e.target.closest('[data-totp-row]');
+      if (!row) return;
+      suppressClick = false;
+      pressTimer = window.setTimeout(function () {
+        pressTimer = null;
+        suppressClick = true;
+        openMenu(row);
+        if (window.App) { App.haptic('medium'); }
+      }, 500);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+      sec.addEventListener(ev, function () {
+        if (pressTimer) { window.clearTimeout(pressTimer); pressTimer = null; }
+      });
+    });
+    sec.addEventListener('contextmenu', function (e) {
+      var row = e.target.closest && e.target.closest('[data-totp-row]');
+      if (!row) return;
+      e.preventDefault();
+      openMenu(row);
+    });
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      if (t.closest('[data-menu-copy]')) {
+        if (target) copyCode(target);
+        if (menu) menu.hidden = true;
+        return;
+      }
+      if (t.closest('[data-menu-pause]')) {
+        if (target) {
+          var paused = target.classList.toggle('totp-paused');
+          if (window.App) App.toast(paused ? '账户已暂停，不再滚动验证码' : '账户已恢复');
+        }
+        if (menu) menu.hidden = true;
+        return;
+      }
+      if (t.closest('[data-menu-edit]')) {
+        if (menu) menu.hidden = true;
+        if (window.App) App.go('s26');
+        return;
+      }
+
+      var row = t.closest('[data-totp-row]');
+      if (row) {
+        if (suppressClick) { suppressClick = false; return; }
+        copyCode(row);
+      }
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s23" data-screen="s23" data-title="添加账户" id="s23" data-od-id="screen-s23">
+  <div class="content pad" data-od-id="s23-content">
+
+    <p class="s23-intro s23-in od-d1" data-od-min-fs>
+      <span class="meta">选择一种方式添加 TOTP 账户 · 密钥只保存在本机</span>
+    </p>
+
+    <div class="group s23-in od-d2" data-state-hide="loading" data-od-id="s23-entries">
+      <button class="s23-entry" type="button" data-goto="s24" data-od-id="s23-entry-scan">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><path d="M4 8.4V5.6A1.6 1.6 0 0 1 5.6 4h2.8"/><path d="M15.6 4h2.8A1.6 1.6 0 0 1 20 5.6v2.8"/><path d="M20 15.6v2.8a1.6 1.6 0 0 1-1.6 1.6h-2.8"/><path d="M8.4 20H5.6A1.6 1.6 0 0 1 4 18.4v-2.8"/><path d="M4 12h16"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">扫码添加</span>
+          <span class="row-sub">对准网站出示的 otpauth 二维码</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+      <button class="s23-entry" type="button" data-goto="s25" data-od-id="s23-entry-manual">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.6" rx="2.6"/><path d="M7 10.4h6"/><path d="M7 14.2h3.4"/><path d="M16.4 10.4h1.2"/><path d="M16.4 14.2h1.2"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">手动输入</span>
+          <span class="row-sub">粘贴 Base32 密钥，可调算法与周期</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+      <button class="s23-entry" type="button" data-album data-goto="s24" data-od-id="s23-entry-album">
+        <span class="row-icon" aria-hidden>
+          <svg viewBox="0 0 24 24"><rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M4.4 17.4 10 12l3.2 3 2.6-2.4 3.8 3.6"/></svg>
+        </span>
+        <span class="row-body">
+          <span class="row-title">从相册识别</span>
+          <span class="row-sub">选择二维码截图，本机离线解码</span>
+        </span>
+        <svg class="s23-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+      </button>
+    </div>
+
+    <div class="card s23-card s23-in od-d3" data-state-hide="loading empty error edge" data-od-id="s23-support">
+      <div class="sec-head">
+        <h2 class="h3">支持的参数</h2>
+        <span class="badge" data-od-min-fs>RFC 6238</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">算法</span>
+        <span class="num">SHA1 / SHA256 / SHA512</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">位数</span>
+        <span class="num">6 / 8 位</span>
+      </div>
+      <div class="s23-kv">
+        <span class="meta">周期</span>
+        <span class="num">30 / 60 秒</span>
+      </div>
+      <p class="fine mt-3 s23-detail" data-od-min-fs>扫码优先读 otpauth 里的参数；二维码里没有的项，先按 SHA1 / 6 位 / 30 秒计算，之后可在账户详情里改。</p>
+    </div>
+
+    <p class="fine s23-in od-d3" data-od-min-fs style="display:block;padding-top:var(--space-3);line-height:1.5">密钥以 Android Keystore 加密后只存本机，不进备份、不写日志、不上传；卸载 App 即随之删除。</p>
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s23-loading">
+      <div class="card">
+        <div class="sk w-40 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s23：从相册入口 → 先给一句「正在读取所选图片」的反馈，再进扫码页演示解码。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    sec.addEventListener('click', function (e) {
+      var album = e.target.closest && e.target.closest('[data-album]');
+      if (!album) return;
+      if (window.App) App.toast('已选择相册图片 · 正在本机识别二维码');
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s24" data-screen="s24" data-title="扫码添加" id="s24" data-od-id="screen-s24">
+  <div class="content pad" data-od-id="s24-content">
+
+    <!-- 相机权限被拒 -->
+    <div class="st-error" data-state-when="error" data-od-id="s24-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><path d="M4 8.4V5.6A1.6 1.6 0 0 1 5.6 4h2.8"/><path d="M20 15.6v2.8a1.6 1.6 0 0 1-1.6 1.6h-2.8"/><path d="M8.4 20H5.6A1.6 1.6 0 0 1 4 18.4v-2.8"/><path d="M15.6 4h2.8A1.6 1.6 0 0 1 20 5.6v2.8"/><path d="M8 8l8 8"/></svg></span>
+      <p class="st-title">无法使用相机</p>
+      <p class="st-desc">相机权限被拒绝，扫码不可用。可以到系统设置里重新授权，或改用手动输入密钥。</p>
+      <button class="btn btn-ghost" type="button" onclick="App.toast('已跳转系统设置 · 应用权限 · 相机')" data-od-id="s24-error-settings">去系统设置</button>
+      <button class="btn btn-ghost" type="button" data-goto="s25" data-od-id="s24-error-manual">改用手动输入</button>
+    </div>
+
+    <!-- 正常取景 -->
+    <div data-state-hide="error" data-od-id="s24-body">
+      <div class="s24-view s24-in od-d1" data-od-id="s24-view">
+        <div class="s24-lens" id="s24Lens" data-od-id="s24-lens">
+          <span class="s24-scanline" aria-hidden></span>
+          <span class="s24-frame" aria-hidden><span></span><span></span><span></span><span></span></span>
+        </div>
+        <span class="s24-hint" data-od-min-fs>把二维码放进取景框 · 识别在本机完成，截图不外传</span>
+      </div>
+
+      <div class="s24-alert s24-in od-d2" id="s24Alert" hidden data-od-id="s24-alert">
+        <div class="row" style="padding:0">
+          <span class="row-icon" aria-hidden style="background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger-text)">
+            <svg viewBox="0 0 24 24"><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">没有识别到二维码</span>
+            <span class="row-sub">这张图片里没有 otpauth 二维码，或图片太模糊。换一张，或直接手动输入密钥。</span>
+          </span>
+        </div>
+        <div class="grid-2 mt-2">
+          <button class="btn btn-ghost" type="button" data-album-retry data-od-id="s24-alert-retry">换一张图片</button>
+          <button class="btn" type="button" data-goto="s25" data-od-id="s24-alert-manual">手动输入</button>
+        </div>
+      </div>
+
+      <div class="s24-tools s24-in od-d2" data-od-id="s24-tools">
+        <button class="btn btn-ghost" type="button" data-torch aria-pressed="false" data-od-id="s24-torch">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9.2 3.4h5.6l-.9 5.2H10z"/><path d="M10.1 8.6 9.4 20.6h5.2l-.7-12"/></svg>
+          <span>手电筒</span>
+        </button>
+        <button class="btn btn-ghost" type="button" data-album-open data-od-id="s24-album">
+          <svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M4.4 17.4 10 12l3.2 3 2.6-2.4 3.8 3.6"/></svg>
+          <span>从相册选择</span>
+        </button>
+      </div>
+
+      <div class="group s24-in od-d3 mt-3" data-od-id="s24-fallback">
+        <div class="s24-row">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.6" rx="2.6"/><path d="M7 10.4h6"/><path d="M7 14.2h3.4"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">扫码不方便？</span>
+            <span class="row-sub">网站只给了密钥字符串时可改手动输入</span>
+          </span>
+          <button class="btn btn-ghost" type="button" data-goto="s25" data-od-id="s24-manual">手动输入</button>
+        </div>
+      </div>
+
+      <p class="fine s24-note s24-in od-d3" data-od-min-fs>识别成功后直接回到账户列表，可再改平台名与账号；二维码解析出的密钥立即用 Keystore 加密，不落明文磁盘。</p>
+    </div>
+  </div>
+
+  <script>
+  /* s24：手电筒开关 + 相册识别失败反馈（原型不发真实摄像头请求）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+    var lens = sec.querySelector('#s24Lens');
+    var alert = sec.querySelector('#s24Alert');
+    var torch = sec.querySelector('[data-torch]');
+
+    function toggleTorch() {
+      if (!torch) return;
+      var on = torch.getAttribute('aria-pressed') === 'true';
+      torch.setAttribute('aria-pressed', on ? 'false' : 'true');
+      if (lens) lens.classList.toggle('is-torch', !on);
+      if (window.App) App.toast(on ? '手电筒已关闭' : '手电筒已打开');
+    }
+
+    function scanFail() {
+      if (alert) alert.hidden = false;
+      if (window.App) { App.haptic('medium'); App.toast('未识别到二维码，请换一张图片'); }
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('[data-torch]')) { toggleTorch(); return; }
+      if (t.closest('[data-album-open]')) { scanFail(); return; }
+      if (t.closest('[data-album-retry]')) {
+        if (window.App) App.toast('已重新打开相册 · 请选择二维码截图');
+        if (alert) alert.hidden = true;
+        return;
+      }
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s25" data-screen="s25" data-title="手动输入" id="s25" data-od-id="screen-s25">
+  <div class="content pad" data-od-id="s25-content">
+
+    <p class="s25-hint" data-od-min-fs style="display:block;padding-top:var(--space-2)">网站「两步验证」页给出的密钥通常是一串 Base32 字符（A–Z 与 2–7），可带空格。</p>
+
+    <form class="s25-form" data-s25-form novalidate data-od-id="s25-form">
+      <label class="s25-field">
+        <span class="s25-label">平台名</span>
+        <input class="s25-in" type="text" name="issuer" id="s25Issuer" placeholder="例如 GitHub / 腾讯云" autocomplete="off" />
+      </label>
+
+      <label class="s25-field">
+        <span class="s25-label">账户（可选）</span>
+        <input class="s25-in" type="text" name="account" id="s25Account" placeholder="例如 alice@acme.com" autocomplete="off" inputmode="email" />
+      </label>
+
+      <label class="s25-field">
+        <span class="s25-label">密钥（Base32）</span>
+        <input class="s25-in num" type="text" name="secret" id="s25Secret" value="JBSWY3DPEHPK3PXP"
+               autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <span class="s25-hint" data-od-min-fs>演示用公开测试值；真实密钥请从网站的「无法扫码」入口复制。</span>
+      </label>
+
+      <p class="s25-err" id="s25Err" hidden role="alert" data-od-id="s25-err">
+        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg>
+        <span id="s25ErrText">密钥格式不对</span>
+      </p>
+
+      <div class="s25-preview" data-od-id="s25-preview">
+        <span>
+          <span class="meta" data-od-min-fs>按当前参数预演（假数据）</span>
+          <span class="totp-code" id="s25PreviewCode">654 321</span>
+        </span>
+        <span class="totp-meta" data-od-min-fs>
+          <span class="totp-ring" id="s25Ring" aria-hidden></span>
+          <span class="totp-sec" id="s25Sec">30s</span>
+        </span>
+      </div>
+
+      <details class="s25-adv" data-od-id="s25-adv">
+        <summary>
+          <span>高级参数</span>
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
+        </summary>
+        <div class="s25-adv-body">
+          <div class="s25-field">
+            <span class="s25-seg-label">算法</span>
+            <div class="segmented" role="radiogroup" aria-label="哈希算法">
+              <button type="button" role="radio" aria-checked="true" data-adv="algo" data-value="SHA1">SHA1</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="algo" data-value="SHA256">SHA256</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="algo" data-value="SHA512">SHA512</button>
+            </div>
+          </div>
+          <div class="s25-field">
+            <span class="s25-seg-label">位数</span>
+            <div class="segmented" role="radiogroup" aria-label="验证码位数">
+              <button type="button" role="radio" aria-checked="true" data-adv="digits" data-value="6">6 位</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="digits" data-value="8">8 位</button>
+            </div>
+          </div>
+          <div class="s25-field">
+            <span class="s25-seg-label">周期</span>
+            <div class="segmented" role="radiogroup" aria-label="刷新周期">
+              <button type="button" role="radio" aria-checked="true" data-adv="period" data-value="30">30 秒</button>
+              <button type="button" role="radio" aria-checked="false" data-adv="period" data-value="60">60 秒</button>
+            </div>
+          </div>
+          <p class="fine" data-od-min-fs style="line-height:1.45">默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。</p>
+        </div>
+      </details>
+
+      <div class="s25-actions">
+        <button class="btn" type="submit" data-od-id="s25-submit">添加账户</button>
+        <button class="btn btn-ghost" type="button" data-goto="s24" data-od-id="s25-goto-scan">改扫码添加</button>
+      </div>
+    </form>
+
+    <p class="fine s25-foot" data-od-min-fs style="line-height:1.5">密钥加密后只存本机，不写日志、不上传、不进导出包；添加后可在账户详情里改名、换平台或删除。</p>
+  </div>
+
+  <script>
+  /* s25：高级参数分段选择、密钥格式校验、预演倒计时。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var form = sec.querySelector('[data-s25-form]');
+    var issuer = sec.querySelector('#s25Issuer');
+    var account = sec.querySelector('#s25Account');
+    var secret = sec.querySelector('#s25Secret');
+    var err = sec.querySelector('#s25Err');
+    var errText = sec.querySelector('#s25ErrText');
+    var params = { algo: 'SHA1', digits: '6', period: '30' };
+    var left = 30;
+
+    var ring = sec.querySelector('#s25Ring');
+    var secEl = sec.querySelector('#s25Sec');
+    var preview = sec.querySelector('#s25PreviewCode');
+
+    function paint() {
+      var period = Number(params.period);
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      if (secEl) secEl.textContent = left + 's';
+      if (preview) {
+        preview.textContent = params.digits === '8' ? '6543 2170' : '654 321';
+        preview.classList.toggle('totp-code--wide', params.digits === '8');
+      }
+      if (secEl) secEl.classList.toggle('is-warn', left <= 5);
+      if (ring) ring.classList.toggle('is-warn', left <= 5);
+    }
+    paint();
+    window.setInterval(function () {
+      left = left > 1 ? left - 1 : Number(params.period);
+      paint();
+    }, 1000);
+
+    function showError(text, field) {
+      if (errText) errText.textContent = text;
+      if (err) err.hidden = false;
+      if (field) { field.setAttribute('aria-invalid', 'true'); field.focus(); }
+    }
+    function clearError(field) {
+      if (err) err.hidden = true;
+      if (field) field.removeAttribute('aria-invalid');
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var btn = t.closest('[data-adv]');
+      if (btn) {
+        var group = sec.querySelectorAll('[data-adv="' + btn.getAttribute('data-adv') + '"]');
+        Array.prototype.forEach.call(group, function (b) {
+          b.setAttribute('aria-checked', b === btn ? 'true' : 'false');
+        });
+        params[btn.getAttribute('data-adv')] = btn.getAttribute('data-value');
+        left = Number(params.period);
+        paint();
+        if (window.App) App.toast('已切换为 ' + btn.textContent.trim() + ' · 预演已刷新');
+      }
+    });
+
+    if (secret) secret.addEventListener('input', function () { clearError(secret); });
+    if (issuer) issuer.addEventListener('input', function () { clearError(issuer); });
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = issuer && issuer.value ? issuer.value.trim() : '';
+        var key = secret && secret.value ? secret.value.replace(/\s+/g, '').toUpperCase() : '';
+        if (!name) { showError('请填写平台名，用于在列表里区分账户', issuer); return; }
+        if (!/^[A-Z2-7]{16,}$/.test(key)) {
+          showError('密钥应为 16 位以上的 Base32 字符（A–Z 与 2–7）', secret);
+          return;
+        }
+        clearError(secret);
+        clearError(issuer);
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('已添加 ' + name + (account && account.value.trim() ? ' · ' + account.value.trim() : ''));
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+      });
+    }
+  })();
+  </script>
+</section>
+
+<section class="screen s26" data-screen="s26" data-title="账户详情" id="s26" data-od-id="screen-s26">
+  <div class="content pad" data-od-id="s26-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s26-loading">
+      <div class="card">
+        <div class="sk w-60 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-40"></div>
+      </div>
+    </div>
+
+    <div data-state-hide="loading" data-od-id="s26-body">
+      <div class="s26-hero s26-in-anim od-d1" data-od-id="s26-hero">
+        <span class="s26-ava" id="s26Ava" aria-hidden>G</span>
+        <span class="row-body">
+          <span class="row-title" id="s26Title">GitHub</span>
+          <span class="row-sub">alice@acme.com · 已启用 · 排序第 4 位</span>
+        </span>
+      </div>
+
+      <div class="s26-code s26-in-anim od-d1" data-od-id="s26-code">
+        <span>
+          <span class="meta" data-od-min-fs>当前验证码</span>
+          <span class="totp-code" data-s26-code>936 140</span>
+        </span>
+        <span class="totp-meta" data-od-min-fs>
+          <span class="totp-ring" id="s26Ring" aria-hidden></span>
+          <span class="totp-sec" id="s26Sec">27s</span>
+        </span>
+      </div>
+
+      <div class="s26-grid s26-in-anim od-d2" data-od-id="s26-fields">
+        <label class="s26-field">
+          <span class="s26-label">平台名</span>
+          <input class="s26-in" type="text" id="s26Issuer" value="GitHub" autocomplete="off" />
+        </label>
+        <label class="s26-field">
+          <span class="s26-label">账户</span>
+          <input class="s26-in" type="text" id="s26Account" value="alice@acme.com" autocomplete="off" inputmode="email" />
+        </label>
+        <div class="s26-field">
+          <span class="s26-label">密钥（Base32）</span>
+          <div class="s26-mask-row">
+            <input class="s26-in num" type="text" id="s26Secret" value="•••• •••• •••• ••••" readonly aria-label="已加密的密钥，掩码显示" />
+            <button class="btn btn-ghost" type="button" data-reveal aria-pressed="false" data-od-id="s26-reveal">显示</button>
+          </div>
+          <span class="fine" data-od-min-fs style="line-height:1.4">掩码显示，默认不落屏；显示 15 秒后自动收回。</span>
+        </div>
+      </div>
+
+      <div class="group s26-in-anim od-d2" data-od-id="s26-params">
+        <div class="s26-kv">
+          <span class="meta">算法</span>
+          <span class="num">SHA1 · 6 位 · 30 秒</span>
+        </div>
+        <div class="s26-kv">
+          <span class="meta">来源</span>
+          <span class="num">扫码识别 · 2025-10-14</span>
+        </div>
+        <div class="s26-kv">
+          <span class="meta">最近使用</span>
+          <span class="num">今天 09:26</span>
+        </div>
+      </div>
+      <p class="fine mt-2" data-od-min-fs style="line-height:1.45">参数由二维码决定，改错会算出错码，所以这里只读；要换参数请重新扫码添加。</p>
+
+      <div class="group s26-in-anim od-d3 mt-3" data-od-id="s26-order">
+        <div class="row" style="border-top:0">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3 7h.5"/><path d="M3 12h.5"/><path d="M3 17h.5"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">列表排序</span>
+            <span class="row-sub">靠近顶部 = 更常用，概览卡片也按此顺序取前 3 个</span>
+          </span>
+          <span class="row-tail"><span class="num">第 4 位 / 共 5</span></span>
+        </div>
+        <div class="s26-order">
+          <button class="btn btn-ghost" type="button" data-move="up" data-od-id="s26-move-up">上移一位</button>
+          <button class="btn btn-ghost" type="button" data-move="down" data-od-id="s26-move-down">下移一位</button>
+        </div>
+      </div>
+
+      <div class="s26-save s26-in-anim od-d3" data-od-id="s26-save">
+        <button class="btn" type="button" data-save data-od-id="s26-save-btn">保存修改</button>
+      </div>
+
+      <div class="s26-danger s26-in-anim od-d3" data-od-id="s26-danger">
+        <div class="row" style="padding:0 0 var(--space-2);border-top:0">
+          <span class="row-icon" aria-hidden style="background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger-text)">
+            <svg viewBox="0 0 24 24"><path d="M4.6 6.6h14.8"/><path d="M9.4 6.6V4.4h5.2v2.2"/><path d="M6.6 6.6 7.6 20h8.8l1-13.4"/><path d="M10.4 10.4v5.6"/><path d="M13.6 10.4v5.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">删除该账户</span>
+            <span class="row-sub">删除后本机不再计算此验证码，网站上的两步验证需另行关闭</span>
+          </span>
+        </div>
+        <button class="btn btn-ghost" type="button" data-del data-od-id="s26-del">删除账户</button>
+      </div>
+
+      <p class="fine s26-note" data-od-min-fs>改名与换平台只影响本机展示，不影响网站上已绑定的两步验证。</p>
+    </div>
+  </div>
+
+  <div class="scrim" id="s26-del-dialog" hidden data-od-id="s26-del-dialog">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="s26DelTitle" aria-describedby="s26DelDesc">
+      <p class="h3" id="s26DelTitle">删除「<span id="s26DelName">GitHub</span>」账户？</p>
+      <p class="s26-del-desc meta" id="s26DelDesc" data-od-min-fs>删除后无法从本机恢复，也不会同步到其他设备。网站上的两步验证仍然有效，需要到该网站设置里才能关闭。</p>
+      <div class="s26-del-actions">
+        <button class="btn btn-ghost" type="button" data-close="#s26-del-dialog" data-od-id="s26-del-cancel">取消</button>
+        <button class="btn is-danger" type="button" data-del-confirm data-od-id="s26-del-confirm">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s26：掩码显示（15s 自动收回）、排序反馈、保存、删除二次确认、验证码倒计时。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var left = 27;
+    var period = 30;
+    var ring = sec.querySelector('#s26Ring');
+    var secEl = sec.querySelector('#s26Sec');
+    function paint() {
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      if (secEl) secEl.textContent = left + 's';
+      if (ring) ring.classList.toggle('is-warn', left <= 5);
+      if (secEl) secEl.classList.toggle('is-warn', left <= 5);
+    }
+    paint();
+    window.setInterval(function () { left = left > 1 ? left - 1 : period; paint(); }, 1000);
+
+    var reveal = sec.querySelector('[data-reveal]');
+    var secret = sec.querySelector('#s26Secret');
+    var revealTimer = null;
+    if (reveal && secret) {
+      reveal.addEventListener('click', function () {
+        var shown = reveal.getAttribute('aria-pressed') === 'true';
+        reveal.setAttribute('aria-pressed', shown ? 'false' : 'true');
+        reveal.textContent = shown ? '显示' : '收起';
+        secret.value = shown ? '•••• •••• •••• ••••' : 'JBSWY3DPEHPK3PXP';
+        if (window.App) App.toast(shown ? '密钥已收起' : '密钥将显示 15 秒');
+        if (revealTimer) { window.clearTimeout(revealTimer); revealTimer = null; }
+        if (!shown) {
+          revealTimer = window.setTimeout(function () {
+            reveal.setAttribute('aria-pressed', 'false');
+            reveal.textContent = '显示';
+            secret.value = '•••• •••• •••• ••••';
+          }, 15000);
+        }
+      });
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var move = t.closest('[data-move]');
+      if (move) {
+        var dir = move.getAttribute('data-move');
+        if (window.App) {
+          App.haptic('light');
+          App.toast(dir === 'up' ? '已上移一位 · 排序第 3 位' : '已下移一位 · 排序第 5 位');
+        }
+        var pos = sec.querySelector('[data-move]') && sec.querySelector('.s26-order').parentNode.querySelector('.num');
+        if (pos) pos.textContent = dir === 'up' ? '第 3 位 / 共 5' : '第 5 位 / 共 5';
+        return;
+      }
+
+      if (t.closest('[data-save]')) {
+        var name = (sec.querySelector('#s26Issuer') || {}).value || '';
+        var title = sec.querySelector('#s26Title');
+        var ava = sec.querySelector('#s26Ava');
+        if (title && name.trim()) title.textContent = name.trim();
+        if (ava && name.trim()) ava.textContent = name.trim().slice(0, 1);
+        if (window.App) { App.haptic('medium'); App.toast('已保存 · 账户信息已更新'); }
+        return;
+      }
+
+      if (t.closest('[data-del]')) {
+        var dlg = sec.querySelector('#s26-del-dialog');
+        var dn = sec.querySelector('#s26DelName');
+        var issuer = sec.querySelector('#s26Issuer');
+        if (dn && issuer && issuer.value.trim()) dn.textContent = issuer.value.trim();
+        if (dlg) dlg.hidden = false;
+        return;
+      }
+
+      if (t.closest('[data-del-confirm]')) {
+        var dialog = sec.querySelector('#s26-del-dialog');
+        if (dialog) dialog.hidden = true;
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('账户已删除');
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+        return;
+      }
+    });
+
+    sec.addEventListener('click', function (e) {
+      var dlg = sec.querySelector('#s26-del-dialog');
+      if (dlg && !dlg.hidden && e.target === dlg) dlg.hidden = true;
+    });
+  })();
+  </script>
+</section>
+
+<section class="screen s27" data-screen="s27" data-title="备份与导入" id="s27" data-od-id="screen-s27">
+  <div class="content pad" data-od-id="s27-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s27-loading">
+      <div class="card">
+        <div class="sk w-50 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+      </div>
+      <div class="card mt-3">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <!-- 导入失败态（备份密码错误 / 文件损坏） -->
+    <div class="st-error" data-state-when="error" data-od-id="s27-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg></span>
+      <p class="st-title">导入失败</p>
+      <p class="st-desc">备份密码不正确，或文件不是完整的 Aegis / 2FAS 导出包。重试不会改动已有账户。</p>
+      <button class="btn btn-ghost" type="button" data-import-retry data-od-id="s27-error-retry">重新选择备份文件</button>
+    </div>
+
+    <!-- 边界态：超大备份 -->
+    <div class="pad" data-state-when="edge" data-od-id="s27-edge">
+      <div class="card">
+        <div class="row-between">
+          <span class="badge" data-od-min-fs>5,000 个账户</span>
+          <span class="meta">文件 2.4 MB</span>
+        </div>
+        <p class="row-title mt-2">aegis-backup-2025-10-14.json</p>
+        <p class="meta mt-2">超过 1,000 个账户时分批导入，每批 200 个，中途可取消；已导入的账户保留。</p>
+        <div class="grid-2 mt-3">
+          <button class="btn btn-ghost" type="button" onclick="App.toast('已取消 · 未导入的账户未写入')" data-od-id="s27-edge-cancel">取消</button>
+          <button class="btn" type="button" onclick="App.toast('继续导入第 26 批 · 4,800 / 5,000')" data-od-id="s27-edge-continue">继续导入</button>
+        </div>
+      </div>
+    </div>
+
+    <div data-state-hide="loading error edge" data-od-id="s27-body">
+      <p class="s27-intro s27-in-anim od-d1" data-od-min-fs>
+        <span class="meta">备份文件包含全部密钥，等同账号的第二把钥匙 —— 只放在自己可信的地方。</span>
+      </p>
+
+      <div class="card s27-in-anim od-d2" data-od-id="s27-export">
+        <div class="sec-head">
+          <h2 class="h3">加密导出</h2>
+          <span class="badge" data-od-min-fs>AES-256</span>
+        </div>
+        <div class="s27-block">
+          <label class="s27-field">
+            <span class="s27-label">设置备份密码（至少 8 位）</span>
+            <input class="s27-in" type="password" id="s27Pass" placeholder="用于加密备份文件" autocomplete="new-password" />
+          </label>
+          <button class="btn s27-btn" type="button" data-export data-od-id="s27-export-btn">导出加密备份</button>
+          <p class="fine s27-note" data-od-min-fs>密码不随文件保存，丢了就解不开；文件写入「下载」目录，同名文件会被覆盖。</p>
+        </div>
+      </div>
+
+      <div class="card s27-in-anim od-d3 mt-3" data-od-id="s27-import">
+        <div class="sec-head">
+          <h2 class="h3">从其他验证器导入</h2>
+          <span class="meta">本机解析</span>
+        </div>
+        <button class="s27-row" type="button" data-import="Aegis" data-od-id="s27-import-aegis">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M12 8.6v5.2"/><path d="M9.4 11.2h5.2"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">Aegis（JSON 导出）</span>
+            <span class="row-sub">支持加密与明文导出，密码在导入时输入</span>
+          </span>
+          <span class="badge" data-od-min-fs>可导入</span>
+        </button>
+        <button class="s27-row" type="button" data-import="2FAS" data-od-id="s27-import-2fas">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="4.6" y="3.4" width="14.8" height="17.2" rx="3"/><path d="M8.4 8.2h7.2"/><path d="M8.4 12h4.6"/><path d="M8.4 15.8h2.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">2FAS（.2fas 备份）</span>
+            <span class="row-sub">读取 accounts 数组，忽略应用内设置项</span>
+          </span>
+          <span class="badge" data-od-min-fs>可导入</span>
+        </button>
+        <button class="s27-row" type="button" aria-disabled="true" data-import-unsupported data-od-id="s27-import-unsupported">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/><path d="M3.4 10.2h17.2"/><path d="M7 15h3"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">其他专有格式</span>
+            <span class="row-sub">无公开格式，需改用扫码或手动输入逐条添加</span>
+          </span>
+          <span class="badge" data-od-min-fs>不支持</span>
+        </button>
+        <p class="fine s27-note" data-od-min-fs>导入按密钥去重，同名账户保留两条；导入过程不联网，解析失败不会写入任何账户。</p>
+      </div>
+
+      <div class="s27-warn s27-in-anim od-d3 mt-3" data-od-id="s27-warn">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        <span>导出包请勿放进网盘同步目录或聊天记录；本机卸载 App 会一并删除密钥，届时应删除备份文件本身。</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="s27-import-dialog" hidden data-od-id="s27-import-dialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="s27ImportTitle">
+      <p class="h3" id="s27ImportTitle">导入 <span id="s27ImportName">Aegis</span> 备份</p>
+      <p class="s27-dialog-desc meta" data-od-min-fs>输入备份文件的密码；不确定就先用「明文导出」在对方 App 里重做一份。</p>
+      <label class="s27-field">
+        <span class="s27-label">备份密码</span>
+        <input class="s27-in num" type="password" id="s27ImportPass" placeholder="备份文件密码" autocomplete="off" />
+      </label>
+      <p class="s27-err" id="s27ImportErr" hidden role="alert" data-od-id="s27-import-err">
+        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg>
+        <span id="s27ImportErrText">请先输入备份密码</span>
+      </p>
+      <div class="s27-dialog-actions">
+        <button class="btn btn-ghost" type="button" data-close="#s27-import-dialog" data-od-id="s27-import-cancel">取消</button>
+        <button class="btn" type="button" data-import-confirm data-od-id="s27-import-confirm">开始导入</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s27：加密导出（密码强度校验）、导入对话框（密码必填 / 失败提示）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var dlg = sec.querySelector('#s27-import-dialog');
+    var dlgName = sec.querySelector('#s27ImportName');
+    var dlgPass = sec.querySelector('#s27ImportPass');
+    var dlgErr = sec.querySelector('#s27ImportErr');
+    var dlgErrText = sec.querySelector('#s27ImportErrText');
+
+    function openImport(name) {
+      if (dlgName) dlgName.textContent = name;
+      if (dlgPass) dlgPass.value = '';
+      if (dlgErr) dlgErr.hidden = true;
+      if (dlg) dlg.hidden = false;
+      if (dlgPass) window.setTimeout(function () { dlgPass.focus(); }, 60);
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var imp = t.closest('[data-import]');
+      if (imp) { openImport(imp.getAttribute('data-import')); return; }
+
+      if (t.closest('[data-import-unsupported]')) {
+        if (window.App) App.toast('该格式无公开结构，只能扫码或手动输入');
+        return;
+      }
+
+      if (t.closest('[data-export]')) {
+        var pass = (sec.querySelector('#s27Pass') || {}).value || '';
+        if (pass.length < 8) {
+          if (window.App) App.toast('密码至少 8 位 · 备份未导出');
+          var field = sec.querySelector('#s27Pass');
+          if (field) { field.focus(); field.setAttribute('aria-invalid', 'true'); }
+          return;
+        }
+        var f = sec.querySelector('#s27Pass');
+        if (f) f.removeAttribute('aria-invalid');
+        if (window.App) { App.haptic('medium'); App.toast('已导出 5 个账户 · aegis-totp-backup.json'); }
+        return;
+      }
+
+      if (t.closest('[data-import-confirm]')) {
+        var v = dlgPass ? dlgPass.value : '';
+        if (!v) {
+          if (dlgErrText) dlgErrText.textContent = '请先输入备份密码';
+          if (dlgErr) dlgErr.hidden = false;
+          if (dlgPass) dlgPass.focus();
+          return;
+        }
+        if (dlg) dlg.hidden = true;
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('已导入 5 个账户 · 按密钥去重后新增 4 个');
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+        return;
+      }
+
+      if (t.closest('[data-import-retry]')) {
+        openImport('Aegis');
+        return;
+      }
+
+      if (dlg && !dlg.hidden && e.target === dlg) dlg.hidden = true;
+    });
+
+    if (dlgPass) dlgPass.addEventListener('input', function () { if (dlgErr) dlgErr.hidden = true; });
   })();
   </script>
 </section>

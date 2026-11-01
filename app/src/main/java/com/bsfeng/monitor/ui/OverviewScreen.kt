@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NavigateNext
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -139,6 +140,8 @@ fun OverviewScreen(
     onOpenSettings: (() -> Unit)? = null,
     /** s01-recent-*：切实时 Tab 并把该条滚到可视区。未接线时退化为 onOpenLive。 */
     onOpenLiveEvent: ((Record) -> Unit)? = null,
+    /** s01-goto-totp：右上角验证器图标。null = 功能关闭，图标整个不渲染。 */
+    onOpenTotp: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val t = LocalDesignTokens.current
@@ -163,6 +166,7 @@ fun OverviewScreen(
             OverviewHead(
                 dateText = formatFullDate(now) + " · " + weekdayLabel(now),
                 onBell = { toast.show("今日已记录 " + state.todayEventCount + " 条事件") },
+                onOpenTotp = onOpenTotp,
             )
             RangeSegment(
                 selectedIndex = rangeIndex,
@@ -253,7 +257,7 @@ fun OverviewScreen(
 // ───────────────────────────── 页头 / 分段 ─────────────────────────────
 
 @Composable
-private fun OverviewHead(dateText: String, onBell: () -> Unit) {
+private fun OverviewHead(dateText: String, onBell: () -> Unit, onOpenTotp: (() -> Unit)? = null) {
     val t = LocalDesignTokens.current
     Row(
         modifier = Modifier
@@ -274,6 +278,16 @@ private fun OverviewHead(dateText: String, onBell: () -> Unit) {
             modifier = Modifier.testTag("s01-bell"),
             onClick = onBell,
         )
+        if (onOpenTotp != null) {
+            Spacer(Modifier.width(t.space2))
+            // s01-goto-totp：原型 .screen-head 右上角第二个 icon-btn（盾形 = 验证器）
+            OverviewIconButton(
+                icon = Icons.Outlined.Security,
+                description = "验证器",
+                modifier = Modifier.testTag("s01-goto-totp"),
+                onClick = onOpenTotp,
+            )
+        }
     }
 }
 

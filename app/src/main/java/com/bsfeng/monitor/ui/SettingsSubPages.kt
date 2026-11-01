@@ -29,12 +29,13 @@ internal fun SettingsSubPageBody(
 
         SettingsSubPage.LIVE_DETAIL -> SettingsLiveDetail(rt)
         SettingsSubPage.SKIP_DETAIL -> SettingsSkipDetail(rt)
-        SettingsSubPage.FINANCE_DETAIL -> SettingsFinanceDetail(rt)
+        SettingsSubPage.FINANCE_DETAIL -> SettingsFinanceDetail(rt, onOpenSubPage)
         SettingsSubPage.TRANSPORT_DETAIL -> SettingsTransportDetail(rt, onOpenSubPage)
         SettingsSubPage.TRANSPORT_RECEIVING_DETAIL -> SettingsTransportReceivingDetail(rt)
         SettingsSubPage.TRANSPORT_ALERTS_DETAIL -> SettingsTransportAlertsDetail(rt)
         SettingsSubPage.QUOTA_DETAIL -> SettingsQuotaDetail(rt)
         SettingsSubPage.LOCATION_DETAIL -> SettingsLocationDetail(rt)
+        SettingsSubPage.TOTP_DETAIL -> SettingsTotpFeatureCard(rt)
         SettingsSubPage.WIDGET_DETAIL -> SettingsWidgetDetail(rt)
     }
 }

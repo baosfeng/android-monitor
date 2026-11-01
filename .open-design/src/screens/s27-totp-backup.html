@@ -1,0 +1,255 @@
+<!-- ============================================================
+     s27 · 备份与导入（push 屏）
+
+     加密导出 + 从 Aegis / 2FAS 导入（含密码错误 / 文件损坏失败态）。
+     入口：s22「备份与导入」、s09「验证器 › 备份与导入」。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s27">
+/* ── s27 备份与导入 ─────────────────────────────────────────────── */
+.screen.s27{font-size:max(var(--text-sm),14px)}
+.screen.s27 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s27 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s27-label){font-size:max(var(--text-sm),14px)}
+.screen.s27 button:focus-visible,
+.screen.s27 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s27-intro{display:block;margin:0 0 var(--space-3);line-height:1.5}
+.s27-block{padding:var(--space-3) 0}
+.s27-block + .s27-block{border-top:1px solid var(--border-soft)}
+.s27-label{color:var(--fg-2);font-weight:500;display:block;margin-bottom:var(--space-2)}
+.s27-field{display:grid;gap:var(--space-1)}
+.s27-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s27-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s27-in.num{font-family:var(--font-mono);letter-spacing:.06em}
+.s27-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  width:100%;min-height:var(--tap-min);padding:var(--space-2) 0;border:0;border-top:1px solid var(--border-soft);
+  background:transparent;color:inherit;text-align:left;cursor:pointer;
+  transition:background var(--dur-state) var(--ease-standard)}
+.s27-row:first-of-type{border-top:0}
+.s27-row:active{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.s27-row .row-icon{background:color-mix(in srgb,var(--fg) 7%,transparent);color:var(--fg-2)}
+.s27-row[aria-disabled="true"]{cursor:default;opacity:.6}
+.s27-btn{width:100%;margin-top:var(--space-3)}
+.s27-note{display:block;padding-top:var(--space-2);line-height:1.45}
+.s27-warn{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-3);
+  border-radius:var(--radius-md);background:color-mix(in srgb,var(--warn) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);line-height:1.45}
+.s27-warn svg{width:18px;height:18px;flex:0 0 auto;margin-top:1px;fill:none;stroke:var(--warn-text);
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.s27-warn span{color:var(--fg-2)}
+.s27-in-anim{opacity:0}
+.s27.is-active .s27-in-anim{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s27.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s27.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s27.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s27 *{animation:none}
+.s27-dialog-desc{margin:0 0 var(--space-3);line-height:1.5}
+.s27-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-3)}
+.s27-dialog-actions .btn{width:100%}
+.s27-err{display:flex;gap:var(--space-2);align-items:center;color:var(--danger-text);line-height:1.4;margin-top:var(--space-2)}
+.s27-err svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+</style>
+<!--@od:section-->
+<section class="screen s27" data-screen="s27" data-title="备份与导入" id="s27" data-od-id="screen-s27">
+  <div class="content pad" data-od-id="s27-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s27-loading">
+      <div class="card">
+        <div class="sk w-50 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+      </div>
+      <div class="card mt-3">
+        <div class="sk w-100 tall"></div>
+        <div class="sk w-60"></div>
+      </div>
+    </div>
+
+    <!-- 导入失败态（备份密码错误 / 文件损坏） -->
+    <div class="st-error" data-state-when="error" data-od-id="s27-error">
+      <span class="st-icon" aria-hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg></span>
+      <p class="st-title">导入失败</p>
+      <p class="st-desc">备份密码不正确，或文件不是完整的 Aegis / 2FAS 导出包。重试不会改动已有账户。</p>
+      <button class="btn btn-ghost" type="button" data-import-retry data-od-id="s27-error-retry">重新选择备份文件</button>
+    </div>
+
+    <!-- 边界态：超大备份 -->
+    <div class="pad" data-state-when="edge" data-od-id="s27-edge">
+      <div class="card">
+        <div class="row-between">
+          <span class="badge" data-od-min-fs>5,000 个账户</span>
+          <span class="meta">文件 2.4 MB</span>
+        </div>
+        <p class="row-title mt-2">aegis-backup-2025-10-14.json</p>
+        <p class="meta mt-2">超过 1,000 个账户时分批导入，每批 200 个，中途可取消；已导入的账户保留。</p>
+        <div class="grid-2 mt-3">
+          <button class="btn btn-ghost" type="button" onclick="App.toast('已取消 · 未导入的账户未写入')" data-od-id="s27-edge-cancel">取消</button>
+          <button class="btn" type="button" onclick="App.toast('继续导入第 26 批 · 4,800 / 5,000')" data-od-id="s27-edge-continue">继续导入</button>
+        </div>
+      </div>
+    </div>
+
+    <div data-state-hide="loading error edge" data-od-id="s27-body">
+      <p class="s27-intro s27-in-anim od-d1" data-od-min-fs>
+        <span class="meta">备份文件包含全部密钥，等同账号的第二把钥匙 —— 只放在自己可信的地方。</span>
+      </p>
+
+      <div class="card s27-in-anim od-d2" data-od-id="s27-export">
+        <div class="sec-head">
+          <h2 class="h3">加密导出</h2>
+          <span class="badge" data-od-min-fs>AES-256</span>
+        </div>
+        <div class="s27-block">
+          <label class="s27-field">
+            <span class="s27-label">设置备份密码（至少 8 位）</span>
+            <input class="s27-in" type="password" id="s27Pass" placeholder="用于加密备份文件" autocomplete="new-password" />
+          </label>
+          <button class="btn s27-btn" type="button" data-export data-od-id="s27-export-btn">导出加密备份</button>
+          <p class="fine s27-note" data-od-min-fs>密码不随文件保存，丢了就解不开；文件写入「下载」目录，同名文件会被覆盖。</p>
+        </div>
+      </div>
+
+      <div class="card s27-in-anim od-d3 mt-3" data-od-id="s27-import">
+        <div class="sec-head">
+          <h2 class="h3">从其他验证器导入</h2>
+          <span class="meta">本机解析</span>
+        </div>
+        <button class="s27-row" type="button" data-import="Aegis" data-od-id="s27-import-aegis">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M12 8.6v5.2"/><path d="M9.4 11.2h5.2"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">Aegis（JSON 导出）</span>
+            <span class="row-sub">支持加密与明文导出，密码在导入时输入</span>
+          </span>
+          <span class="badge" data-od-min-fs>可导入</span>
+        </button>
+        <button class="s27-row" type="button" data-import="2FAS" data-od-id="s27-import-2fas">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="4.6" y="3.4" width="14.8" height="17.2" rx="3"/><path d="M8.4 8.2h7.2"/><path d="M8.4 12h4.6"/><path d="M8.4 15.8h2.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">2FAS（.2fas 备份）</span>
+            <span class="row-sub">读取 accounts 数组，忽略应用内设置项</span>
+          </span>
+          <span class="badge" data-od-min-fs>可导入</span>
+        </button>
+        <button class="s27-row" type="button" aria-disabled="true" data-import-unsupported data-od-id="s27-import-unsupported">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/><path d="M3.4 10.2h17.2"/><path d="M7 15h3"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">其他专有格式</span>
+            <span class="row-sub">无公开格式，需改用扫码或手动输入逐条添加</span>
+          </span>
+          <span class="badge" data-od-min-fs>不支持</span>
+        </button>
+        <p class="fine s27-note" data-od-min-fs>导入按密钥去重，同名账户保留两条；导入过程不联网，解析失败不会写入任何账户。</p>
+      </div>
+
+      <div class="s27-warn s27-in-anim od-d3 mt-3" data-od-id="s27-warn">
+        <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.6v.6"/></svg>
+        <span>导出包请勿放进网盘同步目录或聊天记录；本机卸载 App 会一并删除密钥，届时应删除备份文件本身。</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="s27-import-dialog" hidden data-od-id="s27-import-dialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="s27ImportTitle">
+      <p class="h3" id="s27ImportTitle">导入 <span id="s27ImportName">Aegis</span> 备份</p>
+      <p class="s27-dialog-desc meta" data-od-min-fs>输入备份文件的密码；不确定就先用「明文导出」在对方 App 里重做一份。</p>
+      <label class="s27-field">
+        <span class="s27-label">备份密码</span>
+        <input class="s27-in num" type="password" id="s27ImportPass" placeholder="备份文件密码" autocomplete="off" />
+      </label>
+      <p class="s27-err" id="s27ImportErr" hidden role="alert" data-od-id="s27-import-err">
+        <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 8v4.6"/><path d="M12 15.8v.4"/></svg>
+        <span id="s27ImportErrText">请先输入备份密码</span>
+      </p>
+      <div class="s27-dialog-actions">
+        <button class="btn btn-ghost" type="button" data-close="#s27-import-dialog" data-od-id="s27-import-cancel">取消</button>
+        <button class="btn" type="button" data-import-confirm data-od-id="s27-import-confirm">开始导入</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s27：加密导出（密码强度校验）、导入对话框（密码必填 / 失败提示）。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var dlg = sec.querySelector('#s27-import-dialog');
+    var dlgName = sec.querySelector('#s27ImportName');
+    var dlgPass = sec.querySelector('#s27ImportPass');
+    var dlgErr = sec.querySelector('#s27ImportErr');
+    var dlgErrText = sec.querySelector('#s27ImportErrText');
+
+    function openImport(name) {
+      if (dlgName) dlgName.textContent = name;
+      if (dlgPass) dlgPass.value = '';
+      if (dlgErr) dlgErr.hidden = true;
+      if (dlg) dlg.hidden = false;
+      if (dlgPass) window.setTimeout(function () { dlgPass.focus(); }, 60);
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var imp = t.closest('[data-import]');
+      if (imp) { openImport(imp.getAttribute('data-import')); return; }
+
+      if (t.closest('[data-import-unsupported]')) {
+        if (window.App) App.toast('该格式无公开结构，只能扫码或手动输入');
+        return;
+      }
+
+      if (t.closest('[data-export]')) {
+        var pass = (sec.querySelector('#s27Pass') || {}).value || '';
+        if (pass.length < 8) {
+          if (window.App) App.toast('密码至少 8 位 · 备份未导出');
+          var field = sec.querySelector('#s27Pass');
+          if (field) { field.focus(); field.setAttribute('aria-invalid', 'true'); }
+          return;
+        }
+        var f = sec.querySelector('#s27Pass');
+        if (f) f.removeAttribute('aria-invalid');
+        if (window.App) { App.haptic('medium'); App.toast('已导出 5 个账户 · aegis-totp-backup.json'); }
+        return;
+      }
+
+      if (t.closest('[data-import-confirm]')) {
+        var v = dlgPass ? dlgPass.value : '';
+        if (!v) {
+          if (dlgErrText) dlgErrText.textContent = '请先输入备份密码';
+          if (dlgErr) dlgErr.hidden = false;
+          if (dlgPass) dlgPass.focus();
+          return;
+        }
+        if (dlg) dlg.hidden = true;
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('已导入 5 个账户 · 按密钥去重后新增 4 个');
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+        return;
+      }
+
+      if (t.closest('[data-import-retry]')) {
+        openImport('Aegis');
+        return;
+      }
+
+      if (dlg && !dlg.hidden && e.target === dlg) dlg.hidden = true;
+    });
+
+    if (dlgPass) dlgPass.addEventListener('input', function () { if (dlgErr) dlgErr.hidden = true; });
+  })();
+  </script>
+</section>
+<!--@od:end-->

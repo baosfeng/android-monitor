@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -56,6 +57,7 @@ enum class SettingsSubPage(
     // 接收目录，本身就有 8 项，挤进「传送」开关页会超过每页 ≤ 7 项的上限。
     TRANSPORT_RECEIVING_DETAIL("传送 · 接收", "本机名称 · 后台接收 · 自动关闭 · 接收目录", indexEntry = false),
     TRANSPORT_ALERTS_DETAIL("传送 · 提醒与配对", "提示音 · 免配对窗口 · 体积阈值", indexEntry = false),
+    TOTP_DETAIL("验证器", "TOTP 二次验证码 · 账户管理 · 备份与导入", indexEntry = false),
     WIDGET_DETAIL("桌面小组件", "隐藏金额 · 六个组件添加到桌面", indexEntry = false);
 
     companion object {
@@ -85,6 +87,7 @@ internal fun settingsFeatureDetailPages(): List<SettingsSubPage> = listOf(
     SettingsSubPage.TRANSPORT_DETAIL,
     SettingsSubPage.QUOTA_DETAIL,
     SettingsSubPage.LOCATION_DETAIL,
+    SettingsSubPage.TOTP_DETAIL,
 )
 
 /**
@@ -101,6 +104,7 @@ internal fun settingsParentOf(page: SettingsSubPage): SettingsSubPage? = when (p
     SettingsSubPage.TRANSPORT_DETAIL,
     SettingsSubPage.QUOTA_DETAIL,
     SettingsSubPage.LOCATION_DETAIL,
+    SettingsSubPage.TOTP_DETAIL,
     SettingsSubPage.WIDGET_DETAIL,
     -> SettingsSubPage.FEATURE
 
@@ -133,5 +137,6 @@ internal fun settingsPageIcon(page: SettingsSubPage): ImageVector = when (page) 
     SettingsSubPage.TRANSPORT_ALERTS_DETAIL -> Icons.Outlined.Settings
     SettingsSubPage.QUOTA_DETAIL -> Icons.Outlined.AccountBalanceWallet
     SettingsSubPage.LOCATION_DETAIL -> Icons.Outlined.LocationOn
+    SettingsSubPage.TOTP_DETAIL -> Icons.Outlined.Security
     SettingsSubPage.WIDGET_DETAIL -> Icons.Outlined.Widgets
 }

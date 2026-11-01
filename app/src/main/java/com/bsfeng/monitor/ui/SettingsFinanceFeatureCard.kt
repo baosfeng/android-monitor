@@ -34,6 +34,8 @@ internal fun SettingsFinanceFeatureCard(
     toast: ToastHostState,
     financeOn: Boolean,
     setFeature: (Feature, Boolean) -> Unit,
+    /** 下钻「桌面小组件」页：组件展示的是记账数据，入口放这里语义最近。 */
+    onOpenWidgetDetail: () -> Unit = {},
 ) {
 // 记账（Tab：记账）
 AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
@@ -77,6 +79,16 @@ if (financeOn) {
         icon = Icons.Outlined.Payments,
     )
 }
+// 桌面小组件属于记账呈现（隐藏金额 / 六个组件），从功能开关页挪到记账细则，
+// 功能开关页因此回到 7 项（锚点 s09 每页 ≤ 7 项）。
+TokenDivider(first = false)
+TokenRow(
+    title = "桌面小组件",
+    subtitle = "显示本月支出 · 隐藏金额开关 · 添加到桌面",
+    icon = settingsPageIcon(SettingsSubPage.WIDGET_DETAIL),
+    onClick = onOpenWidgetDetail,
+    trailing = { TailChevron() },
+)
 Spacer(Modifier.height(t.space1))
 }
 }

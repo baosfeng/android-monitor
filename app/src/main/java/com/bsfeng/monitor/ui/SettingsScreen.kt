@@ -87,6 +87,8 @@ fun SettingsScreen(
     onNavigateToAppearance: (() -> Unit)? = null,
     onNavigateToGallery: (() -> Unit)? = null,
     onNavigateToQuotaSettings: () -> Unit = {},
+    /** 验证器模块入口（true = 直接落备份页）；未接线时设置卡里的两行不出现。 */
+    onNavigateToTotp: ((Boolean) -> Unit)? = null,
 ) {
     // 取数与状态全在 SettingsScreenRuntime（ui/SettingsScreenRuntime.kt）；本屏只做渲染
     val rt = rememberSettingsScreenRuntime(
@@ -96,6 +98,7 @@ fun SettingsScreen(
         onNavigateToAppearance = onNavigateToAppearance,
         onNavigateToGallery = onNavigateToGallery,
         onNavigateToQuotaSettings = onNavigateToQuotaSettings,
+        onNavigateToTotp = onNavigateToTotp ?: {},
     )
     val t = rt.t
     val context = rt.context

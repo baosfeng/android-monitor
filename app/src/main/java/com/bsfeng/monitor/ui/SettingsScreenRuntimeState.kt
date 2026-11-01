@@ -44,6 +44,7 @@ internal class SettingsScreenRuntime(
     val transportOn: Boolean,
     val locationOn: Boolean,
     val quotaOn: Boolean,
+    val totpOn: Boolean,
     val quotaSettings: QuotaSettings,
     val quotaAlertsOnState: MutableState<Boolean>,
     val quotaRefreshHoursState: MutableState<Int>,
@@ -91,4 +92,6 @@ internal class SettingsScreenRuntime(
     val onNavigateToAppearance: (() -> Unit)?,
     val onNavigateToGallery: (() -> Unit)?,
     val onNavigateToQuotaSettings: () -> Unit,
+    /** 验证器模块的 push 入口：true = 直接落在备份页。 */
+    val onNavigateToTotp: (Boolean) -> Unit,
 )

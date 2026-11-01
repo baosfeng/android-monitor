@@ -63,6 +63,12 @@
 .screen.s09 .s09-quota-body .row-sub{white-space:normal}
 .screen.s09 .s09-quota-body .badge{flex:0 0 auto;white-space:nowrap}
 .screen.s09 .s09-quota-body .s09-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
+
+/* ── 验证器（TOTP）：安全开关行描述需要换行 ─────────────────────── */
+.screen.s09 .s09-totp .row-sub{white-space:normal}
+.screen.s09 .s09-totp > .row:first-child{border-top:1px solid var(--border-soft)}
+.screen.s09 .s09-totp .badge{flex:0 0 auto;white-space:nowrap}
+.screen.s09 .s09-totp-note{display:block;line-height:1.45}
 </style>
 <!--@od:section-->
 <section class="screen s09" data-screen="s09" data-title="设置" data-od-id="screen-s09">
@@ -259,6 +265,79 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="set-group" data-od-id="s09-totp">
+        <p class="group-label">验证器</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon">
+              <svg viewBox="0 0 24 24" aria-hidden><rect x="4.4" y="2.6" width="15.2" height="18.8" rx="3"/><path d="M9.4 17.4h5.2"/><path d="M12 7.4v5.2"/><path d="M9.4 10h5.2"/></svg>
+            </span>
+            <span class="row-body">
+              <span class="row-title">验证器（TOTP）</span>
+              <span class="row-sub">5 个账户 · 概览卡片已显示前 3 个</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="验证器" data-toggle
+                    data-on-msg="验证器已开启 · 概览与设置均可进入" data-off-msg="验证器已关闭 · 本地密钥保留，不再计算验证码" data-od-id="s09-totp-switch"></button>
+          </div>
+          <div class="s09-totp" data-od-id="s09-totp-body">
+            <button class="row" type="button" data-goto="s22" data-od-id="s09-goto-totp">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3 7h.5"/><path d="M3 12h.5"/><path d="M3 17h.5"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">管理账户</span>
+                <span class="row-sub">扫码 / 手动添加 / 排序 / 删除</span>
+              </span>
+              <span class="row-tail"><span class="num">5 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <button class="row" type="button" data-goto="s27" data-od-id="s09-goto-totp-backup">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">备份与导入</span>
+                <span class="row-sub">加密导出 · 从 Aegis / 2FAS 导入</span>
+              </span>
+              <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+            </button>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><rect x="6" y="2.6" width="12" height="18.8" rx="2.6"/><path d="M9.4 17.6h5.2"/><path d="M9.4 8.2l2 2 3.2-3.4"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">防止截屏</span>
+                <span class="row-sub">验证码页禁止截屏与录屏（FLAG_SECURE）</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="防止截屏" data-toggle
+                      data-on-msg="已禁止截屏 · 验证码页不可截图" data-off-msg="已允许截屏 · 验证码可能出现在截图里" data-od-id="s09-totp-flag-secure"></button>
+            </div>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M12 4V2.4"/><path d="M6.4 8.6 4 7.2"/><path d="M6.4 15.4 4 16.8"/><path d="M17.6 8.6 20 7.2"/><path d="M17.6 15.4 20 16.8"/><path d="M10.6 12h2.8"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">复制即焚</span>
+                <span class="row-sub">复制后 30 秒清空剪贴板（含系统「已复制」提示残留）</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="复制即焚" data-toggle
+                      data-on-msg="已开启 · 30 秒后自动清空剪贴板" data-off-msg="已关闭 · 复制的验证码会留在剪贴板" data-od-id="s09-totp-clip-clear"></button>
+            </div>
+            <div class="row">
+              <span class="row-icon">
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M2.4 12s3.6-6.4 9.6-6.4S21.6 12 21.6 12s-3.6 6.4-9.6 6.4S2.4 12 2.4 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>
+              </span>
+              <span class="row-body">
+                <span class="row-title">后台遮罩</span>
+                <span class="row-sub">切到后台时盖住验证码，回到前台再显示</span>
+              </span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-label="后台遮罩" data-toggle
+                      data-on-msg="已开启 · 后台与多任务卡片不显示验证码" data-off-msg="已关闭 · 多任务卡片可能露出验证码" data-od-id="s09-totp-blur"></button>
+            </div>
+          </div>
+        </div>
+        <p class="fine mt-2 s09-totp-note" data-od-min-fs>三项安全开关默认全开且关闭不放行；密钥用 Android Keystore 加密，只存本机、不进日志、不上传。</p>
       </div>
 
       <div class="set-group" data-od-id="s09-granularity">

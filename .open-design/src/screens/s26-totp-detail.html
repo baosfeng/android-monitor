@@ -1,0 +1,267 @@
+<!-- ============================================================
+     s26 · 账户详情（push 屏）
+
+     改名 / 换平台 / 排序 / 删除（二次确认）。入口：s22 长按菜单。
+     ============================================================ -->
+<!--@od:style-->
+<style data-for="s26">
+/* ── s26 账户详情 ───────────────────────────────────────────────── */
+.screen.s26{font-size:max(var(--text-sm),14px)}
+.screen.s26 [data-state-when]{grid-template-columns:minmax(0,1fr)}
+.screen.s26 :is(.meta,.row-sub,.row-tail,.st-desc,.fine,.group-label,.s26-label){font-size:max(var(--text-sm),14px)}
+.screen.s26 button:focus-visible,
+.screen.s26 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+
+.s26-hero{display:grid;grid-template-columns:44px minmax(0,1fr);gap:var(--space-3);align-items:center;padding:var(--space-3) 0}
+.s26-ava{width:44px;height:44px;border-radius:var(--radius-md);display:grid;place-items:center;
+  background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);
+  font-family:var(--font-mono);font-size:var(--text-base);font-weight:600;line-height:1}
+.s26-code{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-3);
+  padding:var(--space-3);border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 5%,transparent);margin-top:var(--space-2)}
+.s26-code .totp-code{font-size:var(--text-xl)}
+.s26-meta-line{display:inline-flex;align-items:center;gap:var(--space-2)}
+.s26-grid{display:grid;gap:var(--space-3);padding:var(--space-3) 0}
+.s26-field{display:grid;gap:var(--space-1)}
+.s26-label{color:var(--fg-2);font-weight:500}
+.s26-in{width:100%;min-height:var(--tap-min);padding:var(--space-2) var(--space-3);
+  border:1px solid var(--border-soft);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:max(var(--text-base),14px);font-family:inherit}
+.s26-in:focus{border-color:var(--accent);box-shadow:var(--focus-ring);outline:none}
+.s26-in.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.s26-mask-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:center}
+.s26-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--border-soft)}
+.s26-kv:first-child{border-top:0}
+.s26-kv .num{text-align:right}
+.s26-order{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);padding:var(--space-2) 0}
+.s26-order .btn{width:100%}
+.s26-save{display:grid;gap:var(--space-2);padding:var(--space-3) 0 var(--space-4)}
+.s26-save .btn{width:100%}
+.s26-danger{border-top:1px solid var(--border-soft);padding-top:var(--space-3);margin-top:var(--space-2)}
+.s26-danger .row-title{color:var(--danger-text)}
+.s26-danger .btn{width:100%;color:var(--danger-text);border-color:color-mix(in srgb,var(--danger) 34%,transparent)}
+.s26-note{display:block;padding-top:var(--space-3);line-height:1.5}
+.s26-in-anim{opacity:0}
+.s26.is-active .s26-in-anim{animation:od-rise var(--dur-page) var(--ease-out) both}
+.s26.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
+.s26.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
+.s26.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
+.device-screen:has(#odSplash:not([hidden])) .s26 *{animation:none}
+.s26-del-desc{line-height:1.5;margin:0 0 var(--space-3)}
+.s26-del-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.s26-del-actions .btn{width:100%}
+.s26-del-actions .btn.is-danger{background:var(--danger);color:var(--bg);border-color:transparent}
+</style>
+<!--@od:section-->
+<section class="screen s26" data-screen="s26" data-title="账户详情" id="s26" data-od-id="screen-s26">
+  <div class="content pad" data-od-id="s26-content">
+
+    <div class="st-loading" data-state-when="loading" data-od-id="s26-loading">
+      <div class="card">
+        <div class="sk w-60 tall"></div>
+        <div class="sk w-100"></div>
+        <div class="sk w-80"></div>
+        <div class="sk w-40"></div>
+      </div>
+    </div>
+
+    <div data-state-hide="loading" data-od-id="s26-body">
+      <div class="s26-hero s26-in-anim od-d1" data-od-id="s26-hero">
+        <span class="s26-ava" id="s26Ava" aria-hidden>G</span>
+        <span class="row-body">
+          <span class="row-title" id="s26Title">GitHub</span>
+          <span class="row-sub">alice@acme.com · 已启用 · 排序第 4 位</span>
+        </span>
+      </div>
+
+      <div class="s26-code s26-in-anim od-d1" data-od-id="s26-code">
+        <span>
+          <span class="meta" data-od-min-fs>当前验证码</span>
+          <span class="totp-code" data-s26-code>936 140</span>
+        </span>
+        <span class="totp-meta" data-od-min-fs>
+          <span class="totp-ring" id="s26Ring" aria-hidden></span>
+          <span class="totp-sec" id="s26Sec">27s</span>
+        </span>
+      </div>
+
+      <div class="s26-grid s26-in-anim od-d2" data-od-id="s26-fields">
+        <label class="s26-field">
+          <span class="s26-label">平台名</span>
+          <input class="s26-in" type="text" id="s26Issuer" value="GitHub" autocomplete="off" />
+        </label>
+        <label class="s26-field">
+          <span class="s26-label">账户</span>
+          <input class="s26-in" type="text" id="s26Account" value="alice@acme.com" autocomplete="off" inputmode="email" />
+        </label>
+        <div class="s26-field">
+          <span class="s26-label">密钥（Base32）</span>
+          <div class="s26-mask-row">
+            <input class="s26-in num" type="text" id="s26Secret" value="•••• •••• •••• ••••" readonly aria-label="已加密的密钥，掩码显示" />
+            <button class="btn btn-ghost" type="button" data-reveal aria-pressed="false" data-od-id="s26-reveal">显示</button>
+          </div>
+          <span class="fine" data-od-min-fs style="line-height:1.4">掩码显示，默认不落屏；显示 15 秒后自动收回。</span>
+        </div>
+      </div>
+
+      <div class="group s26-in-anim od-d2" data-od-id="s26-params">
+        <div class="s26-kv">
+          <span class="meta">算法</span>
+          <span class="num">SHA1 · 6 位 · 30 秒</span>
+        </div>
+        <div class="s26-kv">
+          <span class="meta">来源</span>
+          <span class="num">扫码识别 · 2025-10-14</span>
+        </div>
+        <div class="s26-kv">
+          <span class="meta">最近使用</span>
+          <span class="num">今天 09:26</span>
+        </div>
+      </div>
+      <p class="fine mt-2" data-od-min-fs style="line-height:1.45">参数由二维码决定，改错会算出错码，所以这里只读；要换参数请重新扫码添加。</p>
+
+      <div class="group s26-in-anim od-d3 mt-3" data-od-id="s26-order">
+        <div class="row" style="border-top:0">
+          <span class="row-icon" aria-hidden>
+            <svg viewBox="0 0 24 24"><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3 7h.5"/><path d="M3 12h.5"/><path d="M3 17h.5"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">列表排序</span>
+            <span class="row-sub">靠近顶部 = 更常用，概览卡片也按此顺序取前 3 个</span>
+          </span>
+          <span class="row-tail"><span class="num">第 4 位 / 共 5</span></span>
+        </div>
+        <div class="s26-order">
+          <button class="btn btn-ghost" type="button" data-move="up" data-od-id="s26-move-up">上移一位</button>
+          <button class="btn btn-ghost" type="button" data-move="down" data-od-id="s26-move-down">下移一位</button>
+        </div>
+      </div>
+
+      <div class="s26-save s26-in-anim od-d3" data-od-id="s26-save">
+        <button class="btn" type="button" data-save data-od-id="s26-save-btn">保存修改</button>
+      </div>
+
+      <div class="s26-danger s26-in-anim od-d3" data-od-id="s26-danger">
+        <div class="row" style="padding:0 0 var(--space-2);border-top:0">
+          <span class="row-icon" aria-hidden style="background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger-text)">
+            <svg viewBox="0 0 24 24"><path d="M4.6 6.6h14.8"/><path d="M9.4 6.6V4.4h5.2v2.2"/><path d="M6.6 6.6 7.6 20h8.8l1-13.4"/><path d="M10.4 10.4v5.6"/><path d="M13.6 10.4v5.6"/></svg>
+          </span>
+          <span class="row-body">
+            <span class="row-title">删除该账户</span>
+            <span class="row-sub">删除后本机不再计算此验证码，网站上的两步验证需另行关闭</span>
+          </span>
+        </div>
+        <button class="btn btn-ghost" type="button" data-del data-od-id="s26-del">删除账户</button>
+      </div>
+
+      <p class="fine s26-note" data-od-min-fs>改名与换平台只影响本机展示，不影响网站上已绑定的两步验证。</p>
+    </div>
+  </div>
+
+  <div class="scrim" id="s26-del-dialog" hidden data-od-id="s26-del-dialog">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="s26DelTitle" aria-describedby="s26DelDesc">
+      <p class="h3" id="s26DelTitle">删除「<span id="s26DelName">GitHub</span>」账户？</p>
+      <p class="s26-del-desc meta" id="s26DelDesc" data-od-min-fs>删除后无法从本机恢复，也不会同步到其他设备。网站上的两步验证仍然有效，需要到该网站设置里才能关闭。</p>
+      <div class="s26-del-actions">
+        <button class="btn btn-ghost" type="button" data-close="#s26-del-dialog" data-od-id="s26-del-cancel">取消</button>
+        <button class="btn is-danger" type="button" data-del-confirm data-od-id="s26-del-confirm">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* s26：掩码显示（15s 自动收回）、排序反馈、保存、删除二次确认、验证码倒计时。 */
+  (function () {
+    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
+    if (!sec) return;
+
+    var left = 27;
+    var period = 30;
+    var ring = sec.querySelector('#s26Ring');
+    var secEl = sec.querySelector('#s26Sec');
+    function paint() {
+      if (ring) ring.style.setProperty('--p', String(Math.round((left / period) * 100)));
+      if (secEl) secEl.textContent = left + 's';
+      if (ring) ring.classList.toggle('is-warn', left <= 5);
+      if (secEl) secEl.classList.toggle('is-warn', left <= 5);
+    }
+    paint();
+    window.setInterval(function () { left = left > 1 ? left - 1 : period; paint(); }, 1000);
+
+    var reveal = sec.querySelector('[data-reveal]');
+    var secret = sec.querySelector('#s26Secret');
+    var revealTimer = null;
+    if (reveal && secret) {
+      reveal.addEventListener('click', function () {
+        var shown = reveal.getAttribute('aria-pressed') === 'true';
+        reveal.setAttribute('aria-pressed', shown ? 'false' : 'true');
+        reveal.textContent = shown ? '显示' : '收起';
+        secret.value = shown ? '•••• •••• •••• ••••' : 'JBSWY3DPEHPK3PXP';
+        if (window.App) App.toast(shown ? '密钥已收起' : '密钥将显示 15 秒');
+        if (revealTimer) { window.clearTimeout(revealTimer); revealTimer = null; }
+        if (!shown) {
+          revealTimer = window.setTimeout(function () {
+            reveal.setAttribute('aria-pressed', 'false');
+            reveal.textContent = '显示';
+            secret.value = '•••• •••• •••• ••••';
+          }, 15000);
+        }
+      });
+    }
+
+    sec.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+
+      var move = t.closest('[data-move]');
+      if (move) {
+        var dir = move.getAttribute('data-move');
+        if (window.App) {
+          App.haptic('light');
+          App.toast(dir === 'up' ? '已上移一位 · 排序第 3 位' : '已下移一位 · 排序第 5 位');
+        }
+        var pos = sec.querySelector('[data-move]') && sec.querySelector('.s26-order').parentNode.querySelector('.num');
+        if (pos) pos.textContent = dir === 'up' ? '第 3 位 / 共 5' : '第 5 位 / 共 5';
+        return;
+      }
+
+      if (t.closest('[data-save]')) {
+        var name = (sec.querySelector('#s26Issuer') || {}).value || '';
+        var title = sec.querySelector('#s26Title');
+        var ava = sec.querySelector('#s26Ava');
+        if (title && name.trim()) title.textContent = name.trim();
+        if (ava && name.trim()) ava.textContent = name.trim().slice(0, 1);
+        if (window.App) { App.haptic('medium'); App.toast('已保存 · 账户信息已更新'); }
+        return;
+      }
+
+      if (t.closest('[data-del]')) {
+        var dlg = sec.querySelector('#s26-del-dialog');
+        var dn = sec.querySelector('#s26DelName');
+        var issuer = sec.querySelector('#s26Issuer');
+        if (dn && issuer && issuer.value.trim()) dn.textContent = issuer.value.trim();
+        if (dlg) dlg.hidden = false;
+        return;
+      }
+
+      if (t.closest('[data-del-confirm]')) {
+        var dialog = sec.querySelector('#s26-del-dialog');
+        if (dialog) dialog.hidden = true;
+        if (window.App) {
+          App.haptic('medium');
+          App.toast('账户已删除');
+          var stack = App.stack ? App.stack() : [];
+          if (stack.length && stack[stack.length - 1] === 's22') App.back();
+          else App.go('s22');
+        }
+        return;
+      }
+    });
+
+    sec.addEventListener('click', function (e) {
+      var dlg = sec.querySelector('#s26-del-dialog');
+      if (dlg && !dlg.hidden && e.target === dlg) dlg.hidden = true;
+    });
+  })();
+  </script>
+</section>
+<!--@od:end-->
