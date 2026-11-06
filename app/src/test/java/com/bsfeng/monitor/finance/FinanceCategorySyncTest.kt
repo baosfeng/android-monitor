@@ -21,7 +21,9 @@ import org.robolectric.annotation.Config
  * 只认「表为空」不会补新分类 —— 这里用真实 SQLite 验证补齐路径与幂等性。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// application = Application：不用 MonitorApp —— 它在 onCreate 里会起后台协程补分类目录，
+// 与「先造旧库再验证补齐」的用例抢同一个 finance.db
+@Config(sdk = [34], application = android.app.Application::class)
 class FinanceCategorySyncTest {
 
     private lateinit var context: Context

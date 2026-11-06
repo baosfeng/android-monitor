@@ -23,7 +23,9 @@ import java.io.File
  * 文件不可用与表结构不兼容时的「错误可见 + 整体回滚」。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// application = Application：`MonitorApp.onCreate` 会后台补分类目录（写 finance.db），
+// 与这里「自建空库 + 断言精确计数」的用例抢同一个库
+@Config(sdk = [34], application = android.app.Application::class)
 class PandaImporterTest {
 
     private lateinit var context: Context

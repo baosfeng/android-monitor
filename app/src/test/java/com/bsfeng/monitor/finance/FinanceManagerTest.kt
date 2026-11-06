@@ -22,7 +22,9 @@ import org.robolectric.annotation.Config
  * 覆盖种子数据幂等、月度统计、预算进度、预算实时已支出回填与交易增删改查。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// application = Application：不用 MonitorApp —— 它在 onCreate 里会起后台协程补分类目录，
+// 与「先造旧库再验证补齐」的用例抢同一个 finance.db
+@Config(sdk = [34], application = android.app.Application::class)
 class FinanceManagerTest {
 
     private lateinit var context: Context
@@ -378,5 +380,39 @@ class FinanceManagerTest {
         assertEquals("没有拼接说明就不应清理", 0, cleaned)
         assertEquals("同事聚餐", manager.getTransactionById(manualId)!!.remark)
         assertEquals("同事聚餐 AA", manager.getTransactionById(handWrittenId)!!.remark)
+    }
+    // ==================== 分类目录补齐 ====================
+
+    @Test
+    fun `syncCatalogOnce 两次调用只写一次`() = runBlocking {
+        // 模拟存量安装：库里只有旧目录的一小部分，目录版本标记未置位
+        manager.dao.insertCategory(
+            com.bsfeng.monitor.finance.model.Category(
+                name = "餐饮", type = 0, parentId = -1, sortOrder = 0,
+            )
+        )
+        val before = manager.getAllCategories().size
+
+        manager.syncCatalogOnce()
+        val afterFirst = manager.getAllCategories()
+        assertTrue("首次调用应补齐目录", afterFirst.size > before)
+        assertEquals(
+            "补齐后分类总数应等于当前目录",
+            com.bsfeng.monitor.finance.model.CategoryCatalog.allNames().size,
+            afterFirst.size,
+        )
+
+        manager.syncCatalogOnce()
+        assertEquals(
+            "同目录版本第二次调用不应再写入",
+            afterFirst.size,
+            manager.getAllCategories().size,
+        )
+        assertEquals(
+            "落盘标记应记录的是当前目录版本",
+            true,
+            context.getSharedPreferences("finance_prefs", Context.MODE_PRIVATE)
+                .getBoolean("catalog_sync_v${com.bsfeng.monitor.finance.model.CategoryCatalog.VERSION}", false),
+        )
     }
 }
