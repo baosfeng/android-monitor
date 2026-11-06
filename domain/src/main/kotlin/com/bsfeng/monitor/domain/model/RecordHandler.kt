@@ -12,11 +12,17 @@ interface RecordHandler {
 class ScreenHandler : RecordHandler {
     override val type = RecordType.SCREEN
     override fun validate(action: String, detail: Map<String, String>?): Boolean =
-        action in setOf("OFF", "UNLOCKED", "AD_SKIPPED")
+        action in setOf("OFF", "UNLOCKED", "AD_SKIPPED", "AD_SKIP_UNCONFIRMED")
     override fun createLabel(action: String, detail: Map<String, String>?): String = when (action) {
         "OFF" -> "屏幕熄灭"; "UNLOCKED" -> "解锁成功"; "AD_SKIPPED" -> {
             detail?.get("app_name")?.let { "跳过 $it 广告" } ?: "跳过广告"
-        }; else -> "锁屏"
+        }
+        // 未确认 = 点了跳过按钮但复核时它仍在：语义是「已点击、未确认」，绝不能写成「跳过成功」，
+        // 否则误判会被伪装成成功（见 docs/开屏跳过/设计.md 复核章节）
+        "AD_SKIP_UNCONFIRMED" -> {
+            detail?.get("app_name")?.let { "点击 $it 跳过按钮（未确认）" } ?: "点击跳过按钮（未确认）"
+        }
+        else -> "锁屏"
     }
     override fun needsDuration(action: String) = false
 }

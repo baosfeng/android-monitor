@@ -80,14 +80,32 @@ internal class SkipClickVerifier(
         return null
     }
 
-    /** 上报跳过结果（日志分流 + 回调），由调用方负责停窗 */
-    fun finish(result: SkipRuleEngine.SkipResult, tag: String, onSkipSuccess: ((SkipRuleEngine.SkipResult) -> Unit)?) {
+    /**
+     * 上报跳过结果（日志分流 + 回调），由调用方负责停窗。
+     *
+     * **分流规则（A 项）**：只有 `confirmed != false` 才走 [onSkipSuccess]（写 `AD_SKIPPED` +
+     * 弹「已跳过」）。`confirmed == false` 走 [onSkipUnconfirmed]：落一条
+     * `AD_SKIP_UNCONFIRMED`、不计入任何「跳过成功」计数、弹幕如实说「未确认」。
+     *
+     * 注意 `confirmed == true` 也只代表「同一选择器不再匹配」，不等于「广告真的消失」——
+     * 点掉导航/引导节点同样会判 true。误判防线在点击前的判据（见 [SplashCandidateVerdict]）。
+     */
+    fun finish(
+        result: SkipRuleEngine.SkipResult,
+        tag: String,
+        onSkipSuccess: ((SkipRuleEngine.SkipResult) -> Unit)?,
+        onSkipUnconfirmed: ((SkipRuleEngine.SkipResult) -> Unit)? = null,
+    ) {
         pending = null
         when (result.confirmed) {
             true -> Log.d(tag, "✅ 跳过成功（已确认广告消失）: " + result.packageName + " ← " + result.selector)
-            false -> Log.d(tag, "⚠️ 跳过未确认（点完广告仍在）: " + result.packageName + " ← " + result.selector)
+            false -> Log.w(tag, "⚠️ 跳过未确认（点完广告仍在）: " + result.packageName + " ← " + result.selector)
             null -> Log.d(tag, "✅ 跳过成功: " + result.packageName + " ← " + result.selector)
         }
-        onSkipSuccess?.invoke(result)
+        if (result.confirmed == false) {
+            onSkipUnconfirmed?.invoke(result)
+        } else {
+            onSkipSuccess?.invoke(result)
+        }
     }
 }

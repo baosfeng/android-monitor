@@ -73,6 +73,32 @@ object SkipConfig {
     /** 顺延能带来的最大额外时长（毫秒）= [WINDOW_EXTEND_STEP_MS] × [WINDOW_MAX_EXTENSIONS] = 4000 */
     const val WINDOW_MAX_EXTENSION_MS = WINDOW_EXTEND_STEP_MS * WINDOW_MAX_EXTENSIONS
 
+    // ==================== 点击前判据（防误判，见 SplashCandidateVerdict） ====================
+
+    /**
+     * **纯结构候选**（靠 viewId 命中、无可读文案）的兜底宽限窗（毫秒，自切换到 App 起算）。
+     *
+     * ⚠️ **经验值，未实测校准**：取自「冷启动后广告首帧通常在 1 秒左右渲染完成」的量级判断，
+     * **不是**真机采样出来的分位数。改动前请先抓「进入 App → 跳过按钮首次出现」的分布再定。
+     *
+     * 该窗口只在「同屏无广告标识、祖先无广告容器」时生效；有广告证据时不受它限制，
+     * 因此 15 秒档下晚到的广告页仍能正常跳过。
+     */
+    const val SPLASH_WORDING_GRACE_MS = 1_500L
+
+    /**
+     * **纯文本候选**（有合规文案、但无任何广告语境）的宽限窗（毫秒），比 [SPLASH_WORDING_GRACE_MS] 短。
+     *
+     * ⚠️ **经验值，未实测校准**：0.8 秒是「再短会误杀慢机型首帧、再长会放大详情页误判面」的
+     * 主观折中，**没有**真机采样数据支撑。校准方法：给每个 App 记录「进入 App → 跳过按钮首次
+     * 出现」的时刻分布，取 P90 再定；在此之前不要把它当既定阈值引用。
+     *
+     * 为什么必须比纯结构候选更短：这是本次误判的最大残留面 —— 页面在切进来 0.8 秒内渲染出
+     * 一个整词"跳过"、且既无广告标识也无广告容器时仍会被放行。纯结构候选靠 viewId 命中
+     * splash/count_down 等，ID 本身就是结构性证据，误判风险远低于纯文本。
+     */
+    const val SPLASH_TEXT_ONLY_GRACE_MS = 800L
+
     private var prefs: SharedPreferences? = null
 
     /** 当前监控窗口（毫秒，自 App 切换起算） */

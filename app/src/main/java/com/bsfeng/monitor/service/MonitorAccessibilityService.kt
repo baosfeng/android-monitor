@@ -224,18 +224,33 @@ open class MonitorAccessibilityService : AccessibilityService() {
         Log.i("MonitorService", "无障碍服务身份: isAccessibilityTool=$accessibilityTool")
         ActionExecutor.accessibilityService = this
         skipEngine.setRootNodeProvider { rootInActiveWindow }
+        // 跳过成功：只在 confirmed != false 时触发（confirmed=null 表示未做复核）
         skipEngine.onSkipSuccess = { result ->
             val name = AppUtils.getAppName(result.packageName)
-            val suffix = if (result.confirmed == false) "（未确认）" else ""
-            timeline("⏭️", "跳过 $name 开屏广告$suffix")
+            timeline("⏭️", "跳过 $name 开屏广告")
             SkipEventRecorder.recordSkip(
                 packageName = result.packageName,
                 appName = name,
                 selectorExpr = result.selector,
                 className = lastActivityClass,
-                confirmed = result.confirmed
+                confirmed = result.confirmed,
+                matchedText = result.matchedText,
+                verdictReason = result.verdictReason
             )
             showSkipDanmaku(name, result.confirmed)
+        }
+        // 已点击但未确认：落 AD_SKIP_UNCONFIRMED、不计入跳过成功，弹幕如实说「未确认」
+        skipEngine.onSkipUnconfirmed = { result ->
+            val name = AppUtils.getAppName(result.packageName)
+            timeline("⚠️", "点击 $name 跳过按钮但未确认")
+            SkipEventRecorder.recordUnconfirmed(
+                packageName = result.packageName,
+                appName = name,
+                selectorExpr = result.selector,
+                matchedText = result.matchedText,
+                verdictReason = result.verdictReason
+            )
+            showSkipDanmaku(name, confirmed = false)
         }
         // 启动前台 App 轮询（兜底监测）；已运行则跳过，防止服务重建后叠加轮询链
         if (!pollerActive) {
