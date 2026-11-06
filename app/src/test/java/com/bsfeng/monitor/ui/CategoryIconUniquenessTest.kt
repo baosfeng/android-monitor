@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 分类图标唯一性：145 个分类（26 个一级 + 119 个二级）每个都有独立 key 与独立 drawable。
+ * 分类图标唯一性：209 个分类（26 个一级 + 183 个二级）每个都有独立 key 与独立 drawable。
  *
  * 约束：任意两个分类的图标 key 不同、drawable 资源 id 不同，避免「二级复用父级图标」
  * 导致列表里出现肉眼无法区分的重复图标。资源存在性由 R.drawable 常量断言覆盖
@@ -19,7 +19,7 @@ class CategoryIconUniquenessTest {
 
     @Test
     fun `分类总数与图标覆盖基数一致`() {
-        assertEquals(145, names.size)
+        assertEquals(209, names.size)
         assertEquals(26, CategoryCatalog.expense.size + CategoryCatalog.income.size)
     }
 

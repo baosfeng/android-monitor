@@ -104,6 +104,16 @@ internal class FinanceCategoryDao(private val dbHelper: FinanceDatabaseHelper) {
         )
     }
 
+    /** 按名字取分类 id；不存在返回 -1（分类目录补齐时复用已有一级/二级） */
+    fun findCategoryId(name: String): Long {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            CategoryEntity.TABLE_NAME, arrayOf(CategoryEntity.COL_ID),
+            "${CategoryEntity.COL_NAME} = ?", arrayOf(name), null, null, null, "1"
+        )
+        return cursor.use { if (it.moveToFirst()) it.getLong(0) else -1L }
+    }
+
     /** 预算里出现过的分类名（迁移映射用；总预算空串跳过） */
     fun getDistinctBudgetCategoryNames(): List<String> {
         val db = dbHelper.readableDatabase

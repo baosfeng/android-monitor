@@ -43,6 +43,50 @@ internal class FinanceCategorySeeder(private val dao: FinanceDao) {
         insertCatalog()
     }
 
+    /**
+     * 把 [CategoryCatalog] 里**新增**的分类补进已有分类表（幂等，可重复调用）。
+     *
+     * 为什么需要它：[seedDefaultCategories] 只在分类表为空时写入，而 [CategoryCatalog] 扩容后
+     * 存量安装的分类表已有旧目录，不补齐的话用户永远看不到新分类。
+     *
+     * 三条约定：
+     * 1. **只增不删**：历史交易的 `category_name` 可能引用改名/下线的旧分类，删掉会让分类名游离在表外；
+     * 2. **一级复用 id**：一级已存在时取它的 id 挂二级，不能为了拿 id 重复 insert（UNIQUE 冲突返回 -1）；
+     * 3. **sortOrder 用 catalog 下标**：与 [insertCatalog] 同口径，存量项本来就是下标，新项天然接在末尾。
+     *
+     * @return 实际新增条数（一级 + 二级）；再跑一次返回 0
+     */
+    fun syncCatalog(): Int = dao.runInTransaction {
+        var inserted = 0
+        for ((type, seeds) in listOf(0 to CategoryCatalog.expense, 1 to CategoryCatalog.income)) {
+            for ((index, seed) in seeds.withIndex()) {
+                val existingTop = dao.findCategoryId(seed.name)
+                val topId = if (existingTop > 0) {
+                    existingTop
+                } else {
+                    dao.insertCategory(
+                        Category(name = seed.name, type = type, parentId = -1, sortOrder = index)
+                    ).also { if (it > 0) inserted++ }
+                }
+                if (topId <= 0) continue
+                for ((childIndex, child) in seed.children.withIndex()) {
+                    // 一级还在、二级也还在：跳过；只补新增项
+                    if (dao.findCategoryId(child) > 0) continue
+                    val id = dao.insertCategory(
+                        Category(
+                            name = child,
+                            type = type,
+                            parentId = topId,
+                            sortOrder = childIndex,
+                        )
+                    )
+                    if (id > 0) inserted++
+                }
+            }
+        }
+        inserted
+    }
+
     /** 账户表为空时写入默认账户 */
     fun seedDefaultAccounts() {
         val existing = dao.getAllAccounts()

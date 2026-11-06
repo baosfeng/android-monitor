@@ -101,6 +101,9 @@ fun AppDialog(
 /**
  * 确认弹窗（原型 .dialog + 两枚 .btn/.btn-ghost：标题 17/600、说明 14、动作 grid 1fr 1fr）。
  * s05 删除交易 / s06 保存预算 可直接用它替换 M3 AlertDialog；自定义正文用 [extraContent]。
+ *
+ * 破坏性操作（删除 / 断开凭据）传 [destructive] = true：确认键换 danger 语义 + REJECT 触觉，
+ * 但按钮长宽、位置、字重与取消键完全一致 —— 让用户看清后果，而不是把「确认删」做得更好点。
  */
 @Composable
 fun ConfirmDialog(
@@ -112,6 +115,11 @@ fun ConfirmDialog(
     message: String? = null,
     confirmLabel: String = "确定",
     dismissLabel: String = "取消",
+    /**
+     * 确认键的语义档：破坏性操作（删除 / 断开）传 true —— 底色改 danger 文本色、触觉走 REJECT。
+     * 只换语义不换权重：面积与位置与取消键一致，破坏性操作不该比「取消」更显眼。
+     */
+    destructive: Boolean = false,
     extraContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
@@ -128,7 +136,13 @@ fun ConfirmDialog(
         Spacer(Modifier.height(t.space4))
         Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
             DialogAction(dismissLabel, primary = false, onClick = onDismiss, modifier = Modifier.weight(1f))
-            DialogAction(confirmLabel, primary = true, onClick = onConfirm, modifier = Modifier.weight(1f))
+            DialogAction(
+                confirmLabel,
+                primary = true,
+                onClick = onConfirm,
+                modifier = Modifier.weight(1f),
+                destructive = destructive,
+            )
         }
     }
 }
@@ -140,6 +154,8 @@ private fun DialogAction(
     primary: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 破坏性语义：danger 底 + danger 字 + REJECT 触觉；尺寸与取消键一致（不加重权重）。 */
+    destructive: Boolean = false,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
@@ -150,19 +166,43 @@ private fun DialogAction(
         modifier = modifier
             .height(t.tapMin)
             .clip(shape)
-            .background(if (primary) t.accent else Color.Transparent)
-            .border(1.dp, if (primary) Color.Transparent else t.border, shape)
+            .background(
+                when {
+                    // 破坏性用 danger 淡底而不是实底：语义要读得出，权重不能盖过取消键
+                    destructive -> t.danger.copy(alpha = t.danger.alpha * 0.12f)
+                    primary -> t.accent
+                    else -> Color.Transparent
+                },
+            )
+            .border(
+                1.dp,
+                when {
+                    destructive -> Color.Transparent
+                    primary -> Color.Transparent
+                    else -> t.border
+                },
+                shape,
+            )
             .pressFeedback(interaction)
             .testTag("dialog.action")
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
             ) {
-                haptic(HapticTone.LIGHT)
+                // 破坏性操作走 REJECT（删除 / 断开确认档），普通确认 LIGHT
+                haptic(if (destructive) HapticTone.REJECT else HapticTone.LIGHT)
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = if (primary) t.accentOn else t.fg)
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = when {
+                destructive -> t.dangerText
+                primary -> t.accentOn
+                else -> t.fg
+            },
+        )
     }
 }

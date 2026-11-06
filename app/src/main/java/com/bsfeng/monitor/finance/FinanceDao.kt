@@ -133,6 +133,9 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     /** 插入一个分类并返回新 id（分类体系迁移/种子用；冲突返回 -1） */
     fun insertCategory(category: Category): Long = categoryDao.insertCategory(category)
 
+    /** 按名字取分类 id；不存在返回 -1（分类目录补齐时复用已有分类） */
+    fun findCategoryId(name: String): Long = categoryDao.findCategoryId(name)
+
     /** 交易里出现过的分类名 + 类型（迁移映射用；跳过空分类） */
     fun getDistinctTransactionCategoryTypes(): List<Pair<String, Int>> =
         transactionDao.getDistinctTransactionCategoryTypes()
