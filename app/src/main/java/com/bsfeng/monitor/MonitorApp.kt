@@ -54,6 +54,7 @@ class MonitorApp : Application() {
         scheduleAlarmCheck(this)
         QuotaScheduler.reschedule(this)
         registerFinanceWidgetRefresh()
+        syncFinanceCategoryCatalog()
         checkSubscriptionUpdate()
     }
 
@@ -89,6 +90,21 @@ class MonitorApp : Application() {
             } catch (e: Exception) {
                 Log.w(TAG, "订阅记账变更信号失败（组件改由心跳兜底刷新）", e)
             }
+        }
+    }
+
+    /**
+     * 启动时补齐记账分类目录（每个目录版本一次）。
+     *
+     * 不能只等 [com.bsfeng.monitor.finance.ui.FinanceViewModel] 首次进入记账页：自动记账浮窗
+     * （AutoBookEngine.loadCategoryTree）读的是同一张分类表，用户不点开记账页前新分类
+     * 既不在库里、也不会出现在浮窗里。放在这里让「装完新包就生效」。
+     * 与 FinanceViewModel 里那次重复调用无副作用：prefs 标记保证每版只写一次，且 syncCatalog 幂等。
+     */
+    private fun syncFinanceCategoryCatalog() {
+        appScope.launch {
+            runCatching { FinanceManager.getInstance(this@MonitorApp).syncCatalogOnce() }
+                .onFailure { Log.w(TAG, "分类目录补齐失败（下次启动重试）", it) }
         }
     }
 

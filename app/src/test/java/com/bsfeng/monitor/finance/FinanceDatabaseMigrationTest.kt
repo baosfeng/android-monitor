@@ -17,7 +17,9 @@ import org.robolectric.annotation.Config
  * 迁移必须做到：**老数据一行不丢、新列有默认值、迁移后可正常读写** —— 迁移错了就是用户账本损坏。
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// application = Application：`MonitorApp.onCreate` 会后台补分类目录（写 finance.db），
+// 与这里「自建空库 + 断言精确计数」的用例抢同一个库
+@Config(sdk = [34], application = android.app.Application::class)
 class FinanceDatabaseMigrationTest {
 
     /** V1 的建表语句（不含 V2 的 6 列），用来造一个真实的旧库 */
