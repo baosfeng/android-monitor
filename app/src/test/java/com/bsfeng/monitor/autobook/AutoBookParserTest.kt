@@ -812,6 +812,65 @@ class AutoBookParserTest {
         )
     }
 
+    /**
+     * 真机 2026-11-06 20:40：支付宝「账单详情」页（商户 FT美业，-49.90，交易成功）。
+     *
+     * 该页同时出现两条金额行：`支出49.90元`（实付）与 `订单金额 50.00`（原价）。
+     * 价格行未被判噪时，一屏不同金额个数 = 2，门禁判成流水列表、
+     * 日志报「未识别到账单: 非账单页,门禁拒绝」——**整笔支出漏记**。
+     * 夹具已去掉真实商户与收款方隐私值。
+     */
+    private fun alipayOrderPriceDetailLines(): List<String> = listOf(
+        "返回 账单详情",
+        "某美业商户",
+        "-49.90",
+        "支出49.90元",
+        "交易成功",
+        "订单金额 50.00",
+        "碰友日立减 -0.10",
+        "支付时间 2026-11-06 20:40:51",
+        "付款方式 余额宝",
+        "收款方全称 **(个人)",
+        "账单分类 美容美发"
+    )
+
+    @Test
+    fun `账单详情页的「订单金额」原价行不得让整笔被判成流水列表`() {
+        val lines = alipayOrderPriceDetailLines()
+        assertTrue(
+            "实付 49.90 与订单金额 50.00 是同一笔的价格对照，不是两笔交易",
+            AutoBookParser.isBillPage(lines)
+        )
+        val draft = AutoBookParser.parse(alipay, lines, 1_760_000_000_000L)
+        requireNotNull(draft) { "带原价行的账单详情页仍然要能记账" }
+        assertEquals("金额必须是实付，不能取原价", 49.9, draft.amount, 0.0001)
+        assertEquals(AutoBookDraft.TYPE_EXPENSE, draft.type)
+        assertEquals("某美业商户", draft.merchant)
+        assertEquals("余额宝", draft.payMethod)
+        assertEquals("美容美发", draft.platformCategory)
+    }
+
+    @Test
+    fun `收款方被整体打码时不得当商户名`() {
+        // 打码值以连续星号开头 = 个人信息被整体遮掉，没有可对账的商户信息，退回页面大标题；
+        // 「名字在前、掩码在括号里」的转账对象仍然可用（见「支付宝转账成功页」用例）。
+        assertFalse(AutoBookFieldParse.isUsableMerchant("**(个人)"))
+        assertFalse(AutoBookFieldParse.isUsableMerchant("**腾(个人)"))
+        assertTrue(AutoBookFieldParse.isUsableMerchant("张三(***)"))
+        assertTrue(AutoBookFieldParse.isUsableMerchant("某美业商户"))
+    }
+
+    @Test
+    fun `价格与原价类标签行不参与一屏多笔计数`() {
+        // 同一页里的价格 / 原价字段行都不是交易金额（价格类标签逐个覆盖）
+        listOf(
+            "订单金额 50.00", "商品金额 50.00", "订单总额 50.00",
+            "商品总价 50.00", "订单价格 50.00", "商品单价 50.00", "原价 50.00"
+        ).forEach { priceLine ->
+            assertNull("价格行不是交易金额：$priceLine", AutoBookParser.extractAmount(listOf(priceLine)))
+        }
+    }
+
     @Test
     fun `微信支付会话页不得被识别成账单`() {
         assertNull(
