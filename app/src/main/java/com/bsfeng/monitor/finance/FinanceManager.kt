@@ -9,6 +9,7 @@ import androidx.core.content.edit
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
+import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Dispatchers
@@ -126,6 +127,34 @@ class FinanceManager internal constructor(context: Context) {
     }
 
     /**
+     * 分类目录补齐（每个 [CategoryCatalog.VERSION] 只跑一次）。
+     *
+     * 已安装用户的 finance.db 里已有旧目录，[seedDefaultCategories] 只认「表为空」，
+     * 所以 [CategoryCatalog] 扩容后必须靠这里把新分类补进去，否则真机上永远看不到新分类。
+     * 标记按版本号命名：下次再扩容只递增 [CategoryCatalog.VERSION] 即可再补一次。
+     */
+    suspend fun syncCatalogOnce() {
+        val key = KEY_CATALOG_SYNC_PREFIX + CategoryCatalog.VERSION
+        if (prefs.getBoolean(key, false)) return
+        val added = syncCatalog()
+        prefs.edit { putBoolean(key, true) }
+        if (added > 0) {
+            android.util.Log.i(TAG, "分类目录已补齐 $added 条（目录版本 ${CategoryCatalog.VERSION}）")
+        }
+    }
+
+    /**
+     * 补齐分类目录（幂等，可重复调用；单测直接调它）。
+     *
+     * @return 实际新增条数；再跑一次返回 0
+     */
+    internal suspend fun syncCatalog(): Int = withContext(Dispatchers.IO) {
+        val added = categorySeeder.syncCatalog()
+        if (added > 0) notifyChanged()
+        added
+    }
+
+    /**
      * 分类体系一次性迁移（旧扁平 → 新一级/二级）。
      *
      * 用落盘标记保证只跑一次；失败整体回滚，旧分类与账目保持原样，下次启动重试。
@@ -180,10 +209,11 @@ class FinanceManager internal constructor(context: Context) {
 
     // ========== 数据完整性 ==========
 
-    /** 初始化：分类体系迁移（只跑一次）→ 种子兜底 → 其他一次性清理 */
+    /** 初始化：分类体系迁移（只跑一次）→ 种子兜底 → 目录补齐 → 其他一次性清理 */
     suspend fun ensureInitialized() {
         migrateCategoryTreeOnce()
         seedDefaultCategories()
+        syncCatalogOnce()
         seedDefaultAccounts()
         cleanLegacyAggregatedRemarksOnce()
     }
@@ -228,6 +258,9 @@ class FinanceManager internal constructor(context: Context) {
 
         /** 分类体系迁移的一次性标记（v1：旧扁平分类 → 一级/二级） */
         private const val KEY_CATEGORY_TREE = "category_tree_v1"
+
+        /** 分类目录补齐标记前缀，拼 [CategoryCatalog.VERSION] 组成 key（每次扩容各补一次） */
+        private const val KEY_CATALOG_SYNC_PREFIX = "catalog_sync_v"
 
         /** 交易类型：支出 */
         const val TYPE_EXPENSE = 0

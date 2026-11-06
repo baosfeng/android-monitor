@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · accountfee（ic_cat_accountfee）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3.4 9.6h11.2v8.4H3.4zM3.4 12.4h11.2"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9 14.8a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M17.6 4.6a2.1 2.1 0 1 0 0 4.2a2.1 2.1 0 1 0 0-4.2"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M17.6 3v1.4M17.6 9.4V10.8M15.9 6.7h-1.4M19.3 6.7h1.4M16.4 5.5l-.9-.9M18.8 7.9l.9.9M16.4 7.9l-.9.9M18.8 5.5l.9-.9"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

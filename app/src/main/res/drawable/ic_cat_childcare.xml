@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · childcare（ic_cat_childcare）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6.8 17.8a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0M7.8 16V5.4a1.2 1.2 0 0 1 2.4 0V16M10.6 8.6h1.6M10.6 11.4h1.6M10.6 14.2h1.6M17 4.6v3.2M15.4 6.2h3.2"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

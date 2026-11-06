@@ -24,7 +24,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
  *
  * 图标为 24x24 viewBox 线描（`strokeWidth 1.7`、`fill=none`、圆角端点），
  * 每个分类（一级 + 二级）都有**独立 key 与独立 drawable**，二级不再继承父级图标；
- * 唯一性由 `CategoryIconUniquenessTest` 守护（145 个分类 ↔ 145 个不同资源）。
+ * 唯一性由 `CategoryIconUniquenessTest` 守护（分类与资源一一对应，数量以 [CategoryCatalog.allNames] 为准，不在注释里写死）。
  *
  * 映射表本体在 [CategoryIconKeys] / [CategoryIconDrawables]，本对象只做门面，
  * 保持 `CategoryIcons.keyOf` / `CategoryIcons.drawableOf` 的既有调用与测试。
