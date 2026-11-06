@@ -13,24 +13,14 @@ import com.bsfeng.monitor.util.ActivityNames
 import com.bsfeng.monitor.util.DebugConfig
 
 /**
- * 开屏跳过规则引擎（GKD 语义）。
+ * 开屏跳过规则引擎（GKD 语义）：以 **App 切换时刻** 为锚点开窗（[SkipConfig.watchWindowMs]）。
  *
- * ## 触发模型
- * `MonitorAccessibilityService` 在窗口/内容变化时调用本引擎；引擎以 **App 切换时刻** 为锚点
- * 开启一个匹配窗口（[SkipConfig.watchWindowMs]，默认 10 秒，设置页可选 5/10/15 秒），窗口内：
- * - `TYPE_WINDOW_CONTENT_CHANGED` 事件到达即扫描（100ms 节流）——广告渲染完成的第一时间命中
- * - 兜底轮询每 [BACKUP_SCAN_INTERVAL_MS] 一次，防止事件丢失
- * - 根节点为 null（启动瞬间很常见）时不放弃，等下轮扫描重试
- *
- * ## 行为边界
- * - **弱网顺延**：窗口到点时页面仍在渲染就顺延（有次数与硬上限），规则 `matchTime` 同步放宽已顺延的
- *   额度 —— 判定细节与理由见 [SkipWatchWindow.tryExtend]。
- * - **点击后确认**：动作执行后用同一选择器复核，广告没消失标为"未确认"（见 [SkipClickVerifier]）。
- * - **防误触**：只执行规则命中的节点动作，没有"坐标连点"或"返回键"兜底；熄屏不点击；白名单 App
- *   完全不处理；`matchTime`/`actionMaximum`/`resetMatch`/`actionCd`/`excludeMatches` 各管一道闸门
- *   （见 [SkipRuleGate]）。业界调研结论见 `docs/开屏跳过/业界调研与改进方案.md` §4 P0-2。
- * - **与旧实现的差异**：`matchDelay` 改为"到期标记"（见 [SkipRuleGate]），不再用 Handler 取消/重投，
- *   避免被 CONTENT_CHANGED 风暴无限推迟导致规则永不执行。
+ * - **触发**：CONTENT_CHANGED 到达即扫描（100ms 节流）+ 兜底轮询 [BACKUP_SCAN_INTERVAL_MS]；
+ *   根节点为 null（启动瞬间常见）不等死，下轮重试。
+ * - **防误触**：只执行规则命中的节点动作，无坐标连点/返回键兜底；熄屏不点；白名单不处理；
+ *   点击前还要过 [SplashCandidateVerdict]（见 [SkipRuleMatcher]），各闸门见 [SkipRuleGate]。
+ * - **弱网顺延**：到点仍在渲染就顺延（有硬上限），`matchTime` 同步放宽，见 [SkipWatchWindow.tryExtend]。
+ * - **点击后确认**：用同一选择器复核，没消失标"未确认"，见 [SkipClickVerifier]。
  */
 class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
 
@@ -45,14 +35,20 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         val ruleName: String,
         val selector: String,
         val action: String,
-        val confirmed: Boolean? = null
+        val confirmed: Boolean? = null,
+        /** 命中文案（截断 32 字）与判据结论：误判排查的关键证据，此前只落 `selector` 无法回溯"点的是什么字" */
+        val matchedText: String? = null,
+        val verdictReason: String? = null
     )
 
     private val handler = Handler(Looper.getMainLooper())
     private var rootNodeProvider: (() -> AccessibilityNodeInfo?)? = null
 
-    /** 跳过成功回调（服务层用于记录事件与提示） */
+    /** 跳过成功回调（服务层用于记录事件与提示）：只在 `confirmed != false` 时触发 */
     var onSkipSuccess: ((SkipResult) -> Unit)? = null
+
+    /** 「已点击但未确认」回调（`confirmed == false`）：服务层据此落 `AD_SKIP_UNCONFIRMED`，不进成功口径 */
+    var onSkipUnconfirmed: ((SkipResult) -> Unit)? = null
 
     // ==================== 运行状态 ====================
 
@@ -91,6 +87,16 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
      * 空列表 = 不做复核（动作执行后立即上报，`confirmed = null`）。
      */
     internal var verifyDelaysMs: List<Long> = VERIFY_DELAYS.toList()
+
+    /** 点击前判据开关（默认开启，须过 [SplashCandidateVerdict] 才允许点；置 false 做对照实验） */
+    internal var splashGateEnabled: Boolean
+        get() = matcher.splashGateEnabled
+        set(value) { matcher.splashGateEnabled = value }
+
+    /** 判据兜底宽限窗（毫秒），默认 [SkipConfig.SPLASH_WORDING_GRACE_MS] */
+    internal var splashGraceMs: Long
+        get() = matcher.splashGraceMs
+        set(value) { matcher.splashGraceMs = value }
 
     private val scanTask = Runnable { performScan() }
 
@@ -138,11 +144,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         startWatching(now)
     }
 
-    /**
-     * 窗口内容变化（事件驱动扫描）。
-     *
-     * 仅处理正在监控的 App；100ms 节流以吸收 CONTENT_CHANGED 风暴。
-     */
+    /** 窗口内容变化（事件驱动扫描）：仅处理正在监控的 App，100ms 节流吸收 CONTENT_CHANGED 风暴 */
     fun onContentChanged(packageName: String) {
         val pkg = currentPackage ?: return
         if (!window.watching || packageName != pkg) return
@@ -152,12 +154,7 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         performScan()
     }
 
-    /**
-     * 停止监控并清理规则状态。
-     *
-     * 顺延计数（[extensionCount]/[extensionGrantedMs]）**不在这里清零**：它们随下一次
-     * [startWatching] 重置，停窗后保留最后一次的取值便于诊断与单测断言。
-     */
+    /** 停止监控并清理规则状态。顺延计数**不在这里清零**（随下次 [startWatching] 重置，便于诊断断言） */
     fun stopWatching() {
         window.stop()
         handler.removeCallbacks(scanTask)
@@ -269,9 +266,13 @@ class SkipRuleEngine(private val ruleManager: SkipRuleManager) {
         schedule(BACKUP_SCAN_INTERVAL_MS)
     }
 
-    /** 上报跳过结果并结束窗口 */
+    /**
+     * 上报跳过结果并结束窗口。
+     *
+     * 分流在 [SkipClickVerifier.finish]：`confirmed == false` 不走成功回调（A 项）。
+     */
     private fun finishSkip(result: SkipResult) {
-        verifier.finish(result, TAG, onSkipSuccess)
+        verifier.finish(result, TAG, onSkipSuccess, onSkipUnconfirmed)
         stopWatching()
     }
 

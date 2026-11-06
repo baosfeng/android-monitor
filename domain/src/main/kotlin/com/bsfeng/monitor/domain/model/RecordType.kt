@@ -65,7 +65,7 @@ sealed interface RecordType {
          * `ON`（POWER_SAVE / AIRPLANE）—— 猜错比不猜更糟。
          */
         private val BY_ACTION: Map<String, RecordType> = mapOf(
-            "UNLOCKED" to SCREEN, "AD_SKIPPED" to SCREEN,
+            "UNLOCKED" to SCREEN, "AD_SKIPPED" to SCREEN, "AD_SKIP_UNCONFIRMED" to SCREEN,
             "USAGE" to APP_USAGE, "CLOSED" to APP_USAGE,
             "STARTED" to CHARGING, "STOPPED" to CHARGING,
             "LOW" to BATTERY, "OKAY" to BATTERY,

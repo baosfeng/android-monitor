@@ -174,14 +174,49 @@ class RecordCollector(
      *
      * @param confirmed 点击后确认结果（true 已确认广告消失 / false 未确认 / null 未复核）
      */
-    fun onSkipAd(appName: String, packageName: String, selectorExpr: String, confirmed: Boolean? = null) {
+    fun onSkipAd(
+        appName: String,
+        packageName: String,
+        selectorExpr: String,
+        confirmed: Boolean? = null,
+        matchedText: String? = null,
+        verdictReason: String? = null
+    ) {
         val detail = mutableMapOf(
             "app_name" to appName,
             "package_name" to packageName,
             "selector" to selectorExpr
         )
         confirmed?.let { detail["confirmed"] = it.toString() }
+        // 判据证据：只有 selector 无法回溯"点的是什么字"（2026-11-02 小红书误判的教训）
+        matchedText?.takeIf { it.isNotBlank() }?.let { detail["matched_text"] = it }
+        verdictReason?.takeIf { it.isNotBlank() }?.let { detail["verdict_reason"] = it }
         emit(RecordType.SCREEN, "AD_SKIPPED", System.currentTimeMillis(), detail = detail)
+    }
+
+    /**
+     * 记录一次「已点击但未确认」的跳过（点击后复核时跳过按钮仍在）。
+     *
+     * 为什么不复用 [onSkipAd]：`AD_SKIPPED` 的语义是「跳过成功」，所有成功口径都按它计数
+     * （广告页列表 / 概览 / 桌面小组件）。把它写成独立 action，计数口径自动分离，
+     * 未确认既不会伪装成成功，也不会丢证据 —— 误判排查全靠这批数据。
+     */
+    fun onSkipAdUnconfirmed(
+        appName: String,
+        packageName: String,
+        selectorExpr: String,
+        matchedText: String? = null,
+        verdictReason: String? = null
+    ) {
+        val detail = mutableMapOf(
+            "app_name" to appName,
+            "package_name" to packageName,
+            "selector" to selectorExpr,
+            "confirmed" to "false"
+        )
+        matchedText?.takeIf { it.isNotBlank() }?.let { detail["matched_text"] = it }
+        verdictReason?.takeIf { it.isNotBlank() }?.let { detail["verdict_reason"] = it }
+        emit(RecordType.SCREEN, "AD_SKIP_UNCONFIRMED", System.currentTimeMillis(), detail = detail)
     }
 
     /**

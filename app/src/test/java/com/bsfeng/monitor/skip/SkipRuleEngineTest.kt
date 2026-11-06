@@ -46,6 +46,9 @@ class SkipRuleEngineTest {
     private var clock = 0L
     private var interactive = true
     private val results = mutableListOf<SkipRuleEngine.SkipResult>()
+
+    /** `confirmed == false` 的回调集合：**不进** [results]（成功口径），见 A 项分流 */
+    private val unconfirmedResults = mutableListOf<SkipRuleEngine.SkipResult>()
     private var rootProvider: () -> AccessibilityNodeInfo? = { null }
 
     /** 最近一次上报发生的虚拟时刻（-1 = 未上报） */
@@ -67,6 +70,7 @@ class SkipRuleEngineTest {
         clock = 0L
         interactive = true
         results.clear()
+        unconfirmedResults.clear()
         lastSkipAtMs = -1L
         rootCalls = 0
         lastRootCallAtMs = -1L
@@ -81,6 +85,10 @@ class SkipRuleEngineTest {
             }
             onSkipSuccess = {
                 results.add(it)
+                lastSkipAtMs = clock
+            }
+            onSkipUnconfirmed = {
+                unconfirmedResults.add(it)
                 lastSkipAtMs = clock
             }
             // 默认关闭「点击后确认」，否则每个用例都要多等复核延时；
@@ -352,7 +360,7 @@ class SkipRuleEngineTest {
     }
 
     @Test
-    fun `点击后广告仍在则标记为未确认`() {
+    fun `点击后广告仍在则标记为未确认且不进成功口径`() {
         addRule(matches = listOf("[text=\"跳过广告\"]"))
         engine.verifyDelaysMs = listOf(300L)
         rootProvider = { tree(listOf(node(text = "跳过广告"))) }
@@ -360,8 +368,9 @@ class SkipRuleEngineTest {
         engine.onWindowChanged(testPackage, "com.test.app.MainActivity")
         advanceSteps(800)
 
-        assertEquals(1, results.size)
-        assertEquals(false, results.first().confirmed)
+        assertEquals("未确认不得走成功回调（A 项）", 0, results.size)
+        assertEquals(1, unconfirmedResults.size)
+        assertEquals(false, unconfirmedResults.first().confirmed)
     }
 
     @Test
@@ -392,7 +401,9 @@ class SkipRuleEngineTest {
         advance(50)              // 命中并点击
         advanceSteps(2_000)      // 复核期间（1 秒）+ 复核结束后
 
-        assertEquals("复核期间不得再次执行规则", 1, results.size)
+        // 本用例的广告始终"还在"，复核结论是未确认 → 走上报的是 unconfirmed 回调
+        assertEquals("复核期间不得再次执行规则", 0, results.size)
+        assertEquals("只上报一次未确认", 1, unconfirmedResults.size)
     }
 
     @Test

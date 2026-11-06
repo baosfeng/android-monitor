@@ -59,4 +59,4 @@ $A logcat -c && $A logcat -d | grep -E 'GkdSubscription|SkipRuleManager'
 - 订阅拉取：`app/src/main/java/com/bsfeng/monitor/skip/GkdSubscription.kt`
 - 订阅落库与多源管理：`app/src/main/java/com/bsfeng/monitor/skip/SkipRuleManager.kt`
 - 规则页入口：`app/src/main/java/com/bsfeng/monitor/ui/SkipRuleScreen.kt`
-- 模块文档：`docs/开屏跳过/设计.md` §5 规则来源与订阅
+- 模块文档：`docs/开屏跳过/设计.md` §4 规则来源与订阅
