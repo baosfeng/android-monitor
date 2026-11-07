@@ -1,8 +1,10 @@
 name: Android CI
 
+# 日常开发在 feat/** 分支上进行，只挂 main 会让这些分支在整个开发期零门禁。
+# 已有的 concurrency（cancel-in-progress）负责取消同 ref 的旧 run，无需额外改动。
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feat/**', 'fix/**' ]
   pull_request:
     branches: [ main ]
 
