@@ -61,15 +61,23 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
-          key: ${{ runner.os }}-robolectric-${{ hashFiles('**/build.gradle.kts') }}
+          # key 只认 app 模块的构建脚本：这份 jar 由 app 的 Robolectric 版本决定，
+          # 用 '**/build.gradle.kts' 会让改 domain 依赖这类无关改动也把 372MB 缓存整份作废。
+          key: ${{ runner.os }}-robolectric-${{ hashFiles('app/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-robolectric-
 
       # 152MB 平台包：命中缓存恢复约 2-4s，实测重新下载安装 8-16s，缓存划算。
+      # 缓存路径不能写死 runner 镜像的绝对路径，但 actions/cache 的 path 是逐字 glob、
+      # 不做环境变量展开（toolkit glob 只处理 ~ 与相对路径）。所以在前面用 shell 把
+      # $ANDROID_HOME 解析成真实路径（缺省仍回落官方镜像的 sdk 目录）再交给缓存。
+      - name: Resolve Android SDK path
+        run: echo "ANDROID_PLATFORM_DIR=${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms/android-37.0" >> "$GITHUB_ENV"
+
       - name: Cache Android SDK platform 37
         uses: actions/cache@v6
         with:
-          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          path: ${{ env.ANDROID_PLATFORM_DIR }}
           key: ${{ runner.os }}-android-platform-37.0
           restore-keys: |
             ${{ runner.os }}-android-platform-
@@ -149,10 +157,16 @@ jobs:
 
       # 与 test job 同一把 key：两个 job 都要 compileSdk 37 的平台包。
       # 并发保存同 key 时后到的那个会被跳过（只打 warning，不失败）。
+      # 缓存路径不能写死 runner 镜像的绝对路径，但 actions/cache 的 path 是逐字 glob、
+      # 不做环境变量展开（toolkit glob 只处理 ~ 与相对路径）。所以在前面用 shell 把
+      # $ANDROID_HOME 解析成真实路径（缺省仍回落官方镜像的 sdk 目录）再交给缓存。
+      - name: Resolve Android SDK path
+        run: echo "ANDROID_PLATFORM_DIR=${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms/android-37.0" >> "$GITHUB_ENV"
+
       - name: Cache Android SDK platform 37
         uses: actions/cache@v6
         with:
-          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          path: ${{ env.ANDROID_PLATFORM_DIR }}
           key: ${{ runner.os }}-android-platform-37.0
           restore-keys: |
             ${{ runner.os }}-android-platform-
