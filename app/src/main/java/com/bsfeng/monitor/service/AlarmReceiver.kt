@@ -11,11 +11,10 @@ import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
-import com.bsfeng.monitor.network.EventReporter
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationProbePolicy
-import com.bsfeng.monitor.util.AppUtils
+import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,26 +49,15 @@ class AlarmReceiver : BroadcastReceiver() {
         // 检查 AccessibilityService 是否存活，如果不在且 App 不在前台才尝试唤醒进程。
         // 注意：不再无条件 startActivity + CLEAR_TOP —— 那会每分钟把正在使用的页面
         // 重建回「概览」，用户会看到「设置页/传送页自己跳走」。
-        if (!isAccessibilityServiceRunning(context)) {
+        // 判定走 AccessibilityStatus 唯一实现，并要求连续 N 次都判未开启才动手：
+        // 单次抖动就把用户从别的 App 拽回来，代价远大于晚一分钟发现故障。
+        if (AccessibilityStatus.isDisabledConfirmed(context, MonitorAccessibilityService.isRunning)) {
             bringToFrontIfBackground(context)
         }
 
-        // 每 1 分钟也触发一次数据上报
-        // goAsync():广播回调返回后进程可能被系统回收,异步任务必须持有 pendingResult
-        val uploadResult = goAsync()
-        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            try {
-                val reporter = EventReporter(context)
-                if (AppUtils.getToken() != null) {
-                    reporter.uploadBatch()
-                } else {
-                    reporter.registerDevice()
-                    reporter.uploadBatch()
-                }
-            } finally {
-                uploadResult.finish()
-            }
-        }
+        // 数据上报：EventReporter.uploadBatch 目前是恒返回 0 的空壳（二期实现），
+        // 这里连 goAsync 都不申请 —— 否则每分钟白起一个协程、无 token 时还会每次重试设备注册。
+        // 二期接上传时把「有 token 才上传 + 失败指数退避」一起写回来，别恢复成现在的无条件每 60s。
 
         // 定位采样寄生在这条心跳里（不新开前台服务、不常驻监听），自己持有一个 PendingResult：
         // 主动定位可能耗时到 5 秒，与上报的完成时机互不牵连，任何一条路径都必须 finish
@@ -115,21 +103,6 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         sampleLocationOnce(context) { finishOnce() }
-    }
-
-    private fun isAccessibilityServiceRunning(context: Context): Boolean {
-        return try {
-            val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
-                    as android.view.accessibility.AccessibilityManager
-            val enabledServices = am.getEnabledAccessibilityServiceList(
-                16 // AccessibilityServiceInfo.FEEDBACK_GENERIC
-            )
-            enabledServices.any {
-                it.resolveInfo?.serviceInfo?.packageName == context.packageName
-            }
-        } catch (_: Exception) {
-            true  // 无法判断时默认 OK
-        }
     }
 
     /**
