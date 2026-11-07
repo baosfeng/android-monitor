@@ -184,6 +184,27 @@ internal class FinanceTransactionDao(private val dbHelper: FinanceDatabaseHelper
         return TransactionEntity.listFromCursor(cursor)
     }
 
+    /**
+     * 按日期区间（含两端）汇总某类交易的金额。
+     *
+     * 为什么要走 SQL 而不是把交易捞出来在内存里 sum：调用方原来用「最近 500 笔」再按日期过滤，
+     * 30 天内超过 500 笔时被截掉的恰好是最旧那批 —— 月度金额会**静默偏低**，界面上看不出异常。
+     *
+     * @param fromDate 起始日（含），`yyyy-MM-dd`；字符串比较即时间序
+     * @param toDate 截止日（含），`yyyy-MM-dd`
+     * @param type [FinanceManager.TYPE_EXPENSE] / [FinanceManager.TYPE_INCOME]
+     */
+    fun sumByDateRange(fromDate: String, toDate: String, type: Int): Double {
+        val db = dbHelper.readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT COALESCE(SUM(${TransactionEntity.COL_AMOUNT}), 0) FROM ${TransactionEntity.TABLE_NAME} " +
+                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} <= ? " +
+                "AND ${TransactionEntity.COL_TYPE} = ?",
+            arrayOf(fromDate, toDate, type.toString())
+        )
+        return cursor.use { c -> if (c.moveToFirst()) c.getDouble(0) else 0.0 }
+    }
+
     /** 获取某月的总支出 */
     fun getMonthlyExpenseTotal(yearMonth: String): Double {
         val db = dbHelper.readableDatabase
