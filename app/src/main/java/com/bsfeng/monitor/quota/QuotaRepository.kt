@@ -102,6 +102,42 @@ class QuotaRepository(
     }
 
     /**
+     * 断开某个 provider：清凭据 + 清快照 + 状态回落到「未配置」。
+     *
+     * 与「把输入框清空再保存」的区别：那条路只在填了空串时生效，且**不清快照** ——
+     * 仓库冷启动/重进页面会读回上次快照并标 stale，卡片继续显示旧数字，看起来像断开没生效。
+     * 所以这里必须连 [QuotaSnapshotCache] 里这一家的快照一起清掉。
+     *
+     * 不清的东西（都是用户偏好，不是凭据）：刷新间隔、用量范围、预警阈值、Ollama 计费模式。
+     * 节流与退避要清：下次重新填 Key 时应当立刻能查，而不是等一个上家的冷却窗口。
+     *
+     * 与 [refresh] 共用同一把 provider 锁：避免「清到一半正好有一次刷新在跑，把旧快照又写回来」。
+     * 不发请求 —— 凭据都没了，refresh 只会走「两个都为 null」的提前返回分支。
+     */
+    suspend fun clearCredentials(providerId: String) {
+        val lock = locks.getOrPut(providerId) { Mutex() }
+        lock.withLock {
+            credentials.clearAll(providerId)
+            // 唯一真值源是凭据：先落盘再清缓存，中途异常也不会留下「有快照没凭据」的半态
+            cache.clear(providerId)
+            lastRefreshAt.remove(providerId)
+            retryNotBefore.remove(providerId)
+            update(providerId) {
+                it.copy(
+                    items = emptyList(),
+                    usage = null,
+                    fetchedAtEpochSecond = 0L,
+                    loading = false,
+                    errorMessage = null,
+                    stale = false,
+                    balanceConfigured = false,
+                    usageConfigured = false,
+                )
+            }
+        }
+    }
+
+    /**
      * 切换用量范围：只重拉用量，避免打满限流。
      *
      * 失败回滚范围：用量数据仍是旧范围的，选中态必须跟着数据走 —— 否则会出现「近 30 天」的
