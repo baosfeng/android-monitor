@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.totp
 
 import android.database.sqlite.SQLiteConstraintException
+import androidx.core.database.sqlite.transaction
 
 /**
  * TOTP 账户表数据访问 —— 写用 writableDatabase、读用 readableDatabase。
@@ -89,22 +90,18 @@ class TotpAccountDao(private val dbHelper: TotpDatabaseHelper) {
      */
     fun reorder(orderedIds: List<Long>) {
         val db = dbHelper.writableDatabase
-        db.beginTransaction()
-        try {
+        db.transaction {
             orderedIds.forEachIndexed { index, id ->
                 val values = android.content.ContentValues().apply {
                     put(TotpEntity.COL_SORT_ORDER, index)
                 }
-                db.update(
+                update(
                     TotpEntity.TABLE_NAME,
                     values,
                     TotpEntity.COL_ID + " = ?",
                     arrayOf(id.toString()),
                 )
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 }
