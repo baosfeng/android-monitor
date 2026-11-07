@@ -7,7 +7,7 @@
      ============================================================ -->
 <!--@od:style-->
 <style data-for="s08">
-/* ═══ s08 · 数据导入（熊猫记账） ═══ */
+/* ═══ s08 · 数据导入（支付宝 / 微信账单 + 熊猫记账） ═══ */
 .s08-steps{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)}
 .s08-step{display:flex;align-items:center;gap:var(--space-3);min-height:var(--tap-min)}
 .s08-step-n{flex:0 0 auto;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg-2);font-family:var(--font-mono);font-size:var(--text-sm);font-weight:600}
@@ -34,21 +34,21 @@
   <div class="content" data-od-id="s08-content">
 
     <div class="pad s08-in" style="--i:0" id="s08-pickwrap" data-state-hide="loading empty error edge">
-      <p class="meta">从「熊猫记账」导出的 CSV 文件导入历史账目。导入前会先预检：重复记录自动跳过，无法识别的分类落到「未分类」。</p>
+      <p class="meta">从支付宝 / 微信导出的账单，或「熊猫记账」导出的数据库导入历史账目。同一笔按交易单号识别：已存在的只补全空白字段，不覆盖你改过的分类。</p>
       <div class="s08-steps">
-        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>1</span><span class="s08-step-t">选择熊猫记账导出的 CSV 文件</span></div>
-        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>2</span><span class="s08-step-t">预检并预览：导入 / 跳过 / 失败 三类记录</span></div>
-        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>3</span><span class="s08-step-t">写入本地数据库并重建预算与统计</span></div>
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>1</span><span class="s08-step-t">选择支付宝 / 微信账单（.csv · .xlsx · .zip）或熊猫记账 .db</span></div>
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>2</span><span class="s08-step-t">解析并自动推断分类：平台分类 → 商品说明 → 交易对方</span></div>
+        <div class="s08-step"><span class="s08-step-n" data-od-min-fs>3</span><span class="s08-step-t">写入账本：已存在的补全空白，不存在的新增</span></div>
       </div>
       <button class="s08-drop mt-4" type="button" data-file-pick data-od-id="s08-drop">
         <span class="s08-drop-ic"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 16.5V5"/><path d="M7.5 9.5 12 5l4.5 4.5"/><path d="M4.5 15v3A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-3"/></svg></span>
-        <span class="s08-drop-t">选择 CSV 文件</span>
-        <span class="s08-drop-s">支持 .csv，单文件 ≤ 20 MB</span>
+        <span class="s08-drop-t">选择账单文件</span>
+        <span class="s08-drop-s">.csv / .xlsx / .zip 账单，或 .db 账本</span>
       </button>
       <div class="group mt-3" id="s08-file" hidden data-od-id="s08-file">
         <div class="row">
           <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
-          <span class="row-body"><span class="row-title" id="s08-fname">熊猫记账_导出_2026-10-14.csv</span><span class="row-sub" id="s08-fmeta">1.2 MB · 1,039 条记录</span></span>
+          <span class="row-body"><span class="row-title" id="s08-fname">alipay_record_2026-10-14.csv</span><span class="row-sub" id="s08-fmeta">1.2 MB · 1,039 条记录</span></span>
           <button class="icon-btn" type="button" data-file-clear aria-label="移除文件" data-od-id="s08-file-clear"><svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 6.5 17.5 17.5"/><path d="M17.5 6.5 6.5 17.5"/></svg></button>
         </div>
       </div>
@@ -63,12 +63,13 @@
     <div class="pad" id="s08-result" hidden data-od-id="s08-result">
       <div class="card glass">
         <div class="row-between"><h2 class="h2">导入完成</h2><span class="badge" data-od-min-fs>1039</span></div>
-        <div class="grid-3 mt-3">
+        <div class="grid-4 mt-3">
           <div class="kpi"><span class="kpi-label">成功</span><span class="s08-kv" data-count-to="1024">1,024</span></div>
+          <div class="kpi"><span class="kpi-label">更新</span><span class="s08-kv" data-count-to="18">18</span></div>
           <div class="kpi"><span class="kpi-label">跳过</span><span class="s08-kv" data-count-to="12">12</span></div>
           <div class="kpi"><span class="kpi-label">失败</span><span class="s08-kv is-exp" id="s08-failnum" data-count-to="3">3</span></div>
         </div>
-        <p class="meta mt-3">耗时 1.8 秒 · 覆盖 2024-01-01 ~ 2026-10-14 · 新增 6 个分类</p>
+        <p class="meta mt-3">共 1,039 条记录 · 自动分类 1,006 条</p>
       </div>
       <div class="group mt-3" id="s08-failrows" data-od-id="s08-failrows">
         <div class="row">
@@ -110,14 +111,14 @@
     <div class="st-empty" data-state-when="empty" data-od-id="s08-empty">
       <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
       <p class="st-title">还没有选择文件</p>
-      <p class="st-desc">先在熊猫记账里「我的 → 导出账单 → CSV」，再回到这里选择该文件</p>
+      <p class="st-desc">支付宝「我的 → 账单 → 开具交易流水证明」或微信「我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单」，也可以选熊猫记账导出的 .db</p>
       <button class="btn btn-ghost" type="button" data-file-pick data-od-id="s08-empty-pick">选择 CSV 文件</button>
     </div>
 
     <div class="st-error" data-state-when="error" data-od-id="s08-error">
       <span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.8 21 19.4H3z"/><path d="M12 9.6v4.2"/><path d="M12 16.8h.01"/></svg></span>
       <p class="st-title">文件解析失败</p>
-      <p class="st-desc">不是有效的熊猫记账导出文件，或文件已损坏（第 1 行缺少表头）</p>
+      <p class="st-desc">无法识别这个账单文件：请确认是支付宝 / 微信导出的原始 .csv / .xlsx / .zip，或熊猫记账的 .db</p>
       <button class="btn btn-ghost" type="button" data-import-reset data-od-id="s08-error-retry">重试</button>
     </div>
 
@@ -126,7 +127,7 @@
         <div class="row">
           <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5V8.5h5"/></svg></span>
           <span class="row-body">
-            <span class="row-title">熊猫记账-全部账本导出-2026年10月14日-含转账与退款-完整版-final-final.csv</span>
+            <span class="row-title">alipay_record_2026-10-14-含转账与退款-完整版-final-final.csv</span>
             <span class="row-sub">19.8 MB · 128,430 条记录 · 已超过 20 MB 建议上限</span>
           </span>
           <span class="badge" data-od-min-fs>128430</span>
