@@ -22,15 +22,31 @@ object AppUtils {
         }
     }
 
+    /**
+     * 包名 → 应用显示名。**带缓存**：前台轮询每秒调用一次，而每次都要两次跨进程
+     * （`getApplicationInfo` + `getApplicationLabel`），且它与事件采集、开屏跳过共享主线程。
+     *
+     * 缓存失效条件：包被安装/卸载/替换时 [invalidateAppName]，由 RecordReceiver 的 PACKAGE_* 分支调用；
+     * 未命中时回退到包名本身（与应用商店表现一致，且不会因为查不到而丢记录）。
+     */
     fun getAppName(packageName: String): String {
+        appNameCache[packageName]?.let { return it }
         return try {
             val pm = appContext.packageManager
             val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo).toString()
+            pm.getApplicationLabel(appInfo).toString().also { appNameCache.put(packageName, it) }
         } catch (_: PackageManager.NameNotFoundException) {
             packageName
         }
     }
+
+    /** 包被安装 / 卸载 / 替换时清掉它的名字缓存（下次取到的是新版本 label）。 */
+    fun invalidateAppName(packageName: String) {
+        appNameCache.remove(packageName)
+    }
+
+    /** 64 条足够覆盖常用应用；超出后按 LRU 淘汰。安装/卸载清缓存只是加速，不是正确性依赖。 */
+    private val appNameCache = android.util.LruCache<String, String>(64)
 
     fun getToken(): String? {
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

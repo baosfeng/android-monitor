@@ -46,14 +46,15 @@ if (isSystemUi(pkg)) {
     return
 }
 
-val appName = AppUtils.getAppName(pkg)
-
-// 日志（仅 App 切换时）
+// 显示名只在 App 变化时取（AppUtils 有 LRU，但取不到仍要跨进程两次）：
+// 主线程每秒一次的固定开销会挤占事件回调与开屏跳过的节点遍历。
 if (pkg != lastPackageName) {
-    Log.d("MonitorService", "pollForegroundApp: $appName ($pkg)")
-    timeline("📱", appName)
+    lastAppName = AppUtils.getAppName(pkg)
+    Log.d("MonitorService", "pollForegroundApp: $lastAppName ($pkg)")
+    timeline("📱", lastAppName.orEmpty())
     lastPackageName = pkg
 }
+val appName = lastAppName ?: AppUtils.getAppName(pkg)
 
 // 通知 UsageTracker 累加时长（状态驱动，每秒调用一次）
 recordCollector.onTick(pkg, appName, now)
