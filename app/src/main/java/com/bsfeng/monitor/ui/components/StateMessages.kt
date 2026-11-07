@@ -160,8 +160,8 @@ private fun StateColumn(
     danger: Boolean,
     actionLabel: String?,
     onAction: (() -> Unit)?,
-    actionModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
+    actionModifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val iconBg = if (danger) t.danger.copy(alpha = t.danger.alpha * 0.14f) else t.fgFade(6)

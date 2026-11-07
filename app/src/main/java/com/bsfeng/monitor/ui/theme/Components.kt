@@ -189,17 +189,17 @@ fun SettingsRow(
  *
  * 替代各页面手写的 Row + IconButton 组合。
  *
- * @param titleModifier 标题节点的 modifier 入口（默认 [Modifier]，零行为变化）。
+ * @param modifier 标题节点的 modifier 入口（默认 [Modifier]，零行为变化）。
  *   用于「进入子页后焦点落在子页标题」这类口径：调用方传
  *   `Modifier.focusRequester(f).focusable()`，标题即可成为焦点 / 读屏落点。
  */
 @Composable
 fun IOSNavigationBar(
     title: String,
+    modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
-    titleModifier: Modifier = Modifier,
 ) {
     Row(
         modifier = Modifier
@@ -229,7 +229,7 @@ fun IOSNavigationBar(
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.weight(1f).then(titleModifier),
+            modifier = Modifier.weight(1f).then(modifier),
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
