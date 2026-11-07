@@ -22,14 +22,33 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/app/src/main/java"
 TOTAL_CHECKS=4
+
+# 前置自检：源码目录是四项检查的唯一输入。目录不存在时 find 只往 stderr 抱怨、
+# stdout 全空，四项会各自判「0 处命中」→ 假 PASS + exit 0。
+# 本门禁是唯一进 CI 的静态门禁，必须在无输入时自己判红。
+if [ ! -d "$SRC" ]; then
+    echo "门禁自身故障：源码目录不存在 → $SRC" >&2
+    echo "检查被跳过不等于通过，本门禁拒绝在无输入时判 PASS。" >&2
+    exit 1
+fi
+
 FAILED=0
 SUMMARY=()
 
 run_check() {
     local index="$1" title="$2" expected="$3"
     shift 3
-    local out
-    out="$("$@")"
+    local out rc=0
+    out="$("$@")" || rc=$?
+    # 扫描函数非零退出 = 扫描本身出错（find 失败 / 目录不可读），不能当成「0 处命中」。
+    if [ "$rc" -ne 0 ]; then
+        echo "== 检查 ${index}/${TOTAL_CHECKS} · ${title}（期望 ${expected} 处）=="
+        echo "   FAIL：门禁自身故障（扫描命令退出码 ${rc}），本轮不判定为通过"
+        SUMMARY+=("FAIL  检查 ${index} · ${title}：扫描命令退出码 ${rc}")
+        FAILED=1
+        echo
+        return
+    fi
     local hits=0
     if [ -n "$out" ]; then
         hits=$(printf '%s\n' "$out" | grep -c .)
@@ -49,15 +68,26 @@ run_check() {
 
 # 检查 1：页面（*Screen.kt）不得自画底衬渐变；foundation/Backdrop.kt 是唯一实现处。
 scan_page_backdrop() {
-    find "$SRC" -type f -name '*Screen.kt' | sort | while IFS= read -r f; do
+    # find 失败必须传上去（pipefail 下 || 能捕获），不能静默当成「0 处命中」。
+    local files
+    files=$(find "$SRC" -type f -name '*Screen.kt' | sort) || return 1
+    [ -z "$files" ] && return 0
+    printf '%s\n' "$files" | while IFS= read -r f; do
         grep -nE 'Brush\.verticalGradient\(listOf\(t\.backdropA' "$f" \
             | awk -v rel="${f#"$ROOT"/}" '{ print rel ":" $0 }'
     done
+    # grep 无匹配在 pipefail 下会给整条管道返回 1，这里显式收敛；
+    # 真正的扫描故障已在上面 return 1，不会走到这儿。
+    return 0
 }
 
 # 检查 2：onDrawBehind / onDrawWithContent 体内不得 new Path() / Brush.；按花括号深度跟踪块范围。
 scan_draw_alloc() {
-    find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
+    # find 失败必须传上去（pipefail 下 || 能捕获），不能静默当成「0 处命中」。
+    local files
+    files=$(find "$SRC" -type f -name '*.kt' | sort) || return 1
+    [ -z "$files" ] && return 0
+    printf '%s\n' "$files" | while IFS= read -r f; do
         awk -v rel="${f#"$ROOT"/}" '
             function braces(s,   t) { t = s; return gsub(/\{/, "", t) }
             function closebraces(s,   t) { t = s; return gsub(/\}/, "", t) }
@@ -76,17 +106,23 @@ scan_draw_alloc() {
             }
         ' "$f"
     done
+    return 0
 }
 
 # 检查 3：offset(...) 引用动画状态（animateDpAsState / animateFloatAsState / transition.animateFloat…）。
 scan_animated_offset() {
-    find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
+    # find 失败必须传上去（pipefail 下 || 能捕获），不能静默当成「0 处命中」。
+    local files
+    files=$(find "$SRC" -type f -name '*.kt' | sort) || return 1
+    [ -z "$files" ] && return 0
+    printf '%s\n' "$files" | while IFS= read -r f; do
         names=$(grep -oE 'val [A-Za-z_][A-Za-z0-9_]* (by|=) ([A-Za-z_][A-Za-z0-9_]*\.)?animate[A-Za-z]+(AsState)?\(' "$f" \
             | awk '{ print $2 }' | sort -u | paste -sd'|' -)
         [ -z "$names" ] && continue
         grep -nE "\.offset\([^)]*($names)([^A-Za-z0-9_]|$)" "$f" \
             | awk -v rel="${f#"$ROOT"/}" '{ print rel ":" $0 }'
     done
+    return 0
 }
 
 # 检查 4：AnimatedVisibility 的 enter/exit 里不得出现不带 animationSpec 的裸转场调用。
@@ -94,7 +130,11 @@ scan_animated_offset() {
 # 块内匹配「函数名 + 空括号」，即 slideInHorizontally() / fadeIn() 这类取 Compose 默认 spec 的写法；
 # 带参数的写法（tween(...) / fadeIn(tween(...))）不命中。同一文件可多次出现，逐个报。
 scan_bare_transition_spec() {
-    find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
+    # find 失败必须传上去（pipefail 下 || 能捕获），不能静默当成「0 处命中」。
+    local files
+    files=$(find "$SRC" -type f -name '*.kt' | sort) || return 1
+    [ -z "$files" ] && return 0
+    printf '%s\n' "$files" | while IFS= read -r f; do
         awk -v rel="${f#"$ROOT"/}" '
             function opens(s,   t) { t = s; gsub(/\{[^{}]*\}/, "", t); return gsub(/\(/, "", t) }
             function closes(s,   t) { t = s; gsub(/\{[^{}]*\}/, "", t); return gsub(/\)/, "", t) }
@@ -122,6 +162,7 @@ scan_bare_transition_spec() {
             }
         ' "$f"
     done
+    return 0
 }
 
 echo "渲染期规则门禁：$SRC"
