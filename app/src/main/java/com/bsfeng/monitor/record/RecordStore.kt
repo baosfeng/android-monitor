@@ -192,11 +192,9 @@ class RecordStore(private val db: DatabaseHelper) {
                     duration = if (cursor.isNull(cursor.getColumnIndexOrThrow("duration"))) null
                         else cursor.getLong(cursor.getColumnIndexOrThrow("duration")),
                     label = cursor.getString(cursor.getColumnIndexOrThrow("label")),
-                    // 单次解析：keys() 与取值共用同一个 JSONObject（原实现每行 new 了 keys+1 次）
-                    detail = if (detailStr.isNullOrBlank()) null
-                        else JSONObject(detailStr).let { obj ->
-                            obj.keys().asSequence().associateWith { obj.optString(it) }
-                        },
+                    // 单次解析：keys() 与取值共用同一个 JSONObject（原实现每行 new 了 keys+1 次）。
+                    // 解析失败按 null 处理：detail 可能来自备份还原 / 旧版写入，一条坏行不该让整页查询抛异常。
+                    detail = parseDetail(detailStr),
                     owner = cursor.getString(cursor.getColumnIndexOrThrow("owner"))
                 ))
             }
@@ -204,6 +202,32 @@ class RecordStore(private val db: DatabaseHelper) {
         }
     }
 }
+
+/**
+ * 解析 `records.detail` 的 JSON。
+ *
+ * 失败返回 null 而不是抛：detail 不是本进程独占写出来的 —— 备份还原会整库替换成用户选的 zip、
+ * v5 迁移按启发式重写过、旧版本也可能留下非 JSON 值。一条坏行不该让 [RecordStore.queryByDate]
+ * 整体抛异常，那会把实时页 / 概览 / 行程一起打成空白。
+ *
+ * 每个不同的坏值只报一次 W 日志（照 [UnknownStoredType] 的去重思路），避免高频查询刷屏。
+ */
+private fun parseDetail(raw: String?): Map<String, String>? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching {
+        val obj = JSONObject(raw)
+        obj.keys().asSequence().associateWith { obj.optString(it) }
+    }.getOrElse { e ->
+        val key = raw.take(64)
+        if (brokenDetailKeys.putIfAbsent(key, true) == null) {
+            android.util.Log.w("RecordStore", "detail 不是合法 JSON，按空值处理（此值只报一次）", e)
+        }
+        null
+    }
+}
+
+/** 已报过警的坏 detail 前缀。查询在多个 IO 线程上跑，用并发容器；超过 32 条就不再记（日志本就够用）。 */
+private val brokenDetailKeys = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
 /**
  * 库里的 `type` 既不规范、也推不出类型时的最后兜底。
