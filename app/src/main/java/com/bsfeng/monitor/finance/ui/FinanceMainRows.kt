@@ -345,7 +345,7 @@ internal fun S04LoadingBlock() {
 internal fun S04EmptyBlock(onAdd: () -> Unit) {
     val t = LocalDesignTokens.current
     EmptyState(
-        text = "点右下角「+」记下第一笔，或从熊猫记账导入历史账目",
+        text = "点右下角「+」记下第一笔，或导入支付宝 / 微信账单",
         modifier = Modifier
             .testTag("s04-empty")
             .padding(horizontal = t.space4),

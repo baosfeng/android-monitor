@@ -271,7 +271,7 @@ fun FinanceStatsScreen(
                         }
                         if (showEmptyCard) item(key = "empty") {
                             EmptyState(
-                                text = "记一笔账或从熊猫记账导入历史数据后，这里会生成分类占比与趋势",
+                                text = "记一笔账或导入支付宝 / 微信账单后，这里会生成分类占比与趋势",
                                 title = "本月还没有可统计的支出",
                                 icon = Icons.Filled.BarChart,
                                 actionLabel = if (onAddClick != null) "新增一笔" else null,
