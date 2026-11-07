@@ -58,15 +58,21 @@ internal const val FAIL_ROWS_LIMIT = 50
 /**
  * 导入结果概览卡（锚点 s08-result）。
  *
- * 口径：卡上无点击响应、不提供撤销或删除入口；三格数字 620ms 滚动到终值；卡可聚焦且整体一个焦点组
- * （三格不拆成三个 Tab 停位）；读屏一次读完「导入完成，共 1,039 条记录，成功 1,024，跳过 12，失败 3」，
- * 失败数为 0 时不朗读失败项。
+ * 口径：卡上无点击响应、不提供撤销或删除入口；数字 620ms 滚动到终值；卡可聚焦且整体一个焦点组
+ * （各格不拆成多个 Tab 停位）；读屏一次读完「导入完成，共 1,039 条记录，成功 1,024，更新 18，
+ * 跳过 12，失败 3，自动分类 1,006 条」，更新 / 失败 / 自动分类为 0 时都不朗读对应项。
  *
+ * @param updatedCount 命中已有记录并被补全的条数。只有账单导入（支付宝 / 微信）会传；
+ *   熊猫 .db 导入沿用默认 0，此时「更新」这一格整个不渲染 —— 三格布局与旧版完全一致。
+ * @param autoCategorized 自动推断出分类的条数（不算兜底「其他」）。账单导入专有；
+ *   为 0 时整段省略，熊猫 .db 的副行文案与旧版一字不差。
  * @param modifier 调用方注入锚点 / 焦点修饰（卡节点）。
  */
 @Composable
 internal fun ImportResultSummaryCard(
     result: PandaImporter.ImportResult,
+    updatedCount: Int = 0,
+    autoCategorized: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
@@ -79,11 +85,20 @@ internal fun ImportResultSummaryCard(
         append(formatCount(result.totalTransactions))
         append(" 条记录，成功 ")
         append(formatCount(result.importedTransactions))
+        if (updatedCount > 0) {
+            append("，更新 ")
+            append(formatCount(updatedCount))
+        }
         append("，跳过 ")
         append(formatCount(result.skippedTransactions))
         if (failCount > 0) {
             append("，失败 ")
             append(formatCount(failCount))
+        }
+        if (autoCategorized > 0) {
+            append("，自动分类 ")
+            append(formatCount(autoCategorized))
+            append(" 条")
         }
     }
     Column(Modifier.padding(horizontal = t.space4)) {
@@ -118,6 +133,16 @@ internal fun ImportResultSummaryCard(
                     color = t.incomeText,
                     modifier = Modifier.weight(1f),
                 )
+                // 「更新」只在真的发生过补全时出现：账单导入才有这个概念，
+                // 熊猫 .db 导入传 0，这一格不渲染（三格布局与旧版完全一致）
+                if (updatedCount > 0) {
+                    ResultTile(
+                        label = "更新",
+                        value = formatCount(animatedCount(updatedCount)),
+                        color = t.accent,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 ResultTile(
                     label = "跳过",
                     value = formatCount(animatedCount(result.skippedTransactions)),
@@ -133,10 +158,30 @@ internal fun ImportResultSummaryCard(
             }
             Spacer(Modifier.height(t.space3))
             Text(
-                "共 " + formatCount(result.totalTransactions) + " 条记录 · 新增 " +
-                    result.importedCategories + " 个分类 · " +
-                    result.importedAccounts + " 个账户 · " +
-                    result.importedBudgets + " 条预算",
+                buildString {
+                    append("共 ")
+                    append(formatCount(result.totalTransactions))
+                    append(" 条记录")
+                    // 账单导入的「自动分类」：用户最关心的就是「有没有猜对」，放在副行最前
+                    if (autoCategorized > 0) {
+                        append(" · 自动分类 ")
+                        append(formatCount(autoCategorized))
+                        append(" 条")
+                    }
+                    // 熊猫 .db 才带分类 / 账户 / 预算三类副产物；账单导入这三项都是 0，
+                    // 与其显示「新增 0 个分类」不如整段省略
+                    if (result.importedCategories > 0 || result.importedAccounts > 0 ||
+                        result.importedBudgets > 0
+                    ) {
+                        append(" · 新增 ")
+                        append(formatCount(result.importedCategories))
+                        append(" 个分类 · ")
+                        append(formatCount(result.importedAccounts))
+                        append(" 个账户 · ")
+                        append(formatCount(result.importedBudgets))
+                        append(" 条预算")
+                    }
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = t.meta,
             )

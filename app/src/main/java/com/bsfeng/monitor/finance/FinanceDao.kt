@@ -119,6 +119,13 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     /** 清空分类表（分类体系迁移用，事务内调用） */
     fun clearCategories(): Int = categoryDao.clearCategories()
 
+    /** 按「来源 + 身份键」精确查一条（账单导入去重用） */
+    fun findBySourceId(source: String, sourceId: String): Transaction? =
+        transactionDao.findBySourceId(source, sourceId)
+
+    /** 按订单号查一条（**跨源**去重用：自动记账与导入的 source 前缀不同） */
+    fun findByOrderId(orderId: String): Transaction? = transactionDao.findByOrderId(orderId)
+
     /** 把交易里旧的分类名批量改到新分类（迁移用；不动金额/余额/时间） */
     fun updateTransactionCategory(oldName: String, newName: String): Int =
         transactionDao.updateTransactionCategory(oldName, newName)

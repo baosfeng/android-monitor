@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.FinanceManager
+import com.bsfeng.monitor.finance.importer.BillImporter
 import com.bsfeng.monitor.finance.PandaImporter
+import com.bsfeng.monitor.finance.importer.BillImportResult
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
@@ -34,6 +36,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val manager = FinanceManager.getInstance(application)
     private val importer = PandaImporter(manager)
+
+    /** 支付宝 / 微信账单导入（.csv / .xlsx / .zip）；与 [importer] 各管一类文件，互不替代。 */
+    private val billImporter = BillImporter(manager)
 
     // ========== 状态 ==========
 
@@ -88,6 +93,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val _importResult = MutableStateFlow<PandaImporter.ImportResult?>(null)
     val importResult: StateFlow<PandaImporter.ImportResult?> = _importResult.asStateFlow()
+
+    /** 账单导入（支付宝 / 微信）的结果；与 [importResult] 互斥，同一时刻只有一个非空。 */
+    private val _billImportResult = MutableStateFlow<BillImportResult?>(null)
+    val billImportResult: StateFlow<BillImportResult?> = _billImportResult.asStateFlow()
 
     // 加载状态
     private val _loading = MutableStateFlow(false)
@@ -354,6 +363,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val deferred = viewModelScope.async {
             _importing.value = true
             _importResult.value = null
+            // 反向互斥：走熊猫导入时把账单结果清掉，结果卡不会新旧并存
+            _billImportResult.value = null
             try {
                 val result = importer.import(dbPath)
                 _importResult.value = result
@@ -371,6 +382,55 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearImportResult() {
         _importResult.value = null
+        _billImportResult.value = null
+    }
+
+    /**
+     * 导入支付宝 / 微信账单文件。
+     *
+     * 与 [importFromPanda] 同一套生命周期：置 [importing] → 清旧结果 → 跑导入 → 回填结果 →
+     * 有写入才刷新当前月 → finally 复位 importing。区别只在结果类型与「有写入」的判据
+     * （账单的已存在记录是**更新**而非跳过，所以看 [BillImportResult.hasWrites]）。
+     *
+     * @param fileName 原始文件名 —— 解析侧靠它识别渠道（alipay / wechat）与容器格式
+     * @param bytes 文件原始字节（重试时调用方会再传一次同一份内容）
+     */
+    fun importBillFile(fileName: String, bytes: ByteArray): Deferred<BillImportResult> {
+        val deferred = viewModelScope.async {
+            _importing.value = true
+            // 两个结果互斥：切到账单导入时，上一次熊猫导入的旧卡片必须先消失
+            _importResult.value = null
+            _billImportResult.value = null
+            try {
+                val result = billImporter.import(fileName, bytes)
+                _billImportResult.value = result
+                // 导入后刷新（失败 / 全跳过时不写库，也就不必重读）
+                if (result.hasWrites) {
+                    loadMonth(_currentMonth.value)
+                }
+                result
+            } finally {
+                _importing.value = false
+            }
+        }
+        return deferred
+    }
+
+    fun clearBillImportResult() {
+        _billImportResult.value = null
+    }
+
+    /**
+     * 按请求类型分流到两个 importer 之一。
+     *
+     * 分流放在这里而不是 MainTabContent：调用点只需要把 UI 组装好的请求原样转交，
+     * 不必同时 import 两个 importer 的结果类型，两处调用点（叠层 / 独立路由）也就不用各写一遍 when。
+     */
+    internal fun dispatchImport(request: ImportRequest) {
+        when (request) {
+            is ImportRequest.Database -> importFromPanda(request.path)
+            is ImportRequest.Bill -> importBillFile(request.fileName, request.bytes)
+        }
     }
 
     // ========== 工具方法 ==========

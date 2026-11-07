@@ -181,7 +181,8 @@ internal fun MainTabContent(
                             ImportScreen(
                                 importing = fvm.importing.collectAsState().value,
                                 importResult = fvm.importResult.collectAsState().value,
-                                onImport = { path -> fvm.importFromPanda(path) },
+                                billImportResult = fvm.billImportResult.collectAsState().value,
+                                onImport = { request -> fvm.dispatchImport(request) },
                                 onDismiss = { closeImportOverlay() },
                                 onClearResult = { fvm.clearImportResult() },
                                 modifier = Modifier.fillMaxSize(),
@@ -241,7 +242,8 @@ internal fun MainTabContent(
                 is FinanceRoute.Import -> ImportScreen(
                     importing = fvm.importing.collectAsState().value,
                     importResult = fvm.importResult.collectAsState().value,
-                    onImport = { path -> fvm.importFromPanda(path) },
+                    billImportResult = fvm.billImportResult.collectAsState().value,
+                    onImport = { request -> fvm.dispatchImport(request) },
                     onDismiss = onBackToFinanceMain,
                     onClearResult = { fvm.clearImportResult() }
                 )

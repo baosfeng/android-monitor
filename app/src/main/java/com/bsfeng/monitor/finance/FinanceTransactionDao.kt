@@ -263,6 +263,46 @@ internal class FinanceTransactionDao(private val dbHelper: FinanceDatabaseHelper
         return cursor.use { c -> c.moveToFirst() && c.getInt(0) > 0 }
     }
 
+    /**
+     * 按「来源 + 身份键」精确查一条（账单导入去重用）。
+     *
+     * 与 [transactionExists] 的区别：这条要拿整行去做「只补空」的更新，所以返回 Transaction 而非布尔。
+     */
+    fun findBySourceId(source: String, sourceId: String): Transaction? {
+        if (source.isBlank() || sourceId.isBlank()) return null
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            TransactionEntity.TABLE_NAME, null,
+            "${TransactionEntity.COL_SOURCE} = ? AND ${TransactionEntity.COL_SOURCE_ID} = ?",
+            arrayOf(source, sourceId),
+            null, null,
+            "${TransactionEntity.COL_ID} ASC",
+            "1"
+        )
+        return TransactionEntity.listFromCursor(cursor).firstOrNull()
+    }
+
+    /**
+     * 按订单号查一条（**跨源**去重用）。
+     *
+     * 自动记账写 `auto_alipay`、导入写 `alipay_import`，同一笔会有两个来源；
+     * 不限 source 地按订单号找，命中就说明「这笔已经在账本里了」。
+     */
+    fun findByOrderId(orderId: String): Transaction? {
+        val id = orderId.trim()
+        if (id.isEmpty()) return null
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            TransactionEntity.TABLE_NAME, null,
+            "${TransactionEntity.COL_ORDER_ID} = ?",
+            arrayOf(id),
+            null, null,
+            "${TransactionEntity.COL_ID} ASC",
+            "1"
+        )
+        return TransactionEntity.listFromCursor(cursor).firstOrNull()
+    }
+
     /** 把交易里旧的分类名批量改到新分类（迁移用；不动金额/余额/时间） */
     fun updateTransactionCategory(oldName: String, newName: String): Int {
         if (oldName == newName) return 0

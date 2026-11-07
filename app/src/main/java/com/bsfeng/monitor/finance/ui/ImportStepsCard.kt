@@ -28,16 +28,16 @@ internal fun ImportStepsCard(modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = t.space4)) {
         Spacer(Modifier.height(t.space3))
         Text(
-            "从熊猫记账导出的数据文件导入历史账目。导入前会先预检：重复记录自动跳过，" +
-                "无法识别的分类落到「未分类」。",
+            "从支付宝 / 微信导出的账单，或「熊猫记账」导出的数据库导入历史账目。" +
+                "同一笔按交易单号识别：已存在的只补全空白字段，不覆盖你改过的分类。",
             style = MaterialTheme.typography.labelSmall,
             color = t.meta,
         )
         Spacer(Modifier.height(t.space3))
         listOf(
-            "选择熊猫记账导出的数据文件",
-            "预检并预览：导入 / 跳过 / 失败 三类记录",
-            "写入本地数据库并重建预算与统计",
+            "选择支付宝 / 微信账单（.csv · .xlsx · .zip）或熊猫记账 .db",
+            "解析并自动推断分类：平台分类 → 商品说明 → 交易对方",
+            "写入账本：已存在的补全空白，不存在的新增",
         ).forEachIndexed { index, step ->
             Row(
                 modifier = Modifier.padding(vertical = t.space1),

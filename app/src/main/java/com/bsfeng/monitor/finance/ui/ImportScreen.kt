@@ -13,7 +13,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,15 +25,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,15 +49,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import com.bsfeng.monitor.finance.PandaImporter
-import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.finance.importer.BillImportResult
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
-import com.bsfeng.monitor.ui.components.EdgeState
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.StateContainer
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
@@ -77,13 +69,15 @@ import com.bsfeng.monitor.ui.foundation.pageBackdrop
  * s08 数据导入。
  *
  * 三步说明 + 文件选择 + 进度条 + 结果统计 + 失败明细与重试；五态齐备。
- * 真实导入走 [PandaImporter]（熊猫记账导出的数据库文件 .db），业务口径按源码现状。
+ * 两个来源共用一个结果壳：熊猫记账的 .db 走 [PandaImporter]，支付宝 / 微信账单
+ * （.csv / .xlsx / .zip）走 BillImporter —— 分流在这里按扩展名做，调用方只接 [ImportRequest]。
  */
 @Composable
-fun ImportScreen(
+internal fun ImportScreen(
     importing: Boolean,
     importResult: PandaImporter.ImportResult?,
-    onImport: (String) -> Unit,
+    billImportResult: BillImportResult?,
+    onImport: (ImportRequest) -> Unit,
     onDismiss: () -> Unit,
     onClearResult: () -> Unit,
     modifier: Modifier = Modifier,
@@ -98,6 +92,11 @@ fun ImportScreen(
     var selectedName by remember { mutableStateOf("") }
     var selectedPath by remember { mutableStateOf("") }
     var selectedBytes by remember { mutableStateOf(0L) }
+    // 选文件后落盘的缓存路径 + 归属（决定后续走 PandaImporter 还是 BillImporter）。
+    // 账单文件在选中时就一次性读进内存：OpenDocument 给的临时授权只在本次会话内可靠，
+    // 而「重试失败项」要能再读一次同一份字节。
+    var selectedKind by remember { mutableStateOf(ImportKind.UNKNOWN) }
+    var selectedBytesData by remember { mutableStateOf<ByteArray?>(null) }
     var readError by remember { mutableStateOf("") }
     // 连点防护：点击后到 StateFlow 回填 importing 之间可能有一点间隔
     var submitting by remember { mutableStateOf(false) }
@@ -126,41 +125,86 @@ fun ImportScreen(
         selectedName = ""
         selectedPath = ""
         selectedBytes = 0L
+        // 账单把内容读进了内存，一起清掉 —— 否则「移除文件」后点重试仍会拿旧字节再导一遍
+        selectedKind = ImportKind.UNKNOWN
+        selectedBytesData = null
         readError = ""
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        // 取消返回：不出文件行、不出 toast、卡片原样、滚动位置不变
-        if (uri == null) return@rememberLauncherForActivityResult
-        val fileName = getFileName(context, uri) ?: "panda_jizhang.db"
-        try {
-            dropCache(selectedPath)
-            val cacheFile = File(context.cacheDir, "panda_import_" + System.currentTimeMillis() + ".db")
-            val stream = context.contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException("文件已被移动")
-            stream.use { input ->
-                FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
-            }
-            selectedName = fileName
-            selectedPath = cacheFile.absolutePath
-            selectedBytes = cacheFile.length()
-            readError = ""
-            onClearResult()
-            toast.show("已选择 " + fileName)
-            fileTick++
-        } catch (e: Exception) {
-            clearSelection()
-            readError = "文件读取失败：" + (e.message ?: "未知错误")
+    /**
+     * 一次性把选中的文件读进缓存：DB 留路径给 PandaImporter 传参，账单文件额外留字节。
+     *
+     * @return 失败原因；null 表示读取成功。
+     */
+    fun loadPicked(uri: Uri, fileName: String): String? = try {
+        dropCache(selectedPath)
+        val kind = ImportKind.of(fileName)
+        // 缓存前缀通用，扩展名跟着原文件走 —— 此前写死 panda_import_*.db，
+        // 会把 csv 命名成 .db，靠扩展名分流的逻辑（以及睡前调试的肉眼核对）全会错。
+        val suffix = fileName.substringAfterLast('.', "").lowercase().ifEmpty { "dat" }
+        val cacheFile = File(context.cacheDir, "import_" + System.currentTimeMillis() + "." + suffix)
+        val stream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException("文件已被移动")
+        stream.use { input ->
+            FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
         }
+        selectedKind = kind
+        selectedName = fileName
+        selectedPath = cacheFile.absolutePath
+        selectedBytes = cacheFile.length()
+        selectedBytesData = if (kind == ImportKind.BILL) cacheFile.readBytes() else null
+        readError = ""
+        onClearResult()
+        fileTick++
+        null
+    } catch (e: Exception) {
+        clearSelection()
+        "文件读取失败：" + (e.message ?: "未知错误")
     }
 
-    val result = importResult
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        // GetContent 只接受单个 MIME，而这里要同时放行 csv / xlsx / zip / db；
+        // OpenMultipleDocuments 的输入是 MIME 数组，且同样返回 Uri 列表（取第一个）。
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        // 取消返回：不出文件行、不出 toast、卡片原样、滚动位置不变
+        val uri = uris.firstOrNull() ?: return@rememberLauncherForActivityResult
+        val fileName = getFileName(context, uri) ?: ""
+        if (fileName.isEmpty()) {
+            readError = "无法读取文件名，请换一个文件"
+            return@rememberLauncherForActivityResult
+        }
+        if (ImportKind.of(fileName) == ImportKind.UNKNOWN) {
+            readError = "只支持 .csv / .xlsx / .zip / .db"
+            return@rememberLauncherForActivityResult
+        }
+        val failure = loadPicked(uri, fileName)
+        if (failure != null) {
+            readError = failure
+        } else {
+            toast.show("已选择 " + fileName)
+        }
+    }
+    val launchPicker = {
+        filePickerLauncher.launch(IMPORT_MIME_TYPES)
+    }
+
+    // 账单结果映射成同构的结果对象（记录数 / 成功 / 跳过 / 错误同一套语义），
+    // 失败判定、结果卡、焦点迁移因此都不分叉；「更新」是它独有的第 4 格，单独往下传。
+    val fromBill = billImportResult != null
+    val result = importResult ?: billImportResult?.asPandaResult()
+    val updatedCount = billImportResult?.updated ?: 0
+    // 自动推断出分类的条数（不算兜底「其他」）：用户最关心「有没有猜对」，结果卡要能回答
+    val autoCategorized = billImportResult?.categoriesResolved ?: 0
     val emptyFile = result != null && !importing && result.totalTransactions == 0 &&
-        result.importedTransactions == 0 && result.errors.isEmpty()
-    val parseFailed = result != null && !importing &&
-        (result.errors.any { it.startsWith("无法打开数据库文件") } || emptyFile)
+        result.importedTransactions == 0 && updatedCount == 0 && result.errors.isEmpty()
+    val parseFailed = result != null && !importing && (
+        // 熊猫：解析器给的固定前缀；账单：一条都没写进去却带着错误，说明格式没认出来
+        result.errors.any { it.startsWith("无法打开数据库文件") } ||
+            (fromBill && result.errors.isNotEmpty() && result.importedTransactions == 0 &&
+                updatedCount == 0) ||
+            emptyFile
+        )
     val interrupted = result != null && !importing && result.errors.any { it.contains("已回滚") }
     val failed = parseFailed || interrupted
     val derivedState = when {
@@ -170,6 +214,23 @@ fun ImportScreen(
     }
     val state = control.value ?: derivedState
     val hasResult = result != null && !importing && !failed
+
+    /** 把当前选中的文件打包成导入请求；选中项不完整时给一句提示并返回 null。 */
+    fun currentRequest(): ImportRequest? {
+        if (selectedPath.isEmpty() || selectedName.isEmpty()) {
+            toast.show("请先选择要导入的文件")
+            return null
+        }
+        if (selectedKind != ImportKind.BILL) {
+            return ImportRequest.Database(selectedName, selectedPath)
+        }
+        val bytes = selectedBytesData
+        if (bytes == null) {
+            toast.show("文件内容已失效，请重新选择")
+            return null
+        }
+        return ImportRequest.Bill(selectedName, bytes)
+    }
 
     // 进度：无真实进度事件，按锚点 120ms 线性步进爬到 92%，结果返回即落 1f
     val progress = remember { Animatable(0f) }
@@ -294,6 +355,8 @@ fun ImportScreen(
                         item(key = "resulthead") {
                             ImportResultSummaryCard(
                                 result = shown,
+                                updatedCount = updatedCount,
+                                autoCategorized = autoCategorized,
                                 modifier = Modifier
                                     .focusRequester(resultFocus),
                             )
@@ -324,13 +387,11 @@ fun ImportScreen(
                                             .weight(1f)
                                             .testTag("s08-retry-failed"),
                                         onClick = {
-                                            if (selectedPath.isNotEmpty()) {
+                                            currentRequest()?.let { request ->
                                                 submitting = true
                                                 retryBase = result?.errors?.size ?: 0
                                                 pendingRetry = true
-                                                onImport(selectedPath)
-                                            } else {
-                                                toast.show("请先选择要导入的文件")
+                                                onImport(request)
                                             }
                                         },
                                     )
@@ -356,14 +417,25 @@ fun ImportScreen(
                         item(key = "failed") {
                             Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
                                 if (parseFailed) {
+                                    // 文案分来源：熊猫 .db 与支付宝 / 微信账单的「认不出」原因不同，
+                                    // 统一说成「熊猫导出文件」会让账单用户以为选错了地方
+                                    val badFileText = if (emptyFile) {
+                                        if (fromBill) {
+                                            "文件里没有可导入的账单记录（可能只导出了表头）。"
+                                        } else {
+                                            "文件里没有可导入的账目记录，或不是有效的熊猫记账导出文件。"
+                                        }
+                                    } else {
+                                        val reason = result.errors.firstOrNull()?.let { " " + it } ?: ""
+                                        if (fromBill) {
+                                            "无法识别这个账单文件，请确认是支付宝 / 微信导出的原始 .csv / .xlsx / .zip。" + reason
+                                        } else {
+                                            "不是有效的熊猫记账导出文件，或文件已损坏。" + reason
+                                        }
+                                    }
                                     ErrorState(
                                         title = "文件解析失败",
-                                        text = if (emptyFile) {
-                                            "文件里没有可导入的账目记录，或不是有效的熊猫记账导出文件。"
-                                        } else {
-                                            "不是有效的熊猫记账导出文件，或文件已损坏。" +
-                                                (result?.errors?.firstOrNull()?.let { " " + it } ?: "")
-                                        },
+                                        text = badFileText,
                                         modifier = Modifier.testTag("s08-error"),
                                         // 锚点 s08-error：焦点直接落到「重试」上
                                         actionModifier = Modifier
@@ -371,11 +443,9 @@ fun ImportScreen(
                                             .focusRequester(errorRetryFocus),
                                         actionLabel = "重试",
                                         onRetry = {
-                                            if (selectedPath.isNotEmpty()) {
+                                            currentRequest()?.let { request ->
                                                 submitting = true
-                                                onImport(selectedPath)
-                                            } else {
-                                                toast.show("请先选择要导入的文件")
+                                                onImport(request)
                                             }
                                         },
                                     )
@@ -383,14 +453,14 @@ fun ImportScreen(
                                     ErrorState(
                                         title = "导入中断",
                                         text = "本次写入已回滚，本地账目未被修改。" +
-                                            (result?.errors?.firstOrNull()?.let { " " + it } ?: ""),
+                                            (result.errors.firstOrNull()?.let { " " + it } ?: ""),
                                         modifier = Modifier.testTag("s08-fail"),
                                         // 锚点 s08-fail：焦点直接落到「重新选择文件」上
                                         actionModifier = Modifier
                                             .testTag("s08-fail-retry")
                                             .focusRequester(failRetryFocus),
                                         actionLabel = "重新选择文件",
-                                        onRetry = { filePickerLauncher.launch("application/octet-stream") },
+                                        onRetry = launchPicker,
                                     )
                                 }
                             }
@@ -426,7 +496,8 @@ fun ImportScreen(
                             Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
                                 EmptyState(
                                     title = "还没有选择文件",
-                                    text = "先在熊猫记账里「我的 → 导出账单」，再回到这里选择该文件",
+                                    text = "支付宝「我的 → 账单 → 开具交易流水证明」或微信「我 → 服务 → 钱包 → " +
+                                        "账单 → 常见问题 → 下载账单」，也可以选熊猫记账导出的 .db 文件",
                                     icon = Icons.Filled.Description,
                                     // 锚点 s08-empty：焦点落标题；标题块兼作键盘焦点停位（2dp 环）
                                     modifier = Modifier
@@ -436,9 +507,7 @@ fun ImportScreen(
                                         .focusable(),
                                     actionLabel = "选择数据文件",
                                     actionModifier = Modifier.testTag("s08-empty-pick"),
-                                    onAction = {
-                                        if (!importing) filePickerLauncher.launch("application/octet-stream")
-                                    },
+                                    onAction = { if (!importing) launchPicker() },
                                 )
                             }
                         }
@@ -456,7 +525,7 @@ fun ImportScreen(
                                 modifier = Modifier
                                     .focusRequester(pickFocus)
                                     .testTag("s08-drop"),
-                                onPick = { filePickerLauncher.launch("application/octet-stream") },
+                                onPick = launchPicker,
                             )
                         }
                     }
@@ -498,8 +567,10 @@ fun ImportScreen(
                                     enabled = selectedPath.isNotEmpty() && !submitting,
                                     modifier = Modifier.testTag("s08-go"),
                                     onClick = {
-                                        submitting = true
-                                        onImport(selectedPath)
+                                        currentRequest()?.let { request ->
+                                            submitting = true
+                                            onImport(request)
+                                        }
                                     },
                                 )
                                 Spacer(Modifier.height(t.space2))
@@ -538,52 +609,3 @@ fun ImportScreen(
     }
 }
 
-/**
- * 边界数据区（锚点 s08-edge）：超长文件名 + 128,430 条记录。
- *
- * 口径：文件名单行省略号；右侧角标等宽不换行；副行带「已超过 20 MB 建议上限」警示色；
- * 超 20 MB 仍允许选择、不拦截。纯展示、无 CTA。
- */
-@Composable
-private fun ImportEdgeCard(modifier: Modifier = Modifier) {
-    val t = LocalDesignTokens.current
-    val longName = "熊猫记账-全部账本导出-2026年10月14日-含转账与退款-完整版-final-final.csv"
-    Column(modifier.padding(horizontal = t.space4).testTag("s08-edge")) {
-        Spacer(Modifier.height(t.space3))
-        EdgeState(text = "边界数据区：超长文件名 / 128,430 条记录 / 超过 20 MB 建议上限")
-        Spacer(Modifier.height(t.space3))
-        AppCard(padding = t.space4) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Description,
-                    contentDescription = null,
-                    tint = t.muted,
-                    modifier = Modifier.size(t.iconSize),
-                )
-                Spacer(Modifier.width(t.space3))
-                Text(
-                    longName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = t.fg,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(t.space2))
-                Text(
-                    "128430",
-                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                    color = t.accent,
-                    maxLines = 1,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Spacer(Modifier.height(t.space1))
-            Text(
-                "19.8 MB · 128,430 条记录 · 已超过 20 MB 建议上限",
-                style = MaterialTheme.typography.labelSmall,
-                color = t.warnText,
-            )
-        }
-    }
-}
