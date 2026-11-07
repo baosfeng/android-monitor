@@ -25,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -103,7 +106,11 @@ fun AppToast(
                 modifier = Modifier
                     .clip(RoundedCornerShape(t.radiusPill))
                     .background(t.fg)
-                    .padding(horizontal = t.space4, vertical = t.space2),
+                    .padding(horizontal = t.space4, vertical = t.space2)
+                    // 读屏要播报操作结果：「已保存」「已删除这笔交易」「端口被占用」全靠 toast，
+                    // 没有 liveRegion 时读屏用户点完按钮听不到任何反馈，1.6s 后提示自毁。
+                    // polite：不打断当前朗读，排在句末播。
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
     }
