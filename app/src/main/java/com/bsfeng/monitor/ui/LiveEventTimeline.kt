@@ -299,6 +299,10 @@ internal fun LiveEventTimeline(
                 val headEnter = remember(group.hour) {
                     if (enterWindow.open && gi < STAGGER_MAX_STEPS) gi else -1
                 }
+                // 每个小时一个稳定的请求器：在 remember 里建，不在组合期 getOrPut（否则每次重组都可能新建一个）
+                val headRequester = remember(group.hour) {
+                    headRequesters.getOrPut(group.hour) { FocusRequester() }
+                }
                 LiveHourGroupHead(
                     label = group.label,
                     count = group.events.size,
@@ -306,7 +310,7 @@ internal fun LiveEventTimeline(
                     modifier = Modifier
                         .staggerEnterAt(headEnter)
                         .hourAnchor(group.hour)
-                        .focusRequester(headRequesters.getOrPut(group.hour) { FocusRequester() })
+                        .focusRequester(headRequester)
                         .focusable()
                         .keyboardFocusRing(RoundedCornerShape(t.radiusLg)),
                 )
