@@ -113,7 +113,7 @@ Android 16 自动给应用图标应用主题色。本项目已有 adaptive icon�
 | 特性 | 状态 | 说明 |
 |------|------|------|
 | `data class` ✅ | 已大量使用 | 事件模型、DTO 等 |
-| `object` 单例 ✅ | `EventCollector`, `HealthChecker`, `AppUtils` 等 | 推荐使用 |
+| `object` 单例 ✅ | `HealthChecker`, `AppUtils`, `ApiService` 等 | 推荐使用 |
 | `sealed class` / `sealed interface` ✅ | `Screen` 密封类 | 状态管理等场景使用 |
 | `companion object` ✅ | `DatabaseHelper`, `EventType`, `MonitorApp` | 推荐 |
 | `StateFlow` + `collectAsState()` ✅ | `MainViewModel` | Compose 标准模式 |
