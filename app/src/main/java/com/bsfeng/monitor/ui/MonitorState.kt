@@ -26,8 +26,7 @@ data class MonitorState(
     val accessibilityEnabled: Boolean = false,
     /** 无障碍服务实例是否已连接（用于区分"已勾选但未连接"） */
     val accessibilityServiceRunning: Boolean = false,
-    val appUsageStats: List<AppUsageStat> = emptyList(),
-    val screenEvents: List<Record> = emptyList(),
+
     /** 首屏加载中（s02 五态之 loading） */
     val isLoading: Boolean = true,
     /** 加载失败原因（s02 五态之 error）；null = 正常 */
