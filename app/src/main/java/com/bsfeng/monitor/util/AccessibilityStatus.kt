@@ -82,6 +82,41 @@ object AccessibilityStatus {
         return serviceRunning || fromSystem
     }
 
+    /** [isDisabledConfirmed] 的默认阈值：轮询每分钟一次，连续 2 次 ≈ 2 分钟。 */
+    const val DISABLED_STREAK_THRESHOLD: Int = 2
+
+    private var disabledStreak = 0
+
+    /**
+     * 轮询路径专用：**连续 [threshold] 次**判定为未开启才返回 true。
+     *
+     * 为什么需要这一层：这里只用于「告警」与「拉前台」这类有副作用的动作，而单次判定会受两类
+     * 假阴性影响 —— 服务刚绑定/系统 UI 重建期间 [AccessibilityManager] 返回空列表；[Settings.Secure]
+     * 那次跨进程读偶发超时。任一次抖动就告警，用户会被反复打扰，久而久之把通知关掉，真故障反而看不见。
+     *
+     * 不用「异常时当作正常」兜底（旧实现的写法）：ROM 拒绝返回列表恰恰是要提示的那种故障，
+     * 静默通过等于把故障藏起来。
+     */
+    @Synchronized
+    fun isDisabledConfirmed(
+        context: Context,
+        serviceRunning: Boolean,
+        threshold: Int = DISABLED_STREAK_THRESHOLD,
+    ): Boolean {
+        if (isEnabled(context, serviceRunning)) {
+            disabledStreak = 0
+            return false
+        }
+        disabledStreak += 1
+        return disabledStreak >= threshold
+    }
+
+    /** 清空 [isDisabledConfirmed] 的连续计数（用户从系统设置页回来时调用，避免残留计数抢先触发告警）。 */
+    @Synchronized
+    fun resetDisabledStreak() {
+        disabledStreak = 0
+    }
+
     /**
      * 系统设置里是否勾选了本服务（权威来源，`Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`）。
      *
