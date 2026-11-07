@@ -515,9 +515,12 @@ private fun AdRecordList(
         } else {
             itemsIndexed(
                 items = visible,
-                // key 必须唯一：timestampMs + selector 在同一毫秒内同 App 两次命中时会撞；
-                // 下标参与保证唯一且同排序下稳定。
-                key = { index, record -> record.timestampMs.toString() + "#" + index },
+                // key 用「时间戳 + 选择器 + 包名」：SkipRecord 没有稳定 id，但这三者组合能区分
+                // 同毫秒同 App 的两次命中；**不带下标** —— 带下标时列表重排会把后续行的 key 全改掉，
+                // Compose 视为全新项、整段重播入场动画（同一口径见 finance/ui/FinanceMainRows.kt）。
+                key = { _, record ->
+                    record.timestampMs.toString() + "|" + record.selector + "|" + record.packageName
+                },
             ) { index, record ->
                 // 入场动画只对首屏可见项有意义，超出部分不再为滚动项付 layer 成本。
                 val enterMod = if (index < STAGGER_MAX_STEPS) {

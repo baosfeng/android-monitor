@@ -36,7 +36,10 @@ internal fun LazyListScope.skipRuleItems(
 ) {
     itemsIndexed(
         items = rules,
-        key = { index, rule -> rule.id + "#" + index },
+        // 只用 rule.id 做 key：拼上下标会让「切一条规则的开关 → 列表重排」把该位置之后
+        // 所有行的 key 全改掉，Compose 视为全新项 → 整段重播入场动画、滚动锚点上跳。
+        // （同一口径见 finance/ui/FinanceMainRows.kt 的交易列表注释。）
+        key = { _, rule -> rule.id },
     ) { index, rule ->
         // 入场动画只给首屏可见项：staggerEnter 会给每行挂一个 graphicsLayer，
         // 长列表滚动时合成成本被放大（AdScreen 同一处理）。
