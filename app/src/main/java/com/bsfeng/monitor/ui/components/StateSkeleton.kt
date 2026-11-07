@@ -43,13 +43,20 @@ private const val SHIMMER_PHASE_STATIC = 0.5f
 @Composable
 fun StateSkeleton(modifier: Modifier = Modifier, rows: Int = 3) {
     val t = LocalDesignTokens.current
-    val transition = rememberInfiniteTransition(label = "skeleton")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(SHIMMER_MS, easing = LinearEasing), RepeatMode.Restart),
-        label = "skeletonShimmer",
-    )
+    // 骨架是基元，必须自己订阅动效档位：「精简」档下全站骨架仍在无限扫动，
+    // 是整个 App 里唯一没有降档出口的动画（其余基元都已订阅）。
+    val phase = if (rememberMotionEnabled()) {
+        val transition = rememberInfiniteTransition(label = "skeleton")
+        val animated by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(SHIMMER_MS, easing = LinearEasing), RepeatMode.Restart),
+            label = "skeletonShimmer",
+        )
+        animated
+    } else {
+        SHIMMER_PHASE_STATIC
+    }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(t.space2)) {
         repeat(rows) { i ->
             SkeletonRow(
