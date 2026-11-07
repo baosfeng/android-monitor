@@ -17,11 +17,21 @@ object RetentionPolicy {
 
     const val MAX_BACKUPS = 5
 
-    /** 返回「该删的」列表（最旧的在前）；份数不超限时返回空列表。 */
-    fun expired(backups: List<BackupFileInfo>, keep: Int = MAX_BACKUPS): List<BackupFileInfo> {
+    /**
+     * 返回「该删的」列表（最旧的在前）；份数不超限时返回空列表。
+     *
+     * @param prefix 只统计这个名字前缀的条目。回滚包（`monitor-prerestore-`）与普通备份
+     *   （`monitor-backup-`）各算各的：混在一起时几次普通备份就能把 marker 指名的回滚包淘汰掉。
+     */
+    fun expired(
+        backups: List<BackupFileInfo>,
+        keep: Int = MAX_BACKUPS,
+        prefix: String? = null,
+    ): List<BackupFileInfo> {
+        val scoped = if (prefix == null) backups else backups.filter { it.name.startsWith(prefix) }
         val limit = keep.coerceAtLeast(1)
-        if (backups.size <= limit) return emptyList()
-        val newestFirst = backups.sortedWith(
+        if (scoped.size <= limit) return emptyList()
+        val newestFirst = scoped.sortedWith(
             compareByDescending<BackupFileInfo> { it.modifiedAt }.thenByDescending { it.name }
         )
         return newestFirst.drop(limit).reversed()

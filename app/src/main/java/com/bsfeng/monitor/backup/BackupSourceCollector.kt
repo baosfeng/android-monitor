@@ -125,6 +125,7 @@ internal class BackupSourceCollector(private val app: Context) {
             ?.filter { it.isFile && it.name.startsWith(BackupManager.NAME_PREFIX) }
             ?.map { BackupFileInfo(it.name, it.lastModified(), it.length()) }
             ?: return
+        // 只看普通备份：回滚包前缀不同，已被上面 filter 排除，由 BackupManager 单独按 2 份收敛
         RetentionPolicy.expired(files).forEach { File(dir, it.name).delete() }
     }
 
