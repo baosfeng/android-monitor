@@ -115,6 +115,19 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     /**
+     * 允许降级。
+     *
+     * 默认实现会抛 `SQLiteDowngradeFailedException`（库版本比代码新），而本项目侧载自用，
+     * 用户完全可能装回旧版 APK。读取一律按**列名**取值（[RecordStore] 的游标逻辑），多出来的列
+     * 自然被忽略，所以降级安全，不该让 App 直接起不来。
+     *
+     * 与 [com.bsfeng.monitor.finance.FinanceDatabaseHelper]、`TotpDatabaseHelper` 同一口径。
+     */
+    override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // 故意留空：保留数据，不做任何结构变更
+    }
+
+    /**
      * v6 迁移：删除历史页面轨迹记录（`type = 'PAGE'`）。
      *
      * 页面轨迹功能已整体下线：留着历史行会让实时页继续出现「页面」事件、筛选里出现空分类。
