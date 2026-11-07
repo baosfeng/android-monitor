@@ -109,7 +109,7 @@ internal fun ImportPickCard(
                 )
                 Spacer(Modifier.height(t.space1))
                 Text(
-                    "熊猫记账导出的 .db 文件",
+                    ".csv / .xlsx / .zip 账单，或 .db 账本",
                     style = MaterialTheme.typography.labelSmall,
                     color = t.muted,
                 )
