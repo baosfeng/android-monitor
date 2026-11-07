@@ -142,4 +142,44 @@ class FinanceDatabaseMigrationTest {
             assertEquals("现金钱包", c.getString(1))
         }
     }
+
+    @Test
+    fun `V3 库升级到 V4 后建好账单查重索引且老数据不丢`() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        FinanceDatabaseHelper.resetForTesting()
+        context.deleteDatabase(FinanceDatabaseHelper.DATABASE_NAME)
+
+        // 1) 造一个 V3 库（V2 的 6 列 + to_account_name，但没有查重索引）
+        val v3CreateTable = v2CreateTable.replace(
+            "trade_time TEXT NOT NULL DEFAULT ''",
+            "trade_time TEXT NOT NULL DEFAULT '',\n            to_account_name TEXT NOT NULL DEFAULT ''",
+        )
+        val old = context.openOrCreateDatabase(FinanceDatabaseHelper.DATABASE_NAME, Context.MODE_PRIVATE, null)
+        old.execSQL(v3CreateTable)
+        old.execSQL(
+            "INSERT INTO finance_transactions (amount, remark, order_id, date, date_time, created_at, updated_at) " +
+                "VALUES (23.9, '淘宝闪购', 'CFP001', '2026-10-16', '2026-10-16 18:32:21', 1, 1)"
+        )
+        old.version = 3
+        old.close()
+
+        // 2) 打开 → 触发 V3 → V4（只加索引）
+        val db = FinanceDatabaseHelper.getInstance(context).writableDatabase
+        assertEquals(FinanceDatabaseHelper.DATABASE_VERSION, db.version)
+
+        // 3) 老数据一行不丢
+        db.rawQuery("SELECT amount, order_id FROM finance_transactions", null).use { c ->
+            assertEquals(1, c.count)
+            assertTrue(c.moveToFirst())
+            assertEquals(23.9, c.getDouble(0), 0.001)
+            assertEquals("CFP001", c.getString(1))
+        }
+
+        // 4) 两个查重索引都建好了 —— 少了它们，导入每行都要全表扫描
+        val indexes = mutableSetOf<String>()
+        db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'finance_transactions'", null)
+            .use { c -> while (c.moveToNext()) indexes += c.getString(0) }
+        assertTrue("缺 (source, source_id) 索引：" + indexes, "idx_finance_tx_source_id" in indexes)
+        assertTrue("缺 order_id 索引：" + indexes, "idx_finance_tx_order_id" in indexes)
+    }
 }
