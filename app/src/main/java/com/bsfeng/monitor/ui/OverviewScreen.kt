@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
@@ -125,6 +126,10 @@ private const val EMPTY_DESC_READY = "开启无障碍服务后，屏幕、应用
 private const val EMPTY_DESC_DENIED =
     "无障碍服务未授权（设置 → 无障碍服务 → 去开启）。开启后，屏幕、应用、网络与充电事件会自动汇总到这里。"
 
+/** 加载超时兜底：骨架停 8 秒就转错误态，文案与真实读取失败共用同一句「可以重试」。 */
+private const val LOAD_TIMEOUT_MS = 8_000L
+private const val LOAD_TIMEOUT_DESC = "统计读取超时。点「重试」再试一次，已采集的事件不会丢失。"
+
 
 
 private val RANGE_OPTIONS = listOf("今日", "近 7 天", "近 30 天")
@@ -152,9 +157,21 @@ fun OverviewScreen(
     val scope = rememberCoroutineScope()
     val now = remember { System.currentTimeMillis() }
 
+    // 骨架超时兜底（与 s06 预算页同一口径）：事件表被占用/损坏时，加载会一直停在这里 ——
+    // 没有文案、没有重试入口，用户只能杀进程。8 秒后转错误态，至少给得出一个可操作的出口。
+    var loadTimedOut by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isLoading) {
+        loadTimedOut = false
+        if (state.isLoading) {
+            delay(LOAD_TIMEOUT_MS)
+            loadTimedOut = true
+        }
+    }
+
     // 五态按真实数据判定；演示条（devbar）不进产品。
     val uiState = when {
-        state.isLoading -> FiveState.LOADING
+        state.isLoading && !loadTimedOut -> FiveState.LOADING
+        state.isLoading -> FiveState.ERROR
         state.loadError != null -> FiveState.ERROR
         state.todayEventCount >= EDGE_DAILY_LIMIT -> FiveState.EDGE
         state.todayEventCount == 0 && state.weekEventCount == 0 -> FiveState.EMPTY
@@ -200,8 +217,9 @@ fun OverviewScreen(
                         )
                     }
                     FiveState.ERROR -> ErrorState(
-                        // 文案逐字；异常原文只在 ViewModel 日志里
-                        text = state.loadError ?: LOAD_ERROR_DESC,
+                        // 文案逐字；异常原文只在 ViewModel 日志里。
+                        // 超时兜底（loadError 仍为 null）落的是同一句概括，用户看到的都是「可以重试」。
+                        text = state.loadError ?: LOAD_TIMEOUT_DESC,
                         title = "统计加载失败",
                         // 触感由共享 GhostButton 内部发 LIGHT，这里不再补一次（同一操作不重复震）
                         onRetry = {
