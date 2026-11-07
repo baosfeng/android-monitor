@@ -71,49 +71,49 @@ private val STACK_GAP = 4.dp
 enum class UsageCardVariant { OLLAMA_USD, OLLAMA_LEGACY, DEEPSEEK }
 
 /** 卡片容器锚点。 */
-private fun cardTagOf(variant: UsageCardVariant): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> Modifier.testTag("s18-ollama-usage")
-    UsageCardVariant.OLLAMA_LEGACY -> Modifier.testTag("s18-legacy-usage")
-    UsageCardVariant.DEEPSEEK -> Modifier.testTag("s18-deepseek-usage")
+private fun Modifier.cardTagOf(variant: UsageCardVariant): Modifier = when (variant) {
+    UsageCardVariant.OLLAMA_USD -> testTag("s18-ollama-usage")
+    UsageCardVariant.OLLAMA_LEGACY -> testTag("s18-legacy-usage")
+    UsageCardVariant.DEEPSEEK -> testTag("s18-deepseek-usage")
 }
 
 /** 标题右侧范围文案锚点（只随范围切换改写，本身不可点）。 */
-private fun rangeLabelTagOf(variant: UsageCardVariant): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> Modifier.testTag("s18-usage-range-label")
-    UsageCardVariant.OLLAMA_LEGACY -> Modifier.testTag("s18-legacy-range-label")
-    UsageCardVariant.DEEPSEEK -> Modifier.testTag("s18-ds-range-label")
+private fun Modifier.rangeLabelTagOf(variant: UsageCardVariant): Modifier = when (variant) {
+    UsageCardVariant.OLLAMA_USD -> testTag("s18-usage-range-label")
+    UsageCardVariant.OLLAMA_LEGACY -> testTag("s18-legacy-range-label")
+    UsageCardVariant.DEEPSEEK -> testTag("s18-ds-range-label")
 }
 
 /** 三个范围项的锚点。 */
-private fun rangeTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
+private fun Modifier.rangeTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
     UsageCardVariant.OLLAMA_USD -> when (range) {
-        QuotaRange.LAST_24_HOURS -> Modifier.testTag("s18-range-24")
-        QuotaRange.LAST_7_DAYS -> Modifier.testTag("s18-range-7")
-        QuotaRange.LAST_30_DAYS -> Modifier.testTag("s18-range-30")
+        QuotaRange.LAST_24_HOURS -> testTag("s18-range-24")
+        QuotaRange.LAST_7_DAYS -> testTag("s18-range-7")
+        QuotaRange.LAST_30_DAYS -> testTag("s18-range-30")
     }
     UsageCardVariant.OLLAMA_LEGACY -> when (range) {
-        QuotaRange.LAST_24_HOURS -> Modifier.testTag("s18-legacy-range-24")
-        QuotaRange.LAST_7_DAYS -> Modifier.testTag("s18-legacy-range-7")
-        QuotaRange.LAST_30_DAYS -> Modifier.testTag("s18-legacy-range-30")
+        QuotaRange.LAST_24_HOURS -> testTag("s18-legacy-range-24")
+        QuotaRange.LAST_7_DAYS -> testTag("s18-legacy-range-7")
+        QuotaRange.LAST_30_DAYS -> testTag("s18-legacy-range-30")
     }
     UsageCardVariant.DEEPSEEK -> when (range) {
-        QuotaRange.LAST_24_HOURS -> Modifier.testTag("s18-ds-range-24")
-        QuotaRange.LAST_7_DAYS -> Modifier.testTag("s18-ds-range-7")
-        QuotaRange.LAST_30_DAYS -> Modifier.testTag("s18-ds-range-30")
+        QuotaRange.LAST_24_HOURS -> testTag("s18-ds-range-24")
+        QuotaRange.LAST_7_DAYS -> testTag("s18-ds-range-7")
+        QuotaRange.LAST_30_DAYS -> testTag("s18-ds-range-30")
     }
 }
 
 /** 按模型 Top 3 区块的锚点（旧版计划没有按模型明细）。 */
-private fun modelsTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
+private fun Modifier.modelsTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
     UsageCardVariant.OLLAMA_USD -> when (range) {
-        QuotaRange.LAST_24_HOURS -> Modifier.testTag("s18-models-24")
-        QuotaRange.LAST_7_DAYS -> Modifier.testTag("s18-models-7")
-        QuotaRange.LAST_30_DAYS -> Modifier.testTag("s18-models-30")
+        QuotaRange.LAST_24_HOURS -> testTag("s18-models-24")
+        QuotaRange.LAST_7_DAYS -> testTag("s18-models-7")
+        QuotaRange.LAST_30_DAYS -> testTag("s18-models-30")
     }
     UsageCardVariant.DEEPSEEK -> when (range) {
-        QuotaRange.LAST_24_HOURS -> Modifier.testTag("s18-ds-models-24")
-        QuotaRange.LAST_7_DAYS -> Modifier.testTag("s18-ds-models-7")
-        QuotaRange.LAST_30_DAYS -> Modifier.testTag("s18-ds-models-30")
+        QuotaRange.LAST_24_HOURS -> testTag("s18-ds-models-24")
+        QuotaRange.LAST_7_DAYS -> testTag("s18-ds-models-7")
+        QuotaRange.LAST_30_DAYS -> testTag("s18-ds-models-30")
     }
     UsageCardVariant.OLLAMA_LEGACY -> Modifier
 }
@@ -135,7 +135,7 @@ fun UsageCard(
 ) {
     val t = LocalDesignTokens.current
     // 卡头空白处点击不切范围：只有范围 chip 是热区
-    AppCard(modifier = modifier.then(cardTagOf(variant))) {
+    AppCard(modifier = modifier.then(Modifier.cardTagOf(variant))) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("用量", style = MaterialTheme.typography.titleMedium, color = t.fg)
             Spacer(Modifier.weight(1f))
@@ -145,7 +145,7 @@ fun UsageCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = t.muted,
                 maxLines = 1,
-                modifier = rangeLabelTagOf(variant),
+                modifier = Modifier.rangeLabelTagOf(variant),
             )
         }
         Spacer(Modifier.height(t.space2))
@@ -281,7 +281,7 @@ private fun ModelRows(
     val t = LocalDesignTokens.current
     val rows = remember(groups) { QuotaFormat.topGroups(groups) }
     // 行不可点：按模型明细只是口径展示，不下钻
-    Column(Modifier.fillMaxWidth().then(modelsTagOf(variant, range))) {
+    Column(Modifier.fillMaxWidth().then(Modifier.modelsTagOf(variant, range))) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("按模型", style = MaterialTheme.typography.bodySmall, color = t.muted, modifier = Modifier.weight(1f))
         Badge("Top 3", tone = BadgeTone.Neutral)
@@ -352,7 +352,7 @@ private fun QuotaRangeChips(
                         haptic(HapticTone.LIGHT)
                         onSelect(range)
                     }
-                    .then(rangeTagOf(variant, range))
+                    .then(Modifier.rangeTagOf(variant, range))
                     // 触达红线（≥48dp）：短标签「7 天」只靠左右内边距会窄到 46.7dp，
                     // 补最小宽度让点击域达标（最高的那个 chip 一直是 48dp，纵向本来就够）
                     .widthIn(min = t.tapMin)

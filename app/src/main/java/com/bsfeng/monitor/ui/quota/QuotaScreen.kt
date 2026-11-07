@@ -520,7 +520,7 @@ private fun QuotaDataBody(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(panelTagOf(info.id, hasPercent)),
+            .then(Modifier.panelTagOf(info.id, hasPercent)),
         verticalArrangement = Arrangement.spacedBy(t.space3),
     ) {
         if (error != null) {
@@ -677,12 +677,12 @@ private fun QuotaErrorBlock(
  *
  * 分支里写字面量 testTag：锚点对账是 grep 源码的，拼字符串扫不到。
  */
-private fun panelTagOf(providerId: String, hasPercent: Boolean): Modifier = when (providerId) {
-    OLLAMA_ID -> if (hasPercent) Modifier.testTag("s18-panel-ollama-legacy") else Modifier.testTag("s18-panel-ollama-usd")
-    "deepseek" -> Modifier.testTag("s18-panel-deepseek")
-    "opencode-go" -> Modifier.testTag("s18-panel-opencode")
-    OPEN_DESIGN_ID -> Modifier.testTag("s18-panel-opendesign")
-    else -> Modifier
+private fun Modifier.panelTagOf(providerId: String, hasPercent: Boolean): Modifier = when (providerId) {
+    OLLAMA_ID -> if (hasPercent) testTag("s18-panel-ollama-legacy") else testTag("s18-panel-ollama-usd")
+    "deepseek" -> testTag("s18-panel-deepseek")
+    "opencode-go" -> testTag("s18-panel-opencode")
+    OPEN_DESIGN_ID -> testTag("s18-panel-opendesign")
+    else -> this
 }
 
 /** 用量卡用哪一套锚点（三家的卡面不同，口径各给一组锚点）。 */
