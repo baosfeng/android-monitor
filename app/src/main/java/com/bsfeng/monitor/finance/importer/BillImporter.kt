@@ -5,6 +5,8 @@ package com.bsfeng.monitor.finance.importer
 
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.Transaction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 账单文件导入（支付宝 / 微信导出的 csv / xlsx / zip）。
@@ -23,14 +25,16 @@ class BillImporter(private val financeManager: FinanceManager) {
      * @param bytes 文件字节（解析侧负责编码探测）
      * @return 统计结果；[BillImportResult.errors] 是失败明细（行号 + 原因）
      */
-    suspend fun import(fileName: String, bytes: ByteArray): BillImportResult {
+    suspend fun import(fileName: String, bytes: ByteArray): BillImportResult = withContext(Dispatchers.IO) {
+        // 解析与写库都在 IO 线程：调用方（viewModelScope.async）默认落在 Main，
+        // 几 MB 的 csv 解压 + GBK 解码 + 上千行插入若留在主线程会直接卡住进度条
         val records = try {
             BillFileParser.parse(fileName, bytes)
         } catch (e: IllegalArgumentException) {
             // 解析失败（空文件 / 表头识别不出）不该让导入页崩，转成可展示的失败明细
-            return BillImportResult(failed = 1, errors = listOf(e.message ?: "账单解析失败"))
+            return@withContext BillImportResult(failed = 1, errors = listOf(e.message ?: "账单解析失败"))
         }
-        return importRecords(records)
+        importRecords(records)
     }
 
     /**
