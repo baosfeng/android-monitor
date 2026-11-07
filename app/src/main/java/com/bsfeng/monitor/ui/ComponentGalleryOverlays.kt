@@ -36,8 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -87,7 +87,9 @@ internal fun BottomSheetCard(
 ) {
     val t = LocalDesignTokens.current
     val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
+    // 容器高度取 WindowInfo.containerSize（px → dp）：Configuration.screenHeightDp 的 insets 口径随
+    // targetSdk 变化且会取整，抽屉上限按实际可用高度算才不会被系统栏吃掉一截。
+    val containerHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
     val scope = rememberCoroutineScope()
     // 单选：null = 没有任何可选项（口径边界「一个都不选时禁用」的防御路径）
     var selectedType by remember { mutableStateOf(SHEET_TYPES.firstOrNull()) }
@@ -152,7 +154,7 @@ internal fun BottomSheetCard(
         Column(
             Modifier
                 // 抽屉高度不超过屏高 90%，超出走内部滚动（口径边界）
-                .heightIn(max = (configuration.screenHeightDp * 0.9f).dp)
+                .heightIn(max = containerHeight * 0.9f)
                 .verticalScroll(rememberScrollState()),
         ) {
             Text("选择记录类型", style = MaterialTheme.typography.titleMedium, color = t.fg)

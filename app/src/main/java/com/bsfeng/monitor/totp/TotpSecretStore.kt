@@ -99,8 +99,11 @@ class TotpSecretStore(
         }
         val blob = cipher.encrypt(trimmed.toByteArray(Charsets.UTF_8))
         val stored = Base64.encodeToString(blob, Base64.NO_WRAP)
-        // 用 commit 而不是 apply：密钥写失败必须当场暴露，让 Repository 回滚刚插入的行
-        check(prefs.edit().putString(key, stored).commit()) { "密钥写入失败" }
+        // 用 commit 而不是 apply：密钥写失败必须当场暴露，让 Repository 回滚刚插入的行。
+        // KTX 的 edit(commit = true) 返回 Unit，拿不到 commit 的返回值，改用「写后读回」判成败：
+        // commit 失败时值不会落盘，读回拿不到目标值即视为写入失败。
+        prefs.edit(commit = true) { putString(key, stored) }
+        check(prefs.getString(key, null) == stored) { "密钥写入失败" }
     }
 
     /** 读取密钥；不存在或解密失败返回 null（失败不清数据）。 */

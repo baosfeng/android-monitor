@@ -17,7 +17,7 @@ package com.bsfeng.monitor.ui.maps
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
+import androidx.core.net.toUri
 
 /** 候选计划的纯逻辑结果。[candidates] 为空表示一个可唤起目标都没有。 */
 data class MapEntryPlan(val candidates: List<MapCandidate>) {
@@ -128,7 +128,7 @@ object MapLauncher {
 
     /** 目标 + URI → Intent（地图 App 显式钉包名，避免被别的 App 抢答）。 */
     fun intentFor(target: MapTarget, uri: String): Intent {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+        val intent = Intent(Intent.ACTION_VIEW, uri.toUri())
         if (target.packageName.isNotEmpty()) intent.setPackage(target.packageName)
         return intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

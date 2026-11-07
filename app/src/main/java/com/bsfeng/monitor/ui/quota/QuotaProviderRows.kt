@@ -467,12 +467,12 @@ internal fun QuotaProviderChips(
 }
 
 /** chip 锚点按 provider id 逐字映射到口径（不改号、不新增）；字面量落在这里才能被锚点对账扫到。 */
-private fun chipTagOf(providerId: String): Modifier = when (providerId) {
-    "ollama" -> Modifier.testTag("s18-provider-ollama")
-    "deepseek" -> Modifier.testTag("s18-provider-deepseek")
-    "opencode-go" -> Modifier.testTag("s18-provider-opencode")
-    "opendesign" -> Modifier.testTag("s18-provider-opendesign")
-    else -> Modifier
+private fun Modifier.chipTagOf(providerId: String): Modifier = when (providerId) {
+    "ollama" -> testTag("s18-provider-ollama")
+    "deepseek" -> testTag("s18-provider-deepseek")
+    "opencode-go" -> testTag("s18-provider-opencode")
+    "opendesign" -> testTag("s18-provider-opendesign")
+    else -> this
 }
 
 @Composable
@@ -503,7 +503,7 @@ private fun QuotaProviderChip(
             .border(1.dp, stroke, shape)
             .pressFeedback(interaction)
             .keyboardFocusRing(shape)
-            .then(chipTagOf(info.id))
+            .then(Modifier.chipTagOf(info.id))
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,

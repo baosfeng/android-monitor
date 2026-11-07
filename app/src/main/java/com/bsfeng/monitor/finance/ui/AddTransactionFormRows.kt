@@ -60,8 +60,8 @@ internal fun FieldRow(
     label: String,
     value: String,
     onClick: () -> Unit,
-    placeholder: String = "",
     modifier: Modifier = Modifier,
+    placeholder: String = "",
     focusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
