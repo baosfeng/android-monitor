@@ -60,7 +60,7 @@ class BackupManager(context: Context) {
     /** 同步 IO：调用方负责放到 `Dispatchers.IO`。 */
     fun backupNow(origin: BackupOrigin = BackupOrigin.MANUAL): BackupOutcome {
         val createdAt = System.currentTimeMillis()
-        val name = backupName(createdAt)
+        val name = backupName(createdAt, origin)
         val tmpFile = File(cacheDir("backup-tmp"), name)
         return try {
             val tables = collector.collectTableCounts()
@@ -76,11 +76,15 @@ class BackupManager(context: Context) {
             val localDir = localBackupDir()
             val localFile = File(localDir, name)
             tmpFile.copyTo(localFile, overwrite = true)
-            // ② 公共 Downloads（MediaStore，无需存储权限）；失败不影响本地那份
-            val publicPath = collector.publishToDownloads(tmpFile, name)
+            // ② 公共 Downloads（MediaStore，无需存储权限）；失败不影响本地那份。
+            //    pre-restore 包只留本地：它唯一的用途是本次还原失败时回滚，没必要摊到公共目录。
+            val publicPath =
+                if (origin == BackupOrigin.PRE_RESTORE) null
+                else collector.publishToDownloads(tmpFile, name)
 
             collector.pruneLocal(localDir)
             collector.prunePublic()
+            prunePreRestore(localDir)
 
             config.recordBackup(createdAt, publicPath, name)
             BackupOutcome.Success(manifest, publicPath, name)
@@ -181,10 +185,26 @@ class BackupManager(context: Context) {
 
     private fun cacheDir(name: String): File = File(app.cacheDir, name).apply { mkdirs() }
 
-    /** 备份文件名：`monitor-backup-yyyyMMdd-HHmmss.zip`（pre-restore 包用同一前缀，一起参与保留策略）。 */
-    private fun backupName(createdAt: Long): String {
+    /**
+     * 备份文件名：普通包 `monitor-backup-yyyyMMdd-HHmmss.zip`，回滚包 `monitor-prerestore-…`。
+     *
+     * 回滚包**必须**用独立前缀：两者共用前缀时它会参与 5 份轮转，连续几次备份就把
+     * marker 指名的那份淘汰掉，还原中断后 [healIfNeeded] 只能放弃回滚（数据停在半新半旧）。
+     */
+    private fun backupName(createdAt: Long, origin: BackupOrigin): String {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(createdAt))
-        return "$NAME_PREFIX$stamp.zip"
+        val prefix = if (origin == BackupOrigin.PRE_RESTORE) PRE_RESTORE_PREFIX else NAME_PREFIX
+        return "$prefix$stamp.zip"
+    }
+
+    /** 回滚包只留最近 [PRE_RESTORE_KEEP] 份：它不参与普通备份的 5 份轮转，但也不该无限攒。 */
+    private fun prunePreRestore(dir: File) {
+        val files = dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(PRE_RESTORE_PREFIX) }
+            ?.map { BackupFileInfo(it.name, it.lastModified(), it.length()) }
+            ?: return
+        RetentionPolicy.expired(files, keep = PRE_RESTORE_KEEP, prefix = PRE_RESTORE_PREFIX)
+            .forEach { File(dir, it.name).delete() }
     }
 
     private fun dbNames(): List<String> = listOf("finance.db", "monitor.db")
@@ -196,5 +216,7 @@ class BackupManager(context: Context) {
         const val PUBLIC_DIR = "行为记录备份"
         const val LOCAL_DIR = "backups"
         const val NAME_PREFIX = "monitor-backup-"
+        const val PRE_RESTORE_PREFIX = "monitor-prerestore-"
+        private const val PRE_RESTORE_KEEP = 2
     }
 }

@@ -14,6 +14,36 @@ class BackupRetentionPolicyTest {
     private fun info(name: String, modifiedAt: Long) = BackupFileInfo(name, modifiedAt)
 
     @Test
+    fun `回滚包不参与普通备份的轮转`() {
+        // 5 份普通备份 + 1 份回滚包：按前缀隔离后，普通备份刚好满额，一份都不该被删。
+        // 共用前缀时这里会删掉最旧的 —— 若它恰好是 marker 指名的回滚包，还原中断就无法回滚。
+        val backups = (1..5).map { info("monitor-backup-0$it.zip", it * 1000L) } +
+            info("monitor-prerestore-01.zip", 100L)
+
+        val expired = RetentionPolicy.expired(backups, prefix = "monitor-backup-")
+
+        assertEquals("普通备份满额时不删任何一份", emptyList<BackupFileInfo>(), expired)
+        assertTrue(
+            "回滚包不在普通备份的删除范围里",
+            expired.none { it.name.startsWith("monitor-prerestore-") },
+        )
+    }
+
+    @Test
+    fun `回滚包按自己的上限删除更旧的`() {
+        val backups = listOf(
+            info("monitor-prerestore-old.zip", 1_000L),
+            info("monitor-prerestore-new.zip", 3_000L),
+            info("monitor-prerestore-mid.zip", 2_000L),
+            info("monitor-backup-09.zip", 9_000L),
+        )
+
+        val expired = RetentionPolicy.expired(backups, keep = 2, prefix = "monitor-prerestore-")
+
+        assertEquals("只删最旧的那份回滚包", listOf("monitor-prerestore-old.zip"), expired.map { it.name })
+    }
+
+    @Test
     fun `7 份保留 5 份时返回最旧的 2 份且最旧在前`() {
         val backups = (1..7).map { info("monitor-backup-0$it.zip", it * 1000L) }
         val expired = RetentionPolicy.expired(backups)
