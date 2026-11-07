@@ -126,6 +126,13 @@ jobs:
     name: Assemble APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 本 job 的产物只有一个：用 release 签名材料打的 debug 包（debug 复用 release 签名，
+    # 见 app/build.gradle.kts）。仓库是 public，PR 上解 release keystore 再把同签名包
+    # 挂成公开 artifact，等于让任意 PR 走一次线上签名；PR 不应接触签名材料。
+    # 用 job 级 if 而不是逐 step 加：本 job 在 PR 上无任何剩余职责，
+    # 逐 step 跳过只会白占一个 runner（checkout + 装 SDK 约 1.5 分钟）。
+    # PR 的编译验证由 test job 的 test / lint 覆盖，report artifact 也只产测试与覆盖率。
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout
@@ -159,12 +166,16 @@ jobs:
             "$SDKMGR" "platforms;android-37.0"
           fi
 
+      # 仓库是 public 且 debug 复用 release 签名（见 app/build.gradle.kts）：
+      # PR 上解 release keystore 再挂出同签名 APK = 线上签名产物公开可下。
+      # 整个 assemble job 已在 job 级 if 里对 PR 跳过，这里只是别让后来人把那条 if 删掉。
       - name: Decode release keystore
         run: |
           echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
 
+      # 签名材料只在非 PR 存在；缺了它 build.gradle.kts 退回默认 debug keystore。
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
         env:
