@@ -152,14 +152,14 @@ internal fun DayGroupRow(
 internal fun TransactionRow(
     transaction: Transaction,
     color: Color,
+    /** 焦点落点（删除后回位用），由调用方决定挂在哪一行；必须排在 `clickable` 之前才落到同一节点 */
+    modifier: Modifier = Modifier,
     /** 自动记账刚落库：整行淡 accent 底点亮，1.6s 后淡出（其余行恒为透明） */
     highlighted: Boolean = false,
     /** >= 0 走错落入场；-1 表示离屏行不做入场动画（每行一个 Animatable 会拖帧） */
     enterIndex: Int,
     /** 锚点序号（0 起，对应 s04-tx-1..8）；-1 = 不带锚点 */
     anchorIndex: Int = -1,
-    /** 焦点落点（删除后回位用），由调用方决定挂在哪一行；必须排在 `clickable` 之前才落到同一节点 */
-    focusModifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
@@ -185,7 +185,7 @@ internal fun TransactionRow(
             .fillMaxWidth()
             .then(anchorModifier)
             // focusRequester 要在 clickable 之前：clickable 自带 focusable，请求器先于它才挂到同一节点
-            .then(focusModifier)
+            .then(modifier)
             .then(enterModifier)
             .rowPressFeedback(interaction)
             .clip(rowShape)
@@ -508,7 +508,7 @@ internal fun LazyListScope.financeMainItems(
                                 enterIndex = enterIndex,
                                 anchorIndex = anchor,
                                 // 只有「删除后的目标行」带焦点落点，其余行不多挂一个请求器
-                                focusModifier = if (focusRowId == tx.id && focusRequester != null) {
+                                modifier = if (focusRowId == tx.id && focusRequester != null) {
                                     Modifier.focusRequester(focusRequester)
                                 } else {
                                     Modifier

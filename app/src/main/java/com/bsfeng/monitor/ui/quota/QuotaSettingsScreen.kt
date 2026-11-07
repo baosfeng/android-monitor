@@ -152,7 +152,7 @@ fun QuotaSettingsScreen(
                 title = "额度设置",
                 onBack = requestBack,
                 // 标题接住进入子页的焦点（IOSNavigationBar 的唯一调用点，见其形参说明）
-                titleModifier = Modifier.focusRequester(titleFocus).focusable(),
+                modifier = Modifier.focusRequester(titleFocus).focusable(),
             )
             Column(
                 Modifier

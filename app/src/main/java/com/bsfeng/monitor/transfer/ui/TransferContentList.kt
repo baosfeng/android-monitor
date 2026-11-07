@@ -413,7 +413,7 @@ private fun GroupTitleRow(
                 danger = true,
                 focusPending = focusPending,
                 onFocusConsumed = onFocusConsumed,
-                tagModifier = Modifier.testTag("C-09"),
+                modifier = Modifier.testTag("C-09"),
                 onClick = onCancelAll,
             )
             TransferRow.TitleAction.CLEAR_FINISHED -> TitleActionButton(
@@ -422,7 +422,7 @@ private fun GroupTitleRow(
                 danger = false,
                 focusPending = focusPending,
                 onFocusConsumed = onFocusConsumed,
-                tagModifier = Modifier.testTag("C-16"),
+                modifier = Modifier.testTag("C-16"),
                 onClick = onClearFinished,
             )
             null -> Unit
@@ -438,7 +438,7 @@ private fun TitleActionButton(
     danger: Boolean,
     focusPending: String?,
     onFocusConsumed: () -> Unit,
-    tagModifier: Modifier,
+    modifier: Modifier,
     onClick: () -> Unit,
 ) {
     val t = LocalDesignTokens.current
@@ -453,7 +453,7 @@ private fun TitleActionButton(
                 haptic(if (danger) HapticTone.REJECT else HapticTone.LIGHT)
                 onClick()
             }
-            .then(tagModifier)
+            .then(modifier)
             .returnFocusWhen(tag, focusPending, onFocusConsumed)
             .padding(horizontal = t.space2),
         contentAlignment = Alignment.Center,
