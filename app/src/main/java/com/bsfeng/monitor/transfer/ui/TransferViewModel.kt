@@ -4,8 +4,10 @@ import android.app.Application
 import android.net.Uri
 import android.view.View
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.domain.transfer.DeletedTask
 import com.bsfeng.monitor.domain.transfer.PeerDevice
+import com.bsfeng.monitor.domain.transfer.TransferDirection
 import com.bsfeng.monitor.domain.transfer.TransferTask
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
 import com.bsfeng.monitor.feature.Feature
@@ -16,10 +18,14 @@ import com.bsfeng.monitor.transfer.service.TransferEngine
 import com.bsfeng.monitor.transfer.service.TransferSourceProbe
 import com.bsfeng.monitor.transfer.service.resendAvailabilityOf
 import com.bsfeng.monitor.transfer.transport.DownloadsSink
+import com.bsfeng.monitor.domain.transfer.TransferStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * 「传送」Tab 的状态与事件（协议 §8 的 `TransferViewModel`）。
@@ -214,10 +220,28 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
+     * 「重新发送 / 重试」的可用性预计算表：key = `sessionId/fileId`，值为 Ready 时才收进表。
+     *
+     * 为什么要有这张表：源文件能否读到要问 ContentResolver（可能一次 binder 到 MediaProvider），
+     * 而列表在 items 体里逐任务调会把这段 IO 拖进组合期 —— 每次重组、每次滚动回收都重跑。
+     * 这里只在**任务集合内容变化时**算一遍，列表侧退化成读 Map。
+     */
+    val resendReadyIds: StateFlow<Set<String>> = engine.tasks
+        .map { tasks ->
+            tasks.filter { it.direction == TransferDirection.SEND && it.status.isTerminal }
+                .filter { task ->
+                    val uri = engine.sourceUriOf(task)
+                    uri != null && TransferSourceProbe.canRead(getApplication(), uri)
+                }
+                .map { it.sessionId + "/" + it.file.fileId }
+                .toSet()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /**
      * C-17 / C-08 的可用性：这条任务的「重新发送 / 重试」该渲染成什么。
      *
-     * 源文件能否读到要问一次 ContentResolver，所以放在 VM 里算（每帧重组都问会很贵；
-     * UI 只在打开面板 / 展开明细时取一次）。
+     * 只给**单条**路径用（任务详情浮层），列表循环请读 [resendReadyIds]。
      */
     internal fun resendAvailability(task: TransferTask): ResendAvailability {
         val sourceUri = engine.sourceUriOf(task)
