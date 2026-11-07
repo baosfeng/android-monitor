@@ -20,6 +20,21 @@ internal fun formatSaved(ms: Long): String {
     return (totalSec / 60).toString() + "m" + String.format(Locale.US, "%02d", totalSec % 60) + "s"
 }
 
+/**
+ * 趋势卡尾注：把「已确认 / 均耗 / 节省」三项回顾性数据拼成一行。
+ *
+ * 任一项无数据就不出现该项；三项都无数据时返回空串，调用方整行不渲染 ——
+ * 不允许出现「均耗 —」这类占位（真机上空格子只占宽、不承载信息）。
+ */
+internal fun reviewExtras(confirmedCount: Int, avgCost: Long?, savedTotal: Long?): String {
+    val parts = buildList {
+        if (confirmedCount > 0) add("已确认 " + confirmedCount + " 次")
+        if (avgCost != null) add("均耗 " + avgCost + " ms")
+        if (savedTotal != null) add("共省 " + formatSaved(savedTotal.coerceAtLeast(0L)))
+    }
+    return parts.joinToString(" · ")
+}
+
 internal fun peakNote(values: List<Float>): String {
     var idx = 0
     var max = 0f

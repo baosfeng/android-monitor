@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -64,7 +63,6 @@ import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BarChart
 import com.bsfeng.monitor.ui.components.BottomSheet
 import com.bsfeng.monitor.ui.components.ChartAxisLabels
-import com.bsfeng.monitor.ui.components.ChipRow
 import com.bsfeng.monitor.ui.components.EdgeState
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
@@ -89,16 +87,15 @@ import com.bsfeng.monitor.ui.live.FiveStateDemoBar
 import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.live.PLACEHOLDER
 import com.bsfeng.monitor.ui.live.StackRow
-import com.bsfeng.monitor.ui.live.StatBox
 import com.bsfeng.monitor.ui.live.formatClockSec
 import com.bsfeng.monitor.ui.live.formatDayLabel
 import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Locale
 
 /**
  * 错态「重试」转骨架的展示窗口。
@@ -107,6 +104,15 @@ import java.util.Locale
  * 展示骨架（按钮已卸载、不可连点），窗口结束回到真实态。补完成回调后可删掉这个常量。
  */
 private const val RETRY_SKELETON_MS = 800L
+
+/**
+ * 记录行时间列宽。
+ *
+ * 本页展示到秒（8 位 HH:mm:ss），14sp 等宽字 8 位约 67dp；原先复用 space12（48dp）放不下，
+ * 真机上折成「17:34:0 / 4」。这里按内容给足 68dp —— 有布局语义的非常规尺寸，不随主题间距档位
+ * 变化（主题把间距调大也不该把时间列挤回两行）。
+ */
+private val TIME_COLUMN_W = 68.dp
 
 /**
  * s03 广告跳过记录。
@@ -202,7 +208,6 @@ fun AdScreen(
     val savedTotal = remember(records) {
         records.mapNotNull { it.savedMs }.takeIf { it.isNotEmpty() }?.sum()
     }
-    val ruleHit = remember(records) { records.count { it.method == SkipMethod.RULE } }
     val chipItems = remember(records) { SkipMethod.entries.map { it.label + " " + countOf(it) } }
 
     fun refresh() {
@@ -300,7 +305,6 @@ fun AdScreen(
                         totalCount = totalCount,
                         confirmedCount = confirmedCount,
                         avgCost = avgCost,
-                        ruleHit = ruleHit,
                         savedTotal = savedTotal,
                         dailyCounts7 = dailyCounts7,
                         labels = labels,
@@ -320,14 +324,16 @@ fun AdScreen(
                     )
                 }
             }
-        }
 
-        // 原型控制条（debug 专用，release 不渲染）：保留以便逐态验收本页锚点。
-        FiveStateDemoBar(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = t.space4),
-        )
+            // 原型控制条（debug 专用，release 不渲染）：保留以便逐态验收本页锚点。
+            // 放在 Column 里占位而不是 Box 里 align(BottomCenter) 浮着 —— 重排后记录进了首屏，
+            // 浮层会压住最后 1~2 行记录；改为参与布局后无法遮住任何一行，关调试态时它不 emit，零影响。
+            FiveStateDemoBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = t.space2),
+            )
+        }
 
         selected?.let { record ->
             Box(Modifier.fillMaxSize()) {
@@ -425,7 +431,12 @@ private fun AdRefreshButton(
     }
 }
 
-/** 内容区：统计卡 + 趋势 + 记录区块（整块纵向滚动，页头固定）。 */
+/**
+ * 内容区（单列纵向滚动，页头固定）：摘要条 → 记录区块（头 + chip + 列表）→ 趋势卡。
+ *
+ * 排序依据：本页主任务是「看刚才那次跳过」，记录必须在首屏；摘要压成单行条、趋势属回顾性信息
+ * 下移到列表之后。原型口径见 .open-design/src/screens/s03-广告跳过记录.html。
+ */
 @Composable
 private fun AdRecordList(
     visible: List<SkipRecord>,
@@ -434,7 +445,6 @@ private fun AdRecordList(
     totalCount: Int,
     confirmedCount: Int,
     avgCost: Long?,
-    ruleHit: Int,
     savedTotal: Long?,
     dailyCounts7: List<Float>,
     labels: List<String>,
@@ -448,21 +458,18 @@ private fun AdRecordList(
     val t = LocalDesignTokens.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        // 底部再留一屏尾余量：最后一条记录能整行滚进可视区、不被底栏截住。
+        // 底部留出「趋势卡整卡进可视区」的余量：最后一项滚到底时其下沿不被底栏吃掉。
         contentPadding = PaddingValues(
             start = t.space4,
             end = t.space4,
+            // 尾部余量 = 一屏高的一小段（对应原型列表到底后趋势卡完整露出的观感）
             bottom = t.space12 + t.space6,
         ),
         verticalArrangement = Arrangement.spacedBy(t.space3),
     ) {
         item(key = "stat") {
-            AdStatsBlock(
+            AdSummaryStrip(
                 totalCount = totalCount,
-                confirmedCount = confirmedCount,
-                avgCost = avgCost,
-                ruleHit = ruleHit,
-                savedTotal = savedTotal,
                 replayTick = replayTick,
                 onReplay = onReplay,
                 onOpenRules = onOpenRules,
@@ -472,23 +479,12 @@ private fun AdRecordList(
             )
         }
 
-        item(key = "trend") {
-            AdTrendBlock(
-                dailyCounts7 = dailyCounts7,
-                labels = labels,
-                rangeLabel = rangeLabel,
-                modifier = Modifier
-                    .testTag("s03-bars")
-                    .staggerEnterAt(1),
-            )
-        }
-
         item(key = "records-head") {
             Row(
                 Modifier
                     .fillMaxWidth()
                     .testTag("s03-records")
-                    .padding(top = t.space2),
+                    .padding(top = t.space1),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -502,7 +498,9 @@ private fun AdRecordList(
         }
 
         item(key = "chips") {
-            ChipRow(
+            // 四个带计数的选项在 390dp 下必然超宽：用 FlowRow 自适应折行，
+            // 能一行就一行、放不下换行，绝不裁切或要求横滑才发现。
+            AdMethodChips(
                 items = chipItems,
                 selectedIndex = methodIndex,
                 onSelect = onSelectMethod,
@@ -541,117 +539,19 @@ private fun AdRecordList(
                 }
             }
         }
-    }
-}
 
-/** 统计卡：大数字点按重播滚动（600ms），其余区域不响应；底部满宽「查看跳过规则」。 */
-@Composable
-private fun AdStatsBlock(
-    totalCount: Int,
-    confirmedCount: Int,
-    avgCost: Long?,
-    ruleHit: Int,
-    savedTotal: Long?,
-    replayTick: Int,
-    onReplay: () -> Unit,
-    onOpenRules: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val t = LocalDesignTokens.current
-    val numberInteraction = remember { MutableInteractionSource() }
-    val rulesInteraction = remember { MutableInteractionSource() }
-    val rulesShape = RoundedCornerShape(t.radiusPill)
-    AppCard(modifier = modifier) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            MetaText("近 7 天累计跳过")
-            MetaText("日均 " + String.format(Locale.US, "%.1f", totalCount / 7.0) + " 次")
-        }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = t.tapMin)
-                .keyboardFocusRing(RoundedCornerShape(t.radiusSm))
-                .clickable(
-                    interactionSource = numberInteraction,
-                    indication = LocalIndication.current,
-                ) { onReplay() }
-                .padding(vertical = t.space1),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            key(replayTick) {
-                AnimatedNumber(
-                    value = totalCount,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = t.fg,
-                )
-            }
-            Spacer(Modifier.width(t.space1))
-            Text("次", style = MaterialTheme.typography.labelMedium, color = t.muted)
-        }
-        if (confirmedCount > 0) {
-            Spacer(Modifier.height(t.space1))
-            MetaText("其中已确认 " + confirmedCount + " 次")
-        }
-        Spacer(Modifier.height(t.space3))
-        Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-            StatBox(
-                label = "平均耗时",
-                value = if (avgCost != null) avgCost.toString() + " ms" else PLACEHOLDER,
-                modifier = Modifier.weight(1f),
-            )
-            StatBox(
-                label = "规则命中",
-                value = ruleHit.toString() + " / " + totalCount,
-                modifier = Modifier.weight(1f),
-            )
-            StatBox(
-                label = "累计节省",
-                // 结余类不出现负值；缺失写「—」。
-                value = savedTotal?.let { formatSaved(it.coerceAtLeast(0L)) } ?: PLACEHOLDER,
-                modifier = Modifier.weight(1f),
+        item(key = "trend") {
+            AdTrendBlock(
+                dailyCounts7 = dailyCounts7,
+                labels = labels,
+                rangeLabel = rangeLabel,
+                // 回顾性补充数据：任一项缺失即整项不出现，三项全空则整行不渲染。
+                extras = reviewExtras(confirmedCount, avgCost, savedTotal),
+                modifier = Modifier
+                    .testTag("s03-bars")
+                    .staggerEnterAt(1),
             )
         }
-        Spacer(Modifier.height(t.space3))
-        Button(
-            onClick = onOpenRules,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = t.tapMin)
-                .testTag("s03-rules")
-                .keyboardFocusRing(rulesShape)
-                .pressFeedback(rulesInteraction),
-            shape = rulesShape,
-            interactionSource = rulesInteraction,
-        ) {
-            Text("查看跳过规则", style = MaterialTheme.typography.labelLarge)
-        }
-    }
-}
-
-/** 趋势卡：卡头区间 + 单色柱 + 轴标签 + 峰值说明；柱子不可点选。 */
-@Composable
-private fun AdTrendBlock(
-    dailyCounts7: List<Float>,
-    labels: List<String>,
-    rangeLabel: String,
-    modifier: Modifier = Modifier,
-) {
-    val t = LocalDesignTokens.current
-    AppCard(modifier = modifier) {
-        CardHead("近 7 天跳过趋势", rangeLabel)
-        Spacer(Modifier.height(t.space3))
-        BarChart(
-            values = dailyCounts7,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(t.chartH),
-        )
-        ChartAxisLabels(labels)
-        Spacer(Modifier.height(t.space2))
-        MetaText(peakNote(dailyCounts7))
     }
 }
 
@@ -678,11 +578,17 @@ private fun AdRecordRow(
             .padding(horizontal = t.space4, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 时间列：本页精确到秒（8 位 HH:mm:ss），等宽字体 + tabular-nums 保证不抖动。
+        // 宽度按内容给足 68dp —— 14sp 等宽字 8 位约 67dp，原先复用 space12(48dp) 会折成
+        // 「17:34:0 / 4」。maxLines=1 + softWrap=false 双保险（只关软换行会中间截断成「17:34:…」，
+        // 所以宽度必须真够，见 docs/UI设计/审查清单.md「有布局意义的非常规尺寸用注释说明」）。
         Text(
             text = formatClockSec(record.timestampMs),
-            style = MaterialTheme.typography.labelMedium,
+            style = monitorMonoMeta,
             color = t.muted,
-            modifier = Modifier.width(t.space12),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.width(TIME_COLUMN_W),
         )
         Spacer(Modifier.width(t.space1))
         AppIcon(

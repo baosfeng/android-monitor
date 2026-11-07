@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/AdScreen.kt 拆出：广告跳过页的单条记录详情面板（现仅保留此块，统计卡与趋势卡已由
-// AdSummaryCards.kt 取代）。只接收渲染所需的值与回调，不持有状态。
+// 从 ui/AdScreen.kt 拆出：广告跳过页的单条记录详情面板。只接收渲染所需的值与回调，不持有状态。
+// 摘要条 / 记录列表 / 趋势卡的实现留在 AdScreen.kt 内（页面结构与数据派生强耦合，拆出去反而要多传参数）。
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
