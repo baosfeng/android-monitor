@@ -152,18 +152,10 @@ class MainViewModel : ViewModel() {
             if (next != old) _state.value = next
             _lastUpdatedAt.value = now
 
-            // 再加载统计数据（较慢的聚合查询）
-            val (usage, screens) = withContext(Dispatchers.IO) {
-                val u = store.getAppUsageRank(todayStart, now)
-                val s = store.queryByType(RecordType.SCREEN, todayStart, now)
-                u to s
-            }
-            val statsOld = _state.value
-            val statsNext = statsOld.copy(
-                appUsageStats = usage,
-                screenEvents = screens
-            )
-            if (statsNext != statsOld) _state.value = statsNext
+            // 原「统计聚合」两次查询（getAppUsageRank + 按类型查 SCREEN）已删除：
+            // 结果写进 appUsageStats / screenEvents，而全仓库没有任何读取点，
+            // 等于每 3 秒白跑一次全窗口 GROUP BY 与一次全列 JSON 反序列化。
+            // 将来真要做「应用排行」时，请连 SQL 一起写（按 package_name 分组，别再拿 label 当包名）。
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
