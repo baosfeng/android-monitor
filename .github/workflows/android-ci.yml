@@ -29,6 +29,20 @@ jobs:
       - name: UI rules gate
         run: bash scripts/check-ui-rules.sh
 
+      # 以下两条是文档已承诺「提交前 / CI 都要跑」但此前只在本地存在的门禁。
+      # 放在 checkout 之后、Set up JDK 之前：两者都是纯静态扫描，无 JDK / SDK 依赖，
+      # 秒级完成，坏了能在装工具链之前就把 run 判红。
+
+      # 无障碍基线（可读名 / 稳定标识 / 触控尺寸），当前实跑 0 ERROR。
+      - name: A11y gate
+        run: bash scripts/check-a11y.sh
+
+      # 锚点账本 ↔ 代码 testTag 两向对账。当前有 123 个缺失：均来自作废页
+      # （s17 / s20a / s20b）与静态不可求值的 testTag 表达式，脚本按设计只报不判（exit 0）。
+      # 待作废页清理完、缺失归零后改跑 --strict，让缺失也致命。
+      - name: Anchors gate
+        run: node scripts/check-anchors.mjs
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
@@ -90,6 +104,13 @@ jobs:
       # 所以 app 阈值不高；它防的是下滑，不是评质量分。domain 数字完全可信，阈值高得多。
       - name: Coverage gate
         run: bash scripts/check-coverage.sh
+
+      # 质量基线要求「Lint 零 error + 零 warning」，但此前只有本地跑过、CI 从未判定。
+      # 位置在覆盖率之后：它要 JDK + Android SDK 都就绪，且与测试链无依赖关系。
+      # ⚠️ 已知红：仓库现存 35 个 lint error，正由 fix-lint 分支并行清零；
+      # 本步先接上门禁，等该项合并后才会真正转绿。
+      - name: Android lint
+        run: ./gradlew :app:lintDebug --stacktrace
 
       - name: Upload coverage reports
         if: always()
