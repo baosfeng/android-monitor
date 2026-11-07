@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /** 跳过方式（s03 筛选 chip）。 */
@@ -106,9 +107,16 @@ class AdViewModel : ViewModel() {
 
     init {
         viewModelScope.launch {
-            while (true) {
-                loadData()
-                delay(REFRESH_MS)
+            // 轮询只在 UI 订阅期间运行：切走 Tab 或退到后台时订阅数归零，循环挂起。
+            // 与 MainViewModel / OverviewViewModel 同一口径 —— 广告页此前是唯一「切走也每 3s 查 7 天」
+            // 的屏，而它的窗口是全站最长的。
+            _skipRecords.subscriptionCount.collectLatest { subscribers ->
+                if (subscribers <= 0) return@collectLatest
+                // 先出数据再进入周期休眠：否则切回本 Tab 要先空等一个 REFRESH_MS
+                while (true) {
+                    loadData()
+                    delay(REFRESH_MS)
+                }
             }
         }
     }
@@ -138,14 +146,20 @@ class AdViewModel : ViewModel() {
                     }
                     .sortedByDescending { it.timestampMs }
 
-                _skipRecords.value = records
-                _totalCount.value = records.size
-                _confirmedCount.value = records.count { it.confirmed == true }
-                _todayCount.value = records.count { it.timestampMs >= startOfDay(now) }
-                _lastSkipAt.value = records.firstOrNull()?.timestampMs ?: 0L
-                _dailyCounts7.value = dailyBuckets(records, rangeStart)
-                _isLoading.value = false
-                _loadError.value = null
+                // 逐个判等后再赋值：records 每轮都是新 List，直接赋值会让 StateFlow 每 3s 必发射，
+                // AdScreen 里 4 个 remember(records) 派生缓存随之全部失效、整屏重组。
+                val todayCount = records.count { it.timestampMs >= startOfDay(now) }
+                val confirmedCount = records.count { it.confirmed == true }
+                val lastSkipAt = records.firstOrNull()?.timestampMs ?: 0L
+                val dailyCounts = dailyBuckets(records, rangeStart)
+                if (_skipRecords.value != records) _skipRecords.value = records
+                if (_totalCount.value != records.size) _totalCount.value = records.size
+                if (_confirmedCount.value != confirmedCount) _confirmedCount.value = confirmedCount
+                if (_todayCount.value != todayCount) _todayCount.value = todayCount
+                if (_lastSkipAt.value != lastSkipAt) _lastSkipAt.value = lastSkipAt
+                if (_dailyCounts7.value != dailyCounts) _dailyCounts7.value = dailyCounts
+                if (_isLoading.value) _isLoading.value = false
+                if (_loadError.value != null) _loadError.value = null
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
