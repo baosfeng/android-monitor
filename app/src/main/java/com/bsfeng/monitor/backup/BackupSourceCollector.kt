@@ -39,7 +39,7 @@ internal class BackupSourceCollector(private val app: Context) {
         }
         val prefsDir = File(app.dataDir, BackupPaths.PREFS_DIR)
         prefsDir.listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".xml") }
+            ?.filter { it.isFile && it.name.endsWith(".xml") && it.nameWithoutExtension in BACKUP_PREFS }
             ?.sortedBy { it.name }
             ?.forEach { sources += fileSource("${BackupPaths.PREFS_DIR}/${it.name}", it) }
 
@@ -173,5 +173,35 @@ internal class BackupSourceCollector(private val app: Context) {
         )
         private val MONITOR_TABLES = listOf("records", "transfer_tasks")
         private val EXTRA_FILES = listOf("skip_rules_v1_backup.json", "profileInstalled")
+
+        /**
+         * 允许进备份包的 SharedPreferences 白名单（文件名去 .xml）。
+         *
+         * 只收**纯偏好**：丢了可以重设、换机后能省几步；一旦带上凭据就变成泄漏面 ——
+         * 备份包经 MediaStore 落在公共 Downloads（卸载不丢、同机任何文件管理器可读），
+         * 而 zip 只做 sha256 完整性校验、不加密。
+         *
+         * 显式排除的四类（都以本机 Keystore / 明文的形式存着凭据）：
+         * - monitor_prefs：auth_token 明文（AppUtils）+ 暂停/心跳/动效等状态
+         * - lan_transfer：pairing_keys 免配对密钥，拿到即可无确认推文件
+         * - totp_secrets：TOTP 私钥密文，跨设备还原也解不开（Keystore 不可导出）
+         * - quota_credentials：额度凭据密文，同上；且解密失败会静默删掉用户凭据
+         */
+        private val BACKUP_PREFS = setOf(
+            "monitor_appearance",
+            "feature_flags",
+            "skip_config",
+            "skip_rule_prefs",
+            "skip_whitelist",
+            "backup_prefs",
+            "widget_prefs",
+            "trip_map",
+            "quota_settings",
+            "quota_alerts",
+            "quota_snapshots",
+            "autobook_ignored",
+            "totp_settings",
+            "finance_prefs",
+        )
     }
 }
