@@ -62,6 +62,9 @@ class UdpDiscoveryService(
     @Volatile
     private var noDeviceSinceMs: Long = 0L
 
+    /** 连续「一台在线设备都没有」的轮数：达到阈值即认为组播收不到，强行走 /24 单播。 */
+    private var emptyRounds = 0
+
     /** 当前是否在发现。 */
     fun isRunning(): Boolean = running.get()
 
@@ -114,10 +117,14 @@ class UdpDiscoveryService(
             }
             delay(DiscoveryCadence.intervalMs(onlineCount, noDeviceSinceMs, now))
             if (!running.get()) return
+            // 组播在这里常见的失效形态是「发得出去、收不到」（AP 客户端隔离 / MulticastLock 没拿到），
+            // 只按「发送是否抛异常」判断会永远认为组播正常、兜底分支永不进入。
+            // 因此判据改成「连续 N 轮一个在线设备都没有」——那才是真正需要 /24 单播兜底的时候。
+            val sweepNeeded = registry.snapshot(System.currentTimeMillis()).none { it.online }
+            if (sweepNeeded) emptyRounds += 1 else emptyRounds = 0
             sendAnnounce()
-            // 表里没有在线设备时，兜底扫一遍（组播 → 广播 → /24 单播）
-            if (registry.snapshot(System.currentTimeMillis()).none { it.online }) {
-                runDiscoverySweep()
+            if (sweepNeeded) {
+                runDiscoverySweep(forceUnicast = emptyRounds >= EMPTY_ROUNDS_BEFORE_UNICAST)
             }
             limiter.prune(System.currentTimeMillis())
         }
@@ -138,12 +145,17 @@ class UdpDiscoveryService(
         }
     }
 
-    /** 兜底发现：组播 discover → 广播 discover → 本机 /24 逐 IP 单播 discover。 */
-    private suspend fun runDiscoverySweep() {
+    /**
+     * 兜底发现：组播 discover → 广播 discover → 本机 /24 逐 IP 单播 discover。
+     *
+     * @param forceUnicast 组播发送成功也照样做 /24 单播。用于「连发多轮组播后仍然一台设备都看不到」：
+     *   此时组播很可能只是发得出、收不到，继续等下去不会自愈。
+     */
+    private suspend fun runDiscoverySweep(forceUnicast: Boolean = false) {
         val sweep = DiscoveryMessage.discover().toJsonString()
         val multicastOk = runCatching { sendTo(MULTICAST_GROUP, sweep) }.isSuccess
         runCatching { sendTo(BROADCAST_ADDRESS, sweep) }
-        if (!multicastOk) {
+        if (!multicastOk || forceUnicast) {
             unicastSweep(sweep)
         }
     }
@@ -237,6 +249,14 @@ class UdpDiscoveryService(
 
     private companion object {
         const val TAG = "TransferDiscovery"
+
+        /**
+         * 连续多少轮「零在线设备」后强制 /24 单播兜底。
+         *
+         * 节奏是「有设备 5s / 无设备 15s」（见 DiscoveryCadence），2 轮约 15-30 秒：
+         * 刚开始找人时还能靠组播省电，一直找不到就必须换更贵的扫描方式。
+         */
+        const val EMPTY_ROUNDS_BEFORE_UNICAST = 2
         const val MAX_PACKET_BYTES = 4096
         const val RECONNECT_DELAY_MS = 1_000L
     }
