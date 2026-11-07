@@ -138,7 +138,7 @@ internal fun BudgetCategoryRowsSection(
                     spentAmount = budget?.spentAmount ?: 0.0,
                     enterIndex = enterIndex,
                     onClick = { onEditCategory(category, budget) },
-                    modifier = budgetRowAnchor(index),
+                    modifier = Modifier.budgetRowAnchor(index),
                     // 双保险：即使将来有人把 requesters 换成定长列表，越界也只是「不回位」而不是崩页
                     focusRequester = requesterSlotFor(index, requesters.size)?.let { requesters[it] },
                 )
@@ -186,14 +186,14 @@ internal fun BudgetListHead(modifier: Modifier = Modifier) {
 }
 
 /** 分类行锚点（锚点 s06-brow-0…5，逐字对应原型 data-od-id）。 */
-private fun budgetRowAnchor(index: Int): Modifier = when (index) {
-    0 -> Modifier.testTag("s06-brow-0")
-    1 -> Modifier.testTag("s06-brow-1")
-    2 -> Modifier.testTag("s06-brow-2")
-    3 -> Modifier.testTag("s06-brow-3")
-    4 -> Modifier.testTag("s06-brow-4")
-    5 -> Modifier.testTag("s06-brow-5")
-    else -> Modifier.testTag("s06-brow-" + index)
+private fun Modifier.budgetRowAnchor(index: Int): Modifier = when (index) {
+    0 -> testTag("s06-brow-0")
+    1 -> testTag("s06-brow-1")
+    2 -> testTag("s06-brow-2")
+    3 -> testTag("s06-brow-3")
+    4 -> testTag("s06-brow-4")
+    5 -> testTag("s06-brow-5")
+    else -> testTag("s06-brow-" + index)
 }
 
 /** 边界态占位数值（锚点 s06-edge 写死；不读库，避免把真实账目写进代码）。 */
