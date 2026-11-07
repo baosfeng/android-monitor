@@ -4,7 +4,7 @@
 
 > 运行在 Android 上的个人效率与行为记录应用：记录应用使用、跳过开屏广告、局域网互传文件、记账与自动记账。
 
-Kotlin + Jetpack Compose，遵循「零第三方业务依赖」——数据库、网络、序列化均用系统内置 API。技术栈：Kotlin 2.4、Compose、Navigation Compose、SQLiteOpenHelper、HttpURLConnection、org.json、Coroutines + Flow；最低 Android 10（API 29），target API 34。
+Kotlin + Jetpack Compose，遵循「零第三方业务依赖」——数据库、网络、序列化均用系统内置 API。技术栈：Kotlin 2.4、Compose、Navigation Compose、SQLiteOpenHelper、HttpURLConnection、org.json、Coroutines + Flow；最低 Android 10（API 29），compileSdk / targetSdk 37。
 
 ## 界面预览
 
@@ -24,7 +24,7 @@ Kotlin + Jetpack Compose，遵循「零第三方业务依赖」——数据库�
 | 开屏跳过 | 无障碍服务 + CSS 风格选择器规则引擎，内置规则 + 订阅更新 |
 | 局域网互传 | UDP 组播发现、HTTP 流式传输、sha256 校验、PIN 配对、断点续传 |
 | 记账 / 自动记账 | 分类 / 账户 / 交易 / 预算、统计图表、熊猫记账导入；识别微信 / 支付宝账单页弹浮窗确认后幂等落库 |
-| 界面 | Compose 六标签（概览 / 实时 / 广告 / 记账 / 传送 / 设置），8 套主题 |
+| 界面 | Compose 七标签（概览 / 实时 / 广告 / 记账 / 额度 / 传送 / 设置），8 套主题；传送、位置采集默认关闭 |
 
 ## 构建
 
