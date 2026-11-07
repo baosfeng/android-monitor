@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.finance.FinanceDatabaseHelper
 import java.io.File
@@ -80,13 +81,15 @@ internal class BackupSourceCollector(private val app: Context) {
      * 之外的增量变多。读库（无打开句柄）时返回 (0,-1,-1)，同样无害。
      */
     fun checkpointDatabases() {
-        runCatching {
-            FinanceDatabaseHelper.getInstance(app).writableDatabase
-                .rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null)
-                .use { it.moveToFirst() }
-            DatabaseHelper.getInstance(app).writableDatabase
-                .rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null)
-                .use { it.moveToFirst() }
+        // 打包同时含 db / -wal / -shm 三个文件：checkpoint 若被并发写挡住，三者就不再构成
+        // SQLite 认可的一致组合，还原后可能丢最近若干条甚至出现坏库。失败必须留痕，不能静默。
+        listOf(
+            "finance.db" to { FinanceDatabaseHelper.getInstance(app).writableDatabase },
+            "monitor.db" to { DatabaseHelper.getInstance(app).writableDatabase },
+        ).forEach { (name, open) ->
+            runCatching {
+                open().rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+            }.onFailure { Log.w("BackupSource", "$name 的 WAL checkpoint 失败：${it.message}") }
         }
     }
 
