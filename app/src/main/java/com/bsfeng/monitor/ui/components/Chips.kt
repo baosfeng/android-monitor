@@ -113,7 +113,6 @@ fun Chip(
             .clip(shape)
             .background(bg)
             .border(1.dp, stroke, shape)
-            .testTag("chip.option")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 // 选中切换属轻触级：震动收敛在控件内，调用点不再各补一次
                 haptic(HapticTone.LIGHT)
@@ -122,11 +121,14 @@ fun Chip(
             .padding(horizontal = t.space4),
         contentAlignment = Alignment.Center,
     ) {
+        // 组件标识打在文本上，别写在调用方 modifier 之后：同一 semantics 节点上后写的
+        // testTag 会顶掉调用方的 sXX-* 锚点（如 s19-refresh-1h）。
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = fg,
+            modifier = Modifier.testTag("chip.option"),
         )
     }
 }
@@ -237,7 +239,6 @@ fun SegmentedControl(
                     .tokenShadow(if (selected) 1 else 0, shape)
                     .clip(shape)
                     .background(bg)
-                    .testTag("seg.segment")
                     .clickable {
                         // 切换属轻触级；重复点当前段不再震
                         if (!selected) haptic(HapticTone.LIGHT)
@@ -245,11 +246,13 @@ fun SegmentedControl(
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                // 同 chip：组件标识落在文本上，保住调用方的分段锚点
                 Text(
                     label,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = fg,
+                    modifier = Modifier.testTag("seg.segment"),
                 )
             }
         }

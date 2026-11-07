@@ -218,7 +218,6 @@ private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier =
             .keyboardFocusRing(shape)
             .clip(shape)
             .border(1.dp, t.border, shape)
-            .testTag("button.ghost")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) {
                 // 普通按钮点击属轻触级：震动收敛在控件内，调用点不再各补一次
                 haptic(HapticTone.LIGHT)
@@ -227,6 +226,13 @@ private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier =
             .padding(horizontal = t.space5),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = t.fg)
+        // 组件标识打在内部文本上：同一 semantics 节点上后写的 testTag 会顶掉调用方的
+        // Modifier.testTag("sNN-*-cta")，13 处空态/错态 CTA 锚点会因此全部不可达。
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = t.fg,
+            modifier = Modifier.testTag("button.ghost"),
+        )
     }
 }
