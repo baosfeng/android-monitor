@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.transfer.service
 
 import android.content.Context
+import com.bsfeng.monitor.transfer.transport.StreamCopier
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -50,8 +51,16 @@ class TransferEngineOfferResumeTest {
         TransferEngine.resetForTesting()
     }
 
-    private fun partFile(fileId: String): File =
-        File(File(context.cacheDir, "transfer").apply { mkdirs() }, fileId + ".part")
+    /**
+     * 用例里落盘的分片必须与引擎算出来的路径同源：分片名带文件身份（sha256），
+     * 手拼 "$fileId.part" 会与 [StreamCopier.partFile] 漂移，续传断言就变成假绿。
+     */
+    private fun partFile(fileId: String, senderDeviceId: String): File =
+        StreamCopier.partFile(
+            File(context.cacheDir, "transfer").apply { mkdirs() },
+            fileId,
+            "sha-$senderDeviceId-$fileId",
+        )
 
     private fun offerBody(
         senderDeviceId: String,
@@ -96,13 +105,25 @@ class TransferEngineOfferResumeTest {
     @Test
     fun `进程重启后 part 有 5 字节时 offer 的 accepted offset 返回 5`() {
         // 模拟「上次传到 5 字节、进程被杀」：磁盘留 .part，内存会话从零开始
-        partFile("f1").writeBytes(ByteArray(5) { 0x41 })
+        partFile("f1", "mac-resume-5").writeBytes(ByteArray(5) { 0x41 })
 
         val accepted = approvedAccepted(offerBody(senderDeviceId = "mac-resume-5"))
 
         assertEquals(1, accepted.length())
         assertEquals("f1", accepted.getJSONObject(0).getString("fileId"))
         assertEquals(5L, accepted.getJSONObject(0).getLong("offset"))
+    }
+
+    @Test
+    fun `别的会话留下的同序号 part 不会被当成本次已收进度`() {
+        // 场景：上一轮传输（另一个发送方 / 另一个文件）中断，磁盘上留着 f1 分片。
+        // 新会话的第 1 个文件同样叫 f1，但 sha256 不同 —— 分片身份不同，必须当作 0 重新开始，
+        // 否则发送端从中间续传、接收端追加旧分片，sha256 必然不符且重传也永远失败。
+        partFile("f1", "old-sender").writeBytes(ByteArray(5) { 0x41 })
+
+        val accepted = approvedAccepted(offerBody(senderDeviceId = "new-sender"))
+
+        assertEquals("不同文件的同名分片不能串用", 0L, accepted.getJSONObject(0).getLong("offset"))
     }
 
     @Test
@@ -113,11 +134,11 @@ class TransferEngineOfferResumeTest {
 
     @Test
     fun `part 超过声明大小时按脏数据处理 offset 为 0 并清理`() {
-        partFile("f1").writeBytes(ByteArray(20) { 0x42 })
+        partFile("f1", "mac-resume-oversize").writeBytes(ByteArray(20) { 0x42 })
 
         val accepted = approvedAccepted(offerBody(senderDeviceId = "mac-resume-oversize", size = 10L))
 
         assertEquals(0L, accepted.getJSONObject(0).getLong("offset"))
-        assertFalse("超长 .part 应被清理", partFile("f1").exists())
+        assertFalse("超长 .part 应被清理", partFile("f1", "mac-resume-oversize").exists())
     }
 }
