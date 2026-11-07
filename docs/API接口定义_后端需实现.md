@@ -1,6 +1,6 @@
 # Android Monitor — 后端 REST API 接口文档
 
-> 供后端实现。Android 端已按此集成。
+> 供后端实现，是**接口契约**不是实现状态。客户端当前**一个请求都不发**：`EventReporter.registerDevice()` 封装完整但无调用方（`ServiceContainer` 只 lazy 定义），`uploadBatch()` 是二期桩（恒返回 `Result.success(0)`），`heartbeat()` 也无调用方。
 > Base URL 由构建配置 `SERVER_BASE_URL` 指定（末尾自动补 `/`）；`Content-Type: application/json`；UTF-8；除设备注册外均需 `Authorization: Bearer <token>`。
 
 统一响应体：
@@ -13,9 +13,9 @@
 
 | # | 方法 | 路径 | 认证 | 用途 |
 |---|---|---|---|---|
-| 1 | POST | `/devices` | 无 | 设备注册，获取 Token |
-| 2 | POST | `/events` | Bearer | 批量上报事件 |
-| 3 | GET | `/heartbeat` | Bearer | 心跳保活，同步动态配置 |
+| 1 | POST | `/devices` | 无 | 设备注册，获取 Token（**客户端已有封装，尚无调用方**） |
+| 2 | POST | `/events` | Bearer | 批量上报事件（**客户端二期桩，当前不发**） |
+| 3 | GET | `/heartbeat` | Bearer | 心跳保活，同步动态配置（**客户端无调用方**） |
 
 ## 1. 设备注册 `POST /devices`
 
@@ -100,7 +100,7 @@
 
 `accepted_count` / `rejected_count`(int)、`server_time_ms`(long，可选)。
 
-> ⚠️ 客户端只认 `code == 0`：成功后本地标记已上传并清理过期数据；否则（或 HTTP 非 200）保留事件，下次重试。
+> ⚠️ 二期接上传时的预期口径：客户端只认 `code == 0`，成功才标记已上传并清理过期数据，否则（或 HTTP 非 200）保留事件等下次重试。**当前 `uploadBatch()` 不会走到这里**——它不发请求、也不写任何标记。
 
 ## 3. 心跳 `GET /heartbeat`
 
@@ -112,7 +112,7 @@
 
 `server_time_ms`（必含，用于时间校准）、`config`（可选，结构同 `ServerConfig`）。
 
-> ⚠️ `code != 0` 视为心跳失败，客户端继续运行，下周期重发。
+> ⚠️ `code != 0` 视为心跳失败；客户端约定继续运行、下周期重发。当前无调用方，`AlarmReceiver` 不触发上报。
 
 ## 认证
 
