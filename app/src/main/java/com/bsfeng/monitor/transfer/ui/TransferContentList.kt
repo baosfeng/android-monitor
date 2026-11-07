@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -180,6 +181,8 @@ internal fun TransferContentList(
     onStopReceiving: () -> Unit,
 ) {
     val rows = buildTransferRows(devices, tasks)
+    // 可重试任务的预计算表：由 VM 在任务集合变化时算好，列表侧只读（避免组合期做 ContentResolver IO）
+    val resendReadyIds by viewModel.resendReadyIds.collectAsState()
     val expandedReceipts = remember { mutableStateMapOf<String, Boolean>() }
     // C-06：撤销恢复后滚动到被恢复的行（行 key = 任务 key，直接按 key 找下标）
     LaunchedEffect(page.scrollTarget, rows) {
@@ -263,12 +266,15 @@ internal fun TransferContentList(
                     onFocusConsumed = page::consumeFocus,
                 )
                 TransferRow.Kind.RECEIPT -> {
-                    // 可重试的失败项：发送方向 + 终态非完成 + 源文件仍可读（锚点 C-08 边界）
+                    // 可重试的失败项：发送方向 + 终态非完成 + 源文件仍可读（锚点 C-08 边界）。
+                    // 可用性由 VM 在收据批次变化时**预计算**成表，这里只读结果 ——
+                    // 直接调 resendAvailability 会在 items 体里逐任务 openFileDescriptor，
+                    // 而 items 体每次重组、每次滚动回收都会重跑一遍，等于组合期做 ContentResolver IO。
                     val retryable = row.tasks.filter { task ->
                         task.direction == TransferDirection.SEND &&
                             task.status.isTerminal &&
                             task.status != TransferStatus.COMPLETED &&
-                            viewModel.resendAvailability(task) is ResendAvailability.Ready
+                            (task.sessionId + "/" + task.file.fileId) in resendReadyIds
                     }
                     BatchReceiptBar(
                         tasks = row.tasks,
