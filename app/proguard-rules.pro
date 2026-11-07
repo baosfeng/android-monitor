@@ -4,12 +4,6 @@
 -keepattributes *Annotation*, InnerClasses, Signature, EnclosingMethod
 -keepattributes SourceFile, LineNumberTable
 
-# ========== 事件数据模型（JSON 序列化/反序列化） ==========
--keep class com.bsfeng.monitor.event.UnifiedEvent { *; }
--keep class com.bsfeng.monitor.event.EventType { *; }
--keep class com.bsfeng.monitor.event.ScreenContent { *; }
--keep class com.bsfeng.monitor.data.EventEntity { *; }
-
 # ========== 网络请求/响应 DTO（JSON 序列化） ==========
 -keep class com.bsfeng.monitor.network.EventsBatch { *; }
 -keep class com.bsfeng.monitor.network.DeviceRegisterRequest { *; }
