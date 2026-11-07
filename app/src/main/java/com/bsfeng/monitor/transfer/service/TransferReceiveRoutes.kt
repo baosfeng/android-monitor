@@ -25,6 +25,16 @@ import java.io.InputStream
 /** 接收侧路由（`GET /info`、`POST /offer`、`GET /offer/status`、`PUT /upload`、`POST /cancel`）。 */
 internal class TransferReceiveRoutes(private val engine: TransferEngine) {
 
+    private companion object {
+        /**
+         * 同一会话内允许输错 PIN 的次数上限。
+         *
+         * 4 位 PIN 只有 10^4 种，局域网内往返 <5ms、确认窗口 60s，不限次数等于没有 PIN；
+         * 5 次后作废会话，正常用户一次就能输对，误触也够用。
+         */
+        const val MAX_PIN_FAILURES = 5
+    }
+
     suspend fun info(): ApiResponse = ApiResponse.ok(
         JSONObject().apply {
             put("deviceId", engine.settings.deviceId)
@@ -115,6 +125,13 @@ internal class TransferReceiveRoutes(private val engine: TransferEngine) {
                 engine.settings.savePairingKey(senderDeviceId, newKey)
                 return engine.approve(session, persistedPairKey = newKey)
             }
+            // 4 位 PIN 空间只有 10^4，且窗口内可无限重试 → 必须按会话计数封顶，
+            // 否则局域网内任意主机都能在 60 秒里枚举完并把自己写成可信设备。
+            session.pinFailures += 1
+            if (session.pinFailures >= MAX_PIN_FAILURES) {
+                engine.failSession(session, TransferErrorCode.USER_DENIED, "PIN 错误次数过多，本次传输已取消")
+                return ApiResponse.error(TransferErrorCode.USER_DENIED, "PIN 错误次数过多，本次传输已取消")
+            }
             return engine.pendingResponse(session, "PIN 不正确")
         }
 
@@ -190,7 +207,7 @@ internal class TransferReceiveRoutes(private val engine: TransferEngine) {
             return ApiResponse.error(TransferErrorCode.DISK_FULL)
         }
 
-        val part = StreamCopier.partFile(engine.downloads.partDir(), incoming.file.fileId)
+        val part = StreamCopier.partFile(engine.downloads.partDir(), incoming.file.fileId, incoming.file.sha256)
         incoming.part = part
         val append = part.exists() && part.length() == offset
         val targetOffset = if (append) offset else 0L

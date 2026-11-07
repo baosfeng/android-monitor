@@ -24,6 +24,14 @@ internal class IncomingSession(
     var pin: String? = null
     var confirmDeadlineMs: Long = System.currentTimeMillis() + CONFIRM_TIMEOUT_MS
 
+    /**
+     * PIN 输错次数（同 DLNA / Miracast 的口径：错了就作废会话，而不是让人继续猜）。
+     *
+     * 4 位 PIN 只有 10^4 种，局域网往返 <5ms，60 秒窗口里能被穷举完 —— 不限次数等于没有 PIN。
+     * 计数按**会话**累积（同一会话重复 offer 不会清零），超过阈值直接拒收本次传输。
+     */
+    var pinFailures: Int = 0
+
     /** 最近一次字节进展时刻（「长时间无进展」判定）。 */
     var lastProgressAtMs: Long = createdAtMs
 
