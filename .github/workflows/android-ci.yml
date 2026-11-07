@@ -1,8 +1,10 @@
 name: Android CI
 
+# 日常开发在 feat/** 分支上进行，只挂 main 会让这些分支在整个开发期零门禁。
+# 已有的 concurrency（cancel-in-progress）负责取消同 ref 的旧 run，无需额外改动。
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feat/**', 'fix/**' ]
   pull_request:
     branches: [ main ]
 
@@ -27,6 +29,20 @@ jobs:
       - name: UI rules gate
         run: bash scripts/check-ui-rules.sh
 
+      # 以下两条是文档已承诺「提交前 / CI 都要跑」但此前只在本地存在的门禁。
+      # 放在 checkout 之后、Set up JDK 之前：两者都是纯静态扫描，无 JDK / SDK 依赖，
+      # 秒级完成，坏了能在装工具链之前就把 run 判红。
+
+      # 无障碍基线（可读名 / 稳定标识 / 触控尺寸），当前实跑 0 ERROR。
+      - name: A11y gate
+        run: bash scripts/check-a11y.sh
+
+      # 锚点账本 ↔ 代码 testTag 两向对账。当前有 123 个缺失：均来自作废页
+      # （s17 / s20a / s20b）与静态不可求值的 testTag 表达式，脚本按设计只报不判（exit 0）。
+      # 待作废页清理完、缺失归零后改跑 --strict，让缺失也致命。
+      - name: Anchors gate
+        run: node scripts/check-anchors.mjs
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
@@ -45,15 +61,23 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.m2/repository/org/robolectric/android-all-instrumented
-          key: ${{ runner.os }}-robolectric-${{ hashFiles('**/build.gradle.kts') }}
+          # key 只认 app 模块的构建脚本：这份 jar 由 app 的 Robolectric 版本决定，
+          # 用 '**/build.gradle.kts' 会让改 domain 依赖这类无关改动也把 372MB 缓存整份作废。
+          key: ${{ runner.os }}-robolectric-${{ hashFiles('app/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-robolectric-
 
       # 152MB 平台包：命中缓存恢复约 2-4s，实测重新下载安装 8-16s，缓存划算。
+      # 缓存路径不能写死 runner 镜像的绝对路径，但 actions/cache 的 path 是逐字 glob、
+      # 不做环境变量展开（toolkit glob 只处理 ~ 与相对路径）。所以在前面用 shell 把
+      # $ANDROID_HOME 解析成真实路径（缺省仍回落官方镜像的 sdk 目录）再交给缓存。
+      - name: Resolve Android SDK path
+        run: echo "ANDROID_PLATFORM_DIR=${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms/android-37.0" >> "$GITHUB_ENV"
+
       - name: Cache Android SDK platform 37
         uses: actions/cache@v6
         with:
-          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          path: ${{ env.ANDROID_PLATFORM_DIR }}
           key: ${{ runner.os }}-android-platform-37.0
           restore-keys: |
             ${{ runner.os }}-android-platform-
@@ -89,6 +113,13 @@ jobs:
       - name: Coverage gate
         run: bash scripts/check-coverage.sh
 
+      # 质量基线要求「Lint 零 error + 零 warning」，但此前只有本地跑过、CI 从未判定。
+      # 位置在覆盖率之后：它要 JDK + Android SDK 都就绪，且与测试链无依赖关系。
+      # ⚠️ 已知红：仓库现存 35 个 lint error，正由 fix-lint 分支并行清零；
+      # 本步先接上门禁，等该项合并后才会真正转绿。
+      - name: Android lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -103,6 +134,13 @@ jobs:
     name: Assemble APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 本 job 的产物只有一个：用 release 签名材料打的 debug 包（debug 复用 release 签名，
+    # 见 app/build.gradle.kts）。仓库是 public，PR 上解 release keystore 再把同签名包
+    # 挂成公开 artifact，等于让任意 PR 走一次线上签名；PR 不应接触签名材料。
+    # 用 job 级 if 而不是逐 step 加：本 job 在 PR 上无任何剩余职责，
+    # 逐 step 跳过只会白占一个 runner（checkout + 装 SDK 约 1.5 分钟）。
+    # PR 的编译验证由 test job 的 test / lint 覆盖，report artifact 也只产测试与覆盖率。
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout
@@ -119,10 +157,16 @@ jobs:
 
       # 与 test job 同一把 key：两个 job 都要 compileSdk 37 的平台包。
       # 并发保存同 key 时后到的那个会被跳过（只打 warning，不失败）。
+      # 缓存路径不能写死 runner 镜像的绝对路径，但 actions/cache 的 path 是逐字 glob、
+      # 不做环境变量展开（toolkit glob 只处理 ~ 与相对路径）。所以在前面用 shell 把
+      # $ANDROID_HOME 解析成真实路径（缺省仍回落官方镜像的 sdk 目录）再交给缓存。
+      - name: Resolve Android SDK path
+        run: echo "ANDROID_PLATFORM_DIR=${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms/android-37.0" >> "$GITHUB_ENV"
+
       - name: Cache Android SDK platform 37
         uses: actions/cache@v6
         with:
-          path: /usr/local/lib/android/sdk/platforms/android-37.0
+          path: ${{ env.ANDROID_PLATFORM_DIR }}
           key: ${{ runner.os }}-android-platform-37.0
           restore-keys: |
             ${{ runner.os }}-android-platform-
@@ -136,12 +180,16 @@ jobs:
             "$SDKMGR" "platforms;android-37.0"
           fi
 
+      # 仓库是 public 且 debug 复用 release 签名（见 app/build.gradle.kts）：
+      # PR 上解 release keystore 再挂出同签名 APK = 线上签名产物公开可下。
+      # 整个 assemble job 已在 job 级 if 里对 PR 跳过，这里只是别让后来人把那条 if 删掉。
       - name: Decode release keystore
         run: |
           echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
 
+      # 签名材料只在非 PR 存在；缺了它 build.gradle.kts 退回默认 debug keystore。
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
         env:
