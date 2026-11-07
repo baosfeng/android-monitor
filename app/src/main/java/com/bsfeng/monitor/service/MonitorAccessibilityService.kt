@@ -38,6 +38,9 @@ open class MonitorAccessibilityService : AccessibilityService() {
         get() = (application as MonitorApp).container.recordCollector
 
     internal var lastPackageName: String? = null
+
+    /** [lastPackageName] 对应的显示名：前台轮询每拍都要它，但只有换 App 时才需要重新查。 */
+    internal var lastAppName: String? = null
     internal var lastActivityClass: String? = null
 
     /** [lastActivityClass] 所属包名：换了 App 旧的 Activity 名就无意义，必须清空 */
