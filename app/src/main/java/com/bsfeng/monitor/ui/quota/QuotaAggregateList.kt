@@ -121,16 +121,16 @@ fun QuotaAggregateBody(
 }
 
 /** 榜单行的位次锚点：口径只给前 3 名各一条（顺序即位次，不按 provider 名钉）。 */
-private fun rankedRowTagOf(index: Int): Modifier = when (index) {
-    0 -> Modifier.testTag("s18-agg-row-1")
-    1 -> Modifier.testTag("s18-agg-row-2")
-    2 -> Modifier.testTag("s18-agg-row-3")
-    else -> Modifier
+private fun Modifier.rankedRowTagOf(index: Int): Modifier = when (index) {
+    0 -> testTag("s18-agg-row-1")
+    1 -> testTag("s18-agg-row-2")
+    2 -> testTag("s18-agg-row-3")
+    else -> this
 }
 
 /** 灰行（不参与聚合）的锚点落在末行：锚点 row-4 就是那条「deepseek —」。 */
-private fun excludedRowTagOf(index: Int): Modifier =
-    if (index == 0) Modifier.testTag("s18-agg-row-4") else Modifier
+private fun Modifier.excludedRowTagOf(index: Int): Modifier =
+    if (index == 0) testTag("s18-agg-row-4") else this
 
 /**
  * 结论条：一句话回答「哪家最先见底」。
@@ -223,7 +223,7 @@ private fun AggregateRankList(
                 row = row,
                 onClick = { onOpenProvider(row.providerId) },
                 // 行内不再各自播入场：外层整块已经按 stagger 步骤一次起，逐行再 delay 会拖到 600ms+
-                modifier = Modifier.staggerEnterAt(-1).then(rankedRowTagOf(index)),
+                modifier = Modifier.staggerEnterAt(-1).then(Modifier.rankedRowTagOf(index)),
             )
         }
         excluded.forEachIndexed { index, item ->
@@ -232,7 +232,7 @@ private fun AggregateRankList(
                 color = t.borderSoft,
                 modifier = Modifier.padding(horizontal = t.space4),
             )
-            ExcludedRow(item, excludedRowTagOf(index))
+            ExcludedRow(item, Modifier.excludedRowTagOf(index))
         }
     }
 }

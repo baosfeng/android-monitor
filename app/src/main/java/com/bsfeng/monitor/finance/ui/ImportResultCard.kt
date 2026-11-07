@@ -71,9 +71,9 @@ internal const val FAIL_ROWS_LIMIT = 50
 @Composable
 internal fun ImportResultSummaryCard(
     result: PandaImporter.ImportResult,
+    modifier: Modifier = Modifier,
     updatedCount: Int = 0,
     autoCategorized: Int = 0,
-    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusLg)

@@ -152,7 +152,7 @@ fun QuotaSettingsScreen(
                 title = "额度设置",
                 onBack = requestBack,
                 // 标题接住进入子页的焦点（IOSNavigationBar 的唯一调用点，见其形参说明）
-                titleModifier = Modifier.focusRequester(titleFocus).focusable(),
+                modifier = Modifier.focusRequester(titleFocus).focusable(),
             )
             Column(
                 Modifier
@@ -174,7 +174,7 @@ fun QuotaSettingsScreen(
                         if (index > 0) IOSDivider()
                         // 行本体在 QuotaProviderRows.kt（s18 路写区）：锚点只能由本屏包一层承载，
                         // 逐字沿用锚点，行内点击/展开行为仍由行本体负责。
-                        Box(Modifier.fillMaxWidth().then(providerRowTagOf(info.id))) {
+                        Box(Modifier.fillMaxWidth().then(Modifier.providerRowTagOf(info.id))) {
                             ProviderSettingsRow(
                                 info = info,
                                 expanded = expandedId == info.id,
@@ -309,12 +309,12 @@ fun QuotaSettingsScreen(
 }
 
 /** provider 行锚点（原型 s19 逐字）：行本体的写区不归本屏，锚点按 provider id 逐字映射。 */
-private fun providerRowTagOf(providerId: String): Modifier = when (providerId) {
-    "ollama" -> Modifier.testTag("s19-provider-ollama")
-    "deepseek" -> Modifier.testTag("s19-provider-deepseek")
-    "opencode-go" -> Modifier.testTag("s19-provider-opencode")
-    "opendesign" -> Modifier.testTag("s19-provider-opendesign")
-    else -> Modifier
+private fun Modifier.providerRowTagOf(providerId: String): Modifier = when (providerId) {
+    "ollama" -> testTag("s19-provider-ollama")
+    "deepseek" -> testTag("s19-provider-deepseek")
+    "opencode-go" -> testTag("s19-provider-opencode")
+    "opendesign" -> testTag("s19-provider-opendesign")
+    else -> this
 }
 
 /** 分组容器：分组小标题 + 卡片底 + 行间分割线（与设置页 iOS 分组一致）。 */
@@ -352,7 +352,7 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
                     label = QuotaSettings.labelOf(hours),
                     selected = hours == selectedHours,
                     onClick = { onSelect(hours) },
-                    modifier = refreshChipTagOf(hours),
+                    modifier = Modifier.refreshChipTagOf(hours),
                 )
             }
         }
@@ -367,12 +367,12 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
 }
 
 /** 后台刷新四个选项的锚点（与锚点账本逐字一致）。 */
-private fun refreshChipTagOf(hours: Int): Modifier = when (hours) {
-    0 -> Modifier.testTag("s19-refresh-off")
-    1 -> Modifier.testTag("s19-refresh-1h")
-    3 -> Modifier.testTag("s19-refresh-3h")
-    6 -> Modifier.testTag("s19-refresh-6h")
-    else -> Modifier
+private fun Modifier.refreshChipTagOf(hours: Int): Modifier = when (hours) {
+    0 -> testTag("s19-refresh-off")
+    1 -> testTag("s19-refresh-1h")
+    3 -> testTag("s19-refresh-3h")
+    6 -> testTag("s19-refresh-6h")
+    else -> this
 }
 
 /** Ollama 计费模式：用户手选、持久化；页面只负责把选择交给 ViewModel。 */

@@ -63,10 +63,10 @@ import com.bsfeng.monitor.ui.theme.fgFade
  *
  * 写成 when 而不是 List：每个锚点都要以 testTag 的字面形态被 grep 逐字查到（验收口径）。
  */
-private fun kindAnchor(index: Int): Modifier = when (index) {
-    0 -> Modifier.testTag("s14a-kind-expense")
-    1 -> Modifier.testTag("s14a-kind-income")
-    else -> Modifier.testTag("s14a-kind-transfer")
+private fun Modifier.kindAnchor(index: Int): Modifier = when (index) {
+    0 -> testTag("s14a-kind-expense")
+    1 -> testTag("s14a-kind-income")
+    else -> testTag("s14a-kind-transfer")
 }
 
 /** 分段容器内边距（与共享 SegmentedControl 同口径：.segmented padding 4px） */
@@ -240,7 +240,7 @@ private fun KindSegment(
                     .tokenShadow(if (selected) 1 else 0, shape)
                     .clip(shape)
                     .background(bg)
-                    .then(kindAnchor(index))
+                    .then(Modifier.kindAnchor(index))
                     .clickable {
                         // 切换属轻触级；重复点当前段不再震（口径「已在支出态时再点无变化、不重复触觉」）
                         if (!selected) {

@@ -2,7 +2,7 @@ package com.bsfeng.monitor.ui.quota
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.LocalIndication
@@ -245,7 +245,7 @@ private fun QuotaKeyLink() {
                 haptic(HapticTone.LIGHT)
                 // 无浏览器时只是留在原页（ActivityNotFound 吞掉，不弹错误）
                 runCatching {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(OLLAMA_KEY_URL)))
+                    context.startActivity(Intent(Intent.ACTION_VIEW, OLLAMA_KEY_URL.toUri()))
                 }.onFailure { if (it !is ActivityNotFoundException) throw it }
             }
             // 点击区高 ≥44dp：文字本身只有一行，靠纵向内边距撑到点击区下限
