@@ -256,7 +256,7 @@ fun AddTransactionScreen(
                     ) {
                         if (state == FiveState.EMPTY) {
                             EmptyState(
-                                text = "分类数据为空，先到「设置 → 记账」里创建分类或从熊猫记账导入",
+                                text = "分类数据为空，先到「设置 → 记账」里创建分类，或导入账单补齐",
                                 modifier = Modifier.testTag("s05-empty"),
                                 title = "还没有可用的分类",
                                 icon = Icons.Filled.Description,
