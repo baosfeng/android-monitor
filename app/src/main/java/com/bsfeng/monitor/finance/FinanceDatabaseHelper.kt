@@ -24,8 +24,10 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
          *   （商户 / 商品说明 / 付款方式 / 订单号 / 平台分类 / 原始交易时间），便于统计与分析
          * - V3：[TransactionEntity] 增 1 列 to_account_name —— 转账（type=2）需要「转出 → 转入」
          *   两个账户才能把余额算对（[com.bsfeng.monitor.finance.FinanceManager] 按此双向增减）
+         * - V4：给 (source, source_id) 与 order_id 建索引 —— 账单导入逐行查重，
+         *   原先这两个条件都走全表扫描，上千条导入 × 上万行账本会把单事务拖到几十秒
          */
-        internal const val DATABASE_VERSION = 3
+        internal const val DATABASE_VERSION = 4
 
         @Volatile
         private var INSTANCE: FinanceDatabaseHelper? = null
@@ -56,6 +58,9 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
         db.execSQL("CREATE INDEX idx_finance_tx_month ON ${TransactionEntity.TABLE_NAME}(${TransactionEntity.COL_DATE}, ${TransactionEntity.COL_TYPE})")
         db.execSQL("CREATE INDEX idx_finance_tx_source ON ${TransactionEntity.TABLE_NAME}(${TransactionEntity.COL_SOURCE})")
         db.execSQL("CREATE INDEX idx_finance_budget_month ON ${BudgetEntity.TABLE_NAME}(${BudgetEntity.COL_MONTH})")
+        // 账单导入的查重条件（V4 起；新库直接在这里建，老库由 onUpgrade 补）
+        db.execSQL(DedupeIndex.SOURCE_ID)
+        db.execSQL(DedupeIndex.ORDER_ID)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -80,6 +85,12 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
                     "${TransactionEntity.COL_TO_ACCOUNT_NAME} TEXT NOT NULL DEFAULT ''"
             )
         }
+        // V3 → V4：只加索引、不动数据。账单导入每条记录都要按 (source, source_id) 再按 order_id
+        // 查一次重，没有索引就是两次全表扫描；用 IF NOT EXISTS 兼容「索引已在新库里建过」的情况。
+        if (oldVersion < 4) {
+            db.execSQL(DedupeIndex.SOURCE_ID_IF_NOT_EXISTS)
+            db.execSQL(DedupeIndex.ORDER_ID_IF_NOT_EXISTS)
+        }
     }
 
     /**
@@ -91,5 +102,16 @@ class FinanceDatabaseHelper(context: Context) : SQLiteOpenHelper(
      */
     override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // 故意留空：保留数据，不做任何结构变更
+    }
+
+    /** 账单导入查重用的两个索引；SQL 集中在这里，onCreate 与 onUpgrade 不会各写一份漂移 */
+    private object DedupeIndex {
+        private const val T = TransactionEntity.TABLE_NAME
+
+        val SOURCE_ID = "CREATE INDEX idx_finance_tx_source_id ON $T(${TransactionEntity.COL_SOURCE}, ${TransactionEntity.COL_SOURCE_ID})"
+        val ORDER_ID = "CREATE INDEX idx_finance_tx_order_id ON $T(${TransactionEntity.COL_ORDER_ID})"
+
+        val SOURCE_ID_IF_NOT_EXISTS = SOURCE_ID.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")
+        val ORDER_ID_IF_NOT_EXISTS = ORDER_ID.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")
     }
 }
