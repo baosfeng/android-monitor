@@ -50,6 +50,10 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     /** 获取最近的交易记录 */
     fun getRecentTransactions(limit: Int = 50): List<Transaction> = transactionDao.getRecentTransactions(limit)
 
+    /** 日期区间（含两端）的金额汇总；统计口径见 [FinanceTransactionDao.sumByDateRange]。 */
+    fun sumByDateRange(fromDate: String, toDate: String, type: Int): Double =
+        transactionDao.sumByDateRange(fromDate, toDate, type)
+
     /**
      * 自动记账记录里按「来源 + 金额」找候选（交易详情页补全用）。
      *

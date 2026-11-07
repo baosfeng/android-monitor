@@ -89,6 +89,16 @@ class FinanceManager internal constructor(context: Context) {
         dao.getRecentTransactions(limit)
     }
 
+    /**
+     * 日期区间（含两端，`yyyy-MM-dd`）的金额汇总，走 SQL `SUM`。
+     *
+     * 统计类口径一律走这里：捞列表再在内存里 sum 会被「最近 N 笔」的截断悄悄改小。
+     */
+    suspend fun sumByDateRange(fromDate: String, toDate: String, expense: Boolean): Double =
+        withContext(Dispatchers.IO) {
+            dao.sumByDateRange(fromDate, toDate, if (expense) TYPE_EXPENSE else TYPE_INCOME)
+        }
+
     suspend fun searchTransactions(query: String, limit: Int = 50): List<Transaction> = withContext(Dispatchers.IO) {
         dao.searchTransactions(query, limit)
     }

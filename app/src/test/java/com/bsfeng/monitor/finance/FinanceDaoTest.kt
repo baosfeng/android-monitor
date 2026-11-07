@@ -78,6 +78,22 @@ class FinanceDaoTest {
     )
 
     @Test
+    fun `区间汇总覆盖全部记录 不受最近 N 笔截断影响`() {
+        // 造 600 笔同日支出：旧口径取「最近 500 笔」再求和，会少掉 100 笔且界面无异常。
+        repeat(600) { i ->
+            dao.insertTransaction(tx(amount = 1.0, date = "2026-02-10", dateTime = "2026-02-10 10:00", sourceId = "s$i"))
+        }
+        // 区间外的记录不能算进来
+        dao.insertTransaction(tx(amount = 999.0, date = "2026-01-31", dateTime = "2026-01-31 10:00", sourceId = "out"))
+        dao.insertTransaction(tx(amount = 999.0, date = "2026-03-01", dateTime = "2026-03-01 10:00", sourceId = "out2"))
+
+        assertEquals("区间内 600 笔全算", 600.0, dao.sumByDateRange("2026-02-10", "2026-02-10", 0), 0.001)
+        // 600（区间内）+ 999（2026-01-31，恰在下界）+ 999（2026-03-01，恰在上界）= 2598
+        assertEquals("跨天区间含两端", 2598.0, dao.sumByDateRange("2026-01-31", "2026-03-01", 0), 0.001)
+        assertEquals("收入类为零", 0.0, dao.sumByDateRange("2026-01-01", "2026-12-31", 1), 0.001)
+    }
+
+    @Test
     fun `同一商户取最近一笔的类型与分类`() {
         dao.insertTransaction(tx(category = "购物", dateTime = "2026-01-01 10:00", merchant = "星巴克咖啡"))
         dao.insertTransaction(tx(category = "餐饮", dateTime = "2026-01-20 10:00", merchant = "星巴克咖啡"))

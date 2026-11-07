@@ -10,7 +10,6 @@ import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.TripAggregator
 import com.bsfeng.monitor.finance.FinanceManager
-import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.ui.live.DAY_MS
@@ -166,7 +165,14 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         val todayStr = LocalDate.now().toString()
         val weekStr = LocalDate.now().minusDays(6).toString()
         val monthStr = LocalDate.now().minusDays(29).toString()
-        val transactions = finance.getRecentTransactions(TRANSACTION_LIMIT)
+        // 收支一律走 SQL SUM：原实现取「最近 500 笔」再按日期过滤，30 天内超过 500 笔时
+        // 被截掉的恰好是最旧那批，月度金额静默偏低且界面无异常提示。
+        val todayExpense = finance.sumByDateRange(todayStr, todayStr, expense = true)
+        val todayIncome = finance.sumByDateRange(todayStr, todayStr, expense = false)
+        val weekExpense = finance.sumByDateRange(weekStr, todayStr, expense = true)
+        val weekIncome = finance.sumByDateRange(weekStr, todayStr, expense = false)
+        val monthExpense = finance.sumByDateRange(monthStr, todayStr, expense = true)
+        val monthIncome = finance.sumByDateRange(monthStr, todayStr, expense = false)
 
         val weekSkips = week.filter { it.action == ACTION_AD_SKIPPED }
 
@@ -197,8 +203,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             todayEventCount = today.size,
             todaySkipCount = today.count { it.action == ACTION_AD_SKIPPED },
             todayActiveMinutes = usageMinutes(today),
-            todayExpense = sumBy(transactions, todayStr, todayStr, true),
-            todayIncome = sumBy(transactions, todayStr, todayStr, false),
+            todayExpense = todayExpense,
+            todayIncome = todayIncome,
             yesterdayEventCount = yesterday.size,
             yesterdaySkipCount = yesterday.count { it.action == ACTION_AD_SKIPPED },
             yesterdayActiveMinutes = usageMinutes(yesterday),
@@ -212,8 +218,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             weekEventCount = week.size,
             weekSkipCount = weekSkips.size,
             weekActiveMinutes = usageMinutes(week),
-            weekExpense = sumBy(transactions, weekStr, todayStr, true),
-            weekIncome = sumBy(transactions, weekStr, todayStr, false),
+            weekExpense = weekExpense,
+            weekIncome = weekIncome,
             dailyEventCounts7 = dailyBuckets(week, weekStart, 7),
             dailySkipCounts7 = dailyBuckets(weekSkips, weekStart, 7),
             dailyActiveMinutes7 = dailyUsageMinutes(week, weekStart, 7),
@@ -223,8 +229,8 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             monthEventCount = month.size,
             monthSkipCount = month.count { it.action == ACTION_AD_SKIPPED },
             monthActiveMinutes = usageMinutes(month),
-            monthExpense = sumBy(transactions, monthStr, todayStr, true),
-            monthIncome = sumBy(transactions, monthStr, todayStr, false),
+            monthExpense = monthExpense,
+            monthIncome = monthIncome,
             dailyActiveMinutes30 = dailyUsageMinutes(month, monthStart, 30),
             typeSlices30 = slices(month),
             prevWeekEventCount = prevWeekEvents,
@@ -273,17 +279,11 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             .entries.sortedByDescending { it.value }.take(SLICE_LIMIT)
             .map { TypeSlice(recordTypeLabel(it.key), it.value) }
 
-    /** [expense] = true 取支出，false 取收入；日期为 ISO "yyyy-MM-dd"，字符串比较即时间序。 */
-    private fun sumBy(list: List<Transaction>, from: String, to: String, expense: Boolean): Double =
-        list.filter { (if (expense) it.isExpense else it.isIncome) && it.date >= from && it.date <= to }
-            .sumOf { it.amount }
-
     private companion object {
         const val REFRESH_MS = 5_000L
         const val RECENT_LIMIT = 3
         const val SLICE_LIMIT = 7
         const val TOP_LIMIT = 3
-        const val TRANSACTION_LIMIT = 500
         const val ACTION_AD_SKIPPED = "AD_SKIPPED"
         const val UNKNOWN_APP = "未知应用"
     }
