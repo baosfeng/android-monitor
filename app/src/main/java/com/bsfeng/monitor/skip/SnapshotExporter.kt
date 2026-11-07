@@ -29,6 +29,14 @@ object SnapshotExporter {
     /** 快照输出目录名（相对 filesDir） */
     private const val SNAPSHOT_DIR_NAME = "snapshots"
 
+    /**
+     * 只保留最近 N 份快照。
+     *
+     * 快照内容是**屏幕原文**（聊天、支付页、通知文案），无上限囤在 files/ 里等于长期留隐私副本，
+     * 而且会随导出次数无限膨胀。排查用的快照留 20 份够翻一阵了。
+     */
+    private const val MAX_SNAPSHOTS = 20
+
     /** JSON 缩进空格数 */
     private const val INDENT_SPACES = 2
 
@@ -89,6 +97,7 @@ object SnapshotExporter {
                 Log.e(TAG, "创建快照目录失败: ${dir.absolutePath}")
                 return null
             }
+            pruneSnapshots(dir)
             val file = File(dir, "${System.currentTimeMillis()}.json")
             file.writeText(toJson(root, packageName, className))
             Log.i(TAG, "快照已导出: ${file.absolutePath}")
@@ -97,6 +106,17 @@ object SnapshotExporter {
             Log.e(TAG, "导出当前页面快照失败", e)
             null
         }
+    }
+
+    /** 按修改时间保留最近 [MAX_SNAPSHOTS] 份；目录不可读时静默跳过（导出本身不该因此失败）。 */
+    private fun pruneSnapshots(dir: File) {
+        runCatching {
+            val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: return
+            if (files.size < MAX_SNAPSHOTS) return
+            files.sortedByDescending { it.lastModified() }
+                .drop(MAX_SNAPSHOTS - 1)
+                .forEach { it.delete() }
+        }.onFailure { Log.w(TAG, "清理旧快照失败", it) }
     }
 
     /**
