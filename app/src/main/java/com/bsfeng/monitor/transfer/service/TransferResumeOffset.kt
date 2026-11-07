@@ -27,11 +27,12 @@ internal object TransferResumeOffset {
         fileId: String,
         declaredSize: Long,
         memoryReceived: Long,
+        identity: String? = null,
     ): Result {
         if (declaredSize > 0L && memoryReceived >= declaredSize) {
-            return Result(offset = declaredSize, part = StreamCopier.partFile(partDir, fileId))
+            return Result(offset = declaredSize, part = StreamCopier.partFile(partDir, fileId, identity))
         }
-        val part = StreamCopier.partFile(partDir, fileId)
+        val part = StreamCopier.partFile(partDir, fileId, identity)
         if (!part.exists()) return Result(offset = 0L, part = part)
         val length = part.length()
         if (length <= declaredSize) return Result(offset = length, part = part)

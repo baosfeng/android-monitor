@@ -88,6 +88,8 @@ internal fun TransferEngine.resumableOffset(incoming: IncomingFile): Long {
         fileId = incoming.file.fileId,
         declaredSize = incoming.file.size,
         memoryReceived = incoming.received,
+        // 用声明 sha256 当分片身份：fileId 是会话内序号（恒为 f1/f2），跨会话会撞名
+        identity = incoming.file.sha256,
     )
     incoming.part = result.part
     return result.offset

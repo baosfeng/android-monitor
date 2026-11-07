@@ -95,10 +95,19 @@ object StreamCopier {
         digest.update(bytes, 0, length)
     }
 
-    /** `.part` 临时文件（按 `fileId` 命名，重启后可续传）。 */
-    fun partFile(dir: File, fileId: String): File {
+    /**
+     * `.part` 临时文件（重启后可续传）。
+     *
+     * @param identity 文件身份（声明 sha256）：不同文件的 fileId 都是 f1/f2/… 这种会话内序号，
+     *   只用 fileId 命名会让上一个会话留下的 `f1.part` 被当成新会话第 1 个文件的已收进度 ——
+     *   发送端从中间续传、接收端接着旧分片追加，sha256 必然不符，且重传仍失败（分片还在）。
+     *   带上身份后：同一文件重传照常续传，不同文件各用各的分片。
+     *   传 null 表示不区分（仅供单元测试与不需要续传的场景）。
+     */
+    fun partFile(dir: File, fileId: String, identity: String? = null): File {
         require(fileId.isNotBlank()) { "fileId 不能为空" }
-        return File(dir, sanitizeFileName(fileId) + PART_SUFFIX)
+        val suffix = identity?.takeIf { it.isNotBlank() }?.let { "-" + it.take(16) } ?: ""
+        return File(dir, sanitizeFileName(fileId) + suffix + PART_SUFFIX)
     }
 
     /**
