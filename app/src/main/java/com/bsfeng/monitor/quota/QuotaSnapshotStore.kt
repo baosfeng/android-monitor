@@ -28,6 +28,10 @@ import org.json.JSONObject
 interface QuotaSnapshotCache {
     fun load(providerId: String): QuotaSnapshot?
     fun save(snapshot: QuotaSnapshot)
+
+    /** 清掉某个 provider 的快照：用户断开凭据后不能继续回显旧数字。 */
+    fun clear(providerId: String)
+
     fun clear()
 }
 
@@ -35,6 +39,7 @@ interface QuotaSnapshotCache {
 object NoQuotaSnapshotCache : QuotaSnapshotCache {
     override fun load(providerId: String): QuotaSnapshot? = null
     override fun save(snapshot: QuotaSnapshot) = Unit
+    override fun clear(providerId: String) = Unit
     override fun clear() = Unit
 }
 
@@ -54,6 +59,16 @@ class QuotaSnapshotStore(context: Context) : QuotaSnapshotCache {
         prefs.edit {
             putString(KEY_PREFIX + snapshot.providerId, QuotaSnapshotJson.encode(snapshot))
         }
+    }
+
+    /**
+     * 按 provider 清快照（断开凭据时用）。
+     *
+     * 为什么不能只清凭据：仓库启动与重进页面都会读回快照并标 stale，
+     * 凭据没了但快照还在，卡片会继续显示上一次的额度数字，看起来像「断开没生效」。
+     */
+    override fun clear(providerId: String) {
+        prefs.edit { remove(KEY_PREFIX + providerId) }
     }
 
     override fun clear() {

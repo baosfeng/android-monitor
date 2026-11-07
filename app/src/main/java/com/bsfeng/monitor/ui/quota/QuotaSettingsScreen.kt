@@ -118,6 +118,8 @@ fun QuotaSettingsScreen(
     val savingProviderId by viewModel.savingProviderId.collectAsStateWithLifecycle()
     val saveErrors by viewModel.saveErrors.collectAsStateWithLifecycle()
     var pendingCollapseId by remember { mutableStateOf<String?>(null) }
+    // 收行的两个来源：保存（成功收起 / 失败留展开）与清除（成功后收起并 toast）
+    var pendingClearId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(savingProviderId, saveErrors, pendingCollapseId) {
         val id = pendingCollapseId ?: return@LaunchedEffect
         when (saveRowState(savingProviderId, id, saveErrors[id])) {
@@ -127,6 +129,19 @@ fun QuotaSettingsScreen(
             QuotaSaveRowState.COLLAPSE -> {
                 pendingCollapseId = null
                 expandedId = null
+            }
+        }
+    }
+    // 清除沿用同一套收行判据：在途等、失败留展开就地提示、成功收起 + 一次 toast
+    LaunchedEffect(savingProviderId, saveErrors, pendingClearId) {
+        val id = pendingClearId ?: return@LaunchedEffect
+        when (saveRowState(savingProviderId, id, saveErrors[id])) {
+            QuotaSaveRowState.WAIT -> Unit
+            QuotaSaveRowState.KEEP_OPEN -> pendingClearId = null
+            QuotaSaveRowState.COLLAPSE -> {
+                pendingClearId = null
+                expandedId = null
+                toast.show(CLEAR_CREDENTIALS_DONE)
             }
         }
     }
@@ -170,6 +185,10 @@ fun QuotaSettingsScreen(
                                     // 不在这里立即收行：等保存 + 查询有结果再决定（失败要留展开就地提示）
                                     pendingCollapseId = info.id
                                     viewModel.onSaveCredentialsFor(info.id, balance, usage)
+                                },
+                                onClear = {
+                                    pendingClearId = info.id
+                                    viewModel.onClearCredentialsFor(info.id)
                                 },
                                 saving = savingProviderId == info.id,
                                 saveError = saveErrors[info.id],

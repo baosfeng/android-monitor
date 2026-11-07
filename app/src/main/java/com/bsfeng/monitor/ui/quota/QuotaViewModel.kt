@@ -1,17 +1,10 @@
 package com.bsfeng.monitor.ui.quota
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewModelScope
-import com.bsfeng.monitor.MonitorApp
-import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
-import com.bsfeng.monitor.domain.quota.QuotaProvider
 import com.bsfeng.monitor.domain.quota.QuotaRange
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaRepository
@@ -25,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 
@@ -103,17 +95,18 @@ class QuotaViewModel(
     val refreshHours: StateFlow<Int> = _refreshHours.asStateFlow()
 
     /**
-     * 正在保存凭据 / 查询的 provider（设置页据此把「保存并查询」锁一次）。
+     * 凭据的保存 / 清除：在途锁、失败原因、完成信号都在 [QuotaCredentialActions] 里。
      *
-     * 同一时刻只有一行展开，所以用单值而不是集合：在途期间不再接受任何一行的保存请求
-     * （锚点 s19 · 连点只存一次）。
+     * 两者共用同一把在途锁（同一时刻只有一行展开）：允许交叉连点会出现
+     * 「保存请求在跑时清除，随后保存成功又把凭据写回」的竞态。
      */
-    private val _savingProviderId = MutableStateFlow<String?>(null)
-    val savingProviderId: StateFlow<String?> = _savingProviderId.asStateFlow()
+    private val credentialActions = QuotaCredentialActions(repository, viewModelScope)
 
-    /** 上次保存后就地提示的失败原因（按 provider）；重新保存或保存成功时清掉。 */
-    private val _saveErrors = MutableStateFlow<Map<String, String>>(emptyMap())
-    val saveErrors: StateFlow<Map<String, String>> = _saveErrors.asStateFlow()
+    /** 正在保存 / 清除凭据的 provider（设置页据此把按钮锁一次）。 */
+    val savingProviderId: StateFlow<String?> = credentialActions.savingProviderId
+
+    /** 上次操作后就地提示的失败原因（按 provider）；重新保存或成功时清掉。 */
+    val saveErrors: StateFlow<Map<String, String>> = credentialActions.errors
 
     /** 进页面时拉一次（repository 内部 60 秒节流，切 Tab 不会打满限流）。 */
     fun onProviderVisible() {
@@ -196,7 +189,7 @@ class QuotaViewModel(
         val id = _selectedProviderId.value
         viewModelScope.launch(Dispatchers.IO) {
             val provider = repository.provider(id) ?: return@launch
-            saveFor(provider, balanceValue, usageValue)
+            saveProviderCredentials(repository, provider, balanceValue, usageValue)
         }
     }
 
@@ -207,50 +200,18 @@ class QuotaViewModel(
      * 完成信号（成功后收起展开行，失败则留展开并保留输入，见 [saveRowState]）。
      */
     fun onSaveCredentialsFor(providerId: String, balanceValue: String?, usageValue: String?) {
-        if (_savingProviderId.value != null) return
-        _savingProviderId.value = providerId
-        _saveErrors.update { it - providerId }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val provider = repository.provider(providerId)
-                if (provider == null) {
-                    _saveErrors.update { it + (providerId to "provider 未接入") }
-                    return@launch
-                }
-                val failure = runCatching { saveFor(provider, balanceValue, usageValue) }.exceptionOrNull()
-                if (failure != null) {
-                    _saveErrors.update { it + (providerId to (failure.message ?: "保存失败")) }
-                    return@launch
-                }
-                // 凭据写成功但随后的查询失败（如 Key 无效）：数据层的结论就是这一行的结论
-                repository.state(providerId).errorMessage?.let { message ->
-                    _saveErrors.update { it + (providerId to message) }
-                }
-            } finally {
-                _savingProviderId.value = null
-            }
-        }
+        credentialActions.save(providerId, balanceValue, usageValue)
     }
 
     /**
-     * 保存凭据。
+     * 设置页断开某个 provider：清凭据 + 清快照 + 状态回落到「未配置」。
      *
-     * 两种凭据可能同属一个类型（DeepSeek 的余额与用量共用平台登录令牌）：
-     * 这时只写一次，否则「先写令牌、再写空串」会把刚存的令牌抹掉。
+     * 与保存共用同一把在途锁与同一份失败原因；成功后由设置页收起该行并给一次 toast（见 [saveRowState]）。
      */
-    private suspend fun saveFor(provider: QuotaProvider, balanceValue: String?, usageValue: String?) {
-        val balanceKind = provider.balanceCredentialKind
-        val usageKind = provider.usageCredentialKind
-        val sameKind = usageKind == balanceKind
-        val balance = balanceValue?.trim().orEmpty()
-        val usage = usageValue?.trim().orEmpty()
-        if (balance.isNotEmpty()) {
-            repository.saveCredential(provider.id, balanceKind, balance)
-        }
-        if (!sameKind && usageKind != null && usage.isNotEmpty()) {
-            repository.saveCredential(provider.id, usageKind, usage)
-        }
+    fun onClearCredentialsFor(providerId: String) {
+        credentialActions.clear(providerId)
     }
+
 
     /** 计费模务只影响展示口径，不触发重拉：同一份数据两种排版，没必要多打一次接口。 */
     fun onOllamaPlanChange(mode: OllamaPlanMode) {
@@ -314,24 +275,3 @@ class QuotaViewModel(
 internal fun shouldSyncRefreshMinutes(changedProviderId: String, selectedProviderId: String): Boolean =
     changedProviderId == selectedProviderId
 
-/**
- * ViewModel 工厂：从 `ServiceContainer` 取已装配的 [QuotaRepository]。
- *
- * 不在 VM 里 `QuotaRepository(QuotaProviderRegistry(), ...)` 新建一份：注册表是空的，
- * 页面会永远停在「未接入」。`quotaRepository` 由 `ServiceContainer` 在启动装配时
- * 建好（provider 注册 + Keystore 凭据 + 预警通知）。
- */
-object QuotaViewModelFactory : ViewModelProvider.Factory {
-
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        throw UnsupportedOperationException("QuotaViewModel 需要 Application，请通过 CreationExtras 创建")
-    }
-
-    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
-        val app = checkNotNull(extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]) {
-            "缺少 Application：无法定位 ServiceContainer"
-        }
-        @Suppress("UNCHECKED_CAST")
-        return QuotaViewModel(app, app.serviceContainer.quotaRepository) as T
-    }
-}

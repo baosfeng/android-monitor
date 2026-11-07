@@ -122,6 +122,8 @@ internal const val UNAVAILABLE_HINT: String = "无公开接口 · 手动录入"
  * - 整行按下 120ms 缩到 0.96（--dur-press）+ LIGHT；展开 220ms / 收起 150ms（--dur-overlay-in / out）；
  * - 收起后焦点回本行：展开区卸载会把焦点一起带走，走 pendingFocus 等重组收起后再请求；
  * - 保存期间按钮锁一次（连点只存一次），失败保留输入并就地提示（见 [saveRowState]）；
+ * - **已配置**的家在保存按钮下方多一条「清除凭据」（danger 文字按钮），先二次确认再断开；
+ *   未配置的家不出现这条入口（判据见 [credentialClearAction]）；保存与清除共用同一把在途锁；
  * - **未接入的行**（[available] = false）：不展开、不填凭据、不发请求，按 [providerRowAffordance]
  *   渲染禁用态 —— 避免用户对着假输入框白填。
  *
@@ -138,6 +140,8 @@ internal fun ProviderSettingsRow(
     expanded: Boolean,
     onToggle: () -> Unit,
     onSave: (balance: String, usage: String) -> Unit,
+    /** 确认断开后的回调：清凭据 + 清快照 + 状态回落（见 [QuotaViewModel.onClearCredentialsFor]）。 */
+    onClear: () -> Unit = {},
     intervalMinutes: Int = QuotaSettings.defaultMinutesFor(info.id),
     onIntervalChange: (Int) -> Unit = {},
     /** 保存 + 查询在途（设置页把 ViewModel 的在途锁下传）。 */
@@ -158,6 +162,10 @@ internal fun ProviderSettingsRow(
     var usage by remember(info.id, expanded) { mutableStateOf("") }
     val needsUsageRow = info.usageKind != null && info.usageKind != info.balanceKind
     val affordance = providerRowAffordance(available, unavailableBadge)
+    // 清除入口：已配置才出现，在途（保存或清除）不可点 —— 判据在 QuotaCredentialClear.kt 且有单测
+    val clearAction = credentialClearAction(configured = info.connected && affordance.interactive, busy = saving)
+    // 破坏性操作先确认：一次误触就删掉本机唯一一份 Key，没有撤销路径
+    var confirmClear by remember(info.id) { mutableStateOf(false) }
     // 未接入时永远不展开：即便调用方把 expanded 传成 true（例如状态残留），也不给出可填的假输入框
     val shownExpanded = expanded && affordance.interactive
     // 收起后才把焦点送回本行：此刻展开区还在树里，零帧请求会落到即将卸载的节点上
@@ -273,6 +281,13 @@ internal fun ProviderSettingsRow(
                         onSave(balance.trim(), usage.trim())
                     },
                 )
+                if (clearAction.visible) {
+                    Spacer(Modifier.height(t.space2))
+                    ClearCredentialButton(
+                        enabled = clearAction.enabled,
+                        onClick = { confirmClear = true },
+                    )
+                }
                 if (saveError != null) {
                     Spacer(Modifier.height(t.space2))
                     // 就地提示：保存 / 查询失败时输入保留，改一改再点保存即可（锚点 s19 边界）
@@ -301,6 +316,16 @@ internal fun ProviderSettingsRow(
             }
         }
     }
+
+    // 二次确认：写清后果（删什么、删完要做什么），确认键 danger 语义且不比「取消」更显眼
+    ClearCredentialsConfirmDialog(
+        visible = confirmClear,
+        onDismiss = { confirmClear = false },
+        onConfirm = {
+            confirmClear = false
+            onClear()
+        },
+    )
 }
 
 /** 保存按钮（主色 + 卡片内宽度；按下 0.96 + SUCCESS 触觉，在途 / 空输入时禁用）。 */
