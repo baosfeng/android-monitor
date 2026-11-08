@@ -2029,6 +2029,17 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   .s04-in,.s04-mlabel.is-bump{animation:none!important}
 }
 </style>
+/* 子 Tab：交易明细 / 统计汇总 */
+#s04 .od-ctl{display:none}
+#s04-tab-tx:checked ~ .content .s04-tabbar > :nth-child(1),
+#s04-tab-stats:checked ~ .content .s04-tabbar > :nth-child(2){
+  background:var(--surface);color:var(--fg);font-weight:600;box-shadow:var(--elev-1);
+}
+#s04 .s04-pane{display:none}
+#s04-tab-tx:checked ~ .content .s04-pane[data-tab="tx"],
+#s04-tab-stats:checked ~ .content .s04-pane[data-tab="stats"]{display:block}
+.s04-tabbar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:4px;border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 5%,transparent);margin-bottom:var(--space-3)}
+.s04-tabbar > label{display:inline-flex;align-items:center;justify-content:center;min-height:var(--tap-min);border:0;border-radius:var(--radius-pill);background:transparent;color:var(--muted);font:inherit;font-size:var(--text-sm);cursor:pointer}
 
 <style data-for="s05">
 /* ═══ s05 · 新增 / 编辑交易 ═══ */
@@ -4604,6 +4615,9 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 </section>
 
 <section class="screen" data-screen="s04" data-title="记账" data-od-id="screen-s04">
+  <input class="od-ctl" type="radio" name="s04-tab" id="s04-tab-tx" checked />
+  <input class="od-ctl" type="radio" name="s04-tab" id="s04-tab-stats" />
+
   <div class="content" data-od-id="s04-content">
 
     <div class="screen-head s04-in" style="--i:0" data-state-hide="loading empty error edge" data-od-id="s04-head">
@@ -4628,6 +4642,14 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
     </div>
 
+    <div class="pad s04-in" style="--i:1b">
+      <div class="s04-tabbar" role="tablist" aria-label="记账子 Tab">
+        <label for="s04-tab-tx">交易明细</label>
+        <label for="s04-tab-stats">统计汇总</label>
+      </div>
+    </div>
+
+<div class="s04-pane" data-tab="tx">
     <div class="pad mt-4" data-state-hide="loading empty error edge" data-od-id="s04-list">
       <div class="sec-head"><h2 class="h2">交易明细</h2><span class="meta" id="s04-listmeta">最近 3 天 · 8 笔</span></div>
 
@@ -4687,6 +4709,9 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
     </div>
 
 
+    </div>
+
+<div class="s04-pane" data-tab="stats">
     <div class="pad mt-3 s04-in" style="--i:2" data-state-hide="loading empty error edge">
       <div class="card glass s04-kpis" data-od-id="s04-kpis">
         <div class="s04-kcol">
@@ -4734,6 +4759,8 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="s04-entry-s">已用 ¥2,468 / ¥4,000</span>
         </button>
       </div>
+    </div>
+
     </div>
 
     <div class="pad" data-state-when="loading" data-od-id="s04-loading">
