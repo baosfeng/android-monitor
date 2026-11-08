@@ -25,6 +25,7 @@ import com.bsfeng.monitor.record.UsageTracker
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.skip.SkipRuleManager
 import com.bsfeng.monitor.util.DebugConfig
+import android.util.Log
 
 /**
  * 手动 DI 容器。
@@ -105,14 +106,25 @@ class ServiceContainer(private val app: Application) {
 
     val deviceRepository: DeviceRepository by lazy { DeviceRepositoryImpl() }
 
+    /**
+     * APP_USAGE 落库通道：回调在主线程触发（无障碍 1 秒轮询），写库必须挪到 IO。
+     *
+     * 口径见 [UsageRecordSink]：入队即返回、单并发保序、异常不外抛。
+     * `UsageTracker` 本身仍保持同步回调语义（它的 9 个纯 JVM 用例同步断言 records）。
+     */
+    private val usageRecordSink: UsageRecordSink by lazy {
+        UsageRecordSink(
+            write = { record -> recordStore.insertOrMerge(record) },
+            onError = { e -> Log.w("ServiceContainer", "APP_USAGE 落库失败（跳过本条，不影响采集）", e) },
+        )
+    }
+
     init {
         DebugConfig.init()
         // 解决 UsageTracker 与 RecordCollector 的循环依赖：
         // UsageTracker 生成 APP_USAGE 记录后，通过回调写入 RecordStore
-        // 同 App 5 分钟内多次使用合并为一条（累加 duration）
-        usageTracker.setOnRecordCallback { record ->
-            recordStore.insertOrMerge(record)
-        }
+        // 同 App 5 分钟内多次使用合并为一条（累加 duration）。
+        usageTracker.setOnRecordCallback { record -> usageRecordSink.submit(record) }
     }
 }
 

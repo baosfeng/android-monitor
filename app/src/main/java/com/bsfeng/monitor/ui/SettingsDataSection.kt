@@ -26,6 +26,7 @@ import com.bsfeng.monitor.backup.BackupOutcome
 import com.bsfeng.monitor.backup.BackupScheduler
 import com.bsfeng.monitor.backup.RestoreApplyOutcome
 import com.bsfeng.monitor.backup.RestoreOutcome
+import com.bsfeng.monitor.backup.prepareRestoreOnIo
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
@@ -169,8 +170,11 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
                 restoreBusy = true
                 rt.toast.show("正在校验备份包…")
                 rt.scope.launch {
-                    // URI 读取在 IO 线程里注入给编排层（RestoreIntake），校验失败不碰现有数据
-                    val outcome = BackupManager(rt.context).prepareRestore {
+                    // 准备阶段整段走 IO（prepareRestoreOnIo）：SAF 流 copyTo 落盘 → 整包 pre-restore
+                    // 备份（全库打包 + sha256）→ 解包 + 全量校验，几十 MB 时留在主线就是界面冻死。
+                    // 调度在 backup/RestorePreparation 里统一收口，并有单测盯住实际执行线程。
+                    val outcome = prepareRestoreOnIo(rt.context) {
+                        // URI 读取在 IO 线程里注入给编排层（RestoreIntake），校验失败不碰现有数据
                         openRestoreStream(rt.context, uri)
                     }
                     when (outcome) {
