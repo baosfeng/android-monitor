@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.ui.live.DAY_MS
+import com.bsfeng.monitor.ui.live.bucketizeDaily
 import com.bsfeng.monitor.ui.live.startOfDay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -199,14 +200,8 @@ class AdViewModel : ViewModel() {
         }
     }
 
-    private fun dailyBuckets(records: List<SkipRecord>, rangeStart: Long): List<Float> {
-        val buckets = FloatArray(AD_WINDOW_DAYS)
-        records.forEach { record ->
-            val idx = ((record.timestampMs - rangeStart) / DAY_MS).toInt()
-            if (idx in 0 until AD_WINDOW_DAYS) buckets[idx] += 1f
-        }
-        return buckets.toList()
-    }
+    private fun dailyBuckets(records: List<SkipRecord>, rangeStart: Long): List<Float> =
+        bucketizeDaily(records.map { it.timestampMs }, rangeStart, AD_WINDOW_DAYS)
 
     private companion object {
         const val REFRESH_MS = 3_000L
