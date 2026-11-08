@@ -442,13 +442,7 @@ val coverageExcludes: List<String> = pureComposableSources.map { "$it" + "Kt*.cl
 //    - QuotaAggregateList.rankedRowTagOf / excludedRowTagOf：锚点映射
 //    - QuotaSettingsScreen.providerRowTagOf / refreshChipTagOf：锚点映射
 //    - QuotaStateViews.QuotaUsageSlot / quotaUsageSlot：空态决策
-val nonComposableDebt = mapOf(
-    "com/bsfeng/monitor/ui/AdScreen" to listOf("monthDayLabel"),
-    "com/bsfeng/monitor/ui/components/WindowOverlay" to listOf("findDialogWindow"),
-    "com/bsfeng/monitor/ui/quota/QuotaAggregateList" to listOf("rankedRowTagOf", "excludedRowTagOf"),
-    "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen" to listOf("providerRowTagOf", "refreshChipTagOf"),
-    "com/bsfeng/monitor/ui/quota/QuotaStateViews" to listOf("QuotaUsageSlot", "quotaUsageSlot"),
-)
+val nonComposableDebt = emptyMap<String, List<String>>()
 
 // 清单口径的 preBuild 硬校验：清单里每个文件只能有 @Composable 顶层声明（val / const val 例外，
 // 那是 token 常量不是逻辑）。命中 nonComposableDebt 的声明放行，但**只允许减少**：

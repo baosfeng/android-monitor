@@ -309,14 +309,6 @@ fun QuotaSettingsScreen(
     }
 }
 
-/** provider 行锚点（原型 s19 逐字）：行本体的写区不归本屏，锚点按 provider id 逐字映射。 */
-private fun Modifier.providerRowTagOf(providerId: String): Modifier = when (providerId) {
-    "ollama" -> testTag("s19-provider-ollama")
-    "deepseek" -> testTag("s19-provider-deepseek")
-    "opencode-go" -> testTag("s19-provider-opencode")
-    "opendesign" -> testTag("s19-provider-opendesign")
-    else -> this
-}
 
 /** 分组容器：分组小标题 + 卡片底 + 行间分割线（与设置页 iOS 分组一致）。 */
 @Composable
@@ -367,14 +359,6 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** 后台刷新四个选项的锚点（与锚点账本逐字一致）。 */
-private fun Modifier.refreshChipTagOf(hours: Int): Modifier = when (hours) {
-    0 -> testTag("s19-refresh-off")
-    1 -> testTag("s19-refresh-1h")
-    3 -> testTag("s19-refresh-3h")
-    6 -> testTag("s19-refresh-6h")
-    else -> this
-}
 
 /** Ollama 计费模式：用户手选、持久化；页面只负责把选择交给 ViewModel。 */
 @Composable

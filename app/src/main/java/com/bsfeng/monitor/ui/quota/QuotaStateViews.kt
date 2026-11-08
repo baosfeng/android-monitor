@@ -348,27 +348,6 @@ fun QuotaUsageUnavailableCard(
 }
 
 /** 用量区该渲染哪一块：账本里「有用量数据」才出用量卡，其余落点各有各的说法。 */
-internal enum class QuotaUsageSlot { DATA, LOADING, FAILED, MISSING_CREDENTIAL, NONE }
-
-/**
- * 用量区的落点判定。
- *
- * 只看「supportsUsage && usage == null」就引导「再填一条用量凭据」是假的：凭据早就配好、
- * 只是这次请求失败时，那句引导会把人送去重填一个本来没问题的令牌。
- * 已配置凭据但没数据时，先按「查询中 / 查询失败」处理，绝不再引导重填。
- */
-internal fun quotaUsageSlot(
-    hasUsage: Boolean,
-    supportsUsage: Boolean,
-    usageConfigured: Boolean,
-    hasError: Boolean,
-): QuotaUsageSlot = when {
-    hasUsage -> QuotaUsageSlot.DATA
-    !supportsUsage -> QuotaUsageSlot.NONE
-    !usageConfigured -> QuotaUsageSlot.MISSING_CREDENTIAL
-    hasError -> QuotaUsageSlot.FAILED
-    else -> QuotaUsageSlot.LOADING
-}
 
 /** 用量查询中：紧凑骨架（余额卡已有数据，这里只缺用量，不整屏切骨架）。 */
 @Composable

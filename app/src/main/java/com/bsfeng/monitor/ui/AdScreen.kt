@@ -650,8 +650,4 @@ private fun AdEdgeContent() {
     DetailRow("命中规则", PLACEHOLDER, first = true)
 }
 
-/** 卡头区间文案：原型「10 月 8 日 – 10 月 14 日」。 */
-private fun monthDayLabel(timestamp: Long): String {
-    val date = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-    return date.monthValue.toString() + " 月 " + date.dayOfMonth + " 日"
-}
+

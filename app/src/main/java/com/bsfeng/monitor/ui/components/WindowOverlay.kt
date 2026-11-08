@@ -179,13 +179,3 @@ private fun ImmersiveDialogWindow() {
     }
 }
 
-/**
- * 沿 View 树向上找承载本视图的 Dialog 窗口。
- *
- * Compose 的 `DialogLayout` 实现了 [DialogWindowProvider]（`ui-android` 1.7.x），
- * 在 Dialog 内容里它就是 `LocalView` 本身或其祖先，因此从当前 View 起向上遍历最稳。
- */
-private tailrec fun View.findDialogWindow(): Window? = when (this) {
-    is DialogWindowProvider -> window
-    else -> (parent as? View)?.findDialogWindow()
-}
