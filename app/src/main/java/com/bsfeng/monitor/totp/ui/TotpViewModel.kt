@@ -14,14 +14,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.domain.totp.OtpauthParseResult
 import com.bsfeng.monitor.domain.totp.TotpAccount
-import com.bsfeng.monitor.totp.TotpAccountDao
 import com.bsfeng.monitor.totp.TotpBackup
 import com.bsfeng.monitor.totp.TotpBackupEntry
 import com.bsfeng.monitor.totp.TotpClipboard
-import com.bsfeng.monitor.totp.TotpDatabaseHelper
 import com.bsfeng.monitor.totp.TotpQrDecoder
 import com.bsfeng.monitor.totp.TotpRepository
-import com.bsfeng.monitor.totp.TotpSecretStore
 import com.bsfeng.monitor.totp.TotpSettings
 import com.bsfeng.monitor.ui.components.FiveState
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +52,8 @@ data class TotpDetailDraft(
 /**
  * 验证器装配层。
  *
- * 构造分两条：默认构造器按手动 DI 拼数据层，测试构造器直接注入替身。
+ * 依赖一律从构造注入：生产由 [TotpViewModelFactory] 从 `ServiceContainer` 取
+ * （装配只发生一次，不在 VM 里现拼数据层），测试直接注入替身。
  * 所有写操作都在 [viewModelScope] 里执行，界面拿到的是不可变快照。
  */
 class TotpViewModel internal constructor(
@@ -67,18 +65,6 @@ class TotpViewModel internal constructor(
     private val backup: TotpBackup,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : AndroidViewModel(application) {
-
-    constructor(application: Application) : this(
-        application = application,
-        repository = TotpRepository(
-            dao = TotpAccountDao(TotpDatabaseHelper.getInstance(application)),
-            secrets = TotpSecretStore(application),
-        ),
-        settings = TotpSettings(application),
-        clipboard = TotpClipboard(application),
-        qrDecoder = TotpQrDecoder(),
-        backup = TotpBackup(),
-    )
 
     // ＝＝ 列表 ＝＝
 

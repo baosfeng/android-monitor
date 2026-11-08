@@ -138,8 +138,14 @@ class SubscriptionSourcesTest {
 
     @Test
     fun `同一地址映射到同一文件且不同地址不同`() {
-        assertEquals(manager.fileNameOf(urlA), manager.fileNameOf(urlA))
-        assertNotEquals(manager.fileNameOf(urlA), manager.fileNameOf(urlB))
+        // 与已知真值比对：文件名 = 前缀 + 地址 hashCode 的十六进制 + .json。
+        // 以前这里断言的是 fileNameOf(urlA) == fileNameOf(urlA)（同一表达式恒真），
+        // 把实现改成常量也照样绿——等于没测（基建审计 I13）。
+        val expected = SkipRuleManager.SUBSCRIPTION_FILE_PREFIX + Integer.toHexString(urlA.hashCode()) + ".json"
+        assertEquals(expected, manager.fileNameOf(urlA))
+        // 幂等：同一地址多次调用必须落到同一个文件，否则「更新」会新建一份而不是覆盖
+        assertEquals(expected, manager.fileNameOf(urlA))
+        assertNotEquals(expected, manager.fileNameOf(urlB))
     }
 
     @Test

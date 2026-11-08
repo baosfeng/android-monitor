@@ -8,12 +8,10 @@ import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.quota.ProviderAggregateInput
 import com.bsfeng.monitor.domain.quota.QuotaAggregator
-import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.quota.QuotaSnapshotStore
 import com.bsfeng.monitor.record.RecordStore
 import com.bsfeng.monitor.service.HeartbeatWatchdog
 import com.bsfeng.monitor.service.MonitorAccessibilityService
-import com.bsfeng.monitor.transfer.service.TransferEngineHolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -60,13 +58,14 @@ object WidgetDataProvider {
      *
      * 进度与剩余都用**当月实际支出**现算（不读 Budget.spentAmount）：那个字段是导入时的历史快照，
      * 直接展示会让进度条停在旧值上（与 FinanceManager.getMonthlyBudget 的 KDoc 同一结论）。
+     * 记账/互传实例一律从容器取，不在组件里另起单例入口。
      */
     suspend fun finance(context: Context): FinanceWidgetData = withContext(Dispatchers.IO) {
         val today = LocalDate.now()
         val yearMonth = String.format(Locale.US, "%04d-%02d", today.year, today.monthValue)
         val monthLabel = today.monthValue.toString() + " 月"
         runCatching {
-            val manager = FinanceManager.getInstance(context)
+            val manager = context.serviceContainer.financeManager
             val stats = manager.getMonthlyStats(yearMonth)
             val budgets = manager.getMonthlyBudget(yearMonth)
             val totalBudget = budgets.firstOrNull { it.isOverall && it.budgetAmount > 0.0 }?.budgetAmount
@@ -226,7 +225,7 @@ object WidgetDataProvider {
      */
     suspend fun transfer(context: Context): TransferWidgetData = withContext(Dispatchers.IO) {
         runCatching {
-            val engine = TransferEngineHolder.get(context)
+            val engine = context.serviceContainer.transferEngine
             val running = engine.running.value
             TransferWidgetData(
                 running = running,
