@@ -17,7 +17,8 @@ import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.flow.drop
 import com.bsfeng.monitor.record.RecordReceiver
-import com.bsfeng.monitor.service.scheduleAlarmCheck
+import com.bsfeng.monitor.record.WifiConnectionTracker
+import com.bsfeng.monitor.service.ensureAlarmCheck
 import com.bsfeng.monitor.skip.GkdSubscription
 import com.bsfeng.monitor.skip.SkipConfig
 import kotlinx.coroutines.CoroutineScope
@@ -50,8 +51,9 @@ class MonitorApp : Application() {
         container = ServiceContainer(this)
         registerRecordReceiver()
         registerWifiNetworkCallback()
-        // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度
-        scheduleAlarmCheck(this)
+        // 每分钟保活检查 + 周期上报(设备注册/心跳),开机后由 AlarmReceiver 自行恢复调度。
+        // 走 ensure：闹钟还在就不动 —— 无条件 setInexactRepeating 会把下次触发重锚到 now+30s。
+        ensureAlarmCheck(this)
         QuotaScheduler.reschedule(this)
         registerFinanceWidgetRefresh()
         syncFinanceCategoryCatalog()
@@ -130,35 +132,38 @@ class MonitorApp : Application() {
     /**
      * 使用 ConnectivityManager.NetworkCallback 监听 WiFi 实际连接状态，
      * 替代 WIFI_STATE_CHANGED_ACTION（后者监听的是 WiFi 硬件开关，在 HyperOS 上可能频繁误触发）。
+     *
+     * **onLost 不查 `getNetworkCapabilities`**：网络已被移除时该调用常返回 null，
+     * 原来据此判 WIFI 会让断开事件永久静默（不写 DISCONNECTED 也不复位 lastConnected →
+     * 重连时 `!lastConnected` 为假，CONNECTED 一起丢，直到进程重启）。
+     * 现在 WiFi 身份在 [ConnectivityManager.NetworkCallback.onCapabilitiesChanged] 里缓存，
+     * onLost 只读缓存 + lastConnected 兜底。
      */
     private fun registerWifiNetworkCallback() {
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        // 状态机本身是纯逻辑（record/WifiConnectionTracker），这里只负责取 capability 与 SSID
+        val tracker = WifiConnectionTracker<Network>(
+            onConnected = { ssid ->
+                container.recordCollector.onWifiChanged("CONNECTED", ssid, System.currentTimeMillis())
+            },
+            onDisconnected = {
+                container.recordCollector.onWifiChanged("DISCONNECTED", null, System.currentTimeMillis())
+            },
+        )
         val wifiCallback = object : ConnectivityManager.NetworkCallback() {
-            private var lastConnected = false
-            /** 跳过注册后的首次状态同步回调（防止 force-stop 后误记录"连接 WiFi"） */
-            private var isInitialSync = true
-
             override fun onAvailable(network: Network) {
-                val caps = connectivityManager.getNetworkCapabilities(network)
-                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true && !lastConnected) {
-                    lastConnected = true
-                    if (isInitialSync) {
-                        isInitialSync = false
-                        return  // 首次同步仅更新状态，不写记录
-                    }
-                    val ssid = getWifiSsid()
-                    container.recordCollector.onWifiChanged("CONNECTED", ssid, System.currentTimeMillis())
-                }
-                isInitialSync = false
+                val isWifi = connectivityManager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                tracker.onAvailable(network, isWifi) { getWifiSsid() }
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                tracker.onCapabilities(network, caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
             }
 
             override fun onLost(network: Network) {
-                val caps = connectivityManager.getNetworkCapabilities(network)
-                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true && lastConnected) {
-                    lastConnected = false
-                    container.recordCollector.onWifiChanged("DISCONNECTED", null, System.currentTimeMillis())
-                }
-                isInitialSync = false
+                // 不查 capabilities：网络已被移除时常返回 null，那会让断开事件永久静默
+                tracker.onLost(network)
             }
 
             private fun getWifiSsid(): String? {

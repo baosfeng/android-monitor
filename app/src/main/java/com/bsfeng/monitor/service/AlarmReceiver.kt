@@ -35,8 +35,9 @@ class AlarmReceiver : BroadcastReceiver() {
         val action = intent.action
         if (action != null && action != Intent.ACTION_BOOT_COMPLETED) return
         if (action == null && intent.component?.className != javaClass.name) return
-        // 系统重启后 AlarmManager 闹钟丢失,重新调度(重复调用会更新同一 PendingIntent,不会叠加)
-        scheduleAlarmCheck(context)
+        // 系统重启后 AlarmManager 闹钟丢失，这里只补排一次（已在位时是空操作）。
+        // **不能**无条件 scheduleAlarmCheck：那会把下一次触发重新锚到 30 秒后，等效周期腰斩成 30 秒。
+        ensureAlarmCheck(context)
         // 定期备份的闹钟同理：Restart 后补排一次（已在跑时是空操作，不会把触发时间往后推）
         BackupScheduler.ensureScheduled(context)
         QuotaScheduler.ensureScheduled(context)
@@ -169,19 +170,68 @@ internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
     }
 }
 
+/**
+ * 保活心跳的排班口径。
+ *
+ * 抽成独立对象是为了让「要不要排」能在纯 JVM 单测里断言（[AlarmReceiver] 本身依赖 Context）。
+ * 数字口径与 `docs/后台服务/概述.md` 一致：**首次 30 秒后，之后每 60 秒一次**。
+ */
+internal object HeartbeatAlarmSchedule {
+
+    /** 首个触发延迟：进程刚起来先让启动流程跑完，不在启动瞬间唤醒自己。 */
+    const val FIRST_DELAY_MS = 30_000L
+
+    /** 心跳周期：健康检查 / 桌面组件刷新 / 定位采样都搭这一条，改它要连文档一起改。 */
+    const val INTERVAL_MS = 60_000L
+
+    /** 与自动备份（7301）、额度刷新（7401）分开，互不覆盖。 */
+    const val REQUEST_CODE = 0
+
+    /**
+     * 只有「还没有这条闹钟」才排。
+     *
+     * `setInexactRepeating` 的 start 语义是「从现在起再等 [FIRST_DELAY_MS]」，
+     * 每次触发都排一次等于把周期腰斩成 30 秒（唤醒、定位、6 个组件刷新全翻倍）。
+     */
+    fun shouldSchedule(hasScheduledAlarm: Boolean): Boolean = !hasScheduledAlarm
+}
+
+/**
+ * 「心跳闹钟还在就什么都不做」—— 开机 / 进程重启后 AlarmManager 里的重复闹钟会丢。
+ *
+ * 与 [com.bsfeng.monitor.backup.BackupScheduler.ensureScheduled] 同口径：先 `FLAG_NO_CREATE` 查、
+ * 没有才 [scheduleAlarmCheck]。**所有补排入口都必须走这里**，别再直接调 [scheduleAlarmCheck]。
+ */
+fun ensureAlarmCheck(context: Context) {
+    val existing = PendingIntent.getBroadcast(
+        context,
+        HeartbeatAlarmSchedule.REQUEST_CODE,
+        Intent(context, AlarmReceiver::class.java),
+        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+    )
+    if (!HeartbeatAlarmSchedule.shouldSchedule(existing != null)) return
+    scheduleAlarmCheck(context)
+}
+
+/**
+ * 无条件排一次心跳（`now + FIRST_DELAY_MS` 起、每 [HeartbeatAlarmSchedule.INTERVAL_MS] 一次）。
+ *
+ * 会重新锚定首触发时刻，因此只在确认没有闹钟时调用，见 [ensureAlarmCheck]。
+ */
 fun scheduleAlarmCheck(context: Context) {
     val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val intent = Intent(context, AlarmReceiver::class.java)
     val pendingIntent = PendingIntent.getBroadcast(
-        context, 0, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        context,
+        HeartbeatAlarmSchedule.REQUEST_CODE,
+        Intent(context, AlarmReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     // 每 1 分钟检查一次保活状态
     alarmManager.setInexactRepeating(
         AlarmManager.RTC_WAKEUP,
-        System.currentTimeMillis() + 30_000,
-        60 * 1000L,  // 1 分钟心跳
-        pendingIntent
+        System.currentTimeMillis() + HeartbeatAlarmSchedule.FIRST_DELAY_MS,
+        HeartbeatAlarmSchedule.INTERVAL_MS,
+        pendingIntent,
     )
 }
