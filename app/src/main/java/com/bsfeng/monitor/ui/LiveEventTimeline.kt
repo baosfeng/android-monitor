@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -72,7 +73,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.util.Locale
 
-/** 时间列宽度（原型 .tl-item 时间列 46px）。 */
+/**
+ * 时间列的**最小**宽度（原型 .tl-item 时间列 46px），实际宽度由文本决定。
+ *
+ * 固定 46dp 在大字体（font_scale 1.3）下装不下等宽的「01:50」，末位被 Clip 静默裁掉，
+ * 用户会读到错误时间（实测「01:5」「01:2」）。改为下限：正常字号下文本宽度小于 46dp，
+ * 列宽仍是 46dp（与原设计逐像素一致）；字体放大时列按需变宽，行内后两列（space1 + weight(1f)）
+ * 自动让位，不产生位移。
+ */
 private val TL_TIME_COL_W = 46.dp
 
 /**
@@ -436,8 +444,10 @@ private fun LiveTimelineRow(
             color = t.muted,
             maxLines = 1,
             softWrap = false,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.width(TL_TIME_COL_W),
+            // 兜底用省略号而不是 Clip：真的放不下时用户看见「01:5…」就知道被截了，
+            // 而不是把截断后的时间当真值读
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(min = TL_TIME_COL_W),
         )
         Spacer(Modifier.width(t.space1))
         Column(Modifier.weight(1f)) {

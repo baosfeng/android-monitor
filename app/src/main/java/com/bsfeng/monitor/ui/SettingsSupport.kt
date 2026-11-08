@@ -48,16 +48,12 @@ internal fun notificationsEnabled(context: Context): Boolean =
 // （两段式，带运行时长）、仅状态场景用 accessibilityStatusText(...)、空态用 noEventEmptyText(...)。
 // s01 / s02 / s05 三屏同一数据源（AccessibilityStatus 三重判定）与同一措辞。
 
-/**
- * 本进程已运行的毫秒数（用于 s09 的「已运行 6 小时 12 分」）。
- *
- * 无障碍服务运行在 App 进程内、与服务实例同生命周期，而系统没有提供「服务绑定时刻」的公开 API
- * （AccessibilityServiceInfo 只有能力位与包名，无时间戳）。在「本 agent 不改 service/skip 等
- * 范围外文件」的约束下，进程启动至今是当前可得的最近似值：服务由系统绑定拉起进程时两者一致，
- * 用户先开 App、后授权时该值会略大于服务真实运行时长。
- * 若要精确到「服务运行时长」，需在 MonitorAccessibilityService 记录 onServiceConnected 时间戳
- * 并由状态层暴露（超出本文件范围）。
- */
+// 本进程存活时长（毫秒）—— 见下方 processUptimeMs() 与 formatUptime()。
+// 无障碍服务运行在 App 进程内、与服务实例同生命周期，而系统没有提供「服务绑定时刻」的公开 API
+// （AccessibilityServiceInfo 只有能力位与包名，无时间戳），因此进程启动至今是当前可得的最近似值：
+// 服务由系统绑定拉起进程时两者一致，用户先开 App、后授权时该值会略大于服务真实运行时长。
+// 若要精确到「服务运行时长」，需在 MonitorAccessibilityService 记录 onServiceConnected 时间戳
+// 并由状态层暴露（超出本文件范围）。文案因此写「本次启动 N 分钟」而不是「已运行」（ui/AccessibilityCopy.kt）。
 
 /**
  * 打开所选备份包的字节流。

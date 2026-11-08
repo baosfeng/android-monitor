@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
 // 设置二级页清单（s09 交互口径的页面层级）：一级页 5 组入口 + 1 组调试入口，
-// 「功能开关」页再下钻 6 个功能细则页 + 1 个桌面小组件页。
+// 「功能开关」页再下钻 N 个功能细则页（N = Feature.entries.size，见 settingsFeatureDetailPages）。
 //
 // ⚠️ name 会写进 MainContent 的 rememberSaveable（字符串），改名 = 升级后恢复状态失配：
 //   · GENERAL / FEATURE / DATA / ABOUT 是旧版本存过的名字，**只能换 title 换内容，不能换名字**
@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.bsfeng.monitor.feature.Feature
 
 /**
  * 设置二级页。
@@ -39,7 +40,10 @@ enum class SettingsSubPage(
 ) {
     // ── 一级页 6 组（顺序即入口卡的行序；DEBUG 由 debugUi 闸决定是否出现）──
     GENERAL("监控与采集", "前台监控 · 使用时长 · 事件上报 · 监控窗口 · 电池优化"),
-    FEATURE("功能开关", "六项功能各一行开关，右侧 chevron 进各自细则"),
+    FEATURE(
+        "功能开关",
+        Feature.entries.size.toString() + " 项功能各一行开关，右侧 chevron 进各自细则",
+    ),
     DATA("数据与备份", "立即备份 · 自动频率 · 最近一次 · 从备份还原"),
     APPEARANCE("外观与动效", "外观与主题 · 动效强度 · 触觉反馈与强度"),
     ABOUT("关于", "版本 · 检查更新 · 开源许可"),
@@ -79,16 +83,60 @@ enum class SettingsSubPage(
 internal fun settingsIndexEntries(debugUi: Boolean): List<SettingsSubPage> =
     SettingsSubPage.indexEntries.filter { it != SettingsSubPage.DEBUG || debugUi }
 
-/** 「功能开关」页的六项功能 → 各自细则页（顺序即行序；每项功能恰好一页）。 */
-internal fun settingsFeatureDetailPages(): List<SettingsSubPage> = listOf(
-    SettingsSubPage.LIVE_DETAIL,
-    SettingsSubPage.SKIP_DETAIL,
-    SettingsSubPage.FINANCE_DETAIL,
-    SettingsSubPage.TRANSPORT_DETAIL,
-    SettingsSubPage.QUOTA_DETAIL,
-    SettingsSubPage.LOCATION_DETAIL,
-    SettingsSubPage.TOTP_DETAIL,
+/**
+ * 「功能开关」页的行序（顺序须与 ui/SettingsFeatureIndexSection 的 featureIndexRows 一致）。
+ *
+ * 分母、摘要、计数全部由 [Feature] 派生，不在页头/行尾手写项数：
+ * 手写期 TOTP 被漏掉，页头摘要与行尾计数都少一项（实测渲染 7 行）。
+ * [Feature] 新增枚举项时 [settingsFeatureShortName] 的 when 会编译期报错，漏不掉。
+ */
+internal val settingsFeatureDisplayOrder: List<Feature> = listOf(
+    Feature.LIVE,
+    Feature.AD_SKIP,
+    Feature.FINANCE,
+    Feature.TRANSPORT,
+    Feature.QUOTA,
+    Feature.LOCATION,
+    Feature.TOTP,
 )
+
+/** 功能 → 该功能的细则页（每项功能恰好一页；新增功能时这里编译期缺分支）。 */
+internal fun settingsFeatureDetailPageOf(feature: Feature): SettingsSubPage = when (feature) {
+    Feature.LIVE -> SettingsSubPage.LIVE_DETAIL
+    Feature.AD_SKIP -> SettingsSubPage.SKIP_DETAIL
+    Feature.FINANCE -> SettingsSubPage.FINANCE_DETAIL
+    Feature.TRANSPORT -> SettingsSubPage.TRANSPORT_DETAIL
+    Feature.QUOTA -> SettingsSubPage.QUOTA_DETAIL
+    Feature.LOCATION -> SettingsSubPage.LOCATION_DETAIL
+    Feature.TOTP -> SettingsSubPage.TOTP_DETAIL
+}
+
+/** 「功能开关」页的功能 → 各自细则页（按行序；每项功能恰好一页）。 */
+internal fun settingsFeatureDetailPages(): List<SettingsSubPage> =
+    settingsFeatureDisplayOrder.map(::settingsFeatureDetailPageOf)
+
+/** 一级页摘要里用的短名（完整 title 含「监控 / 采集」后缀，7 项一行放不下）。 */
+internal fun settingsFeatureShortName(feature: Feature): String = when (feature) {
+    Feature.LIVE -> "实时"
+    Feature.AD_SKIP -> "广告跳过"
+    Feature.FINANCE -> "记账"
+    Feature.TRANSPORT -> "传送"
+    Feature.QUOTA -> "额度"
+    Feature.LOCATION -> "位置"
+    Feature.TOTP -> "验证器"
+}
+
+/** 一级页「功能开关」行的摘要：按行序列出每一项（单行，超出由 TokenRow 收省略号）。 */
+internal fun settingsFeatureSummaryText(): String =
+    settingsFeatureDisplayOrder.joinToString(" / ", transform = ::settingsFeatureShortName)
+
+/**
+ * 行尾计数「开 N / M」。
+ *
+ * M = [Feature] 条目数（不写字面量），N = 当前开着的功能数；[isOn] 由设置页的开关快照提供。
+ */
+internal fun settingsFeatureCountText(isOn: (Feature) -> Boolean): String =
+    "开 " + Feature.entries.count(isOn) + " / " + Feature.entries.size
 
 /**
  * 下钻页的父页：返回时回到父页而不是一路弹回一级页。

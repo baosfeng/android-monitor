@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.BuildConfig
+import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.AppToast
@@ -141,7 +142,9 @@ fun SettingsScreen(
                     .testTag("s09-head")
                     .focusRequester(headFocus)
                     .focusable(),
-                meta = "行为记录 1.0.0 · 设备 " + viewModel.getDeviceId().take(8),
+                // 版本号与「关于」页同源（SettingsAboutSection 的 TailNum(BuildConfig.VERSION_NAME)），
+                // 不再写死字面量——升级后两处会不一致
+                meta = "行为记录 " + BuildConfig.VERSION_NAME + " · 设备 " + viewModel.getDeviceId().take(8),
                 badge = {
                     Badge(
                         text = if (rt.isPaused) "已暂停" else "运行中",
@@ -283,7 +286,8 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
                     haptic(HapticTone.LIGHT)
                     rt.context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 },
-            // 两段式「已授权 · 已运行 X」由 ui/AccessibilityCopy.kt 统一产出，本屏只传时长文案
+            // 两段式「已授权 · 本次启动 X」由 ui/AccessibilityCopy.kt 统一产出，本屏只传时长文案；
+            // X 是**本进程**存活时长（formatUptime(processUptimeMs())），不是服务从连接起的时长
             subtitle = s09AccessibilityStatusText(
                 enabled = state.accessibilityEnabled,
                 running = state.accessibilityServiceRunning,
@@ -344,7 +348,8 @@ private fun SettingsGroupIndex(rt: SettingsScreenRuntime, onOpen: (SettingsSubPa
 private fun settingsGroupSummary(page: SettingsSubPage, rt: SettingsScreenRuntime): String =
     when (page) {
         SettingsSubPage.GENERAL -> "前台监控 · 使用时长 · 事件上报 · 监控窗口 · 电池优化"
-        SettingsSubPage.FEATURE -> "实时 / 广告跳过 / 记账 / 传送 / 额度 / 位置"
+        // 摘要按 Feature 行序派生（含验证器）：手写期漏了 TOTP，用户看到的项数与实际行数不一致
+        SettingsSubPage.FEATURE -> settingsFeatureSummaryText()
         SettingsSubPage.DATA -> rt.lastBackup.value?.let { "最近备份 " + formatBackupTime(it.at) }
             ?: "还没有备份 · 可立即备份或设自动频率"
         SettingsSubPage.APPEARANCE -> "主题 · 动效 · 触觉"
@@ -353,16 +358,30 @@ private fun settingsGroupSummary(page: SettingsSubPage, rt: SettingsScreenRuntim
         else -> page.meta
     }
 
+/**
+ * 单个功能当前的开关值。
+ *
+ * 设置页运行时把这 7 个值存成独立 Boolean（[SettingsScreenRuntime] 的 liveOn…totpOn），
+ * 这里按 [com.bsfeng.monitor.feature.Feature] 逐项映射：新增功能时 when 少分支即编译失败，
+ * 不会像手写计数那样静默漏项。
+ */
+private fun featureFlagsEnabled(rt: SettingsScreenRuntime, feature: Feature): Boolean = when (feature) {
+    Feature.LIVE -> rt.liveOn
+    Feature.AD_SKIP -> rt.adSkipOn
+    Feature.FINANCE -> rt.financeOn
+    Feature.TRANSPORT -> rt.transportOn
+    Feature.QUOTA -> rt.quotaOn
+    Feature.LOCATION -> rt.locationOn
+    Feature.TOTP -> rt.totpOn
+}
+
 @Composable
 private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRuntime) {
     when (page) {
-        SettingsSubPage.FEATURE -> {
-            val on = listOf(
-                rt.liveOn, rt.adSkipOn, rt.financeOn, rt.transportOn,
-                rt.quotaOn, rt.locationOn,
-            ).count { it }
-            TailNum("开 $on / 6")
-        }
+        // 分母 = Feature.entries.size（7），不写字面量；此前写死 6 且漏了验证器
+        SettingsSubPage.FEATURE -> TailNum(
+            settingsFeatureCountText { feature -> featureFlagsEnabled(rt, feature) },
+        )
         SettingsSubPage.GENERAL -> Badge(
             text = if (rt.isPaused) "已暂停" else "运行中",
             tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
