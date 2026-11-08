@@ -15,6 +15,11 @@ import java.util.UUID
 class UsageTracker(
     private val onRecord: (Record) -> Unit = {}
 ) {
+    private companion object {
+        /** 同一 App 两次 tick 间隔超过该值即判为断层（息屏 / 进程冻结 / 服务被杀），这段不计入时长 */
+        const val GAP_THRESHOLD_MS = 2_000L
+    }
+
     private var currentPkg: String? = null
     private var currentAppName: String? = null
     /** 当前 session 已累计的毫秒数 */
@@ -55,9 +60,10 @@ class UsageTracker(
             // 同一 App → 累加本次间隔
             if (lastTickTime > 0) {
                 val delta = timestamp - lastTickTime
-                // 防止跨 tick 累积误差（中间缺失 >2s 说明有断层，flush 重新开始）
-                if (delta > 2_000L) {
-                    flush(timestamp)
+                // 中间缺失 >2s 说明有断层（息屏 / 进程冻结 / 服务被杀），这段不是使用时长：
+                // 只结算到断层起点，再把这次 tick 当作断层之后新 session 的第一跳。
+                if (delta > GAP_THRESHOLD_MS) {
+                    flushAt(lastTickTime)
                     startSession(pkg, appName, timestamp)
                     return
                 }
@@ -85,10 +91,24 @@ class UsageTracker(
     /**
      * 写入当前 App 的使用时长记录，并清空 session 状态。
      * 如果当前没有活跃 App（currentPkg == null）则不写入。
+     *
+     * 时间戳取 [timestamp]、时长 = 已累计 + (timestamp - 上一跳)：
+     * 息屏 / 暂停前最后一次 tick 到息屏那一刻的间隔同样是真实使用（≤1 秒），要保留。
+     * 因此**不要**在 [tick] 的断层分支里调它 —— 那会把整段断层算成使用时长，
+     * 断层走 [flushAt] 只结算到断层起点。
      */
-    fun flush(timestamp: Long) {
+    fun flush(timestamp: Long) = flushAt(timestamp)
+
+    /**
+     * 按指定时间戳结算当前 session 并清空状态；[cutoffMs] 早于最后一跳时以最后一跳为准。
+     *
+     * 断层分支用 [lastTickTime] 作 cutoff：时长只到「最后一次确认还在用」的那一跳为止，
+     * 之后到本次 tick 之间的空档（息屏 8 小时 / 进程冻结）一律丢弃。
+     */
+    private fun flushAt(cutoffMs: Long) {
         val pkg = currentPkg ?: return
         val appName = currentAppName ?: return
+        val timestamp = if (lastTickTime > 0 && lastTickTime > cutoffMs) lastTickTime else cutoffMs
         val totalDuration = accumulatedMs +
                 if (lastTickTime > 0 && lastTickTime < timestamp)
                     timestamp - lastTickTime else 0L
