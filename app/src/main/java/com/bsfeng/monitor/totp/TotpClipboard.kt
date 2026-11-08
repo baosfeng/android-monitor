@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
  */
 class TotpClipboard(
     context: Context,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val clearDelayMillis: Long = TotpSettings.CLIPBOARD_CLEAR_MILLIS,
 ) {
 

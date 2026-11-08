@@ -7,6 +7,7 @@ package com.bsfeng.monitor.transfer.service
 import android.util.Log
 import com.bsfeng.monitor.domain.transfer.TransferDirection
 import com.bsfeng.monitor.domain.transfer.TransferStatus
+import java.util.concurrent.TimeUnit
 import com.bsfeng.monitor.domain.transfer.TransferFile
 import com.bsfeng.monitor.domain.transfer.TransferErrorCode
 import com.bsfeng.monitor.domain.transfer.TransferTask
@@ -96,21 +97,18 @@ internal fun TransferEngine.resumableOffset(incoming: IncomingFile): Long {
 }
 
 internal fun TransferEngine.scheduleConfirmTimeout(session: IncomingSession) {
-    scope.launch {
-        delay(confirmTimeoutMs)
+    val delayMs = (session.confirmDeadlineMs - System.currentTimeMillis()).coerceAtLeast(0L)
+    confirmTimeoutScheduler.schedule({
         if (session.state == TransferStatus.AWAITING_CONFIRM &&
             System.currentTimeMillis() >= session.confirmDeadlineMs
         ) {
             session.state = TransferStatus.FAILED
             session.pin = null
-            // 先落任务终态、再收起弹层：外部（UI / 测试）看到弹层消失时任务一定已经不在「进行中」，
-            // 不会出现「弹层没了、卡片还显示等待确认」的中间态。
-            // 超时只静默收起 PIN 弹层：不播失败音、不震（避免打扰）
             refreshSessionTasks(session, notifyFailure = false)
             if (_pinPrompt.value?.sessionId == session.sessionId) _pinPrompt.value = null
             Log.i(TAG, "会话 ${session.sessionId} 确认超时（${confirmTimeoutMs}ms）")
         }
-    }
+    }, delayMs, TimeUnit.MILLISECONDS)
 }
 
 internal fun TransferEngine.pruneExpiredSessions() {

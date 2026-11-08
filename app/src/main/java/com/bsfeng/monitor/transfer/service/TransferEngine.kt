@@ -63,6 +63,9 @@ import java.io.InputStream
 import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -96,6 +99,10 @@ class TransferEngine internal constructor(
     /** HTTP 客户端（测试可换成只记录请求的替身，见 [createForTesting]）。 */
     internal var client: MiniHttpClient = MiniHttpClient()
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** 确认超时调度器：独立线程，避免协程 IO 池拥塞时超时任务迟迟不执行（影响 UI 与测试确定性）。 */
+    internal val confirmTimeoutScheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "transfer-confirm-timeout").apply { isDaemon = true }
+    }
     /**
      * 任务历史存储：**每次访问都重新解析** helper，不在引擎实例上永久绑死一个。
      *
@@ -219,6 +226,7 @@ class TransferEngine internal constructor(
         tickerJob?.cancel()
         tickerJob = null
         scope.cancel()
+        confirmTimeoutScheduler.shutdownNow()
     }
     /** 「自动关闭接收」设置变化后重放计时。 */
     fun refreshAutoCloseSchedule() = refreshAutoCloseScheduleImpl()
