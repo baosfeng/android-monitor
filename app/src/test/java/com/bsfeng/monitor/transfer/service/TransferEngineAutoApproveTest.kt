@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.transfer.service
 
 import android.content.Context
+import com.bsfeng.monitor.util.SoftSecretCipher
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,6 +37,8 @@ class TransferEngineAutoApproveTest {
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.registerStats(context.cacheDir, 4096, 1_048_576, 1_048_576)
         TransferEngine.resetForTesting()
+        // 引擎内部自建 TransferSettings；Robolectric 没有 AndroidKeyStore，换软件 cipher 才能落盘配对密钥
+        TransferSettings.overrideCipherForTesting = SoftSecretCipher()
         engine = TransferEngine.getInstance(context)
     }
 
@@ -44,6 +47,7 @@ class TransferEngineAutoApproveTest {
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.reset()
         TransferEngine.resetForTesting()
+        TransferSettings.overrideCipherForTesting = null
     }
 
     private fun offerBody(senderDeviceId: String, size: Long): JSONObject = JSONObject().apply {

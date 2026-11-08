@@ -10,13 +10,19 @@ import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.trip.DayTimeline
 import com.bsfeng.monitor.domain.trip.TripAggregator
 import com.bsfeng.monitor.finance.FinanceManager
+import com.bsfeng.monitor.record.RecordAggregates
+import com.bsfeng.monitor.record.RecordTypeCount
 import com.bsfeng.monitor.service.MonitorAccessibilityService
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.ui.live.DAY_MS
+import com.bsfeng.monitor.ui.live.HOURS_PER_DAY
+import com.bsfeng.monitor.ui.live.HOUR_MS
+import com.bsfeng.monitor.ui.live.dayStarts
 import com.bsfeng.monitor.ui.live.hourlyIntensityOf
-import com.bsfeng.monitor.ui.live.rollingHourIntensityOf
+import com.bsfeng.monitor.ui.live.localDateOf
 import com.bsfeng.monitor.ui.live.recordTypeLabel
 import com.bsfeng.monitor.ui.live.startOfDay
+import com.bsfeng.monitor.ui.live.startOfDaysAgo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +31,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
 
 /**
  * 错态描述（锚点 s01-error 逐字）：
@@ -102,6 +107,7 @@ data class OverviewState(
 class OverviewViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = MonitorApp.instance.container.recordStore
+    private val aggregates = RecordAggregates(MonitorApp.instance.container.databaseHelper)
     private val finance = FinanceManager.getInstance(application)
 
     private val _state = MutableStateFlow(OverviewState())
@@ -149,22 +155,34 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun buildSnapshot(): OverviewState {
-        val now = System.currentTimeMillis()
+    /**
+     * 组装一次概览快照。
+     *
+     * 除「今日」外的时间窗一律走 SQL 聚合（[RecordAggregates]）：今日记录还要喂给
+     * 行程 / 逐时热力 / 最长事件 / 最近三条，只能整段取，但只取一天；昨日 / 滚动 24h /
+     * 近 7 天 / 近 30 天不再 queryByDate（旧实现每次刷新 5 次全量 + detail JSON 反序列化）。
+     *
+     * [now] 供单测固定时钟；生产不传，取当前时刻。
+     */
+    internal suspend fun buildSnapshot(now: Long = System.currentTimeMillis()): OverviewState {
         val todayStart = startOfDay(now)
-        val weekStart = todayStart - 6 * DAY_MS
-        val monthStart = todayStart - 29 * DAY_MS
+        // 按日历回推：DST 日只有 23 / 25 小时，不能 todayStart - N * DAY_MS
+        val weekStart = startOfDaysAgo(6, now)
+        val monthStart = startOfDaysAgo(29, now)
+        val weekPrevStart = startOfDaysAgo(13, now)
+        val monthPrevStart = startOfDaysAgo(59, now)
+        val weekDayStarts = dayStarts(7, now)
+        val monthDayStarts = dayStarts(30, now)
+        val hourStarts = LongArray(HOURS_PER_DAY) { now - DAY_MS + it * HOUR_MS }
+        val yesterdayStart = startOfDaysAgo(1, now)
+        val yesterdayEnd = todayStart - 1
 
+        // 今日：行程 / 逐时热力 / 最长事件 / 最近三条都要 Record 本身，只查这一天
         val today = store.queryByDate(todayStart, now)
-        // 滚动窗口跨自然日：凌晨打开时必须是「昨天此刻 → 现在」，不能只查今天
-        val last24h = store.queryByDate(now - DAY_MS, now)
-        val yesterday = store.queryByDate(todayStart - DAY_MS, todayStart - 1)
-        val week = store.queryByDate(weekStart, now)
-        val month = store.queryByDate(monthStart, now)
 
-        val todayStr = LocalDate.now().toString()
-        val weekStr = LocalDate.now().minusDays(6).toString()
-        val monthStr = LocalDate.now().minusDays(29).toString()
+        val todayStr = localDateOf(now).toString()
+        val weekStr = localDateOf(weekStart).toString()
+        val monthStr = localDateOf(monthStart).toString()
         // 收支一律走 SQL SUM：原实现取「最近 500 笔」再按日期过滤，30 天内超过 500 笔时
         // 被截掉的恰好是最旧那批，月度金额静默偏低且界面无异常提示。
         val todayExpense = finance.sumByDateRange(todayStr, todayStr, expense = true)
@@ -174,20 +192,25 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         val monthExpense = finance.sumByDateRange(monthStr, todayStr, expense = true)
         val monthIncome = finance.sumByDateRange(monthStr, todayStr, expense = false)
 
-        val weekSkips = week.filter { it.action == ACTION_AD_SKIPPED }
+        // 上周 / 上月：紧邻当前窗口的同长度日历区间（近 7 天 → 再往前 7 天；近 30 天 → 再往前 30 天）。
+        // 只走 COUNT / SUM，不把上万行读回内存；AD_SKIPPED 落库口径与桌面小组件一致（SCREEN + AD_SKIPPED）。
+        val prevWeekEvents = aggregates.count(weekPrevStart, weekStart - 1)
+        val prevWeekSkips = aggregates.count(
+            weekPrevStart, weekStart - 1, RecordType.SCREEN, ACTION_AD_SKIPPED,
+        )
+        val prevMonthEvents = aggregates.count(monthPrevStart, monthStart - 1)
+        val prevMonthSkips = aggregates.count(
+            monthPrevStart, monthStart - 1, RecordType.SCREEN, ACTION_AD_SKIPPED,
+        )
 
-        // 上周 / 上月：紧邻当前窗口的同长度区间（近 7 天 → 再往前 7 天；近 30 天 → 再往前 30 天）。
-        // 只走 COUNT，不把上万行读回内存；AD_SKIPPED 落库口径与桌面小组件一致（SCREEN + AD_SKIPPED）。
-        val weekPrevStart = weekStart - 7 * DAY_MS
-        val monthPrevStart = monthStart - 30 * DAY_MS
-        val prevWeekEvents = store.countByDate(weekPrevStart, weekStart - 1)
-        val prevWeekSkips = store.countByTypeAndAction(
-            RecordType.SCREEN, ACTION_AD_SKIPPED, weekPrevStart, weekStart - 1,
-        )
-        val prevMonthEvents = store.countByDate(monthPrevStart, monthStart - 1)
-        val prevMonthSkips = store.countByTypeAndAction(
-            RecordType.SCREEN, ACTION_AD_SKIPPED, monthPrevStart, monthStart - 1,
-        )
+        // 跳过排行：SQL 按 label 分组（首次出现序），再在内存里归并「空 label → 未知应用」并稳定排序
+        val skippedByLabel = LinkedHashMap<String, Int>()
+        aggregates.labelCounts(weekStart, now, null, ACTION_AD_SKIPPED).forEach { row ->
+            val key = row.label.ifBlank { UNKNOWN_APP }
+            skippedByLabel[key] = (skippedByLabel[key] ?: 0) + row.count
+        }
+        val topSkippedApps = skippedByLabel.entries.sortedByDescending { it.value }
+            .take(TOP_LIMIT).map { TypeSlice(it.key, it.value) }
 
         // 今日行程：复用本轮已查到的今日记录现算（不额外查库、不建表）；
         // 窗口为 0（零点整点那一瞬）时聚合器会拒绝非法区间，这里按「暂无行程」处理。
@@ -205,34 +228,38 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             todayActiveMinutes = usageMinutes(today),
             todayExpense = todayExpense,
             todayIncome = todayIncome,
-            yesterdayEventCount = yesterday.size,
-            yesterdaySkipCount = yesterday.count { it.action == ACTION_AD_SKIPPED },
-            yesterdayActiveMinutes = usageMinutes(yesterday),
+            yesterdayEventCount = aggregates.count(yesterdayStart, yesterdayEnd),
+            yesterdaySkipCount = aggregates.count(
+                yesterdayStart, yesterdayEnd, action = ACTION_AD_SKIPPED,
+            ),
+            yesterdayActiveMinutes = aggregates.sumDurationMs(
+                yesterdayStart, yesterdayEnd, RecordType.APP_USAGE,
+            ) / 60_000L,
             accessibilityEnabled = accessibilityEnabled(),
             accessibilityServiceRunning = MonitorAccessibilityService.isRunning,
             hourlyIntensity = hourlyIntensityOf(today),
-            last24hIntensity = rollingHourIntensityOf(last24h, now),
-            last24hActiveMinutes = usageMinutes(last24h),
+            last24hIntensity = aggregates.hourlyCounts(hourStarts, now).map { it.toFloat() },
+            last24hActiveMinutes = aggregates.sumDurationMs(now - DAY_MS, now, RecordType.APP_USAGE) / 60_000L,
             typeSlicesToday = slices(today),
             recentEvents = today.sortedByDescending { it.timestamp }.take(RECENT_LIMIT),
-            weekEventCount = week.size,
-            weekSkipCount = weekSkips.size,
-            weekActiveMinutes = usageMinutes(week),
+            weekEventCount = aggregates.count(weekStart, now),
+            weekSkipCount = aggregates.count(weekStart, now, action = ACTION_AD_SKIPPED),
+            weekActiveMinutes = aggregates.sumDurationMs(weekStart, now, RecordType.APP_USAGE) / 60_000L,
             weekExpense = weekExpense,
             weekIncome = weekIncome,
-            dailyEventCounts7 = dailyBuckets(week, weekStart, 7),
-            dailySkipCounts7 = dailyBuckets(weekSkips, weekStart, 7),
-            dailyActiveMinutes7 = dailyUsageMinutes(week, weekStart, 7),
-            topSkippedApps = weekSkips.groupingBy { it.label.ifBlank { UNKNOWN_APP } }.eachCount()
-                .entries.sortedByDescending { it.value }.take(TOP_LIMIT)
-                .map { TypeSlice(it.key, it.value) },
-            monthEventCount = month.size,
-            monthSkipCount = month.count { it.action == ACTION_AD_SKIPPED },
-            monthActiveMinutes = usageMinutes(month),
+            dailyEventCounts7 = aggregates.dailyCounts(weekDayStarts, now).map { it.toFloat() },
+            dailySkipCounts7 = aggregates.dailyCounts(
+                weekDayStarts, now, null, ACTION_AD_SKIPPED,
+            ).map { it.toFloat() },
+            dailyActiveMinutes7 = aggregates.dailyUsageMinutes(weekDayStarts, now).map { it.toFloat() },
+            topSkippedApps = topSkippedApps,
+            monthEventCount = aggregates.count(monthStart, now),
+            monthSkipCount = aggregates.count(monthStart, now, action = ACTION_AD_SKIPPED),
+            monthActiveMinutes = aggregates.sumDurationMs(monthStart, now, RecordType.APP_USAGE) / 60_000L,
             monthExpense = monthExpense,
             monthIncome = monthIncome,
-            dailyActiveMinutes30 = dailyUsageMinutes(month, monthStart, 30),
-            typeSlices30 = slices(month),
+            dailyActiveMinutes30 = aggregates.dailyUsageMinutes(monthDayStarts, now).map { it.toFloat() },
+            typeSlices30 = slicesOf(aggregates.typeCounts(monthStart, now)),
             prevWeekEventCount = prevWeekEvents,
             prevWeekSkipCount = prevWeekSkips,
             prevMonthEventCount = prevMonthEvents,
@@ -256,28 +283,15 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
     private fun usageMinutes(records: List<Record>): Long =
         records.filter { it.type == RecordType.APP_USAGE }.sumOf { it.duration ?: 0L } / 60_000L
 
-    private fun dailyBuckets(records: List<Record>, rangeStart: Long, days: Int): List<Float> {
-        val buckets = FloatArray(days)
-        records.forEach { record ->
-            val idx = ((record.timestamp - rangeStart) / DAY_MS).toInt()
-            if (idx in 0 until days) buckets[idx] += 1f
-        }
-        return buckets.toList()
-    }
-
-    private fun dailyUsageMinutes(records: List<Record>, rangeStart: Long, days: Int): List<Float> {
-        val buckets = FloatArray(days)
-        records.filter { it.type == RecordType.APP_USAGE }.forEach { record ->
-            val idx = ((record.timestamp - rangeStart) / DAY_MS).toInt()
-            if (idx in 0 until days) buckets[idx] += ((record.duration ?: 0L) / 60_000L).toFloat()
-        }
-        return buckets.toList()
-    }
-
     private fun slices(records: List<Record>): List<TypeSlice> =
         records.groupingBy { it.type }.eachCount()
             .entries.sortedByDescending { it.value }.take(SLICE_LIMIT)
             .map { TypeSlice(recordTypeLabel(it.key), it.value) }
+
+    /** SQL 聚合回来的类型计数：顺序是首次出现序，稳定排序后与旧的 groupingBy 口径一致。 */
+    private fun slicesOf(counts: List<RecordTypeCount>): List<TypeSlice> =
+        counts.sortedByDescending { it.count }.take(SLICE_LIMIT)
+            .map { TypeSlice(recordTypeLabel(it.type), it.count) }
 
     private companion object {
         const val REFRESH_MS = 5_000L

@@ -36,6 +36,9 @@ class TransferEnginePinTimeoutTest {
 
     private lateinit var context: Context
 
+    /** 本用例自建的引擎；结束必须 dispose，否则排队中的落库/超时会泄漏到后面的用例。 */
+    private var created: TransferEngine? = null
+
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
@@ -47,6 +50,9 @@ class TransferEnginePinTimeoutTest {
 
     @After
     fun tearDown() {
+        created?.stop()
+        created?.disposeForTesting()
+        created = null
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.reset()
         TransferEngine.resetForTesting()
@@ -76,7 +82,7 @@ class TransferEnginePinTimeoutTest {
 
     @Test
     fun `确认超时后 PIN 弹层自动消失且任务标记 4007`() = runBlocking {
-        val engine = TransferEngine.createForTesting(context, confirmTimeoutMs = 120L)
+        val engine = TransferEngine.createForTesting(context, confirmTimeoutMs = 120L).also { created = it }
         val before = System.currentTimeMillis()
 
         val response = engine.offer(offerBody("mac-timeout", alias = "bsfeng 的 Mac"), null)

@@ -3,9 +3,8 @@ package com.bsfeng.monitor.ui
 // 从 ui/OverviewScreen.kt 拆出：概览的数值格式化 —— 带符号增减（整数/分钟）、月份刻度、金额取整、日标签。负责「数字怎么写成一行字」。
 
 import androidx.compose.foundation.layout.size
-import com.bsfeng.monitor.ui.live.DAY_MS
+import com.bsfeng.monitor.ui.live.dayStarts
 import com.bsfeng.monitor.ui.live.formatDayLabel
-import com.bsfeng.monitor.ui.live.startOfDay
 import java.util.Locale
 
 internal fun signed(delta: Int): String = if (delta >= 0) "+" + delta else delta.toString()
@@ -38,6 +37,7 @@ internal fun overviewHeaderNow(lastUpdatedAt: Long, wallClock: Long = System.cur
  * 横轴若自己取街钟并 remember 住，跨零点后柱值和标签会各停各的那一天。
  */
 internal fun dayLabels(days: Int, now: Long = System.currentTimeMillis()): List<String> {
-    val start = startOfDay(now) - (days - 1) * DAY_MS
-    return (0 until days).map { formatDayLabel(start + it * DAY_MS) }
+    if (days <= 0) return emptyList()
+    // 按日历取每天的本地 00:00：DST 日只有 23 / 25 小时，定长 DAY_MS 回推会让轴首偏一天
+    return dayStarts(days, now).map { formatDayLabel(it) }
 }

@@ -73,6 +73,8 @@ class TransferEngineSubmitPinTest {
     @After
     fun tearDown() {
         engine?.stop()
+        // 测试结束即取消进程级 scope：排队中的 persistTask 不能在下一个用例里落库
+        engine?.disposeForTesting()
         engine = null
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.reset()

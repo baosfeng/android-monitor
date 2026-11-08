@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -84,8 +85,13 @@ class LocationGateStateTest {
 
     @Test
     fun `未注册 listener 时 offer 不崩`() {
-        // 心跳在服务没跑时也会 offer（采集器内部统一出口）：没有消费者必须静默丢弃
+        // 心跳在服务没跑时也会 offer（采集器内部统一出口）：没有消费者必须静默丢弃。
+        // 断言「不抛异常」必须显式写成失败，否则函数体被删掉用例依然绿（基建审计 I13）。
         LocationGateState.registerLocationListener(null)
-        LocationGateState.offer(LocationSample("gps", 31.2304, 121.4737, 8f, 1_700_000_000_000L))
+        try {
+            LocationGateState.offer(LocationSample("gps", 31.2304, 121.4737, 8f, 1_700_000_000_000L))
+        } catch (t: Throwable) {
+            fail("未注册 listener 时 offer 不得抛：$t")
+        }
     }
 }

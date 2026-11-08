@@ -41,6 +41,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -62,6 +64,7 @@ import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 // 引擎内部常量（拆出伴生对象以免主文件过长；仅本包内使用）。
 private const val DEVICE_TICK_MS = 5_000L
@@ -93,8 +96,46 @@ class TransferEngine internal constructor(
     /** HTTP 客户端（测试可换成只记录请求的替身，见 [createForTesting]）。 */
     internal var client: MiniHttpClient = MiniHttpClient()
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    internal val taskStore: TransferTaskStore by lazy { TransferTaskStore(DatabaseHelper.getInstance(appContext)) }
+    /**
+     * 任务历史存储：**每次访问都重新解析** helper，不在引擎实例上永久绑死一个。
+     *
+     * 测试里上一用例的引擎（或进程级单例）会活到下一个用例；缓存住旧 helper 时，排队中的
+     * 落库会写进旧用例的临时库，而当前用例用新 helper 读不到（表现为 count=0 / 源 Uri 缺失）。
+     * 生产里 application 唯一，解析结果恒为同一个 helper，没有额外开销。
+     */
+    internal val taskStore: TransferTaskStore
+        get() = TransferTaskStore(DatabaseHelper.getInstance(appContext))
     internal val started = AtomicBoolean(false)
+    /**
+     * 后台 ticker 的句柄（[TransferServiceLifecycle.tickerLoop]）。
+     *
+     * 必须随引擎持有：stopImpl 要 cancel 它。循环条件用 [started] 而不是 [scope].isActive——
+     * 引擎 scope 是进程级、永不取消，靠它判活会让每次 start 都多一条永不退出的 ticker。
+     */
+    @Volatile
+    internal var tickerJob: Job? = null
+
+    /** 在途落库任务：测试用它做确定性收尾，不靠 sleep 赌调度。 */
+    private val pendingPersists: MutableSet<Job> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** 登记一条在途落库（完成后自动移出）。 */
+    internal fun trackPersist(job: Job) {
+        pendingPersists += job
+        job.invokeOnCompletion { pendingPersists.remove(job) }
+    }
+
+    /** 仅供测试：等当前所有在途落库结束（有上限，避免异常时挂住用例）。 */
+    internal suspend fun awaitPendingPersistsForTesting(timeoutMs: Long = 10_000L) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        for (job in pendingPersists.toList()) {
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0L) return
+            runCatching { withTimeout(left) { job.join() } }
+        }
+    }
+    /** ticker 实际跑过的拍数（生产自增是真实行为，测试用它断言「没有叠加多条 ticker」）。 */
+    internal val tickerTicks = AtomicInteger(0)
     /** 历史是否已从库中恢复（首次进入前台 / 首次启动服务时加载一次）。 */
     internal val historyLoaded = AtomicBoolean(false)
     @Volatile
@@ -166,6 +207,19 @@ class TransferEngine internal constructor(
     fun start(): Int = startImpl()
     /** 停止发现与服务，保留 `.part` 供下次续传。 */
     fun stop() = stopImpl()
+
+    /**
+     * 仅供测试复位：停掉 ticker 并取消进程级 [scope]，让在途落库 / 网络协程立刻结束。
+     *
+     * 生产不要调用：scope 要跨 start/stop 复用。测试里若只 stop 不取消，上一用例排队中的
+     * [persistTask] 会在下一用例里落进同一个 `DatabaseHelper`（Robolectric 跨类共享静态），
+     * 把共享表写出多余行——实测会把 count 写成 6 行，导致任务历史类用例假红。
+     */
+    internal fun disposeForTesting() {
+        tickerJob?.cancel()
+        tickerJob = null
+        scope.cancel()
+    }
     /** 「自动关闭接收」设置变化后重放计时。 */
     fun refreshAutoCloseSchedule() = refreshAutoCloseScheduleImpl()
     /** 当前自动关闭剩余毫秒（未计时返回 0）。 */

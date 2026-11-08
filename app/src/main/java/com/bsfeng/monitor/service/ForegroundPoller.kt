@@ -4,13 +4,44 @@ package com.bsfeng.monitor.service
 // 它只决定「这一秒前台是谁、要不要记账/记页面」，轮询链的启停仍由 Service 管
 // （见 MonitorAccessibilityService 的 foregroundPoller）。
 
+import android.content.Context
+import android.os.PowerManager
 import android.util.Log
 import com.bsfeng.monitor.skip.SnapshotExporter
 import com.bsfeng.monitor.skip.SnapshotRequest
 import com.bsfeng.monitor.util.AppUtils
 
+/**
+ * 前台轮询的屏幕门禁（纯逻辑，单测钉住「熄屏不取窗」）。
+ *
+ * 轮询链每秒取一次 rootInActiveWindow（跨进程 Binder），息屏后必然拿到 null，
+ * 8 小时约 2.9 万次空取。熄屏期间只保留「结算当前 session」这一件事，并把节拍拉长到
+ * 30 秒：亮屏后最多 30 秒恢复逐秒采样，代价可忽略。
+ */
+internal object ForegroundPollPolicy {
+    const val INTERACTIVE_INTERVAL_MS = 1_000L
+    const val SCREEN_OFF_INTERVAL_MS = 30_000L
+
+    /** 是否值得取根窗口：熄屏时窗口不可交互，取到的只会是 null 或陈旧节点。 */
+    fun shouldQueryWindow(interactive: Boolean): Boolean = interactive
+
+    fun nextDelayMs(interactive: Boolean): Long =
+        if (interactive) INTERACTIVE_INTERVAL_MS else SCREEN_OFF_INTERVAL_MS
+}
+
+/** 屏幕是否处于交互态；取不到 PowerManager 时按亮屏处理（宁可多采，不漏采）。 */
+internal fun Context.isScreenInteractive(): Boolean =
+    runCatching { (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true }
+        .getOrDefault(true)
+
 internal fun MonitorAccessibilityService.pollForegroundApp() {
 val now = System.currentTimeMillis()
+// 熄屏不取根窗口（跨进程 Binder 空取），但要把当前 session 结算掉，
+// 否则亮屏后第一跳会被 UsageTracker 判成断层之外的整段使用时长。
+if (!ForegroundPollPolicy.shouldQueryWindow(isScreenInteractive())) {
+    recordCollector.onTick(null, null, now)
+    return
+}
 val root = rootInActiveWindow ?: return
 val pkg = root.packageName?.toString()
 root.recycle()

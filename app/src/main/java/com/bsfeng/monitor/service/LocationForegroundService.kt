@@ -36,9 +36,6 @@ import com.bsfeng.monitor.record.LocationTickerScheduler
 import com.bsfeng.monitor.record.MotionDetector
 import com.bsfeng.monitor.record.MotionGate
 import com.bsfeng.monitor.record.TickerHost
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -69,6 +66,9 @@ import kotlinx.coroutines.launch
 class LocationForegroundService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /** 点位落库协程宿主：onDestroy 统一取消，避免服务停掉后仍在写库。 */
+    private val ioWork = IoWorkScope()
 
     private val sensorManager: SensorManager? by lazy {
         runCatching { getSystemService(Context.SENSOR_SERVICE) as? SensorManager }.getOrNull()
@@ -251,6 +251,8 @@ class LocationForegroundService : Service() {
 
     override fun onDestroy() {
         stopTicker()
+        // 先取消落库协程：服务已经不在，再往库里写就是「幽灵写入」（还原 / 备份期间还会撞锁）
+        ioWork.cancel()
         releaseSensors()
         runCatching { LocationCollector.get(this).stopSubscription() }
             .onFailure { Log.w(TAG, "释放位置订阅失败", it) }
@@ -638,7 +640,7 @@ class LocationForegroundService : Service() {
         runCatching {
             LocationCollector.get(this).collectThrottledAsync(force = true, budget = budget) { sample ->
                 if (sample == null) return@collectThrottledAsync
-                CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                ioWork.scope.launch {
                     runCatching { serviceContainer.recordCollector.onLocation(sample) }
                         .onFailure { Log.w(TAG, "探测点位落库失败", it) }
                 }
@@ -651,7 +653,7 @@ class LocationForegroundService : Service() {
         runCatching {
             LocationCollector.get(this).startSubscription { sample ->
                 // 订阅点位的门禁证据由采集器内部 offer（onSubscriptionSample），这里只落库
-                CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                ioWork.scope.launch {
                     runCatching { serviceContainer.recordCollector.onLocation(sample) }
                         .onFailure { Log.w(TAG, "订阅点位落库失败", it) }
                 }

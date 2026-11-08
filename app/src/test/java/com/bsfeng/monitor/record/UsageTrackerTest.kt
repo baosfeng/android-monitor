@@ -161,4 +161,31 @@ class UsageTrackerTest {
         assertEquals("重复 flush 不得写第二条", 1, usageRecords().size)
         assertEquals("flush 后不得残留 session", null, tracker.getActiveSession())
     }
+
+    // ==================== 墙钟回拨：R13 回归 ====================
+
+    @Test
+    fun `时间回拨 10 分钟不把已累计时长减掉`() {
+        tick(0)
+        tick(ONE_SEC)
+        tick(2 * ONE_SEC)
+        // 系统时间被回拨 10 分钟（校时 / 手动改时间）：旧实现这里 accumulatedMs += -600000
+        tick(-600_000L)
+        assertEquals("回拨那一拍不得结算记录，更不能清空 session", 0, usageRecords().size)
+        tracker.flush(t0 + 2 * ONE_SEC)
+        assertEquals("回拨前累计的 2 秒必须保留", 2 * ONE_SEC, usageRecords().single().duration)
+    }
+
+    @Test
+    fun `回拨后墙钟追平再继续累加 且不重复计时`() {
+        tick(0)
+        tick(ONE_SEC)
+        tick(2 * ONE_SEC)
+        tick(-500L)                  // 回拨 500ms：按 0 增量处理
+        tick(ONE_SEC)                // 仍早于旧锚点 2000ms：0 增量
+        tick(2 * ONE_SEC + ONE_SEC)  // 追平并前进 1 秒
+        tracker.flush(t0 + 3 * ONE_SEC)
+
+        assertEquals("只累计墙钟前进的那一段，回拨期间不重复计时", 3 * ONE_SEC, usageRecords().single().duration)
+    }
 }

@@ -45,6 +45,9 @@ class UsageTracker(
     /**
      * 每秒由前台轮询调用。
      *
+     * 时间戳仍用墙钟（记录要写用户看到的那一时刻，换成 elapsedRealtime 会丢掉「几点用的」），
+     * 墙钟回拨由 [tick] 里的非负增量 + 锚点不后退兜底。
+     *
      * @param pkg 当前前台 App 包名，null 表示桌面/系统 UI/息屏
      * @param appName 当前前台 App 显示名，null 时按包名查找
      * @param timestamp 当前毫秒时间戳
@@ -67,9 +70,14 @@ class UsageTracker(
                     startSession(pkg, appName, timestamp)
                     return
                 }
-                accumulatedMs += delta
+                // 墙钟被回拨（手改时间 / 校时跳变）时 delta 为负：加进去会把已累计时长倒扣，
+                // totalDuration ≤ 0 时整段被静默丢弃。这里只取非负增量，锚点也停在旧值，
+                // 等墙钟追平后再继续累加（回拨期间重复的 tick 不会重复计时）。
+                accumulatedMs += delta.coerceAtLeast(0L)
+                if (delta > 0) lastTickTime = timestamp
+            } else {
+                lastTickTime = timestamp
             }
-            lastTickTime = timestamp
         } else {
             // 切换到不同 App → flush 旧 session，开始新 session
             flush(timestamp)

@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.transfer.service
 
+import com.bsfeng.monitor.util.SoftSecretCipher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -29,7 +30,14 @@ class TransferSettingsTest {
             .commit()
     }
 
-    private fun settings(): TransferSettings = TransferSettings(RuntimeEnvironment.getApplication())
+    /**
+     * 生产默认为 Keystore cipher；Robolectric 沙箱没有该 provider，注入软件实现（同 TotpSecretStoreTest）。
+     * **必须是同一把**：每次新建 cipher 等于每次换钥匙，跨实例读回会解不开。
+     */
+    private val cipher = SoftSecretCipher()
+
+    private fun settings(): TransferSettings =
+        TransferSettings(RuntimeEnvironment.getApplication(), cipher)
 
     @Test
     fun `deviceId 稳定且符合 and 前缀规范`() {

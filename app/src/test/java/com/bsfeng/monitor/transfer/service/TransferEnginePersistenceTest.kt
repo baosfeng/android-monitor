@@ -45,6 +45,8 @@ class TransferEnginePersistenceTest {
     @After
     fun tearDown() {
         engine?.stop()
+        // 测试结束即取消进程级 scope：排队中的 persistTask 不能在下一个用例里落库
+        engine?.disposeForTesting()
         engine = null
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.reset()
@@ -93,7 +95,8 @@ class TransferEnginePersistenceTest {
         assertEquals("approved", approved.string("state"))
 
         // 创建即落库（创建时是 OFFERED；进终态才会再写一次）
-        assertTrue(await { store.count() == 1 })
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
+        assertEquals(1, store.count())
         assertEquals(TransferStatus.OFFERED, store.loadRecent().single().task.status)
 
         // 超时 → 终态写库
@@ -103,6 +106,7 @@ class TransferEnginePersistenceTest {
                 store.loadRecent().firstOrNull()?.task?.status == TransferStatus.FAILED
             },
         )
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
 
         // 删除 → 库里同步移除（撤销的写回见下一个用例）
         assertNotNull(transferEngine.deleteTaskNow(sessionId, "f1"))
@@ -115,7 +119,8 @@ class TransferEnginePersistenceTest {
         transferEngine.settings().startOpenPairingWindow()
         val approved = runBlocking { transferEngine.offer(offerBody("mac-undo"), null) }
         val sessionId = approved.string("sessionId")
-        assertTrue(await { store.count() == 1 })
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
+        assertEquals(1, store.count())
         assertTrue(
             await {
                 runBlocking { transferEngine.offerStatus(sessionId, transferEngine.sessions[sessionId]?.token) }
@@ -138,7 +143,8 @@ class TransferEnginePersistenceTest {
         val transferEngine = newEngine()
         transferEngine.settings().startOpenPairingWindow()
         runBlocking { transferEngine.offer(offerBody("mac-load"), null) }
-        assertTrue(await { store.count() == 1 })
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
+        assertEquals(1, store.count())
 
         // 模拟进程被杀：库里留一条非终态（TRANSFERRING）的行
         val persisted = store.loadRecent().single().task.copy(

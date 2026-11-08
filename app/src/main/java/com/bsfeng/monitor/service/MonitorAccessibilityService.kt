@@ -90,9 +90,10 @@ open class MonitorAccessibilityService : AccessibilityService() {
             } catch (e: Exception) {
                 Log.w("MonitorService", "pollForegroundApp 异常", e)
             }
-            // 仅当服务仍存活时继续调度，防止服务重建后产生多条轮询链
+            // 仅当服务仍存活时继续调度，防止服务重建后产生多条轮询链。
+            // 熄屏把节拍拉长到 30 秒：反正这一拍也不取窗，没必要每秒唤醒一次主线程。
             if (pollerActive) {
-                foregroundHandler.postDelayed(this, 1_000L)
+                foregroundHandler.postDelayed(this, ForegroundPollPolicy.nextDelayMs(isScreenInteractive()))
             }
         }
     }

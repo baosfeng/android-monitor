@@ -16,9 +16,6 @@ import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationProbePolicy
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.widget.WidgetRefresher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -149,8 +146,11 @@ internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
                 onFinished()
                 return@collectThrottledAsync
             }
-            // 落库放 IO：SQLite 单条 insert 毫秒级，但别占着广播/主线程回调
-            CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            // 落库放 IO：SQLite 单条 insert 毫秒级，但别占着广播/主线程回调。
+            // 宿主必须随任务收尾 cancel：否则每次心跳都留一个永不结束的 scope，
+            // goAsync 的 PendingResult 虽然 finish 了，子协程仍可能继续跑。
+            val work = IoWorkScope()
+            work.scope.launch {
                 try {
                     context.serviceContainer.recordCollector.onLocation(sample)
                     Log.d(
@@ -161,6 +161,7 @@ internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
                     Log.w("LocationSample", "定位落库失败", e)
                 } finally {
                     onFinished()
+                    work.cancel()
                 }
             }
         }
