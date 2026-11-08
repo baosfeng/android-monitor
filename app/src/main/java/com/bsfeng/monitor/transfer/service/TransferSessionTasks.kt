@@ -15,7 +15,11 @@ internal class TransferSessionTasks(private val engine: TransferEngine) {
 
     fun scheduleConfirmTimeout(session: IncomingSession) {
         engine.scope.launch {
-            delay(engine.confirmTimeoutMs)
+            while (session.state == TransferStatus.AWAITING_CONFIRM &&
+                System.currentTimeMillis() < session.confirmDeadlineMs
+            ) {
+                delay((session.confirmDeadlineMs - System.currentTimeMillis()).coerceAtLeast(1L))
+            }
             if (session.state == TransferStatus.AWAITING_CONFIRM &&
                 System.currentTimeMillis() >= session.confirmDeadlineMs
             ) {
