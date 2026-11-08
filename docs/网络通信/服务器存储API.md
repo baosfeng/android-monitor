@@ -1,6 +1,6 @@
 # 服务器存储 API（备份 / 恢复）
 
-> 结论：服务端只做**不透明字节存储 + 元数据注册 + 访问控制**；解包、校验、还原全部在客户端完成。所有接口复用现有设备 Token（`Authorization: Bearer <token>`），Base URL 与统一响应体同 [设备上报 API](../../API接口定义_后端需实现.md)。
+> 结论：服务端只做**不透明字节存储 + 元数据注册 + 访问控制**；解包、校验、还原全部在客户端完成。所有接口复用现有设备 Token（`Authorization: Bearer <token>`），Base URL 与统一响应体同 [设备上报 API](../API接口定义_后端需实现.md)。
 
 统一响应体：`{ "code": 0, "message": "ok", "data": { } }`；`code=0` 才算成功。HTTP 2xx 且 `code != 0` 仍视为业务失败。
 
@@ -63,7 +63,6 @@
 - `DELETE /backups/{backupId}`：软删除（status=`DELETED`，物理清理异步），成功返回 `{ "backupId": "…", "deleted": true }`。
 
 ## 4. 认证与错误码
-
 | code | 含义 | 客户端行为 |
 |---|---|---|
 | 0 | 成功 | — |
@@ -75,16 +74,7 @@
 | 2004 | sha256/size 校验失败 | 删除半成品，重新上传 |
 | 2005 | schemaVersion 不兼容 | 仅展示、禁止恢复 |
 | 5000 | 服务端错误 | 走离线队列重试 |
-
 ## 5. 不变量
 
-- 服务端**不得**改写、重压、解密备份字节；`GET …/content` 字节必须与上传完全一致（客户端 sha256 断言）。
-- 同一 `deviceId` 下数据隔离；Token 只能读写本设备备份，越权返回 1001/403。
-- 上传 URL 必须短时有效（≤10 分钟）且单次；提交前的半成品不列入 `GET /backups`。
-- 保留策略由服务端执行，但**计数展示以 `status=READY` 为准**；`UPLOADING` 不占显示配额。
-- 服务端可附加 `restoreSupported=false`，客户端必须遵守并不发起恢复。
-
-## 测试与验收
-
-- 契约测试：幂等注册、sha256 不匹配、越权读、分页 cursor、删除后不可下载。
-- 端到端：LOCAL 产物 -> SERVER 上传 -> 下载 -> sha256 一致 -> 现有 restore 流水线成功。
+- 服务端不得改写/重压/解密；GET …/content 字节与上传完全一致（客户端 sha256 断言）；同一 deviceId 隔离，越权返 1001/403。
+- 上传 URL 短时有效（≤10 分钟）且单次；提交前半成品不入 list；保留计数以 `status=READY` 为准；UPLOADING 不占配额；`restoreSupported=false` 时客户端不恢复。
