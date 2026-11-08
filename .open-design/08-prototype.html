@@ -3884,7 +3884,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </button>
           <button class="btn btn-ghost btn-block" type="button" data-goto="s04" data-od-id="s01-quick-finance">
             <svg viewBox="0 0 24 24" aria-hidden><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><circle cx="12" cy="14.6" r="1.6"/></svg>
-            <span>去记账 · 今日支出 ¥268</span>
+            <span>记账 · 本月支出 ¥2,468 · 结余 ¥2,532</span>
           </button>
         </div>
       </div>
@@ -4620,6 +4620,25 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </div>
       </div>
       <p class="meta mt-3" id="s04-strip">今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932</p>
+    </div>
+
+    <div class="pad mt-3 s04-in" style="--i:3b" data-state-hide="loading empty error edge">
+      <div class="card glass">
+        <div class="row-between"><h2 class="h2">多周期查询</h2><span class="meta">支出 / 收入 / 结余</span></div>
+        <div class="segmented mt-3" role="tablist" aria-label="统计周期">
+          <button type="button" aria-pressed="true">今日</button>
+          <button type="button" aria-pressed="false">本周</button>
+          <button type="button" aria-pressed="false">本月</button>
+          <button type="button" aria-pressed="false">本年</button>
+          <button type="button" aria-pressed="false">全部</button>
+        </div>
+        <div class="grid-3 mt-3">
+          <div class="kpi"><span class="kpi-label">总支出</span><span class="s04-amt is-exp num">¥2,468</span></div>
+          <div class="kpi"><span class="kpi-label">总收入</span><span class="s04-amt is-inc num">¥5,000</span></div>
+          <div class="kpi"><span class="kpi-label">结余</span><span class="s04-amt num">¥2,532</span></div>
+        </div>
+        <p class="meta mt-3">支持按日 / 周 / 月 / 年 / 全部统计，不再只限制查看单月。</p>
+      </div>
     </div>
 
     <div class="pad mt-3 s04-in" style="--i:3" data-state-hide="loading empty error edge" data-od-id="s04-entries">
@@ -5834,6 +5853,60 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
     </div>
 
+    <div class="pad mt-3 s07-in" style="--i:1b" data-state-hide="loading empty error edge">
+      <div class="card glass">
+        <div class="row-between"><h2 class="h2">时间范围</h2><span class="meta">支持日 / 周 / 月 / 年 / 全部</span></div>
+        <div class="segmented mt-3" role="tablist" aria-label="统计范围">
+          <button type="button">今日</button><button type="button">本周</button><button type="button" aria-pressed="true">本月</button><button type="button">本年</button><button type="button">全部</button>
+        </div>
+        <div class="grid-3 mt-3">
+          <div class="kpi"><span class="kpi-label">总花费</span><span class="s07-kv is-exp num">¥2,468</span></div>
+          <div class="kpi"><span class="kpi-label">周均</span><span class="s07-kv is-exp num">¥617</span></div>
+          <div class="kpi"><span class="kpi-label">年累计</span><span class="s07-kv is-exp num">¥18,420</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s07-in" style="--i:1c" data-state-hide="loading empty error edge">
+      <div class="card">
+        <div class="row-between"><h2 class="h2">年度趋势</h2><span class="meta">12 个月 · 支出 / 收入</span></div>
+        <svg class="chart mt-3" viewBox="0 0 340 156" role="img" aria-label="年度收支趋势">
+          <line class="chart-grid" x1="24" y1="132" x2="332" y2="132"/>
+          <line class="chart-grid" x1="24" y1="84" x2="332" y2="84"/>
+          <line class="chart-grid" x1="24" y1="36" x2="332" y2="36"/>
+          <polyline fill="none" stroke="var(--expense-text)" stroke-width="2" points="24,96 52,88 80,104 108,72 136,92 164,60 192,78 220,66 248,90 276,54 304,76 332,62"/>
+          <polyline fill="none" stroke="var(--income-text)" stroke-width="2" points="24,58 52,54 80,60 108,48 136,56 164,42 192,50 220,44 248,52 276,38 304,46 332,40"/>
+          <text x="20" y="135.5" text-anchor="end">0</text>
+          <text x="20" y="87.5" text-anchor="end">1200</text>
+          <text x="20" y="39.5" text-anchor="end">2400</text>
+          <text x="52" y="150" text-anchor="middle">1</text>
+          <text x="108" y="150" text-anchor="middle">3</text>
+          <text x="164" y="150" text-anchor="middle">5</text>
+          <text x="220" y="150" text-anchor="middle">7</text>
+          <text x="276" y="150" text-anchor="middle">9</text>
+          <text x="332" y="150" text-anchor="middle">12</text>
+        </svg>
+        <ul class="legend mt-3">
+          <li><span class="legend-dot seq-expense"></span>支出<span class="legend-num">年累计 ¥18,420</span></li>
+          <li><span class="legend-dot seq-income"></span>收入<span class="legend-num">年累计 ¥32,000</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s07-in" style="--i:1d" data-state-hide="loading empty error edge">
+      <div class="card">
+        <div class="row-between"><h2 class="h2">年度 Top 分类</h2><span class="meta">累计</span></div>
+        <ul class="legend s07-legend mt-3">
+          <li><span class="legend-dot s1"></span>购物<span class="legend-num">¥4,862</span></li>
+          <li><span class="legend-dot s2"></span>餐饮<span class="legend-num">¥3,214</span></li>
+          <li><span class="legend-dot s3"></span>交通<span class="legend-num">¥1,532</span></li>
+          <li><span class="legend-dot s4"></span>娱乐<span class="legend-num">¥1,248</span></li>
+          <li><span class="legend-dot s5"></span>居住<span class="legend-num">¥2,868</span></li>
+        </ul>
+        <p class="meta mt-3">点击分类可下钻到交易明细（原型示意）。</p>
+      </div>
+    </div>
+
     <div class="pad mt-3 s07-in" style="--i:2" data-state-hide="loading empty error edge" data-od-id="s07-ringcard">
       <div class="card glass">
         <div class="row-between"><h2 class="h2">分类支出</h2><span class="meta">占比</span></div>
@@ -6384,6 +6457,32 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <span class="row-sub">白名单内应用不参与跳过</span>
             </span>
             <span class="row-tail"><span class="num">9 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <p class="group-label">记账功能（可按需开启）</p>
+        <div class="group">
+          <div class="row">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+            <span class="row-body"><span class="row-title">预算与预警</span><span class="row-sub">默认关闭；开启后在记账页显示预算进度与预警</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="预算与预警" data-toggle data-on-msg="预算与预警已开启" data-off-msg="预算与预警已关闭"></button>
+          </div>
+          <div class="row">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
+            <span class="row-body"><span class="row-title">首页记账卡</span><span class="row-sub">概览页显示本月收支柱状与趋势</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="首页记账卡" data-toggle data-on-msg="首页记账卡已开启" data-off-msg="首页记账卡已关闭"></button>
+          </div>
+          <div class="row">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3 6.5h18M7 12h10M10 17.5h4"/></svg></span>
+            <span class="row-body"><span class="row-title">多周期查询入口</span><span class="row-sub">记账页顶部显示 日 / 周 / 月 / 年 / 全部</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="多周期查询入口" data-toggle data-on-msg="多周期查询入口已开启" data-off-msg="多周期查询入口已关闭"></button>
+          </div>
+          <button class="row" type="button" data-goto="s06">
+            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+            <span class="row-body"><span class="row-title">预算设置</span><span class="row-sub">按需进入，不再占用记账首页</span></span>
+            <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
           </button>
         </div>
       </div>

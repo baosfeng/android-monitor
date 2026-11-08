@@ -88,6 +88,25 @@
       <p class="meta mt-3" id="s04-strip">今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932</p>
     </div>
 
+    <div class="pad mt-3 s04-in" style="--i:3b" data-state-hide="loading empty error edge">
+      <div class="card glass">
+        <div class="row-between"><h2 class="h2">多周期查询</h2><span class="meta">支出 / 收入 / 结余</span></div>
+        <div class="segmented mt-3" role="tablist" aria-label="统计周期">
+          <button type="button" aria-pressed="true">今日</button>
+          <button type="button" aria-pressed="false">本周</button>
+          <button type="button" aria-pressed="false">本月</button>
+          <button type="button" aria-pressed="false">本年</button>
+          <button type="button" aria-pressed="false">全部</button>
+        </div>
+        <div class="grid-3 mt-3">
+          <div class="kpi"><span class="kpi-label">总支出</span><span class="s04-amt is-exp num">¥2,468</span></div>
+          <div class="kpi"><span class="kpi-label">总收入</span><span class="s04-amt is-inc num">¥5,000</span></div>
+          <div class="kpi"><span class="kpi-label">结余</span><span class="s04-amt num">¥2,532</span></div>
+        </div>
+        <p class="meta mt-3">支持按日 / 周 / 月 / 年 / 全部统计，不再只限制查看单月。</p>
+      </div>
+    </div>
+
     <div class="pad mt-3 s04-in" style="--i:3" data-state-hide="loading empty error edge" data-od-id="s04-entries">
       <div class="grid-2">
         <button class="card s04-entry" type="button" data-goto="s07" data-od-id="s04-entry-stats">
