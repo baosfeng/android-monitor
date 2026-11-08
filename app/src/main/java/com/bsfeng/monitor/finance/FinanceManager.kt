@@ -55,25 +55,45 @@ class FinanceManager internal constructor(context: Context) {
     // ========== 交易 ==========
 
     suspend fun addTransaction(tx: Transaction): Long = withContext(Dispatchers.IO) {
-        val id = dao.insertTransaction(tx)
-        accountBalance.applyTransactionEffect(tx, sign = 1.0)
+        val id = insertTransactionWithEffect(tx)
         notifyChanged()
         id
     }
 
+    /**
+     * 「写交易 + 余额副作用」的最小原子单元，**同步阻塞**、调用方拥有事务边界。
+     *
+     * 为什么单独抽出这一层：账单导入要「整批一个事务」（[BillImporter]），逐笔调
+     * [addTransaction] 会让每笔各提交一次事务，且必须绕开余额副作用才能留在批事务里 ——
+     * 之前正是因为绕开了它，导入的每一笔都不进账户余额。现在两条入口共用这一条路径：
+     * 导入在外层事务里逐笔调它，手动/自动记账则由 [addTransaction] 包一层事务。
+     *
+     * 交易写库与余额变更必须在同一个事务里：只写成交易、余额没跟上，或反过来，
+     * 都会让「账目总额」与「账户余额」永久偏差，而界面上看不出异常。
+     */
+    internal fun insertTransactionWithEffect(tx: Transaction): Long = dao.runInTransaction {
+        val id = dao.insertTransaction(tx)
+        accountBalance.applyTransactionEffect(tx, sign = 1.0)
+        id
+    }
+
     suspend fun deleteTransaction(id: Long): Unit = withContext(Dispatchers.IO) {
-        val existing = dao.getTransactionById(id)
-        dao.deleteTransaction(id)
-        if (existing != null) accountBalance.applyTransactionEffect(existing, sign = -1.0)
+        dao.runInTransaction {
+            val existing = dao.getTransactionById(id)
+            dao.deleteTransaction(id)
+            if (existing != null) accountBalance.applyTransactionEffect(existing, sign = -1.0)
+        }
         notifyChanged()
     }
 
     suspend fun updateTransaction(tx: Transaction): Unit = withContext(Dispatchers.IO) {
-        val old = dao.getTransactionById(tx.id)
-        dao.updateTransaction(tx)
-        // 先按旧值回冲、再按新值计入：换账户 / 改金额 / 支出↔转账互转都由这一条路径覆盖
-        if (old != null) accountBalance.applyTransactionEffect(old, sign = -1.0)
-        accountBalance.applyTransactionEffect(tx, sign = 1.0)
+        dao.runInTransaction {
+            val old = dao.getTransactionById(tx.id)
+            dao.updateTransaction(tx)
+            // 先按旧值回冲、再按新值计入：换账户 / 改金额 / 支出↔转账互转都由这一条路径覆盖
+            if (old != null) accountBalance.applyTransactionEffect(old, sign = -1.0)
+            accountBalance.applyTransactionEffect(tx, sign = 1.0)
+        }
         notifyChanged()
     }
 
@@ -287,7 +307,9 @@ class FinanceManager internal constructor(context: Context) {
          */
         fun getInstance(context: Context): FinanceManager =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: FinanceManager(context.applicationContext)
+                // .also 不能省：漏了它这个「单例」每次调用都新建一个 Manager，
+                // 各自持有独立的 changeVersion，写事件的实例与订阅的实例对不上（组件不刷新）。
+                INSTANCE ?: FinanceManager(context.applicationContext).also { INSTANCE = it }
             }
     }
 }

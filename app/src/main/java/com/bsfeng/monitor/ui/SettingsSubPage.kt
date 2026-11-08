@@ -44,7 +44,7 @@ enum class SettingsSubPage(
         "功能开关",
         Feature.entries.size.toString() + " 项功能各一行开关，右侧 chevron 进各自细则",
     ),
-    DATA("数据与备份", "立即备份 · 自动频率 · 最近一次 · 从备份还原"),
+    DATA("数据与备份", "立即备份 · 自动频率 · 导出到下载 · 从备份还原"),
     APPEARANCE("外观与动效", "外观与主题 · 动效强度 · 触觉反馈与强度"),
     ABOUT("关于", "版本 · 检查更新 · 开源许可"),
     // 只在 debug 构建 + 关于页长按解锁后进一级页入口清单（见 settingsIndexEntries）

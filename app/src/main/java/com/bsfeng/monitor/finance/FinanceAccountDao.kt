@@ -2,7 +2,6 @@ package com.bsfeng.monitor.finance
 
 // 来源：原 finance/FinanceDao.kt 的 Account 分区；职责：账户表读写与余额更新。
 
-import android.content.ContentValues
 import android.database.sqlite.SQLiteConstraintException
 import com.bsfeng.monitor.finance.model.Account
 
@@ -43,10 +42,29 @@ internal class FinanceAccountDao(private val dbHelper: FinanceDatabaseHelper) {
         }
     }
 
-    /** 更新账户余额 */
-    fun updateAccountBalance(accountId: Long, newBalance: Double): Int {
+    /**
+     * 余额按相对增量原子更新：`balance = balance + delta`。
+     *
+     * 为什么不是「读整行 → 内存相加 → 整行写回」：自动记账（AutoBookPersistence 在 IO scope）与
+     * 手动记账（记账页协程）会并发写同一账户，两个写者各自读到同一个旧值时，后写者会把前者的
+     * 增量覆盖掉 —— 账目总额与账户余额从此永久偏差，且没有任何报错可以察觉。
+     * 把加法交给 SQLite 一条 UPDATE：写语句串行执行，后到的那条读到的是前者已提交的值。
+     *
+     * @return 受影响行数；0 表示账户不存在（或账户名为空），调用方按「跳过」处理，
+     *         不让差额落到别的账户上
+     */
+    fun addToAccountBalance(accountName: String, delta: Double): Int {
+        if (accountName.isBlank() || delta == 0.0) return 0
         val db = dbHelper.writableDatabase
-        val cv = ContentValues().apply { put(AccountEntity.COL_BALANCE, newBalance) }
-        return db.update(AccountEntity.TABLE_NAME, cv, "${AccountEntity.COL_ID} = ?", arrayOf(accountId.toString()))
+        val statement = db.compileStatement(
+            "UPDATE ${AccountEntity.TABLE_NAME} " +
+                "SET ${AccountEntity.COL_BALANCE} = ${AccountEntity.COL_BALANCE} + ? " +
+                "WHERE ${AccountEntity.COL_NAME} = ?"
+        )
+        return statement.use { st ->
+            st.bindDouble(1, delta)
+            st.bindString(2, accountName)
+            st.executeUpdateDelete()
+        }
     }
 }

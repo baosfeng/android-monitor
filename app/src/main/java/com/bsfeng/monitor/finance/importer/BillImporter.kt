@@ -64,10 +64,20 @@ class BillImporter(private val financeManager: FinanceManager) {
                     errors += "第 " + lineNo + " 行缺少交易单号与时间，已跳过"
                     continue
                 }
+                // 身份键成立（有单号）但时间解析不出：date 列一旦写成空串，
+                // 这笔账在「最近列表」里看得见，却因为月度统计/预算都按 date 字符串区间比较
+                // 而永远不进任何月份 —— 隐形账目比丢掉一行更危险，所以计入错误明细并跳过。
+                if (BillIdentity.dateOf(record).isEmpty()) {
+                    errors += "第 " + lineNo + " 行交易时间无法识别（「" +
+                        excerpt(record.tradeTime) + "」），已跳过"
+                    continue
+                }
                 val existing = findExisting(record, sourceId)
                 if (existing == null) {
                     val category = BillCategoryResolver.resolve(record)
-                    dao.insertTransaction(buildTransaction(record, sourceId, category))
+                    // 走 FinanceManager 的写入口：交易写库与账户余额变更同一条路径（同一个事务），
+                    // 直接调 dao.insertTransaction 会让这笔导入永远不进「支付宝/微信钱包」余额
+                    financeManager.insertTransactionWithEffect(buildTransaction(record, sourceId, category))
                     inserted++
                     if (!BillCategoryResolver.isFallback(category)) resolved++
                 } else if (fillBlanks(existing, record, sourceId)) {
@@ -167,6 +177,12 @@ class BillImporter(private val financeManager: FinanceManager) {
             )
         )
         return true
+    }
+
+    /** 错误明细里的原文摘录：超过 20 字截断，避免整段异常文本把结果卡刷满。 */
+    private fun excerpt(raw: String): String {
+        val text = raw.trim()
+        return if (text.length <= 20) text else text.take(20) + "…"
     }
 
     /** 记账账户按渠道固定：支付宝 → 支付宝；微信 → 微信钱包（余额按账户算，不能留空） */
