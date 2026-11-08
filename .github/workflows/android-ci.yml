@@ -115,8 +115,8 @@ jobs:
 
       # 质量基线要求「Lint 零 error + 零 warning」，但此前只有本地跑过、CI 从未判定。
       # 位置在覆盖率之后：它要 JDK + Android SDK 都就绪，且与测试链无依赖关系。
-      # ⚠️ 已知红：仓库现存 35 个 lint error，正由 fix-lint 分支并行清零；
-      # 本步先接上门禁，等该项合并后才会真正转绿。
+      # 35 个存量 error 已清零（abortOnError + warningsAsErrors 全开，基线文件为空），
+      # 本步现在是**真门禁**：新增 error/warning 会直接判红。
       - name: Android lint
         run: ./gradlew :app:lintDebug --stacktrace
 
