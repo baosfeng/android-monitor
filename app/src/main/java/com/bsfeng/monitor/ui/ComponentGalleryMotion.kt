@@ -80,7 +80,7 @@ internal fun GalleryDots() {
                     }
                 }
                 Spacer(Modifier.height(t.space2))
-                Text("按 chart-1..chart-16 循环取色（替代旧 categoryPalette）", style = MaterialTheme.typography.labelSmall, color = t.meta)
+                Text("按 chart-1..chart-16 循环取色（替代旧分类色板）", style = MaterialTheme.typography.labelSmall, color = t.meta)
             }
         }
     }

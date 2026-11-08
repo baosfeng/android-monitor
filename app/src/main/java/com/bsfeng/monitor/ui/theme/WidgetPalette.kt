@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * 桌面小组件（6 个 Glance App Widget）的固定色板。
  *
- * 为什么单独一套、不并进 [IOSColors] / DesignTokenTable：那两套是 **App 内**的 8 套主题，
+ * 为什么单独一套、不并进 DesignTokenTable：那两套是 **App 内**的 8 套主题，
  * 而组件在桌面上只跟随系统深浅色两档（Glance 的 `ColorProvider(day, night)`）；
  * 一旦混用，「App 里选深色主题 + 系统是浅色」时桌面卡片会和 App 内颜色对不上。
  *

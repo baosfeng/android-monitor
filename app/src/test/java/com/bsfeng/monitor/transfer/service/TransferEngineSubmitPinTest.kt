@@ -35,7 +35,8 @@ class TransferEngineSubmitPinTest {
 
     /** 只记录、不落网的 HTTP 替身：每次 offer 都回 pending，避免进入上传分支。 */
     private class RecordingClient : MiniHttpClient() {
-        val posts = mutableListOf<Pair<String, String>>()
+        val posts = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        val posted = java.util.concurrent.CountDownLatch(1)
 
         override fun postJson(
             url: String,
@@ -43,6 +44,7 @@ class TransferEngineSubmitPinTest {
             headers: Map<String, String>,
         ): HttpResponse {
             posts += url to body
+            posted.countDown()
             val data = JSONObject().apply {
                 put("sessionId", "sess-1")
                 put("token", "tok-1")
@@ -120,10 +122,11 @@ class TransferEngineSubmitPinTest {
         val client = RecordingClient()
         val transferEngine = newEngine(client)
         transferEngine.pendingSend = pendingSend()
+        assertTrue("pendingSend 应已就位", transferEngine.pendingSend != null)
 
         transferEngine.submitPin("1234")
 
-        assertTrue("必须真的发出 offer，否则 PIN 流程静默", await { client.posts.size == 1 })
+        assertTrue("必须真的发出 offer，否则 PIN 流程静默", client.posted.await(10, java.util.concurrent.TimeUnit.SECONDS))
         val (url, body) = client.posts.single()
         assertTrue("应打 /offer 路由：$url", url.endsWith("/offer"))
         assertEquals("1234", JSONObject(body).optString("pin"))
@@ -149,7 +152,7 @@ class TransferEngineSubmitPinTest {
 
         transferEngine.submitPin("1234")
 
-        assertTrue(await { client.posts.size == 1 })
+        assertTrue(client.posted.await(10, java.util.concurrent.TimeUnit.SECONDS))
         // 对端仍回 pending：不能把 pendingSend 清掉，否则用户没有第二次输入的入口
         assertTrue("待确认的发送必须保留", transferEngine.pendingSend != null)
     }

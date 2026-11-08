@@ -29,13 +29,13 @@ val DesignTokens.chartRamp: List<Color>
         )
     }
 
-/** 分类圆点色：按下标循环取分类色板（替代旧 categoryPalette[i]）。 */
+/** 分类圆点色：按下标循环取分类色板（按下标循环取分类色板）。 */
 fun DesignTokens.categoryDot(index: Int): Color {
     val ramp = chartRamp
     return ramp[((index % ramp.size) + ramp.size) % ramp.size]
 }
 
-/** 旧 categoryPalette 的等价物：16 槽循环色阶，供仍按下标取色的调用点过渡。 */
+/** 16 槽循环色阶：供仍按下标取色的调用点使用。 */
 val DesignTokens.categoryRamp: List<Color>
     get() = (0 until 16).map { categoryDot(it) }
 
@@ -62,7 +62,7 @@ fun DesignTokens.heatCell(intensity: Int, levels: Int = 6): Color {
     return ramp[idx.coerceIn(0, ramp.size - 1)]
 }
 
-/** 事件类型色（替代 RecordType.toEventColor()）。 */
+/** 事件类型色（事件类型到主题色映射）。 */
 fun DesignTokens.eventColor(type: RecordType): Color = when (type) {
     RecordType.SCREEN -> chart1
     RecordType.APP_USAGE -> chart2
@@ -115,7 +115,7 @@ val DesignTokens.dotDiameter get() = dotSize
 internal object DesignTokenCatalog {
     val legacyTable: List<LegacyTokenMap.Entry> get() = LegacyTokenMap.TABLE
 
-    /** 旧语义名（如 "IOSColors.green"）对应的新 token 名（如 "success"）；未登记返回 null。 */
+    /** 旧语义名对应的新 token 名；未登记返回 null。 */
     fun tokenFor(legacyName: String): String? =
         LegacyTokenMap.TABLE.firstOrNull { it.legacy == legacyName }?.token
 
