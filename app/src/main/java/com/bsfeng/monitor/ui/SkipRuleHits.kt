@@ -5,6 +5,7 @@ package com.bsfeng.monitor.ui
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.record.RecordStore
 import com.bsfeng.monitor.ui.live.DAY_MS
+import com.bsfeng.monitor.ui.live.bucketizeDaily
 import com.bsfeng.monitor.ui.live.startOfDay
 
 /**
@@ -31,13 +32,11 @@ internal fun loadSkipHits(store: RecordStore, now: Long): SkipHits {
     val weekStart = todayStart - (SKIP_TREND_DAYS - 1) * DAY_MS
     val events = store.queryByTypeAndAction(RecordType.SCREEN, AD_SKIPPED_ACTION, 0L, now)
     var today = 0
-    val buckets = FloatArray(SKIP_TREND_DAYS)
     events.forEach { record ->
         if (record.timestamp >= todayStart) today++
-        val idx = ((record.timestamp - weekStart) / DAY_MS).toInt()
-        if (idx in 0 until SKIP_TREND_DAYS) buckets[idx] += 1f
     }
-    return SkipHits(total = events.size, today = today, daily7 = buckets.toList())
+    val daily7 = bucketizeDaily(events.map { it.timestamp }, weekStart, SKIP_TREND_DAYS)
+    return SkipHits(total = events.size, today = today, daily7 = daily7)
 }
 
 /** 跳过事件的动作名（与 RecordCollector.onSkipAd 写入的 action 一致）。 */

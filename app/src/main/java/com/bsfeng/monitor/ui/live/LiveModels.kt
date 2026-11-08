@@ -178,13 +178,6 @@ fun formatDurationMs(ms: Long?): String {
     }
 }
 
-/** 毫秒 → "6h 12m"（近 7 天 / 近 30 天活跃 KPI 用）。 */
-fun formatHoursMinutes(totalMinutes: Long): String {
-    val h = totalMinutes / 60
-    val m = totalMinutes % 60
-    return h.toString() + "h " + String.format(Locale.US, "%02d", m) + "m"
-}
-
 /** 缺失字段统一占位（与原型「缺失字段以 — 占位」一致）。 */
 const val PLACEHOLDER: String = "—"
 
