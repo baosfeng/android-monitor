@@ -27,15 +27,17 @@ object SnapshotExporter {
     internal const val MAX_DEPTH = 60
 
     /** 快照输出目录名（相对 filesDir） */
-    private const val SNAPSHOT_DIR_NAME = "snapshots"
+    private const val SNAPSHOT_DIR_NAME = SnapshotRetention.DIR_NAME
 
     /**
-     * 只保留最近 N 份快照。
+     * 只保留最近 [SnapshotRetention.MAX_SNAPSHOTS]（10）份快照。
      *
-     * 快照内容是**屏幕原文**（聊天、支付页、通知文案），无上限囤在 files/ 里等于长期留隐私副本，
-     * 而且会随导出次数无限膨胀。排查用的快照留 20 份够翻一阵了。
+     * 快照内容是**屏幕原文**（聊天、支付页、通知文案），无上限囤在 files/ 里等于长期留隐私副本。
+     * 为什么是 10 而不是更多：排查一个选择器通常只看当下这一两份，20 份意味着一轮取证就能攒下
+     * 几十屏聊天 / 支付页面；10 份对「翻回去看上一版」仍够用，暴露面减半。
+     * 淘汰口径落在 [SnapshotRetention]（纯 java.io，可纯 JVM 单测）。
      */
-    private const val MAX_SNAPSHOTS = 20
+    private const val MAX_SNAPSHOTS = SnapshotRetention.MAX_SNAPSHOTS
 
     /** JSON 缩进空格数 */
     private const val INDENT_SPACES = 2
@@ -110,13 +112,31 @@ object SnapshotExporter {
 
     /** 按修改时间保留最近 [MAX_SNAPSHOTS] 份；目录不可读时静默跳过（导出本身不该因此失败）。 */
     private fun pruneSnapshots(dir: File) {
-        runCatching {
-            val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: return
-            if (files.size < MAX_SNAPSHOTS) return
-            files.sortedByDescending { it.lastModified() }
-                .drop(MAX_SNAPSHOTS - 1)
-                .forEach { it.delete() }
-        }.onFailure { Log.w(TAG, "清理旧快照失败", it) }
+        runCatching { SnapshotRetention.prune(dir, keep = MAX_SNAPSHOTS - 1) }
+            .onFailure { Log.w(TAG, "清理旧快照失败", it) }
+    }
+
+    /**
+     * 已保存的快照份数（跳过规则页副标题「已保存 N 份」）。
+     *
+     * @param context 上下文（取 filesDir）
+     */
+    fun countSaved(context: android.content.Context): Int =
+        SnapshotRetention.count(SnapshotRetention.dir(context.filesDir))
+
+    /**
+     * 一键清除全部页面快照（跳过规则页「清除页面快照」）。
+     *
+     * @param context 上下文（取 filesDir）
+     * @return 实际删除的份数
+     */
+    fun clearAll(context: android.content.Context): Int {
+        val dir = SnapshotRetention.dir(context.filesDir)
+        val removed = SnapshotRetention.clear(dir)
+        // 路径展示也一并清掉：清完后页面上不该还留着「快照：/data/…/123.json」
+        SnapshotRequest.record(null)
+        Log.i(TAG, "已清除页面快照 $removed 份")
+        return removed
     }
 
     /**

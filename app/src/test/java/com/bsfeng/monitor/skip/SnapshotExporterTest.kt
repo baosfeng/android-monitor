@@ -229,6 +229,50 @@ class SnapshotExporterTest {
 
     // ========== 落盘 ==========
 
+    // ========== 份数与清除（SEC-03）==========
+
+    @Test
+    fun `countSaved 统计已落盘快照份数`() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        val dir = File(context.filesDir, "snapshots").apply { mkdirs() }
+        assertEquals(0, SnapshotExporter.countSaved(context))
+        File(dir, "1.json").writeText("{}")
+        File(dir, "2.json").writeText("{}")
+        assertEquals(2, SnapshotExporter.countSaved(context))
+    }
+
+    @Test
+    fun `clearAll 清空快照目录并清掉最近路径`() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        val dir = File(context.filesDir, "snapshots").apply { mkdirs() }
+        repeat(3) { File(dir, "${it + 1}.json").writeText("{\"packageName\":\"com.demo\"}") }
+        SnapshotRequest.record(File(dir, "3.json").absolutePath)
+
+        val removed = SnapshotExporter.clearAll(context)
+
+        assertEquals(3, removed)
+        assertEquals(0, SnapshotExporter.countSaved(context))
+        assertTrue("目录内不该再有 json", dir.listFiles().isNullOrEmpty())
+        assertNull("清完不该再展示旧路径", SnapshotRequest.lastPath)
+    }
+
+    @Test
+    fun `超过 10 份时导出会淘汰最旧的一份`() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        val dir = File(context.filesDir, "snapshots").apply { mkdirs() }
+        repeat(SnapshotRetention.MAX_SNAPSHOTS) { index ->
+            File(dir, "${index + 1}.json").apply {
+                writeText("{}")
+                setLastModified(1_000L + index * 1_000L)
+            }
+        }
+
+        val path = SnapshotExporter.exportCurrentPage(context, node(), "com.demo", "MainActivity")
+
+        assertNotNull(path)
+        assertEquals(SnapshotRetention.MAX_SNAPSHOTS, SnapshotExporter.countSaved(context))
+        assertFalse("最旧的一份应被淘汰", File(dir, "1.json").exists())
+    }
     @Test
     fun `exportCurrentPage 写入 snapshots 目录并返回绝对路径`() {
         val context = RuntimeEnvironment.getApplication() as Context

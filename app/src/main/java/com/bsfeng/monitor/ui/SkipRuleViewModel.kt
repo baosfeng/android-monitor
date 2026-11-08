@@ -7,6 +7,7 @@ import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.SkipRule
 import com.bsfeng.monitor.skip.GkdSubscription
 import com.bsfeng.monitor.skip.SkipRuleManager
+import com.bsfeng.monitor.skip.SnapshotExporter
 import com.bsfeng.monitor.skip.SnapshotRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * s10 错态文案（本地规则库读取失败）。
@@ -74,6 +76,8 @@ data class SkipRuleUiState(
     val updatingUrl: String? = null,
     /** 最近一次导出快照的文件路径 */
     val snapshotPath: String? = null,
+    /** 已保存的页面快照份数（跳过规则页「清除页面快照」副标题显示） */
+    val snapshotCount: Int = 0,
     /** 操作提示（一次性） */
     val message: String? = null,
     /** 加载 / 订阅失败原因（null = 无错误；s10 错误态用） */
@@ -110,6 +114,7 @@ class SkipRuleViewModel : ViewModel() {
                     SubscriptionUi(url = it.url, version = it.version, ruleCount = it.ruleCount)
                 },
                 snapshotPath = SnapshotRequest.lastPath,
+                // 份数用于「清除页面快照」的副标题与禁用态：目录上限 10 个文件，listFiles 是毫秒级，
                 lastSyncAt = ruleManager.lastSubscriptionCheckAt(),
             )
         } catch (e: Exception) {
@@ -256,6 +261,29 @@ class SkipRuleViewModel : ViewModel() {
         _state.value = _state.value.copy(
             message = "已请求快照：请切到目标 App，约 " + (SnapshotRequest.SWITCH_SETTLE_MS / 1000.0) + " 秒后自动导出"
         )
+    }
+
+    /**
+     * 清除全部页面快照（锚点 s10-clear）。
+     *
+     * 快照是第三方 App 的屏幕原文：用户导出后必须能一键撤销，而不是等份数上限把它滚掉。
+     * 删除是文件 IO，放 IO 线程；清完刷新份数，结果经 [SkipRuleUiState.message] 走页面 toast。
+     */
+    fun clearSnapshots() {
+        viewModelScope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                try {
+                    SnapshotExporter.clearAll(MonitorApp.instance)
+                } catch (e: Exception) {
+                    Log.w("SkipRuleViewModel", "清除页面快照失败", e)
+                    0
+                }
+            }
+            _state.value = _state.value.copy(
+                message = if (removed > 0) "已清除 $removed 份页面快照" else "没有可清除的页面快照",
+            )
+            refresh()
+        }
     }
 
     /** 消费一次性提示 */

@@ -6636,6 +6636,13 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="row-sub">上次同步 9:40 · 镜像 registry.npmmirror.com</span>
           <span class="badge" data-od-min-fs>2 个源</span>
         </div>
+        <div class="row snapshot-row">
+          <span class="row-main">
+            <span class="row-title">页面快照</span>
+            <span class="row-sub">已保存 3 份 · 内容是目标 App 的屏幕原文，排查完建议清除</span>
+          </span>
+          <button class="btn btn-ghost" type="button" data-od-id="s10-clear" onclick="App.open('#s10-clear-dialog')">清除快照</button>
+        </div>
       </div>
 
       <div class="kpi-row" data-od-id="s10-summary">
@@ -6797,6 +6804,17 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       <div class="act-row mt-4">
         <button class="btn btn-ghost" type="button" data-close="#s10-confirm">取消</button>
         <button class="btn" type="button" data-close="#s10-confirm" onclick="App.toast('订阅已更新：42 条规则')">确认更新</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="s10-clear-dialog" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="清除页面快照">
+      <p class="h3">清除全部页面快照？</p>
+      <p class="meta mt-2">将删除 files/snapshots 下的 3 份屏幕原文，清除后无法恢复。</p>
+      <div class="act-row mt-4">
+        <button class="btn btn-ghost" type="button" data-close="#s10-clear-dialog">取消</button>
+        <button class="btn" type="button" data-close="#s10-clear-dialog" onclick="App.toast('已清除 3 份页面快照')">确认清除</button>
       </div>
     </div>
   </div>
