@@ -89,7 +89,6 @@ import com.bsfeng.monitor.ui.live.PLACEHOLDER
 import com.bsfeng.monitor.ui.live.StackRow
 import com.bsfeng.monitor.ui.live.formatClockSec
 import com.bsfeng.monitor.ui.live.formatDayLabel
-import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 import kotlinx.coroutines.delay
@@ -134,6 +133,7 @@ fun AdScreen(
     val dailyCounts7 by adViewModel.dailyCounts7.collectAsState()
     val isLoading by adViewModel.isLoading.collectAsState()
     val loadError by adViewModel.loadError.collectAsState()
+    val windowStart by adViewModel.windowStart.collectAsState()
 
     val t = LocalDesignTokens.current
     val toast = rememberToastHostState()
@@ -186,13 +186,16 @@ fun AdScreen(
     val realState = when {
         retrying -> FiveState.LOADING
         isLoading && records.isEmpty() -> FiveState.LOADING
-        loadError != null -> FiveState.ERROR
+        loadError -> FiveState.ERROR
         records.isEmpty() -> FiveState.EMPTY
         else -> FiveState.POPULATED
     }
     val state = FiveStateDemo.effective(realState)
 
-    val dayStart = remember { startOfDay(System.currentTimeMillis()) - 6 * DAY_MS }
+    // 横轴与范围标题的窗口起点必须与 ViewModel 的查询窗口同源。
+    // 原先 remember {} 无 key：跨零点后 VM 已按新的 7 天窗口出数，横轴和「–」范围标题仍停在旧窗口。
+    // 改读 windowStart（VM 每轮刷新现算、仅跨零点变化）：既不冻结，也不会每 3s 重算一次横轴。
+    val dayStart = windowStart
     val labels = remember(dayStart) { (0 until 7).map { formatDayLabel(dayStart + it * DAY_MS) } }
     val rangeLabel = remember(dayStart) {
         monthDayLabel(dayStart) + " – " + monthDayLabel(dayStart + 6 * DAY_MS)
@@ -278,7 +281,8 @@ fun AdScreen(
                     )
 
                     FiveState.ERROR -> ErrorState(
-                        text = "跳过事件表暂时被占用（SQLITE_BUSY）。已跳过的广告不会重复出现。",
+                        // 文案取自唯一常量（VM 只给标记、不给原文）：锚点 s03-error 逐字不变。
+                        text = AD_LOAD_ERROR_DESC,
                         title = "跳过记录读取失败",
                         actionLabel = "重试",
                         onRetry = {

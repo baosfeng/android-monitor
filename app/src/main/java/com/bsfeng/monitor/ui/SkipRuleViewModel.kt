@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.MonitorApp
@@ -13,6 +14,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/**
+ * s10 错态文案（本地规则库读取失败）。
+ *
+ * 上屏文案是常量，异常原文只进 Log.w —— 与本包 [AD_LOAD_ERROR_DESC] 同一口径：
+ * **异常原文只进日志、不上屏**（e.message 是 SQLite 错误码 / 文件路径 / 类名这类实现细节，
+ * 上屏既泄漏内部结构、又随设备与 ROM 变来变去，用户读不出可执行的下一步）。
+ */
+internal const val SKIP_RULE_LOAD_ERROR_DESC = "读取本地规则库失败。请稍后重试。"
+
+/**
+ * s10 订阅拉取异常的上屏文案（同事 [SKIP_RULE_LOAD_ERROR_DESC] 口径）。
+ *
+ * 只用于「抛异常」这条兜底路径：可预期的失败走 [com.bsfeng.monitor.skip.GkdSubscription.Outcome.Failed]，
+ * 那里的 reason 是领域内写好的用户可读文案，照常上屏。
+ */
+internal const val SKIP_SUBSCRIPTION_ERROR_DESC = "订阅更新异常。已保留本地规则，未做覆盖。"
 
 /** 「新增订阅」的结果（锚点 s10-source · 新增订阅行）。 */
 internal enum class LocalSubscriptionOutcome { ADDED, DUPLICATE, BLANK, NOT_HTTPS }
@@ -95,7 +113,9 @@ class SkipRuleViewModel : ViewModel() {
                 lastSyncAt = ruleManager.lastSubscriptionCheckAt(),
             )
         } catch (e: Exception) {
-            _state.value = _state.value.copy(isLoading = false, errorMessage = "读取本地规则库失败：" + (e.message ?: e.javaClass.simpleName))
+            // 异常原文只进日志，上屏用常量（口径见 [SKIP_RULE_LOAD_ERROR_DESC]）
+            Log.w("SkipRuleViewModel", "读取本地规则库失败", e)
+            _state.value = _state.value.copy(isLoading = false, errorMessage = SKIP_RULE_LOAD_ERROR_DESC)
         }
     }
 
@@ -168,9 +188,12 @@ class SkipRuleViewModel : ViewModel() {
                 // 协程取消（ViewModel 销毁）原样上抛，updatingUrl 交给 finally 复位
                 throw e
             } catch (e: Exception) {
+                // 异常原文只进日志，上屏用常量（口径见 [SKIP_SUBSCRIPTION_ERROR_DESC]）；
+                // 可预期的失败走 Outcome.Failed，其 reason 是领域内写好的用户可读文案，照常上屏。
+                Log.w("SkipRuleViewModel", "订阅更新异常", e)
                 _state.value = _state.value.copy(
-                    message = "订阅更新异常：" + (e.message ?: e.javaClass.simpleName),
-                    errorMessage = "订阅拉取异常（" + e.javaClass.simpleName + "），已保留本地规则，未做覆盖。",
+                    message = SKIP_SUBSCRIPTION_ERROR_DESC,
+                    errorMessage = SKIP_SUBSCRIPTION_ERROR_DESC,
                 )
             } finally {
                 // 唯一复位点：成功（Updated / UpToDate）/ 失败（Failed）/ 异常 / 协程取消都经过这里。

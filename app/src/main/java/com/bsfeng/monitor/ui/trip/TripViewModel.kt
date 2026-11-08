@@ -19,6 +19,17 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.LinkedHashMap
 
+/**
+ * s16 错态文案（异常兜底）。
+ *
+ * 统一口径：**异常原文只进日志、不上屏** —— 上屏用本常量，e.message（SQLite 错误码 /
+ * 表名 / 路径）只进 Log.w。与 [com.bsfeng.monitor.ui.AD_LOAD_ERROR_DESC] 同一规则。
+ *
+ * 措辞逐字等于 TripScreen 的 DEFAULT_ERROR_TEXT：VM 已给文案时页面原样展示，
+ * 只有 error 为 null（不该发生）才回落那句；两处必须同字，否则同一次失败会有两种说法。
+ */
+internal const val TRIP_LOAD_ERROR_DESC = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
+
 data class TripState(
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -106,10 +117,11 @@ class TripViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // 异常原文只进日志，上屏用常量（口径见 [TRIP_LOAD_ERROR_DESC]）
             Log.w("TripViewModel", "计算每日行程失败", e)
             TripState(
                 isLoading = false,
-                error = e.message ?: "行程计算失败（本地数据库暂时不可用）",
+                error = TRIP_LOAD_ERROR_DESC,
                 dayStart = dayStart,
                 dayEnd = dayEnd,
             )

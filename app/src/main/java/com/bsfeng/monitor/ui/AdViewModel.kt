@@ -15,6 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+/**
+ * s03 错态文案（锚点 s03-error 逐字）。
+ *
+ * 唯一来源：ViewModel 只置 [AdViewModel.loadError] 标记，文案从这里取。
+ * 异常原文（SQLite 错误码 / 表名 / 路径）只进 Log.w，不上屏。
+ */
+internal const val AD_LOAD_ERROR_DESC = "跳过事件表暂时被占用（SQLITE_BUSY）。已跳过的广告不会重复出现。"
+
 /** 跳过方式（s03 筛选 chip）。 */
 enum class SkipMethod(val label: String) {
     ALL("全部"),
@@ -102,8 +110,25 @@ class AdViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _loadError = MutableStateFlow<String?>(null)
-    val loadError: StateFlow<String?> = _loadError.asStateFlow()
+    /**
+     * 读表失败标记（只判态，不承载文案）。
+     *
+     * 统一口径（全仓约定）：**异常原文只进日志、不上屏**。e.message 是 SQLite 错误码 /
+     * 表名 / 路径这类实现细节，上屏既泄漏内部结构、又和页面写死的错态文案对不上 ——
+     * 此前这里存了 e.message，屏幕层却只用它 `!= null` 判态，那段原文白算。
+     * 上屏文案的唯一来源是常量 [AD_LOAD_ERROR_DESC]。
+     */
+    private val _loadError = MutableStateFlow(false)
+    val loadError: StateFlow<Boolean> = _loadError.asStateFlow()
+
+    /**
+     * 近 7 天窗口起点（当地 00:00 再往前 6 天），同时是查询窗口与横轴 / 范围标题的唯一来源。
+     *
+     * 只在跨零点时变一次：页面以它做 key 重算横轴，既不会像无 key 的 remember 那样冻在进屏那一刻，
+     * 也不会每 3s 发射一次导致整屏重组（同文件其余字段逐个判等后再赋值，口径一致）。
+     */
+    private val _windowStart = MutableStateFlow(adWindowStart(System.currentTimeMillis()))
+    val windowStart: StateFlow<Long> = _windowStart.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -125,7 +150,8 @@ class AdViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val now = System.currentTimeMillis()
-                val rangeStart = startOfDay(now) - (WINDOW_DAYS - 1) * DAY_MS
+                val todayStart = startOfDay(now)
+                val rangeStart = adWindowStart(now)
                 // SQL 层直接过滤 AD_SKIPPED,避免全量 SCREEN 记录拉取+JSON 反序列化
                 val skipEvents = store.queryByTypeAndAction(
                     RecordType.SCREEN, ACTION_AD_SKIPPED, rangeStart, now,
@@ -148,7 +174,7 @@ class AdViewModel : ViewModel() {
 
                 // 逐个判等后再赋值：records 每轮都是新 List，直接赋值会让 StateFlow 每 3s 必发射，
                 // AdScreen 里 4 个 remember(records) 派生缓存随之全部失效、整屏重组。
-                val todayCount = records.count { it.timestampMs >= startOfDay(now) }
+                val todayCount = records.count { it.timestampMs >= todayStart }
                 val confirmedCount = records.count { it.confirmed == true }
                 val lastSkipAt = records.firstOrNull()?.timestampMs ?: 0L
                 val dailyCounts = dailyBuckets(records, rangeStart)
@@ -158,30 +184,44 @@ class AdViewModel : ViewModel() {
                 if (_todayCount.value != todayCount) _todayCount.value = todayCount
                 if (_lastSkipAt.value != lastSkipAt) _lastSkipAt.value = lastSkipAt
                 if (_dailyCounts7.value != dailyCounts) _dailyCounts7.value = dailyCounts
+                if (_windowStart.value != rangeStart) _windowStart.value = rangeStart
                 if (_isLoading.value) _isLoading.value = false
-                if (_loadError.value != null) _loadError.value = null
+                if (_loadError.value) _loadError.value = false
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // 异常原文只进日志：e.message 是内部实现细节（SQLite 错误码 / 表名 / 路径），
+                // 直接上屏既泄漏实现细节、又和页面写死（锚点 s03-error 逐字）的错态文案对不上。
                 Log.w("AdViewModel", "加载跳过广告记录失败", e)
                 _isLoading.value = false
-                _loadError.value = e.message ?: "跳过事件表暂时被占用（SQLITE_BUSY）"
+                _loadError.value = true
             }
         }
     }
 
     private fun dailyBuckets(records: List<SkipRecord>, rangeStart: Long): List<Float> {
-        val buckets = FloatArray(WINDOW_DAYS)
+        val buckets = FloatArray(AD_WINDOW_DAYS)
         records.forEach { record ->
             val idx = ((record.timestampMs - rangeStart) / DAY_MS).toInt()
-            if (idx in 0 until WINDOW_DAYS) buckets[idx] += 1f
+            if (idx in 0 until AD_WINDOW_DAYS) buckets[idx] += 1f
         }
         return buckets.toList()
     }
 
     private companion object {
-        const val WINDOW_DAYS = 7
         const val REFRESH_MS = 3_000L
         const val ACTION_AD_SKIPPED = "AD_SKIPPED"
     }
 }
+
+/** 近 7 天趋势的窗口天数（横轴 7 个柱）。 */
+internal const val AD_WINDOW_DAYS = 7
+
+/**
+ * 近 7 天窗口起点：当地 00:00 再往前 [AD_WINDOW_DAYS] - 1 天。
+ *
+ * 查询窗口、横轴日标签与「–」范围标题三处必须同源，否则跨零点后三处会各停各的
+ * （历史缺陷：横轴用无 key 的 remember 冻在进屏那一刻，跨零点后与 VM 的查询窗口错位）。
+ * 纯函数、无 Android 依赖：由 [com.bsfeng.monitor.ui.HomeWindowRefreshTest] 钉住跨零点行为。
+ */
+internal fun adWindowStart(now: Long): Long = startOfDay(now) - (AD_WINDOW_DAYS - 1) * DAY_MS
