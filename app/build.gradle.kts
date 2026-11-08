@@ -187,8 +187,9 @@ tasks.withType<Test> {
 // 检测 theme 包之外是否引入了硬编码颜色/字号
 // =============================================
 val checkUiStyle by tasks.registering {
+    // theme 包允许定义 Token：过滤写在下面 fileTree 的 exclude 里（这个 set 曾只声明不使用，
+    // 改它不会有任何效果，属门禁假配置，已删——基建审计 I8）。
     val srcDir = file("src/main/java/com/bsfeng/monitor")
-    val excluded = setOf("ui/theme") // theme 包允许定义 Token
 
     doLast {
         val errors = mutableListOf<String>()
@@ -198,8 +199,10 @@ val checkUiStyle by tasks.registering {
             val text = file.readText()
             val relPath = srcDir.toPath().relativize(file.toPath()).toString()
 
-            // 检查 Color(0xFF 硬编码（允许 Color.White / Color.Transparent / IOSColors.*）
-            val colorPattern = Regex("""Color\(0xFF[A-Fa-f0-9]{6}\)""")
+            // 检查 Color(0xAARRGGBB 硬编码（允许 Color.White / Color.Transparent / IOSColors.*）。
+            // 必须按 8 位十六进制判：只认 0xFF 前缀会漏掉小写写法 Color(0xff123456) 与带 alpha 的
+            // Color(0x8012AB34)，两者都绕过了 token（基建审计 I8）。
+            val colorPattern = Regex("""Color\(0x[0-9A-Fa-f]{8}\)""")
             val colorMatches = colorPattern.findAll(text).toList()
             if (colorMatches.isNotEmpty()) {
                 colorMatches.forEach { match ->
@@ -208,9 +211,10 @@ val checkUiStyle by tasks.registering {
                 }
             }
 
-            // 检查 fontSize = X.sp（排除 copy(fontSize = X.sp) 特例和已标记白名单）
-            val fontSizePattern = Regex("""fontSize = (\d+)\.sp""")
-            val skipPattern = Regex("""\.copy\(fontSize = \d+\.sp""")
+            // 检查 fontSize = X.sp（排除 copy(fontSize = X.sp) 特例和已标记白名单）。
+            // 字号允许小数：只认整数会放过 fontSize = 13.5.sp 这类「顺手写的半像素」（基建审计 I8）。
+            val fontSizePattern = Regex("""fontSize = (\d+(?:\.\d+)?)\.sp""")
+            val skipPattern = Regex("""\.copy\(fontSize = \d+(?:\.\d+)?\.sp""")
             val filteredText = text.replace(skipPattern, "")
             val fontSizeMatches = fontSizePattern.findAll(filteredText).toList()
             if (fontSizeMatches.isNotEmpty()) {
@@ -283,7 +287,7 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 // =============================================
 val checkA11y by tasks.registering {
     group = "verification"
-    description = "无障碍静态门禁（ERROR：IconButton 无标签；WARN：锚点/触达区/状态语义）"
+    description = "无障碍静态门禁（ERROR：图标按钮拿不到可读名 / 可点元素无名；WARN：锚点/触达区/状态语义）"
 
     // 与 checkUiStyle 一致：不声明 inputs，每次执行都重新扫描并打印实数
     val script = rootProject.file("scripts/check-a11y.sh").absolutePath
@@ -376,7 +380,12 @@ dependencies {
 //    没有可独立调用的业务逻辑。Compose 的渲染需要 UI 测试（androidTest + Compose Testing），
 //    单元测试环境无法组合，强行计入会让分母膨胀且永远不涨。
 //    判定标准：文件内所有声明都是 @Composable 函数；一旦文件里出现普通 fun/class，
-//    就不排除它（那说明有可单测的逻辑）。
+//    就不排除它（那说明有可单测的逻辑）。这条标准由下面的 checkCoverageExclusions 在
+//    preBuild 硬校验——以前它只写在注释里、实现却是整文件排除，同文件里的普通 fun / enum /
+//    data class 一起被移出分母且无人测（基建审计 I4）。
+//    ⚠️ 排除的是「Composable 外壳」，不是「逻辑」：逻辑必须搬到同包独立文件（如
+//    ui/quota/QuotaUsageTags.kt、quota/QuotaTestNotification.kt）再补纯 JVM 用例，
+//    那些文件不进本清单、照常计入分母。
 //    写法是相对 src/main/java 的路径（去掉 .kt），下面转成 class 名 pattern。
 //    注意 Kotlin 顶层函数的 class 名是「文件名 + Kt」，排除时必须用它而不是文件名。
 val pureComposableSources = listOf(
@@ -390,14 +399,19 @@ val pureComposableSources = listOf(
     "com/bsfeng/monitor/ui/quota/QuotaAggregateList",
     "com/bsfeng/monitor/ui/quota/QuotaAggregateRow",
     "com/bsfeng/monitor/ui/quota/QuotaAtoms",
+    // 下面三个文件原先把业务逻辑与 @Composable 混在一起（整文件排除 = 逻辑不进分母也无人测，
+    // 基建审计 I4）。逻辑已抽到 QuotaUsageTags.kt / QuotaSegment.kt / quota/QuotaTestNotification.kt
+    // 并补了纯 JVM 用例，文件本身现在只剩 @Composable，才允许退回排除清单。
+    // 入选资格由 checkCoverageExclusions 每次 preBuild 复核，不是拍脑袋写进来的。
     "com/bsfeng/monitor/ui/quota/QuotaSettingsAlerts",
-    "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen",
-    "com/bsfeng/monitor/ui/quota/QuotaStateViews",
     "com/bsfeng/monitor/ui/quota/QuotaUsageCard",
     "com/bsfeng/monitor/ui/quota/QuotaViewModeSwitch",
+    "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen",
+    "com/bsfeng/monitor/ui/quota/QuotaStateViews",
     "com/bsfeng/monitor/ui/theme/Components",
     "com/bsfeng/monitor/finance/ui/FinanceDialogs",
 )
+
 
 // 2) 代码生成产物：改了会被下一次生成覆盖，覆盖率高不代表逻辑可靠。
 //    - GeneratedTokens.kt：tools/gen-design-tokens.mjs 由原型 HTML 生成，
@@ -418,6 +432,101 @@ val generatedCodeClasses = listOf(
 // 合并成 JaCoCo Ant 报告能吃的 pattern；纯 Composable 转成「文件名Kt 及其内部类」
 val coverageExcludes: List<String> = pureComposableSources.map { "$it" + "Kt*.class" } + generatedCodeClasses
 
+// 3) 已知债（基建审计 I4 未收口的 5 个文件）：清单入选标准是「全 @Composable」，这几处
+//    仍混着非 @Composable 声明。登在这里的唯一目的是让**新增**立即失败（只允许删、不允许加）；
+//    修一个就把对应条目删掉。抽离方法与 QuotaUsageTags.kt / QuotaTestNotification.kt 一致：
+//    纯逻辑（格式化 / 决策 / 锚点映射）搬进同包独立文件并补纯 JVM 用例，Android 胶水搬进
+//    对应领域包（如 com.bsfeng.monitor.quota）。
+//    - AdScreen.monthDayLabel：纯日期格式化
+//    - WindowOverlay.View.findDialogWindow：Android 窗口查找胶水
+//    - QuotaAggregateList.rankedRowTagOf / excludedRowTagOf：锚点映射
+//    - QuotaSettingsScreen.providerRowTagOf / refreshChipTagOf：锚点映射
+//    - QuotaStateViews.QuotaUsageSlot / quotaUsageSlot：空态决策
+val nonComposableDebt = mapOf(
+    "com/bsfeng/monitor/ui/AdScreen" to listOf("monthDayLabel"),
+    "com/bsfeng/monitor/ui/components/WindowOverlay" to listOf("findDialogWindow"),
+    "com/bsfeng/monitor/ui/quota/QuotaAggregateList" to listOf("rankedRowTagOf", "excludedRowTagOf"),
+    "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen" to listOf("providerRowTagOf", "refreshChipTagOf"),
+    "com/bsfeng/monitor/ui/quota/QuotaStateViews" to listOf("QuotaUsageSlot", "quotaUsageSlot"),
+)
+
+// 清单口径的 preBuild 硬校验：清单里每个文件只能有 @Composable 顶层声明（val / const val 例外，
+// 那是 token 常量不是逻辑）。命中 nonComposableDebt 的声明放行，但**只允许减少**：
+// 债已修好却忘记删条目也会失败，逼着清单与源码同步（基建审计 I4）。
+val checkCoverageExclusions by tasks.registering {
+    val srcDir = file("src/main/java")
+    val entries = pureComposableSources
+    val debt = nonComposableDebt
+
+    doLast {
+        val decl = Regex(
+            """^(?:(?:private|internal|public|protected|inline|suspend|operator|const|data|enum|sealed|value|annotation|tailrec|infix)\s+)*(fun|class|object|interface|typealias)\b"""
+        )
+        val problems = mutableListOf<String>()
+        val seenDebt = mutableMapOf<String, MutableSet<String>>()
+
+        entries.forEach { entry ->
+            val file = File(srcDir, "${entry}.kt")
+            if (!file.exists()) {
+                problems.add("${entry}.kt 不存在：清单与源码不同步")
+                return@forEach
+            }
+            val lines = file.readLines()
+            lines.forEachIndexed { index, line ->
+                if (line.isEmpty() || line.first().isWhitespace()) return@forEachIndexed
+                if (!decl.containsMatchIn(line)) return@forEachIndexed
+                // 向上跳过注解与 KDoc，看有没有 @Composable
+                var i = index - 1
+                var composable = false
+                while (i >= 0) {
+                    val t = lines[i].trim()
+                    if (t.isEmpty()) { i--; continue }
+                    if (t.startsWith("@")) {
+                        if (t.startsWith("@Composable")) composable = true
+                        i--; continue
+                    }
+                    if (t.startsWith("*") || t.startsWith("/**")) { i--; continue }
+                    break
+                }
+                if (composable) return@forEachIndexed
+                // 声明名：fun 要跳过接收者（private fun Modifier.foo() 的名字是 foo 不是 Modifier）
+                val name = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[A-Za-z0-9_.<>?, ]+\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(""")
+                    .find(line)?.groupValues?.get(1)
+                    ?: Regex("""\b(class|object|interface|typealias)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+                        .find(line)?.groupValues?.get(2)
+                    ?: line.trim().take(40)
+                val allowed: List<String> = debt[entry] ?: emptyList()
+                if (allowed.contains(name)) {
+                    seenDebt.getOrPut(entry) { mutableSetOf() }.add(name)
+                } else {
+                    problems.add("${entry}.kt:${index + 1} 非 @Composable 的顶层声明 ${name}（要么抽出去，要么登记进 nonComposableDebt）")
+                }
+            }
+        }
+
+        // 债已还清却还挂在清单里：清掉条目，否则下一次「新增」会被误放行
+        debt.forEach { (entry, names) ->
+            names.forEach { name ->
+                if (seenDebt[entry]?.contains(name) != true) {
+                    problems.add("nonComposableDebt 里的 ${entry}.${name} 已不存在：请从清单删除")
+                }
+            }
+        }
+
+        if (problems.isNotEmpty()) {
+            println("\n⚠️  覆盖率排除清单口径未通过：\n")
+            problems.forEach { println("  • ${it}") }
+            println("\n  标准与抽离方法见本文件「覆盖率排除清单」注释\n")
+            throw GradleException("覆盖率排除清单口径未通过（${problems.size} 处）")
+        }
+        println("✅ 覆盖率排除清单口径通过：${entries.size} 个文件全 @Composable，已知债 ${debt.values.sumOf { it.size }} 条")
+    }
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(checkCoverageExclusions)
+}
+
 // 报告任务：用 JaCoCo Ant 而非 AGP 内置报告，因为 AGP 的 JacocoReportTask 不接受自定义排除项
 // （JacocoWorkParameters.exclusions 只供 on-the-fly 模式用）。Ant 报告与 AGP 报告在无排除时
 // 数字完全一致（LINE 19.78% / BRANCH 20.50%，已实测对比），换的只是过滤能力。
@@ -435,9 +544,16 @@ val coverageReport by tasks.registering {
     val reportDir = layout.buildDirectory.dir("reports/coverage/app-debug")
     val excludes = coverageExcludes
 
+    // debug 源集（src/debug）的类不进报告（基建审计 I9）：它不是生产代码，release 包里根本
+    // 不存在，混进来会把 app 行覆盖率抬高约 0.7pp 让门禁贴线；而 sourcefiles 只给 src/main/java，
+    // HTML 里这些类点不进源码。不参与下面的「排除规则必须命中」自检：debug 源集清空是正常的，
+    // 那时这条规则命中 0 不该让构建失败。
+    val nonProductionExcludes = listOf("com/bsfeng/monitor/debug/**")
+    val allExcludes = excludes + nonProductionExcludes
+
     inputs.file(execFile)
     inputs.files(classesDir, javaClassesDir)
-    inputs.property("excludes", excludes)
+    inputs.property("excludes", allExcludes)
     outputs.dir(reportDir)
 
     doLast {
@@ -457,7 +573,7 @@ val coverageReport by tasks.registering {
                     "请改成正确的 class 名 pattern（Kotlin 顶层函数在 <文件名>Kt 里）。"
             )
         }
-        val excludedCount = classDirs.sumOf { dir -> fileTree(dir) { exclude(excludes) ; include("**/*.class") }.files.size }
+        val excludedCount = classDirs.sumOf { dir -> fileTree(dir) { exclude(allExcludes) ; include("**/*.class") }.files.size }
         val totalClassFiles = classDirs.sumOf { dir -> fileTree(dir) { include("**/*.class") }.files.size }
         println("覆盖率排除自检通过：${excludes.size} 条规则全部命中；排除后保留 $excludedCount / $totalClassFiles 个 class")
 
@@ -477,7 +593,7 @@ val coverageReport by tasks.registering {
                     "classfiles" {
                         classDirs.forEach { d ->
                             "fileset"("dir" to d) {
-                                excludes.forEach { "exclude"("name" to it) }
+                                allExcludes.forEach { "exclude"("name" to it) }
                             }
                         }
                     }

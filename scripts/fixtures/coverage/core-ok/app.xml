@@ -1,0 +1,8 @@
+<report name="fixture">
+  <counter type="LINE" missed="100" covered="100"/>
+  <counter type="BRANCH" missed="50" covered="50"/>
+  <package name="com/bsfeng/monitor/autobook">
+    <counter type="LINE" missed="50" covered="50"/>
+    <counter type="BRANCH" missed="20" covered="20"/>
+  </package>
+</report>

@@ -63,62 +63,6 @@ private val STACK_HEIGHT = 76.dp
 private val STACK_GAP = 4.dp
 
 /**
- * 用量卡的三套锚点：同一张卡在三个 provider 面板里各叫各的
- * （s18-*-usage / s18-*-range-* / s18-*-models-*）。
- *
- * 锚点值一律写成字面量 testTag —— 口径对账是 grep 源码的，拼字符串扫不到。
- */
-enum class UsageCardVariant { OLLAMA_USD, OLLAMA_LEGACY, DEEPSEEK }
-
-/** 卡片容器锚点。 */
-private fun Modifier.cardTagOf(variant: UsageCardVariant): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> testTag("s18-ollama-usage")
-    UsageCardVariant.OLLAMA_LEGACY -> testTag("s18-legacy-usage")
-    UsageCardVariant.DEEPSEEK -> testTag("s18-deepseek-usage")
-}
-
-/** 标题右侧范围文案锚点（只随范围切换改写，本身不可点）。 */
-private fun Modifier.rangeLabelTagOf(variant: UsageCardVariant): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> testTag("s18-usage-range-label")
-    UsageCardVariant.OLLAMA_LEGACY -> testTag("s18-legacy-range-label")
-    UsageCardVariant.DEEPSEEK -> testTag("s18-ds-range-label")
-}
-
-/** 三个范围项的锚点。 */
-private fun Modifier.rangeTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> when (range) {
-        QuotaRange.LAST_24_HOURS -> testTag("s18-range-24")
-        QuotaRange.LAST_7_DAYS -> testTag("s18-range-7")
-        QuotaRange.LAST_30_DAYS -> testTag("s18-range-30")
-    }
-    UsageCardVariant.OLLAMA_LEGACY -> when (range) {
-        QuotaRange.LAST_24_HOURS -> testTag("s18-legacy-range-24")
-        QuotaRange.LAST_7_DAYS -> testTag("s18-legacy-range-7")
-        QuotaRange.LAST_30_DAYS -> testTag("s18-legacy-range-30")
-    }
-    UsageCardVariant.DEEPSEEK -> when (range) {
-        QuotaRange.LAST_24_HOURS -> testTag("s18-ds-range-24")
-        QuotaRange.LAST_7_DAYS -> testTag("s18-ds-range-7")
-        QuotaRange.LAST_30_DAYS -> testTag("s18-ds-range-30")
-    }
-}
-
-/** 按模型 Top 3 区块的锚点（旧版计划没有按模型明细）。 */
-private fun Modifier.modelsTagOf(variant: UsageCardVariant, range: QuotaRange): Modifier = when (variant) {
-    UsageCardVariant.OLLAMA_USD -> when (range) {
-        QuotaRange.LAST_24_HOURS -> testTag("s18-models-24")
-        QuotaRange.LAST_7_DAYS -> testTag("s18-models-7")
-        QuotaRange.LAST_30_DAYS -> testTag("s18-models-30")
-    }
-    UsageCardVariant.DEEPSEEK -> when (range) {
-        QuotaRange.LAST_24_HOURS -> testTag("s18-ds-models-24")
-        QuotaRange.LAST_7_DAYS -> testTag("s18-ds-models-7")
-        QuotaRange.LAST_30_DAYS -> testTag("s18-ds-models-30")
-    }
-    UsageCardVariant.OLLAMA_LEGACY -> Modifier
-}
-
-/**
  * 用量卡：范围分段 → 指标行 → 请求次数面积图 → Token 堆叠柱 → 按模型 Top 3。
  *
  * 图表配色只用序列色（--chart-seq）：请求数曲线与 Token 输入同为强调色，
@@ -135,7 +79,7 @@ fun UsageCard(
 ) {
     val t = LocalDesignTokens.current
     // 卡头空白处点击不切范围：只有范围 chip 是热区
-    AppCard(modifier = modifier.then(Modifier.cardTagOf(variant))) {
+    AppCard(modifier = modifier.then(Modifier.testTag(cardTag(variant)))) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("用量", style = MaterialTheme.typography.titleMedium, color = t.fg)
             Spacer(Modifier.weight(1f))
@@ -145,7 +89,7 @@ fun UsageCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = t.muted,
                 maxLines = 1,
-                modifier = Modifier.rangeLabelTagOf(variant),
+                modifier = Modifier.testTag(rangeLabelTag(variant)),
             )
         }
         Spacer(Modifier.height(t.space2))
@@ -281,7 +225,8 @@ private fun ModelRows(
     val t = LocalDesignTokens.current
     val rows = remember(groups) { QuotaFormat.topGroups(groups) }
     // 行不可点：按模型明细只是口径展示，不下钻
-    Column(Modifier.fillMaxWidth().then(Modifier.modelsTagOf(variant, range))) {
+    // 旧版计划没有按模型明细（modelsTag 为 null）→ 整块不加标识
+    Column(Modifier.fillMaxWidth().modelsTagOf(variant, range)) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("按模型", style = MaterialTheme.typography.bodySmall, color = t.muted, modifier = Modifier.weight(1f))
         Badge("Top 3", tone = BadgeTone.Neutral)
@@ -352,7 +297,7 @@ private fun QuotaRangeChips(
                         haptic(HapticTone.LIGHT)
                         onSelect(range)
                     }
-                    .then(Modifier.rangeTagOf(variant, range))
+                    .testTag(rangeTag(variant, range))
                     // 触达红线（≥48dp）：短标签「7 天」只靠左右内边距会窄到 46.7dp，
                     // 补最小宽度让点击域达标（最高的那个 chip 一直是 48dp，纵向本来就够）
                     .widthIn(min = t.tapMin)

@@ -1,10 +1,5 @@
 package com.bsfeng.monitor.ui.quota
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
-import android.os.Build
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,9 +33,9 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.bsfeng.monitor.domain.quota.QuotaUnit
+import com.bsfeng.monitor.quota.notificationsAllowed
 import com.bsfeng.monitor.ui.components.AppSwitch
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
@@ -158,9 +153,9 @@ internal fun NotificationPermissionRow() {
     val context = LocalContext.current
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
-    var allowed by remember { mutableStateOf(context.notificationsAllowed()) }
+    var allowed by remember { mutableStateOf(notificationsAllowed(context)) }
     LifecycleResumeEffect(Unit) {
-        allowed = context.notificationsAllowed()
+        allowed = notificationsAllowed(context)
         onPauseOrDispose { }
     }
     Row(
@@ -194,53 +189,4 @@ internal fun NotificationPermissionRow() {
             tone = if (allowed) BadgeTone.Success else BadgeTone.Warn,
         )
     }
-}
-
-private fun Context.notificationsAllowed(): Boolean =
-    NotificationManagerCompat.from(this).areNotificationsEnabled()
-
-/**
- * 额度预警通知渠道 id：与 [com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_ID] **同一个**。
- *
- * 不能各写一份字面量：渠道属性创建后不可改，两边不一致就会在设置页出现两条同名渠道，
- * 用户关掉的可能是「测试通知」那条，真实预警照旧上锁屏。
- */
-private const val QUOTA_ALERT_CHANNEL_ID = com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_ID
-
-/** 测试通知用独立 id，不覆盖真实的额度提醒（7301）。 */
-private const val QUOTA_TEST_NOTIFICATION_ID = 7302
-
-/**
- * 发送一条测试通知到系统的额度预警渠道（锚点 s19-test）。
- *
- * 只发通知、不写任何 prefs、不动预警计数；通知权限未允许时系统会静默丢弃，
- * 页面仍给出同一句 toast（用户可点「通知权限」行自查）。
- */
-internal fun postQuotaTestNotification(context: Context) {
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        manager.createNotificationChannel(
-            NotificationChannel(
-                QUOTA_ALERT_CHANNEL_ID,
-                com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply {
-                description = com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_DESCRIPTION
-                // 与真实提醒同口径：测试通知也不许露在锁屏上
-                lockscreenVisibility = Notification.VISIBILITY_SECRET
-            },
-        )
-    }
-    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        Notification.Builder(context, QUOTA_ALERT_CHANNEL_ID)
-    } else {
-        @Suppress("DEPRECATION")
-        Notification.Builder(context)
-    }
-    builder.setSmallIcon(android.R.drawable.stat_sys_warning)
-        .setContentTitle("额度预警 · 测试通知")
-        .setContentText("渠道正常：额度不足时会在这里提醒你。")
-        .setAutoCancel(true)
-        .setVisibility(Notification.VISIBILITY_SECRET)
-    runCatching { manager.notify(QUOTA_TEST_NOTIFICATION_ID, builder.build()) }
 }

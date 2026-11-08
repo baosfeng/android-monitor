@@ -37,11 +37,17 @@ jobs:
       - name: A11y gate
         run: bash scripts/check-a11y.sh
 
-      # 锚点账本 ↔ 代码 testTag 两向对账。当前有 123 个缺失：均来自作废页
-      # （s17 / s20a / s20b）与静态不可求值的 testTag 表达式，脚本按设计只报不判（exit 0）。
-      # 待作废页清理完、缺失归零后改跑 --strict，让缺失也致命。
+      # 锚点账本 ↔ 代码 testTag 两向对账，判定是 fail-closed：缺失只容忍 scripts/anchor-retired.tsv
+      # 里登记过的（每行带来源页面、状态与理由），清单外的缺失与「清单里已落地却还挂着」都 exit 1。
+      # 以前这里只报不判，且注释把全部缺失一锅端归给作废页——实测其中 40 条来自在用页面（s05 / s16），
+      # 谁也没法从输出里看出「哪条是真缺口」（基建审计 I10）。
       - name: Anchors gate
         run: node scripts/check-anchors.mjs
+
+      # 文档门禁：单文档 ≤80 行（存量走 ratchet 基线）+ 死链 + 索引可达。
+      # AGENTS.md 的「文档规则」此前只有文字、没有任何校验（基建审计 I12）。
+      - name: Docs gate
+        run: node scripts/check-docs.mjs
 
       - name: Set up JDK 25
         uses: actions/setup-java@v6
@@ -185,7 +191,16 @@ jobs:
       # 整个 assemble job 已在 job 级 if 里对 PR 跳过，这里只是别让后来人把那条 if 删掉。
       - name: Decode release keystore
         run: |
-          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          if [ -z "${RELEASE_KEYSTORE_BASE64:-}" ]; then
+            echo "缺少 RELEASE_KEYSTORE_BASE64 secret" >&2
+            echo "（空输入进 base64 -d 的退出码是 0，会产出 0 字节 jks，直到签名阶段才炸——基建审计 I7）" >&2
+            exit 1
+          fi
+          echo "${RELEASE_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+          if [ ! -s "${RUNNER_TEMP}/release.jks" ]; then
+            echo "解出来的 release.jks 是空文件：secret 内容不是合法 base64" >&2
+            exit 1
+          fi
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
 
@@ -197,6 +212,31 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      # 产物签名断言（基建审计 I7）：此前只 test -f 存在性，用 debug keystore 打出来的包
+      # 也能一路发出去。这里断言「APK 的签名证书 == 解出来的那把 release keystore 的证书」，
+      # 换钥、误用 debug 签名、secret 缺项都会在这一步红，而不是等用户装不上才发现。
+      - name: Assert APK is signed with the release keystore
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          [ -f "${APK}" ] || { echo "缺少 APK：${APK}" >&2; exit 1; }
+          APKSIGNER="$(ls -d "${ANDROID_HOME}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+          [ -x "${APKSIGNER}" ] || { echo "找不到 apksigner（应位于 ${ANDROID_HOME}/build-tools/*/）" >&2; exit 1; }
+          apk_cert="$("${APKSIGNER}" verify --print-certs "${APK}" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr 'A-F' 'a-f')"
+          [ -n "${apk_cert}" ] || { echo "APK 未签名或取不到证书摘要" >&2; exit 1; }
+          ks_cert="$(keytool -list -v -keystore "${RUNNER_TEMP}/release.jks" -storepass "${RELEASE_STORE_PASSWORD}" -alias "${RELEASE_KEY_ALIAS}" | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+          [ -n "${ks_cert}" ] || { echo "读不到 keystore 里的证书摘要（密码 / alias 不对？）" >&2; exit 1; }
+          if [ "${apk_cert}" != "${ks_cert}" ]; then
+            echo "APK 签名证书与 release keystore 不一致：" >&2
+            echo "  apk:      ${apk_cert}" >&2
+            echo "  keystore: ${ks_cert}" >&2
+            exit 1
+          fi
+          echo "签名断言通过：${apk_cert}"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

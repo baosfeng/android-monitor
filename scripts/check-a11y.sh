@@ -5,39 +5,58 @@
 # （与 check-ui-rules.sh 一致；debug 源集待存量清理后再纳入）。
 #
 # ERROR（确定可判定，必须为 0，命中即 exit 1）：
-#   1. IconButton 家族的调用块内出现 contentDescription = null
-#      —— 图标按钮的图标没有名字时读屏只说「按钮」，等同于不可达。
+#   1. 图标按钮调用块内拿不到可读名：
+#      a) 调用既没有非空 contentDescription / description 命名参数，也没有顶层字符串实参
+#         （AppIconButton(Icons.Add, "更多操作") 这种位置传名），也没有把名字交给内容 lambda
+#         （FinanceIconButton(...) { label -> ... }）；
+#      b) 或块内任一 Icon(...) 省略 contentDescription / 显式写 null——图标没有名字时
+#         读屏只说「按钮」，等同于不可达。
+#   2. 可点元素既无可读名也无装饰标记：函数内有 .clickable + contentDescription = null，
+#      却没有可见 Text、没有非空 contentDescription、也没有 clearAndSetSemantics。
+#      （原 WARN 4，按基建审计 I3 升 ERROR：当前全仓 0 处命中，成本为零。）
+#
+# 为什么 ERROR 1 不再按「函数名里有没有 IconButton」判定（基建审计 I3）：
+#   全仓 6 个图标按钮里 5 个是自建封装，真正的 IconButton( 只有 1 处；旧实现只认函数名，
+#   等于只守住 1/6 的调用面。现在按「调用块里到底传没传名字」判：名字从命名参数、位置实参
+#   还是内容 lambda 来都算，拿不到就判红。块内 Icon( 必须带名字这一条与具体封装无关，
+#   任何自绘图标按钮都适用。
+#   族的构成：函数名以 IconButton 结尾的调用全部自动纳入（IconButton / AppIconButton /
+#   HeadIconButton / FinanceIconButton / OverviewIconButton，以及将来同类命名的封装）；
+#   名字不带 IconButton、但同样把可读名交给调用方的封装显式登记在 ICON_BUTTON_EXTRAS，
+#   否则它的调用点不受检。
 #
 # WARN（启发式，只报数量与前 20 条，不影响 exit code）：
 #   WARN 1. clickable 所在函数没有 testTag：运行时审计与自动化定位都靠这个锚点。
 #   WARN 2. clickable 所在修饰链写死 .size(<44.dp) / .height(<44.dp)：触达区不足（44 = token tap-min）。
 #   WARN 3. switch/checkbox/toggle 类函数里有 clickable 却没有 toggleable/selectable：
 #           状态只靠颜色/位移表达，读屏读不出开或关。
-#   WARN 4. 可点元素既无可读名也无装饰标记：函数内有 clickable + contentDescription = null，
-#           却没有可见 Text、没有非空 contentDescription、也没有 clearAndSetSemantics。
-#
-# 为什么「clickable 内有 Icon(contentDescription = null)」只做 WARN（原定 ERROR，已降级）：
-#   函数级宽松判定在本仓库命中 20 处，全部是合规写法：19 处是「行有可见文本 + 右侧装饰 chevron」
-#   （文本给了可读名、图标是纯装饰，基线文档允许豁免），1 处用 .semantics 给了标签。
-#   按行判定分不清「唯一内容是无名图标」和「有文本的控件里摆了装饰图标」，做成 ERROR 会误报
-#   并堵死构建，故降级为 WARN 4，并把判定收窄到「既无文本也无非空 contentDescription 也无
-#   clearAndSetSemantics」的形态：当前命中 0 处，作为新增代码的回归拦截。
 #
 # 没有豁免清单：ERROR 项要求全仓 0 处，命中就是真缺口，改代码而不是加白名单。
 #
-# 已知局限：按行 + 花括号深度判定，字符串/注释里的花括号可能影响函数结束位置；
-# 跨行书写的尺寸（.size( 换行 40.dp )）与写在 .clickable 之后的尺寸不在此判定范围内。
-# 用法：bash scripts/check-a11y.sh（本地与 CI 同一条命令）
+# 已知局限（按行 + 括号/花括号深度判定）：
+#   - 行首注释跳过，行尾 // 之后出现的调用片段也跳过；字符串里的括号不计数；
+#   - 尾随 lambda 必须与参数右括号在同一行（ktlint 风格即是），写成「右括号换行、
+#     下一行才写 {」时块会在右括号处提前结束；
+#   - 跨行书写的尺寸（.size( 换行 40.dp )）与写在 .clickable 之后的尺寸不在此判定范围内。
+#
+# 用法：
+#   bash scripts/check-a11y.sh              # 本地与 CI 同一条命令
+#   bash scripts/check-a11y.sh --self-test  # 只跑 fixture 自测（校验判据本身）
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$ROOT/app/src/main/java"
+SRC="${A11Y_SRC:-$ROOT/app/src/main/java}"
+FIXTURES="$ROOT/scripts/fixtures/a11y"
 WARN_SHOW=20
-ERROR_TOTAL=1
-WARN_TOTAL=4
+ERROR_TOTAL=2
+WARN_TOTAL=3
 WARN_HITS=0
 FAILED=0
 SUMMARY=()
+
+# 名字不带 IconButton、但把可读名交给调用方的封装。新增这类封装时加在这里，
+# 否则它的调用点不会进 ERROR 1 的检查面（ERROR 2 仍能兜住「完全没名字」的形态）。
+ICON_BUTTON_EXTRAS="DayArrow QuotaHeadIcon"
 
 count_lines() {
     if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi
@@ -108,29 +127,163 @@ run_warn() {
 
 # ── 扫描器 ──────────────────────────────────────────────────────────
 
-# ERROR 1：IconButton 家族调用块（参数块 + 内容 lambda）内出现 contentDescription = null。
-# 括号 + 花括号深度累计，跨行也覆盖；函数定义行（fun XxxIconButton）不算调用。
+# ERROR 1：图标按钮族的调用块里拿不到可读名。
+# 块 = 调用的参数列表 + 紧随其后的内容 lambda（尾随 lambda 与右括号同行）。
+# 括号/花括号深度累计，跨行也覆盖；声明行 fun XxxIconButton( 不算调用。
 scan_icon_button_without_label() {
     find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
-        awk -v rel="${f#"$ROOT"/}" '
-            function opens(s,   t) { t = s; gsub(/"[^"]*"/, "", t); return gsub(/\(/, "", t) }
-            function closes(s,  t) { t = s; gsub(/"[^"]*"/, "", t); return gsub(/\)/, "", t) }
-            function bopens(s,  t) { t = s; gsub(/"[^"]*"/, "", t); return gsub(/\{/, "", t) }
-            function bcloses(s, t) { t = s; gsub(/"[^"]*"/, "", t); return gsub(/\}/, "", t) }
+        awk -v rel="${f#"$ROOT"/}" -v extras="$ICON_BUTTON_EXTRAS" '
+            function nostr(s,   t) { t = s; gsub(/"[^"]*"/, "\"\"", t); return t }
+            function popen(s,   t) { t = nostr(s); return gsub(/\(/, "", t) }
+            function pclose(s,  t) { t = nostr(s); return gsub(/\)/, "", t) }
+            function bopen(s,   t) { t = nostr(s); return gsub(/\{/, "", t) }
+            function bclose(s,  t) { t = nostr(s); return gsub(/\}/, "", t) }
+            function iscomment(s) { return s ~ /^[[:space:]]*(\*|\/\/|\/\*)/ }
+
+            # 从 openIdx（指向左括号）取配对片段；SCAN_END 置为配对右括号下标。
+            function bal(text, openIdx,   i, c, depth, instr, n) {
+                depth = 0; instr = 0; n = length(text)
+                for (i = openIdx; i <= n; i++) {
+                    c = substr(text, i, 1)
+                    if (instr) {
+                        if (c == "\\") { i++; continue }
+                        if (c == "\"") instr = 0
+                        continue
+                    }
+                    if (c == "\"") { instr = 1; continue }
+                    if (c == "(") { depth++; continue }
+                    if (c == ")") {
+                        depth--
+                        if (depth == 0) { SCAN_END = i; return substr(text, openIdx + 1, i - openIdx - 1) }
+                    }
+                }
+                SCAN_END = n
+                return substr(text, openIdx + 1)
+            }
+
+            # 命名参数里有非空可读名（contentDescription / description）？
+            function hasNamedLabel(arg,   rest, v, i, n, c) {
+                if (!match(arg, /(contentDescription|description)[[:space:]]*=/)) return 0
+                rest = substr(arg, RSTART + RLENGTH)
+                sub(/^[[:space:]]+/, "", rest)
+                n = length(rest); v = ""
+                for (i = 1; i <= n; i++) {
+                    c = substr(rest, i, 1)
+                    if (c == "," || c == "\n") break
+                    v = v c
+                }
+                gsub(/[[:space:]]+$/, "", v)
+                return (v != "" && v != "null")
+            }
+
+            # 单个顶层实参是不是「位置传名」：字符串字面量，或裸变量名。
+            # 排除命名实参（a = ...）与图标常量（Icons.Filled.Add 含点号）。
+            function isLabelArg(a,   t) {
+                t = a
+                gsub(/^[[:space:]]+/, "", t); gsub(/[[:space:]]+$/, "", t)
+                if (t == "") return 0
+                if (index(t, "=") > 0) return 0
+                if (t ~ /^"[^"]*"$/) return 1
+                if (t ~ /^[A-Za-z_][A-Za-z0-9_]*$/) return 1
+                return 0
+            }
+
+            # 参数列表按顶层逗号切分后，有没有位置传名的实参
+            # （AppIconButton(Icons.Add, "更多操作", ...) 这种形态）。
+            function hasPositionalLabel(arg,   i, n, c, depth, instr, cur) {
+                n = length(arg); depth = 0; instr = 0; cur = ""
+                for (i = 1; i <= n; i++) {
+                    c = substr(arg, i, 1)
+                    if (instr) {
+                        cur = cur c
+                        if (c == "\\") { i++; cur = cur substr(arg, i, 1); continue }
+                        if (c == "\"") instr = 0
+                        continue
+                    }
+                    if (c == "\"") { instr = 1; cur = cur c; continue }
+                    if (c == "(" || c == "[" || c == "{") depth++
+                    else if (c == ")" || c == "]" || c == "}") depth--
+                    if (c == "," && depth == 0) {
+                        if (isLabelArg(cur)) return 1
+                        cur = ""
+                        continue
+                    }
+                    cur = cur c
+                }
+                return isLabelArg(cur)
+            }
+
+            # 块内每个 Icon(...) 都必须带非空 contentDescription；返回缺名个数。
+            function countUnlabeledIcons(body,   i, n, j, prev, arg, hits) {
+                n = length(body); hits = 0
+                for (i = 1; i + 3 <= n; i++) {
+                    if (substr(body, i, 4) != "Icon") continue
+                    prev = (i > 1) ? substr(body, i - 1, 1) : " "
+                    if (prev ~ /[A-Za-z0-9_]/) continue
+                    j = i + 4
+                    while (j <= n && substr(body, j, 1) ~ /[[:space:]]/) j++
+                    if (substr(body, j, 1) != "(") continue
+                    arg = bal(body, j)
+                    if (!hasNamedLabel(arg)) hits++
+                    i = SCAN_END
+                }
+                return hits
+            }
+
+            # 块结束：括号与花括号都配平，且行尾是 ) 或 }（尾随 lambda 结束）。
+            function blockDone(line) {
+                if (pdepth > 0 || bdepth > 0) return 0
+                return (line ~ /[)}][[:space:]]*$/)
+            }
+
+            # 判定：块内 Icon 缺名 → 红；块内没有 Icon 可查（名字交给调用方的封装）→ 必须显式传名。
+            # Material IconButton( 本身把标签写在 lambda 里的 Icon 上，故不要求实参传名。
+            # 内容 lambda 透传（{ label -> Icon(contentDescription = label) }）之所以不够：
+            # label 的取值就是实参 contentDescription，调用方不传时它是 null，静态看不到。
+            function report(   p, pidx, argText, labeled, nicon, mat) {
+                p = nmpos + length(nm)
+                pidx = p - 1 + index(substr(startline, p), "(")
+                argText = bal(body, pidx)
+                labeled = hasNamedLabel(argText) || hasPositionalLabel(argText)
+                nicon = countUnlabeledIcons(body)
+                mat = (nm == "IconButton")
+                if (nicon > 0)
+                    print rel ":" startNR ": " startline "  ← 块内 " nicon " 个 Icon 缺 contentDescription"
+                else if (!mat && !labeled)
+                    print rel ":" startNR ": " startline "  ← 调用未给可读名（无 contentDescription/description 实参）"
+            }
+
+            BEGIN {
+                fam = "[A-Za-z0-9_]*IconButton"
+                n = split(extras, e, " ")
+                for (i = 1; i <= n; i++) if (e[i] != "") fam = fam "|" e[i]
+                inblk = 0
+            }
+
             {
                 line = $0
-                if (!inblk) {
-                    if (line ~ /^[[:space:]]*(\*|\/\/|\/\*)/) next
-                    if (line ~ /fun[[:space:]]+[A-Za-z0-9_]*IconButton/) next
-                    if (line !~ /[A-Za-z0-9_]*IconButton[[:space:]]*\(/) next
-                    inblk = 1; start = NR; startline = line; buf = ""; depth = 0
+                if (inblk) {
+                    body = body "\n" line
+                    pdepth += popen(line) - pclose(line)
+                    bdepth += bopen(line) - bclose(line)
+                    if (blockDone(line)) { report(); inblk = 0 }
+                    next
                 }
-                buf = buf " " line
-                depth += opens(line) + bopens(line) - closes(line) - bcloses(line)
-                if (depth <= 0) {
-                    if (buf ~ /contentDescription[[:space:]]*=[[:space:]]*null/) print rel ":" start ": " startline
-                    inblk = 0
+                if (iscomment(line)) next
+                if (!match(line, fam "[[:space:]]*\\(")) next
+                nm = substr(line, RSTART, RLENGTH)
+                sub(/[[:space:]]*\($/, "", nm)
+                nmpos = RSTART
+                # 行尾 // 之后的内容不当代码
+                if (nmpos > 2 && index(substr(line, 1, nmpos - 1), "//") > 0) next
+                # 声明行 fun XxxIconButton(... 不算调用
+                if (match(line, /(^|[^A-Za-z0-9_])fun[[:space:]]/)) {
+                    if (RSTART < nmpos) next
                 }
+                inblk = 1; startNR = NR; startline = line; body = line
+                # 首行也要算净增量：IconButton(onClick = {}) { 这一行同时含左括号、右括号与花括号
+                pdepth = popen(line) - pclose(line); bdepth = bopen(line) - bclose(line)
+                if (blockDone(line)) { report(); inblk = 0 }
             }
         ' "$f"
     done
@@ -163,7 +316,7 @@ FUNC_AWK_PRELUDE='
         if ($0 ~ /Text[[:space:]]*\(/) ftext[cur] = 1
         if ($0 ~ /clearAndSetSemantics/) fclear[cur] = 1
         if ($0 ~ /contentDescription[[:space:]]*=[[:space:]]*null/) fnull[cur] = 1
-        if ($0 ~ /contentDescription[[:space:]]*=/ && $0 !~ /contentDescription[[:space:]]*=[[:space:]]*null/) flabel[cur] = 1
+        if ($0 ~ /contentDescription[[:space:]]=/ && $0 !~ /contentDescription[[:space:]]*=[[:space:]]*null/) flabel[cur] = 1
         d = bopen($0); c = bclose($0)
         if (d > c) fopen[cur] = 1
         fdep[cur] += d - c
@@ -242,8 +395,8 @@ scan_toggle_without_semantics() {
     done
 }
 
-# WARN 4：可点元素既无可读名也无装饰标记（ERROR 第 2 条的降级形态，收窄口径见文件头）。
-scan_clickable_icon_without_label() {
+# ERROR 2：可点元素既无可读名也无装饰标记（原 WARN 4，按 I3 升档）。
+scan_clickable_without_readable_name() {
     find "$SRC" -type f -name '*.kt' | sort | while IFS= read -r f; do
         awk -v rel="${f#"$ROOT"/}" "$FUNC_AWK_PRELUDE"'
             '"$FUNC_AWK_ENTER"'
@@ -257,14 +410,68 @@ scan_clickable_icon_without_label() {
     done
 }
 
+# ── fixture 自测：判据本身的回归（--self-test）─────────────────────────
+# 每个用例是一个独立目录、只含一个 .kt；期望命中数是「旧实现会放过 / 改后必须拦住」的证据。
+# 新增判据时先在这里加用例，再改扫描器。
+self_test() {
+    if [ ! -d "$FIXTURES" ]; then
+        echo "缺 fixture 目录：$FIXTURES" >&2
+        return 1
+    fi
+    local failed=0 cases dir fn expect desc out hits
+    cases="$(mktemp)"
+    cat >"$cases" <<'CASES'
+error1-iconbutton-unlabeled|scan_icon_button_without_label|1|Icon 省略 contentDescription（真实 IconButton，旧实现判 PASS）
+error1-dayarrow-unlabeled|scan_icon_button_without_label|1|自建封装名不带 IconButton 且无命名实参（旧实现判 PASS）
+error1-finance-lambda-unlabeled|scan_icon_button_without_label|1|FinanceIconButton 无命名实参，标签只在 lambda 里引用了 null 默认值（旧实现判 PASS）
+error1-appiconbutton-null-label|scan_icon_button_without_label|1|自建 AppIconButton 传 contentDescription = null（旧实现已能判红，防回归）
+error1-labeled-good|scan_icon_button_without_label|0|三种合规传名形态各一处，不得误报
+error2-clickable-no-name|scan_clickable_without_readable_name|1|可点元素只有无名图标、无文本无标签（原 WARN 4）
+error2-labeled-good|scan_clickable_without_readable_name|0|clickable + 可见 Text，不得误报
+CASES
+    echo "无障碍门禁自测（fixture：${FIXTURES}）"
+    echo
+    while IFS='|' read -r dir fn expect desc; do
+        [ -z "$dir" ] && continue
+        if [ ! -d "$FIXTURES/$dir" ]; then
+            echo "  FAIL ${dir}：fixture 目录不存在"
+            failed=1
+            continue
+        fi
+        SRC="$FIXTURES/$dir"
+        out="$("$fn" 2>/dev/null)"
+        hits=$(count_lines "$out")
+        if [ "$hits" -eq "$expect" ]; then
+            echo "  PASS ${dir}：${hits} 处（期望 ${expect}）· ${desc}"
+        else
+            echo "  FAIL ${dir}：${hits} 处（期望 ${expect}）· ${desc}"
+            printf '%s\n' "$out" | sed 's/^/         /'
+            failed=1
+        fi
+    done <"$cases"
+    rm -f "$cases"
+    echo
+    if [ "$failed" -eq 0 ]; then
+        echo "自测结果：PASS（判据按预期命中 / 不误报）"
+        return 0
+    fi
+    echo "自测结果：FAIL（判据与 fixture 期望不符，先修扫描器）"
+    return 1
+}
+
+if [ "${1:-}" = "--self-test" ]; then
+    self_test
+    exit $?
+fi
+
 echo "无障碍静态门禁：$SRC"
 echo
 
-run_error 1 "IconButton 内图标无 contentDescription" scan_icon_button_without_label
+run_error 1 "图标按钮调用拿不到可读名（命名参数 / 位置实参 / lambda 透传；块内 Icon 必须有名）" scan_icon_button_without_label
+run_error 2 "可点元素无可读名兜底（原 WARN 4 升档）" scan_clickable_without_readable_name
 run_warn 1 "clickable 所在函数没有 testTag" scan_clickable_without_testtag
 run_warn 2 "clickable 修饰链写死触达区 <44dp" scan_clickable_small_touch
 run_warn 3 "switch/checkbox 无 toggleable/selectable" scan_toggle_without_semantics
-run_warn 4 "可点图标无可读名兜底（ERROR 降级）" scan_clickable_icon_without_label
 
 echo "================ 汇总 ================"
 for row in "${SUMMARY[@]}"; do
