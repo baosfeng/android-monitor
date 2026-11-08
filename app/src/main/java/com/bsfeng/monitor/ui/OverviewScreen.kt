@@ -155,7 +155,13 @@ fun OverviewScreen(
     var rangeIndex by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val now = remember { System.currentTimeMillis() }
+    // 页头日期与三段面板必须同一时刻：数据侧 startOfDay 由 VM 每轮刷新现算（REFRESH_MS = 5s），
+    // 页头原先用无 key 的 remember { System.currentTimeMillis() }，冻结在进屏那一刻 ——
+    // 常驻前台跨零点后数据已按新的一天重算、页头却还写着昨天。
+    // 以 lastUpdatedAt 为 key：只在一次成功读表后重算，不随每帧重组跳动。
+    val now = remember(state.lastUpdatedAt) {
+        overviewHeaderNow(state.lastUpdatedAt, System.currentTimeMillis())
+    }
 
     // 骨架超时兜底（与 s06 预算页同一口径）：事件表被占用/损坏时，加载会一直停在这里 ——
     // 没有文案、没有重试入口，用户只能杀进程。8 秒后转错误态，至少给得出一个可操作的出口。
@@ -257,8 +263,8 @@ fun OverviewScreen(
                                 },
                                 onHaptic = haptic,
                             )
-                            1 -> weekPanelS01(state = state)
-                            else -> monthPanelS01(state = state)
+                            1 -> weekPanelS01(state = state, now = now)
+                            else -> monthPanelS01(state = state, now = now)
                         }
                     }
                 }
@@ -686,7 +692,7 @@ private fun LazyListScope.todayPanelS01(
 
 // ───────────────────────────── 近 7 天 / 近 30 天 ─────────────────────────────
 
-private fun LazyListScope.weekPanelS01(state: OverviewState) {
+private fun LazyListScope.weekPanelS01(state: OverviewState, now: Long) {
     item(key = "k7-row-1") {
         val t = LocalDesignTokens.current
         Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
@@ -730,7 +736,8 @@ private fun LazyListScope.weekPanelS01(state: OverviewState) {
     }
     item(key = "card-7d-bars") {
         val t = LocalDesignTokens.current
-        val labels = remember { dayLabels(7) }
+        // 与 VM 的日桶同源（同 [now]）：跨零点后柱值与横轴一起翻篇
+        val labels = remember(now) { dayLabels(7, now) }
         AppCard(modifier = Modifier.testTag("s01-chart7d").staggerEnterAt(4)) {
             CardHead("近 7 天每日事件量", labels.first() + " – " + labels.last())
             Spacer(Modifier.height(t.space3))
@@ -776,7 +783,7 @@ private fun LazyListScope.weekPanelS01(state: OverviewState) {
     }
 }
 
-private fun LazyListScope.monthPanelS01(state: OverviewState) {
+private fun LazyListScope.monthPanelS01(state: OverviewState, now: Long) {
     item(key = "k30-row-1") {
         val t = LocalDesignTokens.current
         Row(horizontalArrangement = Arrangement.spacedBy(t.space3)) {
@@ -820,7 +827,7 @@ private fun LazyListScope.monthPanelS01(state: OverviewState) {
     }
     item(key = "card-30d-trend") {
         val t = LocalDesignTokens.current
-        val labels = remember { dayLabels(30) }
+        val labels = remember(now) { dayLabels(30, now) }
         AppCard(modifier = Modifier.testTag("s01-chart30d").staggerEnterAt(4)) {
             CardHead("近 30 天活跃趋势", "单位 分钟")
             Spacer(Modifier.height(t.space3))
