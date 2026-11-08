@@ -1,6 +1,6 @@
 # 踩坑：自绘 BottomSheet 传 align 定位无效，抽屉贴在屏幕顶部
 
-> ⚠️ **何时阅读：** 修改 `ui/components/Surfaces.kt` 里的 `BottomSheet`，或在页面里想用
+> ⚠️ **何时阅读：** 修改 `ui/components/Sheets.kt` 里的 `BottomSheet`，或在页面里想用
 > `Modifier.align(Alignment.BottomCenter)` 把抽屉贴到底部时。
 
 ## 现象
