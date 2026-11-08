@@ -6,7 +6,6 @@ import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.domain.model.Record
 import com.bsfeng.monitor.domain.model.RecordType
 import org.json.JSONObject
-import java.util.UUID
 
 class RecordStore(private val db: DatabaseHelper) {
 
@@ -94,84 +93,9 @@ class RecordStore(private val db: DatabaseHelper) {
         db.readableDatabase.rawQuery("SELECT COUNT(*) FROM records WHERE " + selection, args)
             .use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
 
-    fun getDailySummary(dateStart: Long, dateEnd: Long): DailySummary {
-        val db = db.readableDatabase
-        // 亮屏时长:UNLOCKED→OFF 配对计算,无配对时按 5 分钟估算
-        val screenRecords = query(
-            "type='SCREEN' AND (action='UNLOCKED' OR action='OFF') AND timestamp >= ? AND timestamp <= ?",
-            arrayOf(dateStart.toString(), dateEnd.toString())
-        )
-        val totalScreenOnMinutes = computeScreenOnMillis(screenRecords) / 60_000L
-
-        val chargeRecords = query("type='CHARGING' AND timestamp >= ? AND timestamp <= ?",
-            arrayOf(dateStart.toString(), dateEnd.toString()))
-        val chargeCount = chargeRecords.count { it.action == "STARTED" }
-
-        val topApps = db.rawQuery(
-            """SELECT label, SUM(COALESCE(duration,0)) as total_ms, COUNT(*) as cnt
-               FROM records WHERE type='APP_USAGE' AND (action='CLOSED' OR action='USAGE')
-               AND timestamp >= ? AND timestamp <= ?
-               GROUP BY label ORDER BY total_ms DESC LIMIT 10""",
-            arrayOf(dateStart.toString(), dateEnd.toString())
-        ).use { cursor ->
-            val list = mutableListOf<AppUsageStat>()
-            while (cursor.moveToNext()) {
-                list.add(AppUsageStat(
-                    packageName = cursor.getString(0),
-                    appName = cursor.getString(0),
-                    totalMinutes = cursor.getLong(1) / 60000,
-                    openCount = cursor.getInt(2)
-                ))
-            }
-            list
-        }
-
-        val wifiChanges = db.rawQuery(
-            "SELECT COUNT(*) FROM records WHERE type='WIFI' AND timestamp >= ? AND timestamp <= ?",
-            arrayOf(dateStart.toString(), dateEnd.toString())
-        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-
-        return DailySummary(
-            totalScreenOnMinutes = totalScreenOnMinutes,
-            chargeCount = chargeCount,
-            topApps = topApps,
-            wifiChanges = wifiChanges
-        )
-    }
-
-    fun getAppUsageRank(dateStart: Long, dateEnd: Long): List<AppUsageStat> {
-        val db = db.readableDatabase
-        return db.rawQuery(
-            """SELECT label, SUM(COALESCE(duration,0)) as total_ms, COUNT(*) as cnt
-               FROM records WHERE type='APP_USAGE' AND (action='CLOSED' OR action='USAGE')
-               AND timestamp >= ? AND timestamp <= ?
-               GROUP BY label ORDER BY total_ms DESC""",
-            arrayOf(dateStart.toString(), dateEnd.toString())
-        ).use { cursor ->
-            val list = mutableListOf<AppUsageStat>()
-            while (cursor.moveToNext()) {
-                list.add(AppUsageStat(
-                    packageName = cursor.getString(0),
-                    appName = cursor.getString(0),
-                    totalMinutes = cursor.getLong(1) / 60000,
-                    openCount = cursor.getInt(2)
-                ))
-            }
-            list
-        }
-    }
-
-    fun deleteBefore(timestamp: Long) {
-        db.writableDatabase.delete("records", "timestamp < ?", arrayOf(timestamp.toString()))
-    }
-
     fun deleteByRange(start: Long, end: Long) {
         db.writableDatabase.delete("records", "timestamp >= ? AND timestamp <= ?",
             arrayOf(start.toString(), end.toString()))
-    }
-
-    fun deleteByAction(action: String) {
-        db.writableDatabase.delete("records", "action = ?", arrayOf(action))
     }
 
     private fun query(selection: String, args: Array<String>): List<Record> {
@@ -254,11 +178,16 @@ private object UnknownStoredType {
 /**
  * 根据 SCREEN 的 UNLOCKED/OFF 序列计算亮屏时长（毫秒）。
  *
+ * 仅测试使用：原唯一生产调用方 `getDailySummary` 已随统计聚合入口一起删除，
+ * 现在只有 `ComputeScreenOnMillisTest` 钉住这段规则。将来做「亮屏时长」统计时，
+ * 请从 `queryByType(RecordType.SCREEN, ...)` 取序列后直接调本函数。
+ *
  * 规则：
  * - UNLOCKED 标记一次亮屏开始，下一个 OFF 标记结束，时间差累加；
  * - 无配对 OFF 的 UNLOCKED（跨天/统计区间内未熄屏）与无配对 UNLOCKED 的 OFF
  *   （亮屏未解锁直接熄屏），按 [estimateMs] 估算。
  */
+@androidx.annotation.VisibleForTesting
 internal fun computeScreenOnMillis(records: List<Record>, estimateMs: Long = 5 * 60_000L): Long {
     var totalMs = 0L
     var lastUnlockTs: Long? = null

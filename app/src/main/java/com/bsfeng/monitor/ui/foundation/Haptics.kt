@@ -8,11 +8,6 @@ import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalView
-import androidx.core.content.edit
-import com.bsfeng.monitor.MonitorApp
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -115,7 +110,12 @@ fun shouldPerformHaptic(
     appHapticsEnabled: Boolean,
 ): Boolean = systemHapticsEnabled && viewHapticsEnabled && appHapticsEnabled
 
-/** 进程级缓存：系统触觉总开关只读一次（每次读都是 ContentResolver → binder IPC）。 */
+/**
+ * 进程级缓存：系统触觉总开关只读一次（每次读都是 ContentResolver → binder IPC）。
+ *
+ * 进程内不再刷新：本文件没有 Application 级注册点，挂广播/ContentObserver 需要 Application 侧配合，
+ * 所以用户在系统设置里改完要**重启 App 才生效**。别在这里补一个没人调的 refresh —— 那只会让注释撒谎。
+ */
 private val systemHapticsCache = AtomicReference<Boolean?>(null)
 
 /**
@@ -130,12 +130,6 @@ fun systemHapticEnabled(context: Context): Boolean = systemHapticsCache.get() ?:
         1,
     ) != 0
 }.getOrDefault(true).also { systemHapticsCache.set(it) }
-
-/** 重新读取系统开关（系统设置被改过之后调用；下次 [systemHapticEnabled] 重新读一次）。 */
-fun refreshSystemHapticEnabled(context: Context): Boolean {
-    systemHapticsCache.set(null)
-    return systemHapticEnabled(context)
-}
 
 // ─────────────────────────── 3 · 统一入口 ───────────────────────────
 
@@ -169,6 +163,3 @@ fun rememberHaptic(): (HapticTone) -> Unit {
     val view = LocalView.current
     return remember(view) { { tone: HapticTone -> view.performHaptic(tone) } }
 }
-
-// ─────────────────────────── 4 · 应用内配置 ───────────────────────────
-
