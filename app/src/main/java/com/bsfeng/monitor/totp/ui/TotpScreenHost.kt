@@ -63,7 +63,7 @@ fun TotpScreenHost(
     onBack: () -> Unit,
     /** 首次组合落在哪一屏（设置卡「备份与导入」直接进备份页）。 */
     startRoute: TotpRoute = TotpRoute.List,
-    viewModel: TotpViewModel = viewModel(),
+    viewModel: TotpViewModel = viewModel(factory = TotpViewModelFactory),
 ) {
     val t = LocalDesignTokens.current
     val context = LocalContext.current

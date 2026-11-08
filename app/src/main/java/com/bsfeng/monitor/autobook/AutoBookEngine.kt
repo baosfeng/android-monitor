@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
+import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.CategoryCatalog
@@ -41,7 +42,8 @@ class AutoBookEngine(internal val service: AccessibilityService) {
 
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    internal val financeManager: FinanceManager by lazy { FinanceManager.getInstance(service) }
+    /** 记账实例从容器取（装配只在一处；容器里镜像的仍是 FinanceManager 的进程级单例）。 */
+    internal val financeManager: FinanceManager by lazy { service.serviceContainer.financeManager }
 
     internal val overlay = AutoBookOverlay(service)
 

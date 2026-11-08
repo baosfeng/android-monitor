@@ -13,17 +13,21 @@ import com.bsfeng.monitor.quota.provider.OpencodeGoQuotaProvider
 import com.bsfeng.monitor.quota.provider.QuotaHttp
 import com.bsfeng.monitor.MainActivity
 import com.bsfeng.monitor.data.DatabaseHelper
-import com.bsfeng.monitor.data.repository.DeviceRepositoryImpl
 import com.bsfeng.monitor.data.repository.SkipRuleRepositoryImpl
-import com.bsfeng.monitor.domain.repository.DeviceRepository
 import com.bsfeng.monitor.domain.repository.SkipRuleRepository
-import com.bsfeng.monitor.network.EventReporter
+import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.record.RecordCollector
 import com.bsfeng.monitor.record.RecordHandlerRegistry
 import com.bsfeng.monitor.record.RecordStore
 import com.bsfeng.monitor.record.UsageTracker
 import com.bsfeng.monitor.skip.SkipRuleEngine
 import com.bsfeng.monitor.skip.SkipRuleManager
+import com.bsfeng.monitor.totp.TotpAccountDao
+import com.bsfeng.monitor.totp.TotpDatabaseHelper
+import com.bsfeng.monitor.totp.TotpRepository
+import com.bsfeng.monitor.totp.TotpSecretStore
+import com.bsfeng.monitor.transfer.service.TransferEngine
+import com.bsfeng.monitor.transfer.service.TransferEngineHolder
 import com.bsfeng.monitor.util.DebugConfig
 import android.util.Log
 
@@ -38,11 +42,12 @@ class ServiceContainer(private val app: Application) {
 
     val databaseHelper: DatabaseHelper by lazy { DatabaseHelper.getInstance(app) }
 
-    val eventReporter: EventReporter by lazy { EventReporter(app) }
-
     // ========== Record 系统 ==========
 
-    val recordHandlerRegistry: RecordHandlerRegistry by lazy { RecordHandlerRegistry.createDefault() }
+    /** 只被 [recordCollector] 用来校验/派生记录，不是对外契约（外部要的是 collector）。 */
+    private val recordHandlerRegistry: RecordHandlerRegistry by lazy {
+        RecordHandlerRegistry.createDefault()
+    }
 
     val recordStore: RecordStore by lazy { RecordStore(databaseHelper) }
 
@@ -100,11 +105,40 @@ class ServiceContainer(private val app: Application) {
         )
     }
 
+    // ========== 三条主链路（记账 / 互传 / 验证器）==========
+
+    /**
+     * 记账：FinanceManager 自己持进程级单例（组件、无障碍浮窗、心跳都要取它），
+     * 容器这里只是**统一取用点** —— 新代码从这里取，不再直接 FinanceManager.getInstance(...)。
+     * 身份仍是那个单例：container.financeManager === FinanceManager.getInstance(app)。
+     */
+    val financeManager: FinanceManager by lazy { FinanceManager.getInstance(app) }
+
+    /**
+     * 互传引擎：HTTP 端口与 UDP 发现必须进程级唯一，单例由 TransferEngineHolder 持有；
+     * 容器镜像同一实例，供只读状态的调用方（桌面组件）使用。
+     *
+     * 单例生命周期仍归 holder（resetForTesting 清的是它），容器不参与重建。
+     */
+    val transferEngine: TransferEngine by lazy { TransferEngineHolder.get(app) }
+
+    /**
+     * 验证器数据层：账户表 + Keystore 密钥存储。
+     *
+     * 装配只在这里发生，UI 走 TotpViewModelFactory（CreationExtras → 容器），
+     * 不再在 ViewModel 里现拼 TotpRepository(TotpAccountDao(TotpDatabaseHelper.getInstance()))——
+     * 那样每次新建都绕过容器，也说不清「一份数据源还是几份」。
+     */
+    val totpRepository: TotpRepository by lazy {
+        TotpRepository(
+            dao = TotpAccountDao(TotpDatabaseHelper.getInstance(app)),
+            secrets = TotpSecretStore(app),
+        )
+    }
+
     // ========== Repository ==========
 
     val skipRuleRepository: SkipRuleRepository by lazy { SkipRuleRepositoryImpl(skipRuleManager) }
-
-    val deviceRepository: DeviceRepository by lazy { DeviceRepositoryImpl() }
 
     /**
      * APP_USAGE 落库通道：回调在主线程触发（无障碍 1 秒轮询），写库必须挪到 IO。

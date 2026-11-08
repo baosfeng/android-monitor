@@ -12,7 +12,6 @@ import com.bsfeng.monitor.autobook.AutoBookConfig
 import com.bsfeng.monitor.backup.BackupManager
 import com.bsfeng.monitor.backup.HealOutcome
 import com.bsfeng.monitor.core.di.ServiceContainer
-import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.flow.drop
@@ -86,7 +85,7 @@ class MonitorApp : Application() {
     private fun registerFinanceWidgetRefresh() {
         appScope.launch {
             try {
-                FinanceManager.getInstance(this@MonitorApp).changeVersion.drop(1).collect {
+                container.financeManager.changeVersion.drop(1).collect {
                     WidgetRefresher.refreshFinance(this@MonitorApp)
                 }
             } catch (e: Exception) {
@@ -105,7 +104,7 @@ class MonitorApp : Application() {
      */
     private fun syncFinanceCategoryCatalog() {
         appScope.launch {
-            runCatching { FinanceManager.getInstance(this@MonitorApp).syncCatalogOnce() }
+            runCatching { container.financeManager.syncCatalogOnce() }
                 .onFailure { Log.w(TAG, "分类目录补齐失败（下次启动重试）", it) }
         }
     }
