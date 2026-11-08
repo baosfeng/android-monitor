@@ -15,14 +15,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.backup.BackupConfig
 import com.bsfeng.monitor.backup.BackupFrequency
+import com.bsfeng.monitor.backup.StorageMode
 import com.bsfeng.monitor.backup.BackupManager
 import com.bsfeng.monitor.backup.BackupOrigin
 import com.bsfeng.monitor.backup.BackupOutcome
@@ -54,6 +58,7 @@ import kotlinx.coroutines.withContext
 internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
     val t = rt.t
     var backupFrequency by rt.backupFrequencyState
+    var storageMode by remember { mutableStateOf(BackupConfig(rt.context).storageMode()) }
     var backupBusy by rt.backupBusyState
     var restoreBusy by rt.restoreBusyState
     var pendingRestoreUri by rt.pendingRestoreUriState
@@ -119,6 +124,34 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
                     } else {
                         "自动备份：" + frequency.label + "备份一次"
                     },
+                )
+            },
+            modifier = Modifier.padding(
+                horizontal = t.space4,
+                vertical = t.space2,
+            ),
+        )
+        TokenDivider(first = false)
+        TokenRow(
+            title = "存储模式",
+            subtitle = when (storageMode) {
+                StorageMode.LOCAL -> "本地：备份保存在 App 私有目录，离线可用（默认）"
+                StorageMode.SERVER -> "服务器：备份上传到已配置的服务器，便于换机恢复"
+            },
+            icon = Icons.Outlined.Storage,
+            trailing = { TailNum(storageMode.label) },
+        )
+        ChipRow(
+            items = StorageMode.values().map { it.label },
+            selectedIndex = StorageMode.values().indexOf(storageMode).coerceAtLeast(0),
+            onSelect = { index ->
+                val mode = StorageMode.values()[index]
+                storageMode = mode
+                BackupConfig(rt.context).setStorageMode(mode)
+                rt.reloadCounters()
+                rt.view.performConfirmHaptic()
+                rt.toast.show(
+                    if (mode == StorageMode.LOCAL) "已切换为本地存储" else "已切换为服务器存储",
                 )
             },
             modifier = Modifier.padding(

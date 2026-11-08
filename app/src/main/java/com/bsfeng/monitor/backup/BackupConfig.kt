@@ -30,8 +30,14 @@ data class LastBackup(
 /** 备份配置（SharedPreferences `backup_prefs`）：频率与最近一次备份信息。 */
 class BackupConfig(context: Context) {
 
+    private val app = context.applicationContext
+
     private val prefs =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun storageMode(): StorageMode = StorageModePrefs.read(app)
+
+    fun setStorageMode(mode: StorageMode) = StorageModePrefs.write(app, mode)
 
     fun frequency(): BackupFrequency =
         BackupFrequency.fromValue(prefs.getString(KEY_FREQUENCY, null))

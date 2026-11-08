@@ -81,13 +81,12 @@ class BackupManager(context: Context) {
                 )
             }
 
-            // 只落本地快速列表（还原入口扫描这里）；公共 Downloads 不再写，见类注释
-            val localDir = localBackupDir()
-            val localFile = File(localDir, name)
-            tmpFile.copyTo(localFile, overwrite = true)
-
-            collector.pruneLocal(localDir)
-            prunePreRestore(localDir)
+            // 走选中的存储 provider：LOCAL = 现有私有目录（保留策略 provider 内执行）；
+            // SERVER = HTTPS 上传。失败即本次备份失败，不静默降级。
+            val provider = BackupStorageProviders.fromContext(app)
+            if (!provider.put(name, tmpFile)) {
+                return BackupOutcome.Failed("备份写入存储失败")
+            }
 
             config.recordBackup(createdAt, name)
             BackupOutcome.Success(manifest, name)
@@ -101,11 +100,7 @@ class BackupManager(context: Context) {
 
     /** 本地快速列表目录里的备份，按修改时间倒序。 */
     fun listBackups(): List<BackupFileInfo> =
-        localBackupDir().listFiles()
-            ?.filter { it.isFile && it.name.startsWith(NAME_PREFIX) }
-            ?.map { BackupFileInfo(it.name, it.lastModified(), it.length()) }
-            ?.sortedWith(compareByDescending<BackupFileInfo> { it.modifiedAt }.thenByDescending { it.name })
-            ?: emptyList()
+        BackupStorageProviders.fromContext(app).list()
 
     /**
      * 把本地列表里的某一份**复制**一份到公共 Downloads（同步 IO，调用方负责 IO 线程）。
@@ -116,9 +111,10 @@ class BackupManager(context: Context) {
      * @return 展示用路径；文件不存在或复制失败返回 null
      */
     fun exportBackup(localName: String): String? {
-        // 名字来自本地列表，理论上安全；照样过一遍文件名归一，避免任何 ../ 被当成路径片段
-        val file = File(localBackupDir(), BackupExport.targetName(localName))
-        if (!file.isFile) return null
+        val targetName = BackupExport.targetName(localName)
+        val file = BackupStorageProviders.fromContext(app).get(targetName)
+            ?: File(localBackupDir(), targetName).takeIf { it.isFile }
+        if (file == null || !file.isFile) return null
         return collector.exportToDownloads(file, file.name)
     }
 
@@ -186,7 +182,12 @@ class BackupManager(context: Context) {
     fun healIfNeeded(): HealOutcome = RestoreRecovery.recover(
         dataDir = app.dataDir,
         stagingDir = cacheDir("restore-heal"),
-        findBackup = { name -> File(localBackupDir(), name).takeIf { it.isFile } },
+        findBackup = { name ->
+            listOf(
+                LocalBackupStorageProvider(app),
+                ServerBackupStorageProvider(app),
+            ).firstNotNullOfOrNull { it.get(name)?.takeIf { it.isFile } }
+        },
         dbNames = dbNames(),
     )
 
@@ -214,16 +215,6 @@ class BackupManager(context: Context) {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(createdAt))
         val prefix = if (origin == BackupOrigin.PRE_RESTORE) PRE_RESTORE_PREFIX else NAME_PREFIX
         return "$prefix$stamp.zip"
-    }
-
-    /** 回滚包只留最近 [PRE_RESTORE_KEEP] 份：它不参与普通备份的 5 份轮转，但也不该无限攒。 */
-    private fun prunePreRestore(dir: File) {
-        val files = dir.listFiles()
-            ?.filter { it.isFile && it.name.startsWith(PRE_RESTORE_PREFIX) }
-            ?.map { BackupFileInfo(it.name, it.lastModified(), it.length()) }
-            ?: return
-        RetentionPolicy.expired(files, keep = PRE_RESTORE_KEEP, prefix = PRE_RESTORE_PREFIX)
-            .forEach { File(dir, it.name).delete() }
     }
 
     private fun dbNames(): List<String> = listOf("finance.db", "monitor.db")
