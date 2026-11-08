@@ -165,9 +165,9 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     /** 按名称查询账户 */
     fun getAccountByName(name: String): Account? = accountDao.getAccountByName(name)
 
-    /** 更新账户余额 */
-    fun updateAccountBalance(accountId: Long, newBalance: Double): Int =
-        accountDao.updateAccountBalance(accountId, newBalance)
+    /** 余额按相对增量原子更新；0 行命中 = 账户不存在（见 [FinanceAccountDao.addToAccountBalance]） */
+    fun addToAccountBalance(accountName: String, delta: Double): Int =
+        accountDao.addToAccountBalance(accountName, delta)
 
     // ========== Budget ==========
 

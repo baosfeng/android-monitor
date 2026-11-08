@@ -18,7 +18,9 @@ import org.robolectric.annotation.Config
 /**
  * [BillImporter] 入库语义（Robolectric + 真实 SQLite）。
  *
- * 覆盖设计文档的三条不变式：身份键去重、跨源命中只更新、**只补空不覆盖**。
+ * 覆盖设计文档的三条不变式：身份键去重、跨源命中只更新、**只补空不覆盖**；
+ * 另钉两条正确性约束：导入的账必须同步作用于账户余额（不再绕开 FinanceManager），
+ * 交易时间识别不出的行宁可计入失败，也不写空 date 变成统计里永远看不到的账。
  * 样例数据全部自造（「某某」系列商户名、整数金额），不含任何真实账单。
  */
 // application = Application：MonitorApp.onCreate 会后台补分类目录，与这里的空库断言抢 finance.db
@@ -69,6 +71,18 @@ class BillImporterTest {
     )
 
     private fun all(): List<Transaction> = manager.dao.getRecentTransactions(100)
+
+    private fun seedAccount(name: String, balance: Double) {
+        manager.dao.insertAccount(
+            com.bsfeng.monitor.finance.model.Account(
+                name = name,
+                type = com.bsfeng.monitor.finance.model.Account.TYPE_THIRD_PARTY,
+                balance = balance,
+            )
+        )
+    }
+
+    private fun balanceOf(name: String): Double = manager.dao.getAccountByName(name)!!.balance
 
     @Test
     fun `新记录插入并按关键词推断分类`() {
@@ -204,6 +218,85 @@ class BillImporterTest {
         assertEquals("工资", tx.categoryName)
         assertEquals("wechat_import", tx.source)
         assertEquals("微信钱包", tx.accountName)
+    }
+
+    // ==================== 与账户余额的联动（R2） ====================
+
+    @Test
+    fun `导入支出后对应账户余额同步扣减`() {
+        seedAccount("支付宝", 500.0)
+
+        val result = importer.importRecords(
+            listOf(expenseRow(orderId = "B001", tradeTime = "2026-11-07 12:00:00", amount = 100.0))
+        )
+
+        assertEquals(1, result.inserted)
+        assertEquals("导入的账必须进账户余额，否则余额与账目永久对不上", 400.0, balanceOf("支付宝"), 0.0001)
+    }
+
+    @Test
+    fun `导入收入按微信钱包账户增加余额`() {
+        seedAccount("微信钱包", 20.0)
+        val row = BillRecord(
+            channel = BillChannel.WECHAT, orderId = "B002", tradeTime = "2026-11-07 09:00:00",
+            amount = 800.0, direction = BillDirection.INCOME, product = "代发工资",
+        )
+
+        assertEquals(1, importer.importRecords(listOf(row)).inserted)
+
+        assertEquals(820.0, balanceOf("微信钱包"), 0.0001)
+    }
+
+    @Test
+    fun `跨源命中只补空时不动余额`() {
+        seedAccount("支付宝", 100.0)
+        manager.dao.insertTransaction(
+            Transaction(
+                type = 0, categoryName = "正餐", amount = 66.0, accountName = "支付宝",
+                date = "2026-11-03", dateTime = "2026-11-03 19:20:00",
+                source = "auto_alipay", sourceId = "auto-1", orderId = "B003",
+            )
+        )
+
+        val result = importer.importRecords(
+            listOf(expenseRow(orderId = "B003", tradeTime = "2026-11-03 19:20:00", amount = 66.0, counterparty = "某某火锅店"))
+        )
+
+        assertEquals(0, result.inserted)
+        assertEquals(1, result.updated)
+        assertEquals("只补空的那次更新不该重复扣余额", 100.0, balanceOf("支付宝"), 0.0001)
+    }
+
+    // ==================== 交易时间缺失（R12） ====================
+
+    @Test
+    fun `交易时间只有年月时计入失败且不写空 date`() {
+        seedAccount("支付宝", 500.0)
+
+        val result = importer.importRecords(
+            listOf(expenseRow(orderId = "B004", tradeTime = "2026年11月", amount = 100.0, lineNo = 3))
+        )
+
+        assertEquals("有单号也不该硬写空 date", 0, result.inserted)
+        assertEquals(1, result.failed)
+        assertTrue("文案要指回行号与原因：" + result.errors, result.errors.single().contains("第 3 行"))
+        assertTrue("文案要点出是时间问题：" + result.errors, result.errors.single().contains("时间"))
+        assertTrue("不得以 date='' 落库", all().isEmpty())
+        assertEquals("跳过的那笔也不该动余额", 500.0, balanceOf("支付宝"), 0.0001)
+    }
+
+    @Test
+    fun `交易时间不是时间格式时同样跳过而不是兜底成当天`() {
+        val result = importer.importRecords(
+            listOf(
+                expenseRow(orderId = "B005", tradeTime = "不详", amount = 12.0, lineNo = 8),
+                expenseRow(orderId = "B006", tradeTime = "2026-13-45 99:99", amount = 12.0, lineNo = 9),
+            )
+        )
+
+        assertEquals(0, result.inserted)
+        assertEquals("两行都该计入失败（不做「导入当天」兜底）", 2, result.failed)
+        assertTrue(all().isEmpty())
     }
 
     @Test

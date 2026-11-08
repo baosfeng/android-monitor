@@ -1,7 +1,10 @@
 package com.bsfeng.monitor.ui
 
-// 二级页「数据与备份」：立即备份 / 自动备份频率 / 最近一次备份，
+// 二级页「数据与备份」：立即备份 / 自动备份频率 / 最近一次备份 / 导出到下载目录，
 // 以及从主卡移出的「从备份还原」——破坏性操作，单独成组 + 二次确认。
+//
+// 导出与备份的分工：备份**只写 App 私有目录**（不加密的包不落公共目录），
+// 想把它搬出设备必须由用户在列表里挑一份、再越过一次破坏性确认 —— 不自动、不定时。
 //
 // 为什么还原要单独一张卡：它和「备份」不同级——备份是加法（可重复、出错无损失），
 // 还原是覆盖（会替换账目与记录）。放在同一张卡里，用户扫一眼会把它当成普通一行；
@@ -40,10 +43,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 「数据与备份」页正文：备份主卡（三行）+ 还原卡（一行）+ 还原确认弹窗。
+ * 「数据与备份」页正文：备份主卡（四行）+ 还原卡（一行）+ 还原确认弹窗 + 导出选择 / 确认弹窗。
  *
- * 备份包只含本机数据文件（两张库 + shared_prefs + 规则快照），不含任何账号凭据；
- * 公共 Downloads 一份给用户自己拷走，换机 / 重装后靠它还原。
+ * 备份包只含本机数据文件（两张库 + shared_prefs + 规则快照），不含任何账号凭据。
+ * 包落 App 私有目录（卸载即消失），所以「换机 / 重装前把它搬出去」必须有一条显式路径：
+ * 「导出到下载目录」= 用户挑一份 → 破坏性确认（包未加密）→ 复制一份到公共 Downloads。
+ * 还原不受影响：SAF 选择器本来就是全盘可选的，Downloads 里挑 zip 一样能还原。
  */
 @Composable
 internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
@@ -56,7 +61,12 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
     AppCard(Modifier.padding(horizontal = t.space4), padding = 0.dp) {
         TokenRow(
             title = "立即备份",
-            subtitle = if (backupBusy) "正在打包账目与记录…" else "打包账目、记录与设置到 Downloads",
+            // 副标题必须说清包落在哪：它不落公共目录，卸载即消失，用户要搬家得走下面的导出
+            subtitle = if (backupBusy) {
+                "正在打包账目与记录…"
+            } else {
+                "备份保存在 App 私有目录，卸载即消失"
+            },
             icon = Icons.Outlined.Save,
             trailing = {
                 AppButton(
@@ -72,7 +82,7 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
                                 rt.reloadCounters()
                                 when (outcome) {
                                     is BackupOutcome.Success -> rt.toast.show(
-                                        "已备份：" + (outcome.publicPath ?: outcome.localName ?: ""),
+                                        "已备份：" + (outcome.localName ?: "") + "（App 私有目录）",
                                     )
                                     is BackupOutcome.Failed -> rt.toast.show(outcome.message)
                                 }
@@ -127,8 +137,10 @@ internal fun SettingsBackupSection(rt: SettingsScreenRuntime) {
                 TailNum(last?.let { formatBackupTime(it.at) } ?: "—")
                 TailChevron()
             },
-            onClick = { rt.toast.show(last?.publicPath ?: "还没有备份包") },
+            onClick = { rt.toast.show(last?.localName ?: "还没有备份包") },
         )
+        // 导出的入口行与两个弹窗都在这个组件里（自带三态；拆出去是为了本文件不过 300 行）
+        BackupExportFlow(rt)
     }
 
     // 还原：破坏性操作，独立成卡（与上面的备份主卡不同级）

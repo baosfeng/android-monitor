@@ -27,8 +27,8 @@ class BackupSourceWhitelistTest {
 
     /** 必须排除：内含凭据 / 密钥 / 可被同机解开的密文 */
     private val forbidden = listOf(
-        "monitor_prefs", // auth_token 明文
-        "lan_transfer", // pairing_keys 免配对密钥
+        "monitor_prefs", // auth_token（现为 Keystore 密文，仍属凭据）
+        "lan_transfer", // pairing_keys（现为密文，拿到即可免 PIN 推文件）
         "totp_secrets", // TOTP 私钥密文
         "quota_credentials", // 额度凭据密文
     )
@@ -52,7 +52,8 @@ class BackupSourceWhitelistTest {
     }
 
     private fun archivedPrefs(): List<String> =
-        BackupSourceCollector(context).collectSources()
+        // 只关心 prefs 白名单：库快照那部分给一个空清单，避免这里去开真库
+        BackupSourceCollector(context).collectSources(BackupSnapshot(emptyList(), emptyList()))
             .map { it.archivePath }
             .filter { it.startsWith("${BackupPaths.PREFS_DIR}/") }
             .map { it.substringAfterLast('/') }

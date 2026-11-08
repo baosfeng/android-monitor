@@ -3,9 +3,7 @@ package com.bsfeng.monitor.backup
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import com.bsfeng.monitor.service.IoWorkScope
 import kotlinx.coroutines.launch
 
 /**
@@ -25,11 +23,15 @@ class BackupReceiver : BroadcastReceiver() {
         val frequency = BackupConfig(context).frequency()
         if (frequency == BackupFrequency.OFF) return
         val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+        // goAsync 的局部协程宿主：备份结束（无论成败）都要 cancel，
+        // 否则广播进程被回收前后留下的 scope 没有句柄，任务无法收尾。
+        val work = IoWorkScope()
+        work.scope.launch {
             try {
                 BackupManager(context).backupNow(BackupOrigin.SCHEDULED)
             } finally {
                 pendingResult.finish()
+                work.cancel()
             }
         }
     }

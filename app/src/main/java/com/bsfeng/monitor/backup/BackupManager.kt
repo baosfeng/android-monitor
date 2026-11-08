@@ -19,7 +19,7 @@ enum class BackupOrigin { MANUAL, SCHEDULED, PRE_RESTORE }
 sealed class BackupOutcome {
     data class Success(
         val manifest: BackupManifest,
-        val publicPath: String?,
+        /** 本地快速列表里的文件名；备份只落私有目录（见 [BackupManager] 类注释），没有公共路径。 */
         val localName: String?,
     ) : BackupOutcome()
 
@@ -42,8 +42,12 @@ sealed class RestoreOutcome {
  * 备份 / 还原的全部 IO 编排（Android 依赖只在这一层）。
  *
  * 口径：
- * - 备份包落在两处：公共 `Downloads/行为记录备份/`（用户可见、卸载不丢）+ `getExternalFilesDir("backups")`
- *   （快速列表来源，扫描快）。两处各留最多 [RetentionPolicy.MAX_BACKUPS] 份。
+ * - 备份包**只落 App 私有目录** `getExternalFilesDir("backups")`（快速列表来源，扫描快），
+ *   留最多 [RetentionPolicy.MAX_BACKUPS] 份。不再写公共 `Downloads/行为记录备份/`：
+ *   那个目录里的不加密包（真实账目 + 使用记录 + 轨迹坐标）对同机任何文件管理器与网盘同步可见，
+ *   且用户无从知晓。需要把包搬出设备时走「从备份还原」以外的显式导出，不走自动落盘。
+ * - 打包前对两张库取**一致快照**（见 [BackupDbSnapshotter]）：主库与 wal 在同一把写闸内读走，
+ *   不会出现还原后少数据的包。
  * - 还原是「先备份、再校验、后替换」：任何一步失败都不动现有数据。
  * - 替换走 [RestoreFileOperator]（临时文件 + 原子 rename + restore.marker）：中途中断的数据由
  *   启动时的 [healIfNeeded] 用 pre-restore 包回滚。
@@ -62,36 +66,36 @@ class BackupManager(context: Context) {
         val createdAt = System.currentTimeMillis()
         val name = backupName(createdAt, origin)
         val tmpFile = File(cacheDir("backup-tmp"), name)
+        val snapshotDir = cacheDir("backup-snapshot")
         return try {
-            val tables = collector.collectTableCounts()
-            collector.checkpointDatabases()
-            val sources = collector.collectSources()
+            // 库快照拿不到写闸会抛异常 → 走下面的 Failed 分支，绝不出半成品包
+            val snapshot = collector.snapshotDatabases(snapshotDir)
+            val sources = collector.collectSources(snapshot)
             if (sources.isEmpty()) return BackupOutcome.Failed("没有可备份的数据文件")
 
             val manifest = FileOutputStream(tmpFile).use { out ->
-                BackupPackager.pack(sources, BackupMeta(BuildConfig.VERSION_NAME, createdAt, tables), out)
+                BackupPackager.pack(
+                    sources,
+                    BackupMeta(BuildConfig.VERSION_NAME, createdAt, snapshot.counts),
+                    out,
+                )
             }
 
-            // ① 本地快速列表（还原入口扫描这里）
+            // 只落本地快速列表（还原入口扫描这里）；公共 Downloads 不再写，见类注释
             val localDir = localBackupDir()
             val localFile = File(localDir, name)
             tmpFile.copyTo(localFile, overwrite = true)
-            // ② 公共 Downloads（MediaStore，无需存储权限）；失败不影响本地那份。
-            //    pre-restore 包只留本地：它唯一的用途是本次还原失败时回滚，没必要摊到公共目录。
-            val publicPath =
-                if (origin == BackupOrigin.PRE_RESTORE) null
-                else collector.publishToDownloads(tmpFile, name)
 
             collector.pruneLocal(localDir)
-            collector.prunePublic()
             prunePreRestore(localDir)
 
-            config.recordBackup(createdAt, publicPath, name)
-            BackupOutcome.Success(manifest, publicPath, name)
+            config.recordBackup(createdAt, name)
+            BackupOutcome.Success(manifest, name)
         } catch (t: Throwable) {
             BackupOutcome.Failed("备份失败：${t.message ?: t.javaClass.simpleName}")
         } finally {
             tmpFile.delete()
+            snapshotDir.deleteRecursively()
         }
     }
 
@@ -102,6 +106,21 @@ class BackupManager(context: Context) {
             ?.map { BackupFileInfo(it.name, it.lastModified(), it.length()) }
             ?.sortedWith(compareByDescending<BackupFileInfo> { it.modifiedAt }.thenByDescending { it.name })
             ?: emptyList()
+
+    /**
+     * 把本地列表里的某一份**复制**一份到公共 Downloads（同步 IO，调用方负责 IO 线程）。
+     *
+     * 只读本地、只复制：原文件保留，不改配置、不参与保留策略轮转。确认闸门在调用方
+     * （[BackupExportGate]），这里只管落盘 —— 用户没确认过的名字不该走到这一步。
+     *
+     * @return 展示用路径；文件不存在或复制失败返回 null
+     */
+    fun exportBackup(localName: String): String? {
+        // 名字来自本地列表，理论上安全；照样过一遍文件名归一，避免任何 ../ 被当成路径片段
+        val file = File(localBackupDir(), BackupExport.targetName(localName))
+        if (!file.isFile) return null
+        return collector.exportToDownloads(file, file.name)
+    }
 
     // ---------------------------------------------------------------- 还原
 
@@ -213,7 +232,6 @@ class BackupManager(context: Context) {
         File(app.getExternalFilesDir(null) ?: app.filesDir, LOCAL_DIR).apply { mkdirs() }
 
     companion object {
-        const val PUBLIC_DIR = "行为记录备份"
         const val LOCAL_DIR = "backups"
         const val NAME_PREFIX = "monitor-backup-"
         const val PRE_RESTORE_PREFIX = "monitor-prerestore-"

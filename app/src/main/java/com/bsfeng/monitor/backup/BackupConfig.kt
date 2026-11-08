@@ -21,10 +21,9 @@ enum class BackupFrequency(val value: String, val label: String, val intervalMs:
     }
 }
 
-/** 最近一次成功备份落点：公共 Downloads 路径（展示用）+ 本地快速列表里的文件名。 */
+/** 最近一次成功备份：时间 + 本地快速列表里的文件名（备份只落私有目录，见 [BackupManager]）。 */
 data class LastBackup(
     val at: Long,
-    val publicPath: String?,
     val localName: String?,
 )
 
@@ -46,15 +45,13 @@ class BackupConfig(context: Context) {
         if (at <= 0L) return null
         return LastBackup(
             at = at,
-            publicPath = prefs.getString(KEY_LAST_PUBLIC_PATH, null),
             localName = prefs.getString(KEY_LAST_LOCAL_NAME, null),
         )
     }
 
-    fun recordBackup(at: Long, publicPath: String?, localName: String?) {
+    fun recordBackup(at: Long, localName: String?) {
         prefs.edit {
             putLong(KEY_LAST_AT, at)
-            putString(KEY_LAST_PUBLIC_PATH, publicPath)
             putString(KEY_LAST_LOCAL_NAME, localName)
         }
     }
@@ -63,7 +60,6 @@ class BackupConfig(context: Context) {
         const val PREFS_NAME = "backup_prefs"
         private const val KEY_FREQUENCY = "frequency"
         private const val KEY_LAST_AT = "last_backup_at"
-        private const val KEY_LAST_PUBLIC_PATH = "last_backup_public_path"
         private const val KEY_LAST_LOCAL_NAME = "last_backup_local_name"
     }
 }

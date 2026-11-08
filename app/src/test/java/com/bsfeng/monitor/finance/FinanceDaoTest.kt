@@ -350,10 +350,37 @@ class FinanceDaoTest {
     }
 
     @Test
-    fun `更新账户余额`() {
-        val id = dao.insertAccount(Account(name = "现金钱包", balance = 50.0))
-        assertEquals(1, dao.updateAccountBalance(id, 500.0))
+    fun `余额按相对增量叠加`() {
+        dao.insertAccount(Account(name = "现金钱包", balance = 50.0))
+
+        assertEquals("命中账户返回 1 行", 1, dao.addToAccountBalance("现金钱包", 450.0))
         assertEquals(500.0, dao.getAccountByName("现金钱包")!!.balance, 0.0001)
+
+        dao.addToAccountBalance("现金钱包", -200.0)
+        assertEquals("第二笔在库里当前值上叠加", 300.0, dao.getAccountByName("现金钱包")!!.balance, 0.0001)
+    }
+
+    @Test
+    fun `余额增量不受事务外读到的旧值影响`() {
+        dao.insertAccount(Account(name = "支付宝", balance = 1000.0))
+        // 并发写者的等价场景：它手里的余额快照是 1000
+        val stale = dao.getAccountByName("支付宝")!!.balance
+        assertEquals(1000.0, stale, 0.0001)
+
+        dao.addToAccountBalance("支付宝", -100.0)
+        dao.addToAccountBalance("支付宝", -100.0)
+
+        assertEquals("两笔都按库内值叠加，不能被陈旧快照覆盖", 800.0, dao.getAccountByName("支付宝")!!.balance, 0.0001)
+    }
+
+    @Test
+    fun `账户不存在或账户名为空时不动任何余额`() {
+        dao.insertAccount(Account(name = "支付宝", balance = 100.0))
+
+        assertEquals(0, dao.addToAccountBalance("已删除的卡", -30.0))
+        assertEquals(0, dao.addToAccountBalance("", -30.0))
+        assertEquals(0, dao.addToAccountBalance("支付宝", 0.0))
+        assertEquals(100.0, dao.getAccountByName("支付宝")!!.balance, 0.0001)
     }
 
     @Test
