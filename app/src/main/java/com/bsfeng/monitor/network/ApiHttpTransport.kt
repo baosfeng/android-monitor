@@ -29,6 +29,8 @@ internal object ApiHttpTransport {
 
     fun get(path: String): Result<ApiService.JsonResponse> = request("GET", path)
 
+    fun delete(path: String): Result<ApiService.JsonResponse> = request("DELETE", path)
+
     private inline fun request(
         method: String,
         path: String,

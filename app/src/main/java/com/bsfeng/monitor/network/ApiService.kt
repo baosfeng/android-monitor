@@ -67,4 +67,10 @@ object ApiService {
         ApiResponseParser.deviceRegister(resp)
 
     fun parseHeartbeatResponse(resp: JsonResponse): HeartbeatResponse = ApiResponseParser.heartbeat(resp)
+
+    fun listServerBackups(limit: Int = 20, after: String? = null): Result<JsonResponse> {
+        val path = if (after.isNullOrBlank()) "backups?limit=" + limit else "backups?limit=" + limit + "&after=" + after
+        return ApiHttpTransport.get(path)
+    }
+
 }

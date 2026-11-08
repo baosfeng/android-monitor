@@ -9,6 +9,10 @@ import android.util.Log
 import com.bsfeng.monitor.backup.BackupScheduler
 import com.bsfeng.monitor.quota.QuotaScheduler
 import com.bsfeng.monitor.core.di.serviceContainer
+import com.bsfeng.monitor.network.EventReporter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.record.LocationCollector
@@ -25,6 +29,14 @@ class AlarmReceiver : BroadcastReceiver() {
         /** 定位采样日志标签：`adb logcat -v time | grep LocationCollector` 可看到采集器侧，
          *  这里补心跳侧的落库结果与失败原因。 */
         const val TAG = "AlarmReceiver"
+
+        private const val UPLOAD_RETRY_BASE_MS = 1_000L
+        private const val UPLOAD_RETRY_MAX_MS = 5 * 60 * 1_000L
+        @Volatile
+        private var uploadRetryUntilMs: Long = 0L
+        @Volatile
+        private var uploadRetryDelayMs: Long = UPLOAD_RETRY_BASE_MS
+        private val uploadScope = CoroutineScope(Dispatchers.IO)
     }
     override fun onReceive(context: Context, intent: Intent) {
         // 本接收器有两个入口：系统 BOOT_COMPLETED（action 有值）与 AlarmManager 心跳（显式组件、action 为空）。
@@ -53,9 +65,32 @@ class AlarmReceiver : BroadcastReceiver() {
             bringToFrontIfBackground(context)
         }
 
-        // 数据上报：EventReporter.uploadBatch 目前是恒返回 0 的空壳（二期实现），
-        // 这里连 goAsync 都不申请 —— 否则每分钟白起一个协程、无 token 时还会每次重试设备注册。
-        // 二期接上传时把「有 token 才上传 + 失败指数退避」一起写回来，别恢复成现在的无条件每 60s。
+        // 数据上报：仅在持有 Auth Token 时触发上传；uploadBatch 内部取未发记录、批量 ack、
+        // 标记已上传并清理过期数据；无待上传记录时直接返回、不发网络请求。
+        // 失败按指数退避，不阻塞广播主链路（定位采样等继续执行）。
+        val nowMs = System.currentTimeMillis()
+        if (nowMs >= uploadRetryUntilMs) {
+            val pendingResult = goAsync()
+            uploadScope.launch {
+                try {
+                    val result = EventReporter(context).uploadBatch()
+                    result.onSuccess {
+                        uploadRetryDelayMs = UPLOAD_RETRY_BASE_MS
+                        uploadRetryUntilMs = 0L
+                    }.onFailure {
+                        uploadRetryDelayMs = (uploadRetryDelayMs * 2).coerceAtMost(UPLOAD_RETRY_MAX_MS)
+                        uploadRetryUntilMs = System.currentTimeMillis() + uploadRetryDelayMs
+                        Log.w(TAG, "事件上报失败，退避 ${uploadRetryDelayMs}ms", it)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "事件上报异常", e)
+                    uploadRetryDelayMs = (uploadRetryDelayMs * 2).coerceAtMost(UPLOAD_RETRY_MAX_MS)
+                    uploadRetryUntilMs = System.currentTimeMillis() + uploadRetryDelayMs
+                } finally {
+                    runCatching { pendingResult.finish() }
+                }
+            }
+        }
 
         // 定位采样寄生在这条心跳里（不新开前台服务、不常驻监听），自己持有一个 PendingResult：
         // 主动定位可能耗时到 5 秒，与上报的完成时机互不牵连，任何一条路径都必须 finish

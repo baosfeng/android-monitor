@@ -18,7 +18,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
     companion object {
         private const val DATABASE_NAME = "monitor.db"
         /** 公开给测试做「版本无关」断言（与 FinanceDatabaseHelper.DATABASE_VERSION 同口径）。 */
-        const val DATABASE_VERSION = 6
+        const val DATABASE_VERSION = 7
         private const val TABLE_RECORDS = "records"
 
         /** 局域网互传任务历史表（v4 新增）。 */
@@ -80,7 +80,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
                 duration    INTEGER,
                 label       TEXT NOT NULL,
                 detail      TEXT,
-                owner       TEXT DEFAULT ''
+                owner       TEXT DEFAULT '',
+                uploaded    INTEGER NOT NULL DEFAULT 0
             )
         """)
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_records_ts ON $TABLE_RECORDS(timestamp)")
@@ -134,6 +135,10 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
             // v6：页面轨迹功能下线，清掉历史 PAGE 记录（其它类型原样保留）
             purgePageRecords(db)
         }
+        if (oldVersion < 7) {
+            // v7：给 records 增加 uploaded 标记，供 EventReporter 批量上报去重/断点续传
+            addUploadedColumn(db)
+        }
     }
 
     /**
@@ -167,6 +172,27 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
             Log.i("DatabaseHelper", "v6 迁移：删除 PAGE 记录 $deleted 行")
         } catch (e: Exception) {
             Log.e("DatabaseHelper", "v6 迁移删除 PAGE 记录失败（整事务回滚）", e)
+            throw e
+        }
+    }
+
+    /**
+     * v7 迁移：给 records 表增加 uploaded 标记列（幂等）。
+     *
+     * 默认 0 = 未上传；上报成功后 EventReporter 通过 RecordStore.markUploaded 置 1。
+     * - 可重跑：列已存在时跳过；
+     * - 失败不吞：异常记日志后原样抛出，由 SQLiteOpenHelper 回滚事务。
+     */
+    private fun addUploadedColumn(db: SQLiteDatabase) {
+        if (hasColumn(db, TABLE_RECORDS, "uploaded")) {
+            Log.i("DatabaseHelper", "v7 迁移跳过：uploaded 列已存在")
+            return
+        }
+        try {
+            db.execSQL("ALTER TABLE $TABLE_RECORDS ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
+            Log.i("DatabaseHelper", "v7 迁移：records 增加 uploaded 列")
+        } catch (e: Exception) {
+            Log.e("DatabaseHelper", "v7 迁移增加 uploaded 列失败（整事务回滚）", e)
             throw e
         }
     }

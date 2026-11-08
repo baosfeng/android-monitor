@@ -93,7 +93,7 @@ class RecordTypeMigrationTest {
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
         assertEquals(DatabaseHelper.DATABASE_VERSION, db.version)
-        assertEquals(6, db.version)
+        assertEquals(7, db.version)
 
         // zz9/WHAT 推不出来 → 保留原值；其余混淆名全部改名
         assertEquals(listOf("APP_USAGE", "BATTERY", "CHARGING", "SCREEN", "WIFI", "zz9"), distinctTypes(db))
@@ -125,7 +125,7 @@ class RecordTypeMigrationTest {
 
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
-        assertEquals(6, db.version)
+        assertEquals(7, db.version)
         val total = db.rawQuery("SELECT COUNT(*) FROM records", null).use { if (it.moveToFirst()) it.getInt(0) else -1 }
         assertEquals("重跑不能丢数据", seedRows.size, total)
         assertEquals(listOf("APP_USAGE", "BATTERY", "CHARGING", "SCREEN", "WIFI", "zz9"), distinctTypes(db))
@@ -177,7 +177,7 @@ class RecordTypeMigrationTest {
 
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
-        assertEquals(6, db.version)
+        assertEquals(7, db.version)
         assertEquals(
             "PAGE 行必须清零",
             0,
@@ -200,7 +200,7 @@ class RecordTypeMigrationTest {
 
         val helper = DatabaseHelper(context)
         val db = helper.writableDatabase
-        assertEquals(6, db.version)
+        assertEquals(7, db.version)
         val total = db.rawQuery("SELECT COUNT(*) FROM records", null).use { if (it.moveToFirst()) it.getInt(0) else -1 }
         assertEquals("重跑 v6 不能丢非 PAGE 数据", seedRows.size, total)
         helper.close()

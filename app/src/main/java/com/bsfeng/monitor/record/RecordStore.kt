@@ -98,6 +98,70 @@ class RecordStore(private val db: DatabaseHelper) {
             arrayOf(start.toString(), end.toString()))
     }
 
+    /**
+     * 取尚未上报的记录（uploaded = 0 / NULL），按时间升序、最多 [limit] 条。
+     *
+     * - 未上传标记永远留在本地，不会被上报出去；这里只挑记录、不改任何字段。
+     * - limit 默认批次上限口径；避免一次把整表拉进内存。
+     */
+    fun getUnuploaded(limit: Int = Int.MAX_VALUE): List<Record> {
+        val capped = if (limit <= 0) 0 else limit
+        if (capped == 0) return emptyList()
+        val db = db.readableDatabase
+        val list = mutableListOf<Record>()
+        // SQL LIMIT 直接限制行数，避免大 backlog 时全表反序列化。
+        db.query("records", null, "uploaded IS NULL OR uploaded = 0", null, null, null, "timestamp ASC", capped.toString())
+            .use { cursor ->
+                while (cursor.moveToNext()) {
+                    list.add(mapRecord(cursor))
+                }
+            }
+        return list
+    }
+
+    /**
+     * 把 [ids] 对应的记录标记为已上传。上报成功后调用；失败路径绝不调用。
+     *
+     * 分批占位符，避免 SQLite 单语句参数过多。
+     */
+    fun markUploaded(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val db = db.writableDatabase
+        ids.chunked(500).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            val cv = ContentValues().apply { put("uploaded", 1) }
+            db.update("records", cv, "id IN ($placeholders)", chunk.toTypedArray())
+        }
+    }
+
+    /**
+     * 删除已经上传且早于 [cutoffMs] 的记录（按 cacheMaxDays 保留窗口清理）。
+     *
+     * - 只删 uploaded=1 的行；未上传记录绝不清理，防止丢失未达后端的数据。
+     * - @return 实际删除行数。
+     */
+    fun deleteUploadedBefore(cutoffMs: Long): Int =
+        db.writableDatabase.delete("records", "uploaded = 1 AND timestamp < ?",
+            arrayOf(cutoffMs.toString()))
+
+    private fun mapRecord(cursor: android.database.Cursor): Record {
+        val detailStr = cursor.getString(cursor.getColumnIndexOrThrow("detail"))
+        val action = cursor.getString(cursor.getColumnIndexOrThrow("action"))
+        val rawType = cursor.getString(cursor.getColumnIndexOrThrow("type"))
+        return Record(
+            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+            type = RecordType.fromStored(rawType, action)
+                ?: UnknownStoredType.fallback(rawType, action),
+            action = action,
+            timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+            duration = if (cursor.isNull(cursor.getColumnIndexOrThrow("duration"))) null
+                else cursor.getLong(cursor.getColumnIndexOrThrow("duration")),
+            label = cursor.getString(cursor.getColumnIndexOrThrow("label")),
+            detail = parseDetail(detailStr),
+            owner = cursor.getString(cursor.getColumnIndexOrThrow("owner"))
+        )
+    }
+
     private fun query(selection: String, args: Array<String>): List<Record> {
         val db = db.readableDatabase
         return db.query("records", null, selection, args, null, null, "timestamp ASC").use { cursor ->
