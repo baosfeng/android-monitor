@@ -43,9 +43,46 @@ import kotlin.coroutines.resume
  * 输出统一走 logcat，tag `DebugCmd`，单行：
  * `RESULT cmd=<name>[ reason=<r>][ tag=<t>] ok=<true|false> data=<json>`
  *
- * 约定：
- * - **除 `unlock` 外一律要求已解锁**（`DebugConfig.unlocked`），未解锁回 `ok=false reason=locked`，
- *   避免 debug 包被别人/旧脚本误触发写库；
+ * ## 命令分档（安全审计 S-01；分档实现见 [DebugCommandGates]）
+ *
+ * | 档 | 命令 | 门槛 |
+ * |---|---|---|
+ * | 免鉴权 | `unlock` / `state` / `heartbeat` / `open` / `sample_location` | 无（unlock 本身就是开门） |
+ * | **读数据 + 驱动界面** | `dump` / `db` / `ui`（**含** click·longclick·scroll·swipe·back·home·recents） | 已 unlock + confirm 令牌（TTL 内**可复用**） |
+ * | **不可撤销写库** | `clear` / `seed` | 已 unlock + confirm 令牌（**消费即废**，成功后回执换发新令牌） |
+ *
+ * `ui` 为什么和 `db` 同档：它不是只读 —— [DebugUiBridge] 用无障碍 `performAction` /
+ * `dispatchGesture` **真执行**点击、长按、滑动与三个全局键。unlock 即放行等于「同机任意 App
+ * 一条广播就能远程驱动整台手机的触摸与导航」，副作用比读数据重一档，因此并入要令牌的一档。
+ *
+ * 为什么不是签名级自定义权限：`adb shell am broadcast` 以 shell uid 发送，拿不到应用私有签名权限，
+ * 加权限等于把 scripts/debug-cli.sh 一起废掉；广播也不传发送方 uid，`Binder.getCallingUid()`
+ * 在 receiver 里拿到的是本进程自己。可判的只剩「调用方读没读过 unlock 回执」，见 [DebugConfirmToken]。
+ *
+ * ## 令牌为什么「TTL 内复用」而不是「每条命令一个」
+ *
+ * `ui` 是 agent 操作手机界面的**唯一**通道：一次取证 / 一次点击验证要连发几十条命令。
+ * 每条都要重新 unlock 会让 debug-cli 实际不可用（子命令用法是硬要求，不许变）。
+ * 因此读与驱动类命令在 [DebugConfirmToken.TTL_MS] 内可反复用同一令牌；只有不可撤销的
+ * `clear` / `seed` 消费即废，且成功后立即换发 —— 正常用法里只有「清表连点第二下」会失败。
+ *
+ * ## 剩余攻击面（同机恶意 App 仍能做 / 不能做）
+ *
+ * - **不能再免鉴权接管**：未 unlock 时 `dump` / `db` / `ui` / `clear` 全部
+ *   `ok=false reason=locked`；即便 unlock 了，没有 confirm 令牌仍回 `need_confirm`
+ *   （令牌只在 unlock 回执里出现，三方 App 在 Android 4.1+ 读不到别的进程日志）。
+ * - **仍可免鉴权触发**：`state`（只回各类型**计数**，无内容）、`sample_location`（写一条定位记录）、
+ *   `open`（拉起本 App 的页面）、`heartbeat`（转发一次真心跳，等价于提前一分钟采样）。
+ *   影响面限于「本 App 自己的界面上多一条记录 / 页面被拉起」，不泄露、不清库、不驱动触摸。
+ * - **窗口期抢占（残余）**：unlock 之后 [DebugConfirmToken.TTL_MS] 内，令牌对读与驱动类命令有效。
+ *   同机 App 若能在这段时间里拿到令牌（它读不到 logcat，只能猜或从别的渠道获得），
+ *   仍可读一次 `db query` / 驱动一次界面。**不能再收紧的原因**是平台约束：广播不携带发送方 uid，
+ *   没有第二份可校验的身份材料；要彻底消除只能换成不 exported 的通道（`adb shell run-as` /
+ *   本地 socket / 每次 adb 现场授权），那会改掉 debug-cli 的调用形态，需另立方案。
+ * - **令牌不落盘**：只在进程内存，进程重启即失效，寿命同时被进程生命周期截断。
+ *
+ * ## 其它约定
+ *
  * - 全部命令在 IO 协程里跑并持 `goAsync()`，广播回调立即返回（定位最多 5 秒，DB 写毫秒级），
  *   结果行可能在 `am broadcast` 返回之后才出现 —— CLI 用 `tag` 回执轮询；
  * - 不改生产链路签名：定位复用 `LocationCollector.collectThrottledAsync` +
@@ -56,6 +93,7 @@ class DebugCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val extras = extrasOf(intent)
         val token = DebugCommands.tokenOf(extras)
+        val confirm = DebugCommands.confirmOf(extras)
         when (val parsed = DebugCommands.parse(extras)) {
             is ParseResult.MissingCmd -> emitFailure(
                 cmd = "-",
@@ -82,24 +120,34 @@ class DebugCommandReceiver : BroadcastReceiver() {
                 data = JSONObject().put("message", parsed.message),
             )
 
-            is ParseResult.Ok -> run(context, parsed.command, token)
+            is ParseResult.Ok -> run(context, parsed.command, token, confirm)
         }
     }
 
-    private fun run(context: Context, command: DebugCommand, token: String?) {
-        // unlock 是唯一免解锁命令：先把闸打开，后面的命令才有意义
+    private fun run(context: Context, command: DebugCommand, token: String?, confirm: String?) {
+        // unlock 是唯一免解锁命令：先把闸打开，并签发后续命令要用的**确认令牌**。
+        // 令牌只在这一次回执里出现（读 logcat 才拿得到），三方 App 读不到别的进程日志。
         if (command is DebugCommand.Unlock) {
             runCatching {
                 DebugConfig.unlock()
                 DebugConfig.setEnabled(true)
             }
+            val fresh = DebugConfirmToken.issue(System.currentTimeMillis())
             emit(
                 cmd = command.name,
                 token = token,
                 data = JSONObject()
                     .put("buildDebug", BuildConfig.DEBUG)
                     .put("unlocked", DebugConfig.unlocked)
-                    .put("debugEnabled", DebugConfig.enabled),
+                    .put("debugEnabled", DebugConfig.enabled)
+                    .put("confirm", fresh)
+                    .put("confirmTtlMs", DebugConfirmToken.TTL_MS)
+                    .put(
+                        "hint",
+                        "读数据 / 驱动界面的命令（dump、db、ui）带 --es confirm <值>，" +
+                            "TTL 内可反复用；写库命令（clear、seed）同一令牌消费即废，" +
+                            "成功后回执会换发新令牌",
+                    ),
             )
             return
         }
@@ -115,11 +163,33 @@ class DebugCommandReceiver : BroadcastReceiver() {
             return
         }
 
+        val gate = DebugCommandGates.forCommand(command)
+        val now = System.currentTimeMillis()
+        when (gate) {
+            // 读数据 / 驱动界面：TTL 内可复用（一次取证要跑几十条）
+            DebugCommandGates.Level.CONFIRM_REUSABLE -> {
+                if (!DebugConfirmToken.isValid(confirm, now)) {
+                    emitNeedConfirm(command, token, "该命令需要确认令牌（unlock 回执里的 confirm）")
+                    return
+                }
+            }
+
+            // 不可撤销的写库：消费即废。成功后立刻换发，回执里带回新值，后续命令接着用
+            DebugCommandGates.Level.CONFIRM_ONCE -> {
+                if (!DebugConfirmToken.consume(confirm, now)) {
+                    emitNeedConfirm(command, token, "破坏性命令需要一次性确认令牌（unlock 回执里的 confirm）")
+                    return
+                }
+            }
+
+            DebugCommandGates.Level.FREE -> Unit
+        }
+
         // 广播回调必须立刻返回：所有命令（含 DB 读写）都丢到 IO 协程，任务结束才 finish
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             try {
-                execute(context.applicationContext, command, token)
+                execute(context.applicationContext, command, token, gate == DebugCommandGates.Level.CONFIRM_ONCE)
             } catch (t: Throwable) {
                 Log.w(TAG, "命令执行失败 cmd=${command.name}", t)
                 emitFailure(
@@ -135,14 +205,39 @@ class DebugCommandReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun execute(context: Context, command: DebugCommand, token: String?) {
+    /** 缺令牌的统一拒绝：把「去哪拿」写进 hint，CLI 原样回显给使用者。 */
+    private fun emitNeedConfirm(command: DebugCommand, token: String?, message: String) {
+        emitFailure(
+            cmd = command.name,
+            token = token,
+            reason = "need_confirm",
+            data = JSONObject()
+                .put("message", message)
+                .put(
+                    "hint",
+                    "从 unlock 回执里取 data.confirm（scripts/debug-cli.sh unlock 会自动记住），" +
+                        "再带 --es confirm <值>；有效期 ${DebugConfirmToken.TTL_MS}ms",
+                ),
+        )
+    }
+
+    /**
+     * @param rotatedToken 若本次命令消费了令牌（clear / seed），这里非 null ——
+     *   成功后要把新令牌放进回执，后续命令（CLI 会落盘）才能接着用，而不是被逼着重 unlock。
+     */
+    private suspend fun execute(
+        context: Context,
+        command: DebugCommand,
+        token: String?,
+        rotatedToken: Boolean,
+    ) {
         when (command) {
             DebugCommand.Unlock -> Unit // 已在 run() 里处理
             DebugCommand.State -> emitState(context, token)
             is DebugCommand.SampleLocation -> emitSampleLocation(context, command, token)
             is DebugCommand.Dump -> emitDump(context, command, token)
-            is DebugCommand.Seed -> emitSeed(context, command, token)
-            is DebugCommand.Clear -> emitClear(context, command, token)
+            is DebugCommand.Seed -> emitSeed(context, command, token, rotatedToken)
+            is DebugCommand.Clear -> emitClear(context, command, token, rotatedToken)
             is DebugCommand.Open -> emitOpen(context, command, token)
             is DebugCommand.Db -> emitDb(context, command, token)
             DebugCommand.Heartbeat -> emitHeartbeat(context, token)
@@ -380,7 +475,7 @@ class DebugCommandReceiver : BroadcastReceiver() {
 
     // ────────────────────────────── seed ──────────────────────────────
 
-    private fun emitSeed(context: Context, cmd: DebugCommand.Seed, token: String?) {
+    private fun emitSeed(context: Context, cmd: DebugCommand.Seed, token: String?, rotated: Boolean) {
         val now = System.currentTimeMillis()
         val dayStart = startOfDay(now)
         val records = DebugSeed.build(cmd.scenario, dayStart, now)
@@ -401,13 +496,14 @@ class DebugCommandReceiver : BroadcastReceiver() {
                 .put("firstTs", records.minOfOrNull { it.timestamp } ?: 0L)
                 .put("lastTs", records.maxOfOrNull { it.timestamp } ?: 0L)
                 .put("source", DebugSeed.SOURCE)
-                .put("hint", "行程页按分钟缓存：重新执行 open trip 会先清缓存并重建页面（无需等分钟滚动）"),
+                .put("hint", "行程页按分钟缓存：重新执行 open trip 会先清缓存并重建页面（无需等分钟滚动）")
+                .also { rotateIfNeeded(it, rotated) },
         )
     }
 
     // ────────────────────────────── clear ──────────────────────────────
 
-    private fun emitClear(context: Context, cmd: DebugCommand.Clear, token: String?) {
+    private fun emitClear(context: Context, cmd: DebugCommand.Clear, token: String?, rotated: Boolean) {
         val now = System.currentTimeMillis()
         val dayStart = startOfDay(now)
         val db = context.serviceContainer.databaseHelper.writableDatabase
@@ -438,8 +534,22 @@ class DebugCommandReceiver : BroadcastReceiver() {
                 .put("scope", scope)
                 .put("type", typeLabel)
                 .put("deleted", deleted)
-                .put("totalLeft", totalLeft),
+                .put("totalLeft", totalLeft)
+                .also { rotateIfNeeded(it, rotated) },
         )
+    }
+
+    /**
+     * 消费型命令成功后**换发新令牌**并写进本条回执。
+     *
+     * 不换发的后果：clear 之后同一次取证会话里的 dump / ui 全部 `need_confirm`，
+     * 而 CLI 的令牌是「取用即删」—— 使用者会被逼着每清一次就重新 unlock，
+     * 这正是「用法不许变」要避免的坑。旧令牌已在 [DebugConfirmToken.consume] 里作废。
+     */
+    private fun rotateIfNeeded(data: JSONObject, rotated: Boolean) {
+        if (!rotated) return
+        data.put("confirm", DebugConfirmToken.issue(System.currentTimeMillis()))
+            .put("confirmTtlMs", DebugConfirmToken.TTL_MS)
     }
 
     // ────────────────────────────── open ──────────────────────────────

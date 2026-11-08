@@ -36,7 +36,7 @@ sealed interface DebugCommand {
         override val name: String = "dump"
     }
 
-    /** 插入一套可看的模拟记录。 */
+    /** 插入一套可看的模拟记录（**写库**：属破坏性命令档，receiver 侧还要求一次性确认令牌）。 */
     data class Seed(val scenario: SeedScenario) : DebugCommand {
         override val name: String = "seed"
     }
@@ -191,6 +191,9 @@ object DebugCommands {
     const val EXTRA_BYPASS_THROTTLE = "bypass_throttle"
     const val EXTRA_ALL = "all"
 
+    /** 破坏性命令的一次性确认令牌（值由 `unlock` 回执下发，一次有效、5 分钟过期）。 */
+    const val EXTRA_CONFIRM = "confirm"
+
     const val EXTRA_OP = "op"
     const val EXTRA_TABLE = "table"
     const val EXTRA_SQL = "sql"
@@ -317,6 +320,15 @@ object DebugCommands {
 
     /** 广播里的回执 token：CLI 靠它把「本次调用」的输出从历史日志里区分出来。 */
     fun tokenOf(extras: Map<String, Any?>): String? = (extras[EXTRA_TAG] as? String)?.trim()?.ifEmpty { null }
+
+    /**
+     * 破坏性命令的确认令牌。
+     *
+     * 只在解析期取值、不做校验 —— 校验要读进程内状态（`DebugConfirmToken`），属于 receiver 的职责；
+     * 解析层只保证「这是个字符串」，非字符串（`--ei confirm 1`）照样当参数错误拒掉。
+     */
+    fun confirmOf(extras: Map<String, Any?>): String? =
+        stringOf(extras, EXTRA_CONFIRM)?.trim()?.ifEmpty { null }
 
     fun scenarioList(): String = SeedScenario.entries.joinToString("|") { it.value }
 
