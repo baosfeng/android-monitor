@@ -3889,6 +3889,27 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </div>
       </div>
 
+      <div class="pad mt-3 stg od-d6">
+        <div class="card glass">
+          <div class="row-between"><h2 class="h2">记账图表</h2><span class="meta">2026 年 10 月</span></div>
+          <div class="grid-2 mt-3">
+            <div class="s01-ringbox"><div data-chart="pie" data-chart-values="686,214,862,328,268,110" data-chart-label="本月分类支出"></div></div>
+            <div class="s01-kcol">
+              <div class="s01-krow"><span class="kpi-label">收入</span><span class="s04-amt is-inc num">¥5,000</span></div>
+              <div class="s01-krow"><span class="kpi-label">支出</span><span class="s04-amt is-exp num">¥2,468</span></div>
+              <div class="s01-krow"><span class="kpi-label">结余</span><span class="s04-amt num">¥2,532</span></div>
+              <div class="kpi-spark mt-2"><svg viewBox="0 0 72 24" aria-hidden><polyline fill="none" stroke="var(--income-text)" stroke-width="2" points="0,16 12,12 24,18 36,8 48,14 60,6 72,10"/></svg></div>
+            </div>
+          </div>
+          <ul class="legend mt-3">
+            <li><span class="legend-dot s1"></span>餐饮<span class="legend-num">¥686</span></li>
+            <li><span class="legend-dot s3"></span>购物<span class="legend-num">¥862</span></li>
+            <li><span class="legend-dot s2"></span>交通<span class="legend-num">¥214</span></li>
+          </ul>
+          <button class="btn btn-ghost btn-block mt-3" type="button" data-goto="s04">去记账 · 查看全部交易</button>
+        </div>
+      </div>
+
       <!-- ── 近 7 天 ──────────────────────────────────────────── -->
       <div class="pad mt-3 s01-panel" data-panel="7">
         <div class="grid-2 stg od-d1">
@@ -4607,55 +4628,6 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
     </div>
 
-    <div class="pad mt-3 s04-in" style="--i:2" data-state-hide="loading empty error edge">
-      <div class="card glass s04-kpis" data-od-id="s04-kpis">
-        <div class="s04-kcol">
-          <div class="s04-krow"><span class="kpi-label">本月支出</span><span class="s04-kv is-exp" data-count-to="2468" data-count-pre="¥">¥2,468</span></div>
-          <div class="s04-krow"><span class="kpi-label">本月收入</span><span class="s04-kv is-inc" data-count-to="5000" data-count-pre="¥">¥5,000</span></div>
-          <div class="s04-krow"><span class="kpi-label">本月结余</span><span class="s04-kv" data-count-to="2532" data-count-pre="¥">¥2,532</span></div>
-        </div>
-        <div class="s04-ring" data-od-id="s04-ring">
-          <div class="s04-ring-chart" data-chart="gauge" data-chart-value="0.62" data-chart-label="本月预算使用率 62 百分比"></div>
-          <div class="s04-ring-txt"><b id="s04-pct">62%</b><span>预算</span></div>
-        </div>
-      </div>
-      <p class="meta mt-3" id="s04-strip">今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932</p>
-    </div>
-
-    <div class="pad mt-3 s04-in" style="--i:3b" data-state-hide="loading empty error edge">
-      <div class="card glass">
-        <div class="row-between"><h2 class="h2">多周期查询</h2><span class="meta">支出 / 收入 / 结余</span></div>
-        <div class="segmented mt-3" role="tablist" aria-label="统计周期">
-          <button type="button" aria-pressed="true">今日</button>
-          <button type="button" aria-pressed="false">本周</button>
-          <button type="button" aria-pressed="false">本月</button>
-          <button type="button" aria-pressed="false">本年</button>
-          <button type="button" aria-pressed="false">全部</button>
-        </div>
-        <div class="grid-3 mt-3">
-          <div class="kpi"><span class="kpi-label">总支出</span><span class="s04-amt is-exp num">¥2,468</span></div>
-          <div class="kpi"><span class="kpi-label">总收入</span><span class="s04-amt is-inc num">¥5,000</span></div>
-          <div class="kpi"><span class="kpi-label">结余</span><span class="s04-amt num">¥2,532</span></div>
-        </div>
-        <p class="meta mt-3">支持按日 / 周 / 月 / 年 / 全部统计，不再只限制查看单月。</p>
-      </div>
-    </div>
-
-    <div class="pad mt-3 s04-in" style="--i:3" data-state-hide="loading empty error edge" data-od-id="s04-entries">
-      <div class="grid-2">
-        <button class="card s04-entry" type="button" data-goto="s07" data-od-id="s04-entry-stats">
-          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
-          <span class="s04-entry-t">统计分析</span>
-          <span class="s04-entry-s">分类占比 · 近 7 天</span>
-        </button>
-        <button class="card s04-entry" type="button" data-goto="s06" data-od-id="s04-entry-budget">
-          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
-          <span class="s04-entry-t">预算设置</span>
-          <span class="s04-entry-s">已用 ¥2,468 / ¥4,000</span>
-        </button>
-      </div>
-    </div>
-
     <div class="pad mt-4" data-state-hide="loading empty error edge" data-od-id="s04-list">
       <div class="sec-head"><h2 class="h2">交易明细</h2><span class="meta" id="s04-listmeta">最近 3 天 · 8 笔</span></div>
 
@@ -4710,6 +4682,56 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="cat-icon s1"><svg viewBox="0 0 24 24" aria-hidden><path d="M12,3.6a8.4,8.4 0 1,0 0,16.8a8.4,8.4 0 1,0 0,-16.8"/><path d="M10,9.4l2,2.2 2-2.2M12,11.6v4.2M10.2,13h3.6"/></svg></span>
           <span class="row-body"><span class="row-title">兼职收入</span><span class="row-sub">周末兼职</span></span>
           <span class="row-tail num s04-amt is-inc">+¥1,000.00</span>
+        </button>
+      </div>
+    </div>
+
+
+    <div class="pad mt-3 s04-in" style="--i:2" data-state-hide="loading empty error edge">
+      <div class="card glass s04-kpis" data-od-id="s04-kpis">
+        <div class="s04-kcol">
+          <div class="s04-krow"><span class="kpi-label">本月支出</span><span class="s04-kv is-exp" data-count-to="2468" data-count-pre="¥">¥2,468</span></div>
+          <div class="s04-krow"><span class="kpi-label">本月收入</span><span class="s04-kv is-inc" data-count-to="5000" data-count-pre="¥">¥5,000</span></div>
+          <div class="s04-krow"><span class="kpi-label">本月结余</span><span class="s04-kv" data-count-to="2532" data-count-pre="¥">¥2,532</span></div>
+        </div>
+        <div class="s04-ring" data-od-id="s04-ring">
+          <div class="s04-ring-chart" data-chart="gauge" data-chart-value="0.62" data-chart-label="本月预算使用率 62 百分比"></div>
+          <div class="s04-ring-txt"><b id="s04-pct">62%</b><span>预算</span></div>
+        </div>
+      </div>
+      <p class="meta mt-3" id="s04-strip">今日 支出 ¥268 · 收入 ¥1,200 · 结余 ¥932</p>
+    </div>
+
+    <div class="pad mt-3 s04-in" style="--i:3b" data-state-hide="loading empty error edge">
+      <div class="card glass">
+        <div class="row-between"><h2 class="h2">多周期查询</h2><span class="meta">支出 / 收入 / 结余</span></div>
+        <div class="segmented mt-3" role="tablist" aria-label="统计周期">
+          <button type="button" aria-pressed="true">今日</button>
+          <button type="button" aria-pressed="false">本周</button>
+          <button type="button" aria-pressed="false">本月</button>
+          <button type="button" aria-pressed="false">本年</button>
+          <button type="button" aria-pressed="false">全部</button>
+        </div>
+        <div class="grid-3 mt-3">
+          <div class="kpi"><span class="kpi-label">总支出</span><span class="s04-amt is-exp num">¥2,468</span></div>
+          <div class="kpi"><span class="kpi-label">总收入</span><span class="s04-amt is-inc num">¥5,000</span></div>
+          <div class="kpi"><span class="kpi-label">结余</span><span class="s04-amt num">¥2,532</span></div>
+        </div>
+        <p class="meta mt-3">支持按日 / 周 / 月 / 年 / 全部统计，不再只限制查看单月。</p>
+      </div>
+    </div>
+
+    <div class="pad mt-3 s04-in" style="--i:3" data-state-hide="loading empty error edge" data-od-id="s04-entries">
+      <div class="grid-2">
+        <button class="card s04-entry" type="button" data-goto="s07" data-od-id="s04-entry-stats">
+          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
+          <span class="s04-entry-t">统计分析</span>
+          <span class="s04-entry-s">分类占比 · 近 7 天</span>
+        </button>
+        <button class="card s04-entry" type="button" data-goto="s06" data-od-id="s04-entry-budget">
+          <span class="s04-entry-ic"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+          <span class="s04-entry-t">预算设置</span>
+          <span class="s04-entry-s">已用 ¥2,468 / ¥4,000</span>
         </button>
       </div>
     </div>
