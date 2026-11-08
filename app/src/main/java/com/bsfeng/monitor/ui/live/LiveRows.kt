@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NavigateNext
@@ -41,7 +42,10 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.eventColor
 import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 
-// 尺寸常量（原型字面尺寸，非 token 槽位）：时间列宽度 46dp，原型 .tl-item 的 grid-template-columns:46px（00-shell.html:379）。
+// 尺寸常量（原型字面尺寸，非 token 槽位）：时间列的**最小**宽度 46dp，
+// 原型 .tl-item 的 grid-template-columns:46px（00-shell.html:379）。实际宽度由文本决定：
+// 固定 46dp 在大字体（font_scale 1.3）下装不下等宽的「01:50」，末位被裁掉后用户会读到错误时间
+// （同 ui/LiveEventTimeline.kt 的处理）。正常字号下文本自然宽 < 46dp，列宽仍是 46dp，与原设计一致。
 private val TL_TIME_COL_W = 46.dp
 
 /** 类型图标底座（替代原型 .row-icon）。 */
@@ -124,17 +128,19 @@ fun LiveEventRow(
             .padding(horizontal = t.space4, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 46dp：原型 .tl-item 时间列（00-shell.html:379 grid-template-columns:46px）；
+        // ≥46dp：原型 .tl-item 时间列（00-shell.html:379 grid-template-columns:46px）；
         // .tl-time = --font-mono --text-sm → monitorMonoMeta。宽度不足时不得换行
         // （48dp + 14sp 下 "20:16:12" 会折成两行，见 14-after/s02-live.png）。
+        // 用 widthIn 下限而非固定宽度：字体放大时列按需变宽，后两列（space1 + weight(1f)）让位；
+        // 兜底省略号而非 Clip——真放不下时看见「01:5…」就知道被截了，不会把截断值当真时间读。
         Text(
             text = if (showSeconds) formatClockSec(record.timestamp) else formatClock(record.timestamp),
             style = monitorMonoMeta,
             color = t.muted,
             maxLines = 1,
             softWrap = false,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.width(TL_TIME_COL_W).testTag("row.event"),
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(min = TL_TIME_COL_W).testTag("row.event"),
         )
         Spacer(Modifier.width(t.space1))
         // 凡是 detail 里带 package_name 的记录都显示应用图标（APP_USAGE / PAGE 页面轨迹 /

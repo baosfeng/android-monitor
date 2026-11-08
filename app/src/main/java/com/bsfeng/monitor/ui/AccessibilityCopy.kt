@@ -25,10 +25,16 @@ internal fun accessibilityStatusText(enabled: Boolean, running: Boolean): String
 /**
  * s09 设置页状态行文案（原型 .open-design/08-prototype.html:4318：`已授权 · 已运行 6 小时 12 分`）。
  *
- * 原型只有两段：「已运行」已隐含服务在运行，再叠一句「服务运行中」会让三段合计超出 TokenRow
- * 的单行宽度，在窄屏（小米 14 ≈ 400dp 逻辑宽）被省略号截掉运行时长，用户看不到时长。
+ * 原型只有两段：再叠一句「服务运行中」会让三段合计超出 TokenRow 的单行宽度，
+ * 在窄屏（小米 14 ≈ 400dp 逻辑宽）被省略号截掉时长，用户看不到时长。
  *
- * [uptimeText] 为运行时长文案（如「6 小时 12 分」），格式由调用方按原型口径产出后传入；
+ * **时长是 App 进程存活时长，不是服务从连接起的时长**：[uptimeText] 由调用方传入
+ * `processUptimeMs()` 的结果。系统没有公开「无障碍服务绑定时刻」的 API，服务真实运行时长
+ * 需要 MonitorAccessibilityService 记录 onServiceConnected 时间戳才拿得到（未做）。
+ * 因此这里写「本次启动」而不是原型的「已运行」—— 进程被杀重建就会归零，
+ * 写成「已运行」会被读成服务运行时长，与服务实际状态不符（措辞取自缺陷单的方案 A）。
+ *
+ * [uptimeText] 为时长文案（如「6 小时 12 分」），格式由调用方产出后传入；
  * 整句措辞仍在本文件产出，各屏不各写一套。enabled=false / running=false 两态原型没有，
  * 沿用 [accessibilityStatusText] 的如实口径。
  */
@@ -36,7 +42,7 @@ internal fun s09AccessibilityStatusText(
     enabled: Boolean,
     running: Boolean,
     uptimeText: String,
-): String = if (running) "已授权 · 已运行 $uptimeText" else accessibilityStatusText(enabled, running)
+): String = if (running) "已授权 · 本次启动 $uptimeText" else accessibilityStatusText(enabled, running)
 
 /**
  * 无数据空态文案（s01 / s02）。
