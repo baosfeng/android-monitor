@@ -99,7 +99,7 @@ class TransferEnginePersistenceTest {
         // 超时 → 终态写库
         assertTrue(
             await {
-                runBlocking { transferEngine.offerStatus(sessionId) }
+                runBlocking { transferEngine.offerStatus(sessionId, transferEngine.sessions[sessionId]?.token) }
                 store.loadRecent().firstOrNull()?.task?.status == TransferStatus.FAILED
             },
         )
@@ -118,7 +118,7 @@ class TransferEnginePersistenceTest {
         assertTrue(await { store.count() == 1 })
         assertTrue(
             await {
-                runBlocking { transferEngine.offerStatus(sessionId) }
+                runBlocking { transferEngine.offerStatus(sessionId, transferEngine.sessions[sessionId]?.token) }
                 store.loadRecent().firstOrNull()?.task?.status == TransferStatus.FAILED
             },
         )

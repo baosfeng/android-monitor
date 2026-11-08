@@ -17,8 +17,8 @@ internal class TransferSessionActions(private val engine: TransferEngine) {
     private val _tasks get() = engine._tasks
     private val scope get() = engine.scope
     private val client get() = engine.client
+    private val settings get() = engine.settings
     private val TokenHeader = TransferEngine.TokenHeader
-
 
     /** 接收端拒绝一次待确认的传输。 */
     fun denyIncoming(sessionId: String) {
@@ -65,7 +65,11 @@ internal class TransferSessionActions(private val engine: TransferEngine) {
                         MiniHttpClient.buildUrl(
                             outbound.peer.baseUrl,
                             "cancel",
-                            listOf("session" to outbound.remoteSessionId),
+                            // 协议 §4：/cancel 要同时证明「拿的是本次会话的 token」与「是本次会话的发送方」
+                            listOf(
+                                "session" to outbound.remoteSessionId,
+                                "sender" to settings.deviceId,
+                            ),
                         ),
                         mapOf(TokenHeader to outbound.token),
                     )

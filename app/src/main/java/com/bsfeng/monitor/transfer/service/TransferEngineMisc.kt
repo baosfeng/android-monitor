@@ -70,3 +70,13 @@ internal fun TransferEngine.failAll(sessionId: String, code: Int, message: Strin
 
 internal fun TransferEngine.taskKey(sessionId: String, fileId: String): String = "$sessionId#$fileId"
 
+/**
+ * 尚未确认 / 尚未开始收字节的接收会话数（入站限流用，SEC-04）。
+ *
+ * 只数 `OFFERED / AWAITING_CONFIRM`：它们才是「会弹 PIN、会占任务表」的那批。
+ * 已批准（TRANSFERRING）与终态不占额度 —— 否则一次正常大文件传输会把后续 offer 全堵死。
+ */
+internal fun TransferEngine.pendingSessionCount(): Int =
+    sessions.values.count {
+        it.state == TransferStatus.OFFERED || it.state == TransferStatus.AWAITING_CONFIRM
+    }
