@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +32,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.MonitorApp
 import com.bsfeng.monitor.domain.model.SkipRule
@@ -56,9 +60,10 @@ import kotlinx.coroutines.withContext
 /**
  * s10 订阅源与规则（原型 .open-design/src/screens/s10-开屏跳过规则.html）。
  *
- * 锚点（14 个，逐字取自原型 data-od-id）：
+ * 锚点（15 个，逐字取自原型 data-od-id）：
  * screen-s10 / s10-head / s10-body / s10-source / s10-url / s10-summary / s10-rules /
- * s10-legend / s10-st-loading / s10-st-empty / s10-st-error / s10-st-edge / s10-confirm。
+ * s10-legend / s10-clear / s10-st-loading / s10-st-empty / s10-st-error / s10-st-edge / s10-confirm。
+ * 其中 s10-clear 是「清除页面快照」按钮（SEC-03 新增，原型同位置补了同名锚点）。
  *
  * 空 / 错 / 边界态直接调共享 [EmptyState] / [ErrorState] / [EdgeState]（StateMessages.kt），
  * 不用 StateContainer：后者不接受块级锚点，本页每个态都要带锚点。
@@ -92,7 +97,20 @@ fun SkipRuleScreen(
     }
     var demoState by remember { mutableStateOf(FiveState.POPULATED) }
     var showConfirm by remember { mutableStateOf(false) }
+    // 清除页面快照的二次确认（锚点 s10-clear）：破坏性且不可恢复（删的是屏幕原文）
+    var showClearSnapshots by remember { mutableStateOf(false) }
     var urlInput by remember { mutableStateOf(DEFAULT_SUBSCRIPTION_URL) }
+
+    // 回到前台时重算快照份数：导出是「切到目标 App 后才落盘」，用户切回来正好要看到份数 +1。
+    // 不挂 ON_RESUME 的话副标题会停在进入本页时的那一刻。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // 已有订阅源时以第一个源为准展示在 URL 输入框
     LaunchedEffect(state.subscriptions) {
@@ -263,11 +281,13 @@ fun SkipRuleScreen(
                                         subscriptionCount = state.subscriptions.size,
                                         lastSyncAt = state.lastSyncAt,
                                         snapshotPath = state.snapshotPath,
+                                        snapshotCount = state.snapshotCount,
                                         onRequestUpdate = { showConfirm = true },
                                         // 新增订阅走本地语义（判重 + 清单 +1），不发起网络拉取；
                                         // 需要拉规则时用户再点「更新订阅」（锚点 s10-source · 新增订阅行）
                                         onAddSubscription = { viewModel.addSubscriptionLocally(urlInput) },
                                         onRequestSnapshot = { viewModel.requestSnapshot() },
+                                        onRequestClearSnapshots = { showClearSnapshots = true },
                                         urlFocusRequester = urlFocus,
                                         updateFocusRequester = updateFocus,
                                     )
@@ -389,6 +409,24 @@ fun SkipRuleScreen(
                 showConfirm = false
                 pendingUpdateFocus = true
             },
+        )
+
+        // 清除页面快照：破坏性 + 不可恢复，走同一个 ConfirmDialog（destructive 语义），
+        // 清完 toast 反馈删除份数并刷新份数（ViewModel 侧 refresh 会重算 snapshotCount）。
+        ConfirmDialog(
+            visible = showClearSnapshots,
+            title = "清除全部页面快照？",
+            message = "将删除已保存的 " + state.snapshotCount +
+                " 份屏幕原文（聊天 / 支付页 / 通知文案），清除后无法恢复。",
+            confirmLabel = "确认清除",
+            dismissLabel = "取消",
+            destructive = true,
+            onConfirm = {
+                showClearSnapshots = false
+                haptic(HapticTone.SUCCESS)
+                viewModel.clearSnapshots()
+            },
+            onDismiss = { showClearSnapshots = false },
         )
     }
 }
