@@ -6,16 +6,19 @@
 #   updateServerKey=/path/to/ssh-key.pem
 #   updateServerPath=/var/www/updates
 #
-# 用法：scripts/sync-to-server.sh <apk 路径> <version.json 路径>
+# 用法：scripts/sync-to-server.sh [apk 路径] [version.json 路径]
+#   两个参数的缺省值都相对**仓库根**解析，因此从任意目录执行都可以。
+#   以前参数校验发生在 cd 之前，从别的目录跑必然报「找不到 APK」（基建审计 I14）。
 set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
 APK="${1:-app/build/outputs/apk/release/app-release.apk}"
 MANIFEST="${2:-updates/version.json}"
 
-[ -f "$APK" ] || { echo "找不到 APK：$APK"; exit 1; }
-[ -f "$MANIFEST" ] || { echo "找不到版本清单：$MANIFEST"; exit 1; }
-
-cd "$(dirname "$0")/.."
+[ -f "$APK" ] || { echo "找不到 APK：${APK}（相对仓库根 ${ROOT}；先 ./gradlew assembleRelease）"; exit 1; }
+[ -f "$MANIFEST" ] || { echo "找不到版本清单：${MANIFEST}（相对仓库根 ${ROOT}；先跑一次发布）"; exit 1; }
 
 read_prop() {
   grep -E "^$1=" local.properties 2>/dev/null | tail -1 | cut -d= -f2- || true
@@ -36,7 +39,7 @@ if [ -n "$KEY" ]; then
   SSH_OPTS+=(-i "$KEY")
 fi
 
-echo "同步 APK 与版本清单到 $USER_NAME@$HOST:$REMOTE_PATH"
-scp "${SSH_OPTS[@]}" "$APK" "$USER_NAME@$HOST:$REMOTE_PATH/app-release.apk"
-scp "${SSH_OPTS[@]}" "$MANIFEST" "$USER_NAME@$HOST:$REMOTE_PATH/version.json"
+echo "同步 APK 与版本清单到 ${USER_NAME}${AT}${HOST}:${REMOTE_PATH}"
+scp "${SSH_OPTS[@]}" "$APK" "${USER_NAME}${AT}${HOST}:${REMOTE_PATH}/app-release.apk"
+scp "${SSH_OPTS[@]}" "$MANIFEST" "${USER_NAME}${AT}${HOST}:${REMOTE_PATH}/version.json"
 echo "完成。App 更新检测将优先从该地址拉取。"

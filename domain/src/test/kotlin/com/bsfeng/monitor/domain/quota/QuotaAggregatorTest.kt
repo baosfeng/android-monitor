@@ -89,11 +89,19 @@ class QuotaAggregatorTest {
 
     @Test
     fun `同输入重复聚合结果一致`() {
+        // 先与已知真值比对（比例相同按 providerId 字典序 → deepseek 在前、位次 1/2），
+        // 再验两次独立调用的结果相等。以前断言的是 aggregate(input) == aggregate(input)，
+        // 同一表达式恒真，改成空实现也照样绿（基建审计 I13）。
         val input = listOf(
             provider("ollama", listOf(percentItem(remaining = 20.0))),
             provider("deepseek", listOf(percentItem(remaining = 20.0))),
         )
-        assertEquals(QuotaAggregator.aggregate(input), QuotaAggregator.aggregate(input))
+        val first = QuotaAggregator.aggregate(input)
+        assertEquals(listOf("deepseek", "ollama"), first.map { it.providerId })
+        assertEquals(listOf(1, 2), first.map { it.rank })
+        val second = QuotaAggregator.aggregate(input)
+        assertEquals(first.map { it.providerId to it.rank }, second.map { it.providerId to it.rank })
+        assertEquals(first, second)
     }
 
     // ───────────────────────────── 排除 ─────────────────────────────

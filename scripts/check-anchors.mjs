@@ -21,26 +21,37 @@
 // 代码里根本不存在的幽灵锚点会被判「已落地」，且 exit 0。现在每条证据都必须从
 // testTag 调用点出发、沿声明或调用链走得通，走不通就是缺失。
 //
+// 缺失的事实源（基建审计 I10）：缺失不再「只报不判」。scripts/anchor-retired.tsv 是受版本
+// 控制的作废 / 未实现清单，每行写明来源页面、状态（作废 / 原型外壳 / 待实现）与理由；
+// 脚本只容忍清单内的缺失，清单外的缺失 exit 1，清单里已落地的锚点同样 exit 1（清单要跟着缩）。
+// 以前 CI 注释把 123 条缺失一锅端归给「作废页」，而其中 s05 / s16 约 40 条来自在用页面。
+//
 // 用法：
-//   node scripts/check-anchors.mjs            # 打印四列账本，自增非 0 时 exit 1
-//   node scripts/check-anchors.mjs --strict   # 缺失也非 0 时 exit 1（清理完后再启用）
+//   node scripts/check-anchors.mjs            # 打印四列账本；自增 / 清单外缺失非 0 时 exit 1
+//   node scripts/check-anchors.mjs --strict   # 连清单内的容忍缺失也要求为 0（清理完再启用）
 //   node scripts/check-anchors.mjs --json     # 机器可读输出
+//   node scripts/check-anchors.mjs --self-test # 用 fixture 校验上面三条判定本身
 //
 // 已知局限：testTag 实参是复杂表达式（三元、集合下标算出来的值、超过深度上限的跨文件
 // 参数链）时静态求值不到，这类锚点会落进「缺失」——实现侧应把锚点写成字面量，
 // 或经由常量 / 单层参数透传。
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOC_DIR = path.join(ROOT, 'docs/交互设计');
-const SRC_DIR = path.join(ROOT, 'app/src/main/java');
+// 路径可用环境变量覆盖：--self-test 要拿 fixture 跑同一套判据（见文末 selfTest）。
+const SRC_DIR = path.resolve(ROOT, process.env.ANCHORS_SRC || 'app/src/main/java');
 
 // 锚点源：页面级在 tsv（第 1 列锚点、第 2 列来源页面），组件级在 s12a 的 md 表格。
-const LEDGER_TSV = path.join(ROOT, 'scripts/anchor-ledger.tsv');
-const COMPONENT_DOC = path.join(DOC_DIR, 's12a-组件级锚点登记.md');
+const LEDGER_TSV = path.resolve(ROOT, process.env.ANCHORS_LEDGER || 'scripts/anchor-ledger.tsv');
+const COMPONENT_DOC = path.resolve(ROOT, process.env.ANCHORS_COMPONENTS || 'docs/交互设计/s12a-组件级锚点登记.md');
+// 作废 / 未实现的锚点清单：只容忍这里列出的缺失（见文件头的 I10 说明）。
+const RETIRED_TSV = path.resolve(ROOT, process.env.ANCHORS_RETIRED || 'scripts/anchor-retired.tsv');
 const ANCHOR_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/;
 
 // 证据追踪深度：常量 / 辅助函数链与参数透传链分别计，防止在大型 UI 组件里扩散成全仓搜索。
@@ -50,6 +61,10 @@ const MAX_CALL_HOPS = 4;
 const args = new Set(process.argv.slice(2));
 const STRICT = args.has('--strict');
 const JSON_OUT = args.has('--json');
+
+if (args.has('--self-test')) {
+  process.exit(selfTest());
+}
 
 function readLines(file) {
   if (!fs.existsSync(file)) {
@@ -80,6 +95,31 @@ function readLedgerAnchors() {
     add(cols[1], 's12a-组件级锚点登记');
   }
   return anchors;
+}
+
+/**
+ * 作废 / 未实现锚点清单：锚点 → { page, status, reason }。
+ *
+ * 只容忍这里列出的缺失；每行必须带状态与理由，否则「一锅粥」清单会重新变成
+ * 「缺失没人管」的挡箭牌（基建审计 I10）。
+ */
+function readRetired() {
+  const retired = new Map();
+  if (!fs.existsSync(RETIRED_TSV)) {
+    console.error('缺作废锚点清单：' + path.relative(ROOT, RETIRED_TSV));
+    process.exit(2);
+  }
+  for (const raw of readLines(RETIRED_TSV)) {
+    const [anchor, page, status, reason] = raw.split('\t').map((s) => (s || '').trim());
+    // 首行是中文表头，被字符集过滤掉
+    if (!anchor || !ANCHOR_RE.test(anchor)) continue;
+    if (!status || !reason) {
+      console.error('作废锚点清单缺状态或理由：' + anchor);
+      process.exit(2);
+    }
+    retired.set(anchor, { page: page || '(无)', status, reason });
+  }
+  return retired;
 }
 
 function walk(dir, out = []) {
@@ -472,6 +512,7 @@ function expand(index, text, ctx, declHops, callHops, seen, acc) {
 // ── 主流程 ────────────────────────────────────────────────────────────────
 
 const ledger = readLedgerAnchors();
+const retired = readRetired();
 const index = buildIndex();
 
 // 从每个 testTag 调用点出发收集证据；只有「从调用点走得到」的字面量 / 前缀才算落地证据。
@@ -504,6 +545,13 @@ for (const anchor of ledger.keys()) {
 const missing = [...ledger.keys()].filter((a) => !landed.has(a));
 const extra = [...directLiterals].filter((a) => !ledger.has(a));
 
+// 缺失分两类：清单内的（设计已作废 / 待实现，容忍）与清单外的（真缺口，判红）。
+// 反方向：清单里写着「作废」但代码里已落地的锚点，说明清单该缩了，也判红——
+// 否则这清单会越滚越大，重新变成「缺失无人负责」的挡箭牌。
+const unretired = missing.filter((a) => !retired.has(a));
+const staleRetired = [...retired.keys()].filter((a) => !missing.includes(a));
+const pendingCount = missing.filter((a) => retired.get(a)?.status === '待实现').length;
+
 const pageOf = (a) => ledger.get(a) || '(无)';
 const pages = new Map();
 for (const a of ledger.keys()) {
@@ -523,11 +571,16 @@ if (JSON_OUT) {
     missing: missing.length,
     extra: extra.length,
     extraList: extra,
+    retiredTolerated: missing.length - unretired.length,
+    pending: pendingCount,
+    unretired,
+    staleRetired,
     pages: [...pages.entries()].map(([p, s]) => ({ page: p, ...s })),
   }, null, 2));
 } else {
   console.log('=== 锚点对账 ===');
-  console.log('账本锚点 ' + ledger.size + ' | 代码落地 ' + landed.size + ' | 缺失 ' + missing.length + ' | 自增 ' + extra.length);
+  console.log('账本锚点 ' + ledger.size + ' | 代码落地 ' + landed.size + ' | 缺失 ' + missing.length +
+    '（清单内 ' + (missing.length - unretired.length) + '，其中待实现 ' + pendingCount + '） | 自增 ' + extra.length);
   if (varGen.size) console.log('（其中 ' + varGen.size + ' 个由运行时前缀生成）');
   console.log('');
   const rows = [...pages.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -551,13 +604,120 @@ if (JSON_OUT) {
     console.log('=== 自增（硬错误：代码有、账本无）===');
     console.log(extra.join(', '));
   }
+  if (unretired.length) {
+    console.log('');
+    console.log('=== 清单外缺失（硬错误：不在 ' + path.relative(ROOT, RETIRED_TSV) + ' 里）===');
+    console.log(unretired.join(', '));
+  }
+  if (staleRetired.length) {
+    console.log('');
+    console.log('=== 清单已失效（硬错误：这些锚点已落地或不在账本，删掉对应行）===');
+    console.log(staleRetired.join(', '));
+  }
 }
 
 if (extra.length > 0) {
   console.error('\n锚点自增 ' + extra.length + ' 个：锚点集合必须与锚点账本逐字对账，不允许代码自造锚点。');
   process.exit(1);
 }
-if (STRICT && missing.length > 0) {
-  console.error('\n锚点缺失 ' + missing.length + ' 个（--strict 模式）。');
+if (staleRetired.length > 0) {
+  console.error('\n作废清单有 ' + staleRetired.length + ' 条已失效：删掉 ' +
+    path.relative(ROOT, RETIRED_TSV) + ' 里对应行（清单只容忍仍然缺失的锚点）。');
   process.exit(1);
+}
+if (unretired.length > 0) {
+  console.error('\n有 ' + unretired.length + ' 条缺失不在作废清单里：要么实现 testTag，' +
+    '要么在 ' + path.relative(ROOT, RETIRED_TSV) + ' 里登记状态与理由。');
+  process.exit(1);
+}
+if (STRICT && missing.length > 0) {
+  console.error('\n锚点缺失 ' + missing.length + ' 个（--strict 模式，清单内也不容忍）。');
+  process.exit(1);
+}
+
+// ── fixture 自测：三条判定本身的回归（--self-test）────────────────────────
+// 每个用例在临时目录里造一份最小 fixture（账本 / 组件级 md / 源码 / 作废清单），
+// 再用 ANCHORS_* 环境变量把同一个脚本指过去跑一遍，断言退出码与 JSON 字段。
+// 三种输入：清单外缺失判红、全部清单内判绿、清单已失效判红。
+function selfTest() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'anchors-selftest-'));
+  const build = (name, ledgerAnchors, codeAnchors, retiredRows) => {
+    const dir = path.join(tmp, name);
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'ledger.tsv'),
+      ['锚点\t来源页面', ...ledgerAnchors.map((a) => a + '\t页面A')].join('\n') + '\n',
+    );
+    fs.writeFileSync(path.join(dir, 'components.md'), '| 锚点 | 说明 |\n|---|---|\n');
+    fs.writeFileSync(
+      path.join(dir, 'retired.tsv'),
+      ['锚点\t来源页面\t状态\t理由', ...retiredRows].join('\n') + '\n',
+    );
+    fs.writeFileSync(
+      path.join(dir, 'src', 'Sample.kt'),
+      codeAnchors.map((a) => 'val t = Modifier.testTag("' + a + '")').join('\n') + '\n',
+    );
+    return dir;
+  };
+  const run = (dir) => {
+    const env = { ...process.env };
+    env.ANCHORS_LEDGER = path.join(dir, 'ledger.tsv');
+    env.ANCHORS_COMPONENTS = path.join(dir, 'components.md');
+    env.ANCHORS_RETIRED = path.join(dir, 'retired.tsv');
+    env.ANCHORS_SRC = path.join(dir, 'src');
+    try {
+      const out = execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--json'], {
+        env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, json: JSON.parse(out) };
+    } catch (e) {
+      return { code: e.status ?? 1, json: e.stdout ? JSON.parse(e.stdout) : null };
+    }
+  };
+
+  const cases = [
+    {
+      name: 'unretired-missing',
+      dir: build('unretired', ['a1', 'a2'], ['a1'], []),
+      expect: 1,
+      why: '清单外缺失（账本 a2 未实现且没登记）→ 判红',
+      check: (j) => j && j.unretired.length === 1 && j.unretired[0] === 'a2',
+    },
+    {
+      name: 'all-retired',
+      dir: build('all-retired', ['a1', 'a2'], ['a1'], ['a2\t页面A\t作废\t示例理由']),
+      expect: 0,
+      why: '缺失全部在作废清单内 → 放行',
+      check: (j) => j && j.missing === 1 && j.retiredTolerated === 1,
+    },
+    {
+      name: 'stale-retired',
+      dir: build('stale', ['a1', 'a2'], ['a1', 'a2'], ['a2\t页面A\t作废\t示例理由']),
+      expect: 1,
+      why: '清单里写「作废」但代码已落地 → 判红（清单必须跟着缩）',
+      check: (j) => j && j.staleRetired.length === 1 && j.staleRetired[0] === 'a2',
+    },
+  ];
+
+  let failed = 0;
+  console.log('锚点门禁自测（fixture：' + tmp + '）');
+  console.log('');
+  for (const c of cases) {
+    const r = run(c.dir);
+    const ok = r.code === c.expect && c.check(r.json);
+    if (ok) {
+      console.log('  PASS ' + c.name + '：退出码 ' + r.code + '（期望 ' + c.expect + '）· ' + c.why);
+    } else {
+      console.log('  FAIL ' + c.name + '：退出码 ' + r.code + '（期望 ' + c.expect + '）· ' + c.why);
+      failed = 1;
+    }
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  console.log('');
+  if (failed === 0) {
+    console.log('自测结果：PASS（清单内放行 / 清单外判红 / 失效清单判红 三条都成立）');
+    return 0;
+  }
+  console.log('自测结果：FAIL（判据与 fixture 期望不符）');
+  return 1;
 }

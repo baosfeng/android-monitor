@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaSettings
+import com.bsfeng.monitor.quota.postQuotaTestNotification
 import com.bsfeng.monitor.ui.AppButton
 import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.components.AppToast

@@ -1,0 +1,4 @@
+<report name="fixture">
+  <counter type="LINE" missed="0" covered="100"/>
+  <counter type="BRANCH" missed="0" covered="50"/>
+</report>

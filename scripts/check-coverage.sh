@@ -13,6 +13,12 @@
 #   bash scripts/check-coverage.sh
 #   COVERAGE_APP_MIN_LINE=25 bash scripts/check-coverage.sh
 #   COVERAGE_APP_REPORT=/path/to/a.xml COVERAGE_DOMAIN_REPORT=/path/to/d.xml bash scripts/check-coverage.sh
+#   COVERAGE_APP_CORE_PACKAGE=quota bash scripts/check-coverage.sh      # 核心包改名当天
+#   COVERAGE_ALLOW_MISSING_CORE=1 bash scripts/check-coverage.sh       # 包不在报告里时显式放行
+#   bash scripts/check-coverage.sh --self-test                         # 只跑 fixture 自测
+#
+# 自测是这条闸的回归证据：核心包在 / 不达标 / 不在报告里三种输入下退出码必须是 0 / 1 / 1，
+# 只有显式放行才是 0。判据被改坏时自测先红，不用等 CI 全量跑完才发现闸门又 fail-open 了。
 #
 # 两个模块的可信度差别（决定了阈值为什么差这么多）：
 #   domain：纯 Kotlin/JVM，无 Robolectric 沙箱，数字**完全可信**，实测行 49.38%，阈值 48%。
@@ -31,8 +37,11 @@ APP_REPORT="${COVERAGE_APP_REPORT:-${ROOT}/app/build/reports/coverage/app-debug/
 APP_MIN_LINE="${COVERAGE_APP_MIN_LINE:-21}"
 APP_MIN_BRANCH="${COVERAGE_APP_MIN_BRANCH:-21}"
 # 核心业务包单独卡一道，防止「堆 UI 文件摊薄全局平均」式的偷懒。
-# 该包不在报告里（被排除或改名）时跳过，不判失败。
+# 该包不在报告里（改名 / 被排除 / 报告只统计了空包）默认判 FAIL：这条闸的意义就是
+# 「核心逻辑必须被单独度量」，包名一改就静默跳过等于把闸门拆了（基建审计 I5）。
+# 确需改名当天切换时，用 COVERAGE_ALLOW_MISSING_CORE=1 显式放行，并在 PR 说明里写原因。
 APP_CORE_PACKAGE="${COVERAGE_APP_CORE_PACKAGE:-autobook}"
+ALLOW_MISSING_CORE="${COVERAGE_ALLOW_MISSING_CORE:-0}"
 APP_MIN_CORE_LINE="${COVERAGE_APP_MIN_CORE_LINE:-40}"
 
 # ---- domain 模块（纯 JVM，数字完全可信）----
@@ -176,9 +185,14 @@ check_module() {
         if [ -n "${core_line}" ]; then
             # shellcheck disable=SC2086
             judge "${module} 核心包行覆盖率" ${core_line} "${min_core}"
+        elif [ "${ALLOW_MISSING_CORE}" = "1" ]; then
+            echo "  SKIP  核心包 ${core_pkg} 不在报告里（COVERAGE_ALLOW_MISSING_CORE=1 显式放行）"
+            SUMMARY+=("SKIP  ${module} 核心包不在报告里（显式放行）")
         else
-            echo "  SKIP  核心包 ${core_pkg} 不在报告里（被排除或改名）"
-            SUMMARY+=("SKIP  ${module} 核心包不在报告里")
+            echo "  FAIL  核心包 ${core_pkg} 不在报告里（被排除或改名）"
+            echo "        这条闸必须能度量核心逻辑；改名当天才用 COVERAGE_ALLOW_MISSING_CORE=1 放行，并在 PR 说明原因"
+            SUMMARY+=("FAIL  ${module} 核心包不在报告里")
+            FAILED=$((FAILED + 1))
         fi
     fi
 
@@ -212,6 +226,62 @@ check_module() {
           done
     echo
 }
+
+# ── fixture 自测：判据本身的回归（--self-test）─────────────────────────
+# 每个用例是一个目录，含 app.xml / domain.xml 两份最小报告；期望退出码就是这条闸的判据：
+#   核心包达标 → 0，核心包不达标 → 1，核心包不在报告里 → 1，显式放行 → 0。
+# 阈值全部压到 0，只有「核心包 40%」这一项在起作用，避免用例随基线数字漂移。
+self_test() {
+    local fix="$ROOT/scripts/fixtures/coverage"
+    if [ ! -d "${fix}" ]; then
+        echo "缺 fixture 目录：${fix}" >&2
+        return 1
+    fi
+    local failed=0
+    echo "覆盖率门禁自测（fixture：${fix}）"
+    echo
+    # 用例：<目录> <COVERAGE_ALLOW_MISSING_CORE> <期望退出码> <说明>
+    while IFS='|' read -r case allow expect desc; do
+        [ -z "${case}" ] && continue
+        if [ ! -f "${fix}/${case}/app.xml" ]; then
+            echo "  FAIL ${case}：缺 app.xml"
+            failed=1
+            continue
+        fi
+        local out rc=0
+        out="$(COVERAGE_APP_REPORT="${fix}/${case}/app.xml" \
+            COVERAGE_DOMAIN_REPORT="${fix}/${case}/domain.xml" \
+            COVERAGE_APP_MIN_LINE=0 COVERAGE_APP_MIN_BRANCH=0 \
+            COVERAGE_APP_MIN_CORE_LINE=40 \
+            COVERAGE_DOMAIN_MIN_LINE=0 COVERAGE_DOMAIN_MIN_BRANCH=0 \
+            COVERAGE_ALLOW_MISSING_CORE="${allow}" \
+            bash "${ROOT}/scripts/check-coverage.sh" 2>&1)" || rc=$?
+        if [ "${rc}" -eq "${expect}" ]; then
+            echo "  PASS ${case}（allow=${allow}）：退出码 ${rc}（期望 ${expect}）· ${desc}"
+        else
+            echo "  FAIL ${case}（allow=${allow}）：退出码 ${rc}（期望 ${expect}）· ${desc}"
+            printf '%s\n' "${out}" | tail -n 6 | sed 's/^/         /'
+            failed=1
+        fi
+    done <<'CASES'
+core-ok|0|0|核心包 50% >= 40%，闸放行
+core-below|0|1|核心包 10% < 40%，闸判红
+core-missing|0|1|核心包不在报告里默认判红（旧实现 fail-open：SKIP + exit 0）
+core-missing|1|0|核心包不在报告里 + 显式放行开关
+CASES
+    echo
+    if [ "${failed}" -eq 0 ]; then
+        echo "自测结果：PASS（核心包闸在四种输入下都按预期判定）"
+        return 0
+    fi
+    echo "自测结果：FAIL（判据与 fixture 期望不符）"
+    return 1
+}
+
+if [ "${1:-}" = "--self-test" ]; then
+    self_test
+    exit $?
+fi
 
 echo "覆盖率门禁（两个模块分别判定，都过才算过）"
 echo

@@ -45,9 +45,6 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 
-/** 一个分段项：显示文案 + 锚点（s18-mode-aggregate / s18-plan-legacy 等逐字照抄）。 */
-internal data class QuotaSegment(val label: String, val tagModifier: Modifier)
-
 /** 顶部视图分段的两个选项（顺序 = 显示顺序，索引 0 为聚合）。 */
 private const val VIEW_AGGREGATE = "聚合"
 private const val VIEW_SINGLE = "单家"
@@ -77,10 +74,11 @@ internal fun ViewModeSwitch(
             QuotaSegment(VIEW_AGGREGATE, Modifier.testTag("s18-mode-aggregate")),
             QuotaSegment(VIEW_SINGLE, Modifier.testTag("s18-mode-single")),
         ),
-        selectedIndex = if (aggregateMode) 0 else 1,
+        selectedIndex = viewModeIndex(aggregateMode),
         // 已是当前视图时点击不重播动画、不发请求、不重复震动
         onSelect = { index ->
-            val next = index == 0
+            // 下标 → 语义的换算只走 isAggregateIndex 一处，避免两边各写一次 index == 0
+            val next = isAggregateIndex(index)
             if (next != aggregateMode) onSelect(next)
         },
         tone = HapticTone.MEDIUM,
