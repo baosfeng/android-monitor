@@ -2,8 +2,13 @@
 <!--
     debug 变体专属清单：只在 app/src/debug/ 存在，release / perf 变体不合并、也不编译对应类。
 
-    安全口径：receiver 是 exported，但内部仍守 DebugConfig 的解锁语义（除 unlock 外未解锁一律
-    ok=false reason=locked）；且它只在 debug 包里存在，release 包连类都没有。
+    安全口径（三档，详见 DebugCommandReceiver 的 KDoc）：
+    - receiver 必须 exported：adb shell am broadcast 以 shell uid 发送，签名级自定义权限拿不到，
+      adb 也用不了「不 exported + run-as」以外的通道 —— 加了权限反而会让 scripts/debug-cli.sh 失效；
+    - 免鉴权：unlock / state / heartbeat / open / sample_location（只影响本 App 自己的界面与记录）；
+    - 需 unlock：dump / db query / ui（读屏幕原文、定位轨迹、账目正文）；
+    - 需 unlock + 一次性 confirm 令牌：clear / seed（写库、不可撤销）。
+    它只在 debug 包里存在，release 包连类都没有。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">

@@ -40,6 +40,15 @@ internal object DebugUiBridge {
     /** 深度上限：异常布局（无限嵌套的自定义 View）会让递归吃满栈。 */
     private const val MAX_DEPTH = 30
 
+    /**
+     * `files/dsh-ui/` 的份数上限。
+     *
+     * dump 内容是**屏幕原文**（页面上的金额、聊天、通知文案都在 nodes 的 text 里）。
+     * 不设上限等于把每次取证的屏幕副本长期留在私有目录，且它会随取证次数无限膨胀。
+     * 取 20：一次取证常连发多次 dump 做前后对照，留够翻一轮的量即可。
+     */
+    private const val MAX_DUMP_FILES = 20
+
     /** 手势参数：点击/长按/滑动时长与滑动跨屏比例。 */
     private const val TAP_MS = 60L
     private const val LONG_PRESS_MS = 800L
@@ -113,6 +122,26 @@ internal object DebugUiBridge {
         )
     }
 
+    /**
+     * 只保留最近 [MAX_DUMP_FILES] 份 dump / audit。
+     *
+     * 屏幕原文的落盘副本没有「用完即删」的自然时机（agent 取证后才去读），所以用份数上限兜住：
+     * 超过就按修改时间删最旧的。目录不可读时静默跳过 —— 清理失败不该让命令本身失败。
+     *
+     * 刻意**不**复用 `skip/SnapshotRetention`：那份策略管的是用户手动触发的页面快照
+     * （一次一两份、保留 10 份），dsh-ui 是取证时连发的多次 dump 对照（保留 20 份）。
+     * 两个上限会各自演进，抽成一处反而要给它加参数、把两个语义混成「份数」一个概念。
+     */
+    private fun pruneDumps(dir: File) {
+        runCatching {
+            val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: return
+            if (files.size < MAX_DUMP_FILES) return
+            files.sortedByDescending { it.lastModified() }
+                .drop(MAX_DUMP_FILES - 1)
+                .forEach { it.delete() }
+        }.onFailure { Log.w(TAG, "清理旧 dump 失败", it) }
+    }
+
     /** 相对 `/data/data/<pkg>/` 的路径：logcat 里短、且不暴露绝对私有路径。 */
     private fun relativePath(context: Context, file: File): String =
         "files" + file.absolutePath.removePrefix(context.filesDir.absolutePath)
@@ -128,6 +157,9 @@ internal object DebugUiBridge {
 
     private fun writeDump(context: Context, tag: String, snapshot: Snapshot): File {
         val dir = uiDir(context)
+        // 落盘前先按份数裁剪：dump 里是屏幕原文（账目、聊天、通知），无限囤在私有目录
+        // 等于长期留一份屏幕副本。口径与 SnapshotExporter 一致（保留最近 20 份）。
+        pruneDumps(dir)
         val windows = JSONArray()
         snapshot.windows.forEach { windows.put(it.toJson()) }
         val nodes = JSONArray()
@@ -187,7 +219,9 @@ internal object DebugUiBridge {
     }
 
     private fun writeAudit(context: Context, tag: String, report: UiAuditReport): File {
-        val file = File(uiDir(context), "a11y-" + tag + ".json")
+        val dir = uiDir(context)
+        pruneDumps(dir)
+        val file = File(dir, "a11y-" + tag + ".json")
         file.writeText(report.toJson(System.currentTimeMillis()).toString(), Charsets.UTF_8)
         return file
     }

@@ -7,7 +7,7 @@
 #   scripts/debug-cli.sh locate                 # 立刻采一次位置（绕过节流）
 #   scripts/debug-cli.sh seed [day|stay|move|noise|gap]
 #   scripts/debug-cli.sh dump [limit] [TYPE]
-#   scripts/debug-cli.sh reset [TYPE]           # 删「当日」某类型（默认 PAGE）
+#   scripts/debug-cli.sh reset [TYPE]           # 删「当日」某类型（默认 SCREEN；别名 PAGE 已随类型表下线）
 #   scripts/debug-cli.sh reset all              # 清空全表（所有类型、所有日期）
 #   scripts/debug-cli.sh open <trip|settings|live|overview>
 #   scripts/debug-cli.sh db tables              # 表名 + 行数 + user_version（只读）
@@ -30,6 +30,13 @@
 # db 系列替代 `adb pull` 整个库：USB 易断、WAL 库拷出来常是坏页。只读闸门在端上做
 # （单语句 + select/with 开头 + 拒绝写关键字），被拒时 ok=false 且 reason=bad_args。
 #
+# 鉴权（安全审计 S-01）：receiver 是 exported 的，端上要求「读过本次 unlock 回执」——
+#   - unlock / state / heartbeat / open / locate：免令牌；
+#   - dump / db / ui（含 click·swipe·back 等真点击）：需 unlock 下发的 confirm，10 分钟内可复用；
+#   - clear / seed：同一 confirm 消费即废，成功后回执换发新值。
+# 令牌由本脚本自动取用（unlock 后落盘、后续命令自动附加），**用法与以前完全一致**；
+# 手动排查时可从 unlock 回执的 data.confirm 取，直接 am broadcast 时加 --es confirm <值>。
+#
 # 设备：ANDROID_SERIAL=xxx 指定（多设备时必须给）；adb 路径 ADB=... 可覆盖。
 # 输出：原样打印本次调用的 logcat 行（tag=DebugCmd）；退出码 = 命令的 ok
 #       （0 成功 / 1 ok=false 或超时 / 2 用法错误）。
@@ -41,6 +48,26 @@ ADB="${ADB:-$HOME/android-platform-tools/adb}"
 RECEIVER="com.bsfeng.monitor/.debug.DebugCommandReceiver"
 TIMEOUT="${TIMEOUT:-12}"
 TOKEN="dbg-$(date +%s)-$RANDOM"
+
+# 端上对「读数据 / 驱动界面 / 写库」三类命令都要求 confirm 令牌（unlock 回执里下发，
+# 有效期 10 分钟；clear / seed 消费即废，成功后回执换发新值）。令牌没法跨进程传递，
+# 所以 unlock 后落到本机状态文件；之后每条相关命令自动附加，用法完全不变。
+# 文件名带设备序列号：多设备并行时不会串。
+CONFIRM_FILE="${TMPDIR:-/tmp}/android-monitor-confirm-${ANDROID_SERIAL:-default}"
+
+# 需要令牌的子命令（与 DebugCommandGates 的三档一一对应；unlock/state/heartbeat/open/样本定位不需要）
+NEEDS_CONFIRM=" dump db seed clear ui "
+
+read_confirm() {
+  [ -s "$CONFIRM_FILE" ] && cat "$CONFIRM_FILE" 2>/dev/null
+}
+
+# 从回执 JSON 里取 confirm 并覆盖本地值：unlock 与消费型命令（clear / seed）成功后都会换发新令牌
+save_confirm() {
+  local token
+  token=$(printf '%s' "$1" | sed -n 's/.*"confirm":"\([^"]*\)".*/\1/p' | head -1)
+  [ -n "$token" ] && printf '%s' "$token" >"$CONFIRM_FILE"
+}
 
 adb_run() {
   if [ -n "${ANDROID_SERIAL:-}" ]; then
@@ -67,6 +94,20 @@ send() {
   for arg in "$@"; do
     args+=("$(shell_quote "$arg")")
   done
+  # 需要令牌的子命令自动带上（调用方不用改任何一行用法）：取 unlock 时落盘的 confirm，
+  # 端上按 TTL 复用；clear / seed 消费后回执换发新值，由文件末尾的 save_confirm 覆盖。
+  local cmdval="" i already=0
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    if [ "${args[i]}" = "'cmd'" ] && [ $((i + 1)) -lt ${#args[@]} ]; then
+      cmdval=$(printf '%s' "${args[i + 1]}" | tr -d "'")
+    fi
+    [ "${args[i]}" = "'confirm'" ] && already=1
+  done
+  if [ "$already" -eq 0 ] && [ -n "$cmdval" ] && [[ "$NEEDS_CONFIRM" == *" $cmdval "* ]]; then
+    local saved
+    saved=$(read_confirm)
+    [ -n "$saved" ] && args+=("$(shell_quote "--es")" "$(shell_quote "confirm")" "$(shell_quote "$saved")")
+  fi
   adb_run shell am broadcast -n "$RECEIVER" --es tag "$TOKEN" "${args[@]}" >/dev/null 2>&1
 }
 
@@ -150,6 +191,7 @@ case "$cmd" in
     send --es cmd heartbeat
     ;;
   seed)
+    # 令牌由 send() 统一附加；seed 同为写库命令，消费后回执换发新值
     send --es cmd seed --es scenario "${1:-day}"
     ;;
   dump)
@@ -162,11 +204,16 @@ case "$cmd" in
     fi
     ;;
   reset|clear)
+    # 令牌由 send() 统一附加；clear 是消费型命令，成功后回执换发新值（见文件末尾 save_confirm）
+    args=(--es cmd clear)
     case "${1:-}" in
-      "") send --es cmd clear --es type PAGE ;;
-      all|--all|-a) send --es cmd clear --ez all true ;;
-      *) send --es cmd clear --es type "$1" ;;
+      # 默认值取 SCREEN：历史上写的 PAGE 已不在 RecordType.CANONICAL_NAMES 里，
+      # 无参 reset 会一直 bad_args（"type 取值非法"）—— 与「用法不变」的目标正好相反。
+      "") args+=(--es type SCREEN) ;;
+      all|--all|-a) args+=(--ez all true) ;;
+      *) args+=(--es type "$1") ;;
     esac
+    send "${args[@]}"
     ;;
   open)
     if [ -z "${1:-}" ]; then
@@ -259,4 +306,8 @@ esac
 
 lines=$(wait_result)
 status=$?
+# unlock 与写库命令（clear / seed）成功后回执都带 confirm：覆盖本地值，后续命令接着用
+if [ "$status" -eq 0 ]; then
+  save_confirm "$lines"
+fi
 report "$lines" "$status"
