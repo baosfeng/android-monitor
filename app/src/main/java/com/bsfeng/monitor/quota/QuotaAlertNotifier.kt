@@ -81,16 +81,24 @@ class QuotaAlertNotifier(
 
     // MARK: - 通知
 
+    /**
+     * 渠道属性（可见性 / 重要级）**创建后不可改**：旧渠道 `quota_alert` 已按默认可见性建过，
+     * 只在这条上加 visibility 对老用户不生效。所以换新 id 重建，并显式删掉旧渠道 ——
+     * 留着它只会让系统设置里多出一个「能上锁屏」的同名渠道，用户改的其实是无效的那个。
+     */
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "额度预警",
+            CHANNEL_NAME,
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "额度剩余不足时提醒"
+            description = CHANNEL_DESCRIPTION
+            // 锁屏不显示任何内容：额度名 / 剩余百分比本身就是敏感的用量信息
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
         }
         manager.createNotificationChannel(channel)
+        runCatching { manager.deleteNotificationChannel(LEGACY_CHANNEL_ID) }
     }
 
     private fun post(title: String, body: String) {
@@ -106,6 +114,8 @@ class QuotaAlertNotifier(
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
             .setAutoCancel(true)
+            // 与 LocationForegroundService / TransferService 同口径：锁屏上不露任何内容
+            .setVisibility(Notification.VISIBILITY_SECRET)
         openTabIntent?.invoke()?.let { intent ->
             val pending = PendingIntent.getActivity(
                 context,
@@ -152,14 +162,25 @@ class QuotaAlertNotifier(
         prefs.edit { putString(KEY_STATE, root.toString()) }
     }
 
-    private companion object {
-        const val TAG = "QuotaAlertNotifier"
+    companion object {
+        private const val TAG = "QuotaAlertNotifier"
         const val PREFS_NAME = "quota_alerts"
         const val KEY_STATE = "alert_state"
         const val KEY_ENABLED = "alerts_enabled"
         const val KEY_LOW_CNY = "low_balance_cny"
         const val KEY_LOW_USD = "low_balance_usd"
-        const val CHANNEL_ID = "quota_alert"
+
+        /** 渠道 id 带版本后缀：渠道属性创建后不可改，改可见性只能换 id 重建（见 [ensureChannel]）。 */
+        const val CHANNEL_ID = "quota_alert_v2"
+
+        /** 渠道展示名：设置页的「测试通知」与真实提醒共用同一条渠道。 */
+        const val CHANNEL_NAME = "额度预警"
+
+        /** 渠道说明文案。 */
+        const val CHANNEL_DESCRIPTION = "额度剩余不足时提醒"
+
+        /** 旧渠道（无 lockscreenVisibility）：建新渠道时一并删除，避免设置页出现两个同名项。 */
+        const val LEGACY_CHANNEL_ID = "quota_alert"
         const val NOTIFICATION_ID = 7301
     }
 }

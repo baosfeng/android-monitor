@@ -4,6 +4,7 @@ package com.bsfeng.monitor.autobook
 // 红包有两条路径：付款前页面只预采集，付款后可能回到聊天页（气泡不带金额）。
 
 import android.util.Log
+import com.bsfeng.monitor.util.DebugConfig
 
 /**
  * 解析不出账单时的兜底识别：红包付款流程 + 备注弹窗。
@@ -30,7 +31,8 @@ internal fun AutoBookEngine.fallbackDraft(rule: AutoBookRule, lines: List<String
         if (dialogRemark != null) {
             pendingRemark = dialogRemark
             preDraft = preDraft?.copy(remark = dialogRemark)
-            Log.d(AutoBookEngine.TAG, "捕获备注弹窗: $dialogRemark")
+            // 用户备注是隐私红线：只报「抓到了 + 多长」
+            DebugConfig.log("AutoBook 捕获备注弹窗: ${dialogRemark.length} 字")
             return null
         }
 
@@ -48,10 +50,8 @@ internal fun AutoBookEngine.fallbackDraft(rule: AutoBookRule, lines: List<String
             null
         }
         if (draft != null) {
-            Log.d(
-                AutoBookEngine.TAG,
-                "聊天页识别到已发出的红包: amount=${draft.amount} 领取人=${draft.merchant}"
-            )
+            // 金额与领取人是账目内容：默认不出现，调试闸门打开时才可读
+            DebugConfig.log("AutoBook 聊天页识别到已发出的红包: amount=${draft.amount} 领取人=${draft.merchant}")
         }
         return draft
 }
@@ -79,17 +79,18 @@ internal fun AutoBookEngine.collectPrePayment(rule: AutoBookRule, lines: List<St
         } else pre
         // 付款前是分步的（输入页 → 收银台 → 指纹）：按字段累积，后一页不能把备注冲掉
         preDraft = preDraft?.let { AutoBookDraftMerger.accumulate(it, withRemark) } ?: withRemark
-        Log.d(
-            AutoBookEngine.TAG,
-            "付款前页面预采集: amount=${withRemark.amount} merchant=${withRemark.merchant} " +
-                "payMethod=${withRemark.payMethod} remark=${withRemark.remark}"
+        DebugConfig.log(
+            "AutoBook 付款前页面预采集: amount=${withRemark.amount} merchant=${withRemark.merchant} " +
+                "payMethod=${withRemark.payMethod} remark=${withRemark.remark}",
         )
         return
     }
 
     // 诊断刚需：能区分「没收到事件」「不是账单页（门禁挡掉）」「是账单页但字段没认出来」。
-    // 打印实际文本（截断），否则无法判断是页面结构变了还是节点被系统裁剪。
+    // 结构性判据（包名 / 门禁结论 / 行数 / 指纹）照常打；页面文本只在 DebugConfig 闸门后出现 ——
+    // 它是屏幕原文（金额 / 商户 / 备注），logcat 不进这份明文。
     val preview = lines.joinToString(" | ").take(400)
     val gate = if (AutoBookParser.isBillPage(lines)) "门禁通过,字段不足" else "非账单页,门禁拒绝"
-    Log.d(AutoBookEngine.TAG, "未识别到账单: $packageName [$gate] 行数=${lines.size} 文本=[$preview]")
+    Log.d(AutoBookEngine.TAG, "未识别到账单: $packageName [$gate] 行数=${lines.size}")
+    DebugConfig.log("AutoBook 未识别到账单文本: [$preview]")
 }

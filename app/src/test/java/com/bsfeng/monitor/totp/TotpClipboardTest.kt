@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.totp
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -63,6 +65,34 @@ class TotpClipboardTest {
 
         assertTrue(cb.copy("123456"))
         assertEquals("123456", readClip())
+    }
+
+    @Test
+    fun `写入的剪贴板条目标记为敏感`() {
+        val cb = newClipboard(null)
+
+        assertTrue(cb.copy("123456"))
+
+        // Android 13+ 靠这个 extra 把系统剪贴板预览遮成「敏感内容」，
+        // 漏了它 6 位验证码会直接印在预览浮层上（安全审计 S-06）
+        val extras = clipboard.primaryClip?.description?.extras
+        assertNotNull("剪贴板条目缺少 description.extras", extras)
+        assertTrue(
+            "必须标记 EXTRA_IS_SENSITIVE",
+            extras!!.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false),
+        )
+        // 标记敏感不能改变内容本身
+        assertEquals("123456", readClip())
+    }
+
+    @Test
+    fun `明文标签不写入账号信息`() {
+        val cb = newClipboard(null)
+        cb.copy("123456")
+
+        val label = clipboard.primaryClip?.description?.label?.toString()
+        // 标签会显示在部分 ROM 的剪贴板历史里：只允许「验证码」，不能带发行方 / 账号
+        assertEquals(TotpClipboard.CLIP_LABEL, label)
     }
 
     @Test

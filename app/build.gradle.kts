@@ -108,7 +108,9 @@ android {
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
+                // 只在发布包里剥诊断日志（debug 依赖 logcat 回执，见 proguard-release.pro 的说明）
+                "proguard-release.pro"
             )
         }
         // 性能验证包：与 release 相同的编译优化（R8 + shrink + 非 debuggable），

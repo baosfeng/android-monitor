@@ -51,12 +51,13 @@ internal fun AutoBookEngine.handleDetailPage(draft: AutoBookDraft) {
             // 详情补全只补字段、不走 FinanceManager.updateTransaction（那会重算账户余额）；
             // 但 UI 也要立刻看到补全后的商户 / 商品说明，所以显式发一次数据变更通知。
             financeManager.notifyChanged()
-            Log.i(
-                AutoBookEngine.TAG,
-                "已记账笔补全详情: id=${match.id} merchant=${result.transaction.merchant} " +
-                    "payMethod=${result.transaction.payMethod} orderId=${result.transaction.orderId} " +
-                    "time=${result.transaction.dateTime}"
-            )
+            // 商户 / 付款方式 / 订单号 / 交易时间都是账目内容：日志只留「哪一笔、补了几个字段」
+            val filled = listOf(
+                result.transaction.merchant,
+                result.transaction.payMethod,
+                result.transaction.orderId,
+            ).count { it.isNotBlank() }
+            Log.i(AutoBookEngine.TAG, "已记账笔补全详情: id=${match.id} 非空字段=$filled/3")
             service.mainExecutor.execute {
                 Toast.makeText(service, "详情信息已补全", Toast.LENGTH_SHORT).show()
             }
@@ -92,7 +93,8 @@ internal fun AutoBookEngine.showOverlay(draft: AutoBookDraft) {
                     if (draft.merchant.isBlank()) null
                     else financeManager.getLastTransactionByMerchant(draft.merchant)
                 } catch (e: Exception) {
-                    Log.w(AutoBookEngine.TAG, "查询商户历史失败（按无历史处理）: ${e.message}")
+                    // 只报异常类型：e.message 里可能带出 merchant 参数（账目内容）
+                    Log.w(AutoBookEngine.TAG, "查询历史选择失败（按无历史处理）: ${e.javaClass.simpleName}")
                     null
                 }
             }
@@ -109,10 +111,10 @@ internal fun AutoBookEngine.showOverlay(draft: AutoBookDraft) {
         }
         val enriched = AutoBookDefaults.apply(draft, history)
         if (history != null) {
+            // 对方名称是账目内容：只报「有没有历史、按历史选了哪一类」
             Log.d(
                 AutoBookEngine.TAG,
-                "商户「${draft.merchant}」上次选择: type=${history.type} " +
-                    "category=${history.categoryName} → 默认勾选"
+                "有历史选择: type=${history.type} category=${history.categoryName} → 默认勾选",
             )
         }
         // 回到主线程挂 View（WindowManager 操作要求在同一线程，无障碍服务的主线程即主 Looper）

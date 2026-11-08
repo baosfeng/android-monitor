@@ -8,6 +8,7 @@ import android.view.accessibility.AccessibilityWindowInfo
 import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.model.CategoryCatalog
+import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -188,9 +189,14 @@ class AutoBookEngine(internal val service: AccessibilityService) {
         val merged = AutoBookDraftMerger.merge(draft, preDraft, now)
 
         // 字段取错时的唯一诊断依据，**必须放在去重判定之前** ——
-        // 已记账 / 已忽略的笔会提前 return，放在后面就看不到行文本了。
-        // （真机踩过：商户名取成「账单详情」「返回 全部账单」，不看原始行根本定位不到）
-        Log.d(TAG, "识别到账单页面行: ${lines.joinToString(" | ").take(600)}")
+        // 已记账 / 已忽略的笔会提前 return，放在后面就没有这条记录。
+        // （真机踩过：商户名取成「账单详情」「返回 全部账单」，不看行内容根本定位不到）
+        // ⚠️ 行内容 = 屏幕原文（金额 / 商户 / 备注）：只在 DebugConfig 闸门后出现，默认关闭，
+        // release 包里恒静默（见 DebugConfig.log），logcat 不会被抓成明文账本。
+        DebugConfig.log(
+            "AutoBook 账单页: 行数=${lines.size} 指纹=$fingerprint " +
+                "文本=[${lines.joinToString(" | ").take(600)}]",
+        )
 
         lastDraft = merged
         traceEventAtMs = eventAt
@@ -225,11 +231,12 @@ class AutoBookEngine(internal val service: AccessibilityService) {
             return
         }
 
+        // 结构性诊断：渠道 / 方向 / 命中标记数 / 去重指纹数 —— **不含**金额、商户、账户、用户说明。
+        // 那四项是隐私红线（真机账目）：字段取错时要看它们，走 DebugConfig 闸门那条账单页日志。
         Log.i(
             TAG,
-            "识别到账单 channel=${merged.channel} type=${merged.typeLabel} amount=${merged.amount} " +
-                "merchant=${merged.merchant} category=${merged.categoryName} " +
-                "account=${merged.accountName} remark=${merged.userRemark} markers=${merged.markers}"
+            "识别到账单 channel=${merged.channel} type=${merged.typeLabel} " +
+                "markers=${merged.markers.size} dedupKeys=${merged.dedupKeys.size}",
         )
 
         // 检测到支付成功页就立即展示（2026-10-17 用户要求去掉 1s 延迟）：

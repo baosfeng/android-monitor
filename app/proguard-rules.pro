@@ -1,4 +1,10 @@
 # ProGuard rules for android-monitor
+#
+# ⚠️ 这份规则 **debug / release / perf 三种构建都应用**（debug 也开了 isMinifyEnabled）。
+# 因此这里只放「三种构建都需要」的规则；只该作用于发布包的规则放 proguard-release.pro
+# （见 app/build.gradle.kts 的 release { proguardFiles(...) }）。
+# 反例：把 android.util.Log 的 -assumenosideeffects 写在这里，debug 包的 logcat 会被剥空，
+# scripts/debug-cli.sh 整条通道立刻失效。
 
 # ========== Android 基本 ==========
 -keepattributes *Annotation*, InnerClasses, Signature, EnclosingMethod

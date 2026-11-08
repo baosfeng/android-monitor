@@ -8,6 +8,7 @@ import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.CategoryTree
+import com.bsfeng.monitor.util.DebugConfig
 import java.time.LocalDateTime
 
 /**
@@ -28,7 +29,8 @@ internal fun AutoBookEngine.sanitizeCategoryName(tree: CategoryTree, type: Int, 
     if (names.contains(name)) return name
     val fallback = if (pickerType == 1) INCOME_FALLBACK else CategoryCatalog.FALLBACK
     val picked = if (names.contains(fallback)) fallback else names.first()
-    Log.d(AutoBookEngine.TAG, "分类名不在分类树中，回退: [$name] → [$picked]")
+    // 分类名来自用户账本，属于账目内容：只在调试闸门后输出
+    DebugConfig.log("AutoBook 分类名不在分类树中，回退: [$name] → [$picked]")
     return picked
 }
 
@@ -83,7 +85,8 @@ internal suspend fun AutoBookEngine.persist(
         // 记账列表靠这个一次性信号做「顶部新行高亮 1.6s」：只有自动记账落库才点亮，
         // 手写记录 / 切 Tab / 回前台重载都不点亮（见 FinanceInsertSignal）
         FinanceInsertSignal.mark(id)
-        Log.i(AutoBookEngine.TAG, "自动记账已写入 id=$id 金额=${draft.amount} 分类=$bookedCategory 商户=${draft.merchant}")
+        // 只留「写成功没有 + 落在哪一类」：金额与商户是隐私红线，不进 logcat。
+        Log.i(AutoBookEngine.TAG, "自动记账已写入 id=$id 分类=$bookedCategory 渠道=${draft.channel}")
     } catch (e: Exception) {
         Log.e(AutoBookEngine.TAG, "自动记账落库失败: ${e.message}", e)
     }

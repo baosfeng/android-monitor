@@ -6,6 +6,7 @@ package com.bsfeng.monitor.autobook
 
 import android.util.Log
 import android.view.accessibility.AccessibilityWindowInfo
+import com.bsfeng.monitor.util.DebugConfig
 
 /**
  * 取目标 App 的页面文本。
@@ -111,11 +112,14 @@ internal fun AutoBookEngine.logInvisibleNodesIfAny(packageName: String) {
             if (root.packageName?.toString() != packageName) continue
             val invisible = NodeTextCollector.collect(root, ignoreBounds = true)
             if (invisible.isNotEmpty()) {
-                val sample = invisible.take(12).joinToString(" | ") { it.text }
+                // 结构性结论照常打：这条决定了「改采集策略还有没有救」
                 Log.d(
                     AutoBookEngine.TAG,
-                    "诊断：$packageName 有 ${invisible.size} 个文本节点被标记为不可见（bounds 归零），样本=[$sample]"
+                    "诊断：$packageName 有 ${invisible.size} 个文本节点被标记为不可见（bounds 归零）",
                 )
+                // 节点样本是屏幕原文（金额 / 商户 / 聊天内容）：只在调试闸门后出现
+                val sample = invisible.take(12).joinToString(" | ") { it.text }
+                DebugConfig.log("AutoBook 不可见节点样本: [$sample]")
             }
         } catch (e: Exception) {
             // 诊断失败绝不能影响主流程

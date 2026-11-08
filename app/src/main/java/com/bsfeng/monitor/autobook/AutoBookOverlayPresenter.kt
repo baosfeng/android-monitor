@@ -25,10 +25,8 @@ internal fun AutoBookEngine.display(
                 if (effect.markConfirmed) {
                     dedup.markConfirmed(draft.dedupKeys, System.currentTimeMillis())
                 }
-                Log.i(
-                    AutoBookEngine.TAG,
-                    "用户确认记账: type=$type category=$categoryName amount=${draft.amount} 说明=$remark"
-                )
+                // 金额与用户填的说明是账目内容：日志只留「哪一类、哪个方向」
+                Log.i(AutoBookEngine.TAG, "用户确认记账: type=$type category=$categoryName")
                 scope.launch {
                     persist(draft, type, categoryName, remark, tree)
                     // 落库是异步的（persist 内部吞异常只写日志），浮窗场景最怕「用户以为记上了」。
