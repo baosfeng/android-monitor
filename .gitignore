@@ -107,8 +107,9 @@ tools/
 .open-design/perf-audit.md
 # 原型审查取证目录与逐轮截图（结论已提炼进 05-checklist.md，原文按取证产物处理）
 .open-design/reviews/
-.open-design/shots/r2-*.jpg
-.open-design/shots/trips-*.jpg
+# 注意：r2-*.jpg / trips-*.jpg 的忽略规则已撤销 —— 这三个文件（r2-s17-list / trips-s01-band /
+# trips-s16）被 .open-design/05-checklist.md 正式引用，而对已 tracked 的文件写忽略规则不生效，
+# 留着同一份规则只会让人误以为"清理已完成"。
 # 小组件三轮迭代与设备实拍截图（结论已提炼进 docs/小组件/ 与踩坑，原文按取证产物处理）
 .open-design/shots/widget-*
 .open-design/shots/widgets-*

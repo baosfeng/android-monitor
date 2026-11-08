@@ -21,8 +21,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -87,10 +88,15 @@ fun SkeletonRow(
             .fillMaxWidth(widthFraction.coerceIn(0.05f, 1f))
             .height(height)
             .clip(RoundedCornerShape(t.radiusSm))
-            .drawBehind {
+            // Brush 只随「尺寸 + 配色」重建一次，shimmer 每帧只做 translate + drawRect。
+            // 原写法在 drawBehind 里每帧 new Brush.horizontalGradient（UI 规范门禁 check 2）。
+            .drawWithCache {
                 val span = size.width * 2.2f
-                val start = size.width * 1.2f - span * phase.coerceIn(0f, 1f)
-                drawRect(Brush.horizontalGradient(colors, startX = start, endX = start + span))
+                val brush = Brush.horizontalGradient(colors, startX = 0f, endX = span)
+                onDrawBehind {
+                    val start = size.width * 1.2f - span * phase.coerceIn(0f, 1f)
+                    translate(left = start) { drawRect(brush) }
+                }
             }
     )
 }

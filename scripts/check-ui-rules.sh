@@ -4,8 +4,10 @@
 # 四项检查，各由一个 grep / awk 判定、期望值为 0、命中时打印「文件:行:内容」：
 #   1. 页面自画底衬渐变：*Screen.kt 出现 Brush.verticalGradient(listOf(t.backdropA
 #      （底衬统一走 foundation/Backdrop.kt，避免每屏各建一份全屏渐变）
-#   2. 绘制 lambda 内分配：onDrawBehind / onDrawWithContent 体内出现 Path() 或 Brush. 构造
-#      （对象进 drawWithCache 的 build 块，绘制期只读）
+#   2. 绘制 lambda 内分配：onDrawBehind / onDrawWithContent / Modifier.drawBehind 体内出现
+#      Path() 或 Brush. 构造（对象进 drawWithCache 的 build 块，绘制期只读）
+#      三种写法都是「每帧重跑的绘制 lambda」，漏掉 drawBehind 就等于漏掉一半的真实调用面：
+#      live 样本 ui/components/StateSkeleton.kt 的 shimmer 正是写在外观等价、门禁不认的那种形态里。
 #   3. 动画值走布局：Modifier.offset(...) 引用 animate*AsState / animateFloat 得到的值
 #      （改走 foundation/GpuMotion.kt 的绘制期位移，避免每帧 measure/layout）
 #   4. 转场裸 spec：AnimatedVisibility(...) 参数块内出现不带 animationSpec 的
@@ -81,7 +83,8 @@ scan_page_backdrop() {
     return 0
 }
 
-# 检查 2：onDrawBehind / onDrawWithContent 体内不得 new Path() / Brush.；按花括号深度跟踪块范围。
+# 检查 2：绘制 lambda（onDrawBehind / onDrawWithContent / Modifier.drawBehind）体内不得
+# new Path() / Brush.；按花括号深度跟踪块范围。修法是把对象搬进 drawWithCache 的 build 块缓存。
 scan_draw_alloc() {
     # find 失败必须传上去（pipefail 下 || 能捕获），不能静默当成「0 处命中」。
     local files
@@ -94,7 +97,7 @@ scan_draw_alloc() {
             {
                 opened = braces($0)
                 closed = closebraces($0)
-                if ($0 ~ /(onDrawBehind|onDrawWithContent)[[:space:]]*\{/) {
+                if ($0 ~ /(onDrawBehind|onDrawWithContent|\.drawBehind)[[:space:]]*\{/) {
                     inblock = 1
                     entry = depth
                 }
