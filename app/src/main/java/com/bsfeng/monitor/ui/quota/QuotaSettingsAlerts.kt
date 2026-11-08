@@ -199,8 +199,13 @@ internal fun NotificationPermissionRow() {
 private fun Context.notificationsAllowed(): Boolean =
     NotificationManagerCompat.from(this).areNotificationsEnabled()
 
-/** 额度预警通知渠道 id：与 [com.bsfeng.monitor.quota.QuotaAlertNotifier] 的私有常量保持一致。 */
-private const val QUOTA_ALERT_CHANNEL_ID = "quota_alert"
+/**
+ * 额度预警通知渠道 id：与 [com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_ID] **同一个**。
+ *
+ * 不能各写一份字面量：渠道属性创建后不可改，两边不一致就会在设置页出现两条同名渠道，
+ * 用户关掉的可能是「测试通知」那条，真实预警照旧上锁屏。
+ */
+private const val QUOTA_ALERT_CHANNEL_ID = com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_ID
 
 /** 测试通知用独立 id，不覆盖真实的额度提醒（7301）。 */
 private const val QUOTA_TEST_NOTIFICATION_ID = 7302
@@ -217,9 +222,13 @@ internal fun postQuotaTestNotification(context: Context) {
         manager.createNotificationChannel(
             NotificationChannel(
                 QUOTA_ALERT_CHANNEL_ID,
-                "额度预警",
+                com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply { description = "额度剩余不足时提醒" },
+            ).apply {
+                description = com.bsfeng.monitor.quota.QuotaAlertNotifier.CHANNEL_DESCRIPTION
+                // 与真实提醒同口径：测试通知也不许露在锁屏上
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            },
         )
     }
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -232,5 +241,6 @@ internal fun postQuotaTestNotification(context: Context) {
         .setContentTitle("额度预警 · 测试通知")
         .setContentText("渠道正常：额度不足时会在这里提醒你。")
         .setAutoCancel(true)
+        .setVisibility(Notification.VISIBILITY_SECRET)
     runCatching { manager.notify(QUOTA_TEST_NOTIFICATION_ID, builder.build()) }
 }

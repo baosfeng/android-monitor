@@ -65,10 +65,16 @@ object DebugConfig {
         if (value) log("DebugConfig: enabled=$value")
     }
 
-    /** 输出调试日志 */
+    /**
+     * 输出调试日志（tag 固定 `MonitorDebug`）。
+     *
+     * 两条口径：
+     * - **release 恒静默**：[BuildConfig.DEBUG] 为 false 时即使 prefs 里残留 true 也不打；
+     * - 承载**含用户数据**的诊断（屏幕原文、账目、界面树样本）一律走这里，不走裸 `Log.d(tag=…)` ——
+     *   logcat 是系统级共享文件，裸日志在 release 包里同样生效，抓一次就是一份明文账本。
+     */
     fun log(message: String) {
-        if (enabled) {
-            android.util.Log.d("MonitorDebug", message)
-        }
+        if (!BuildConfig.DEBUG || !enabled) return
+        android.util.Log.d("MonitorDebug", message)
     }
 }

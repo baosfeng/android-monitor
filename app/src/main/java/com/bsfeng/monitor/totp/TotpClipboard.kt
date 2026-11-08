@@ -1,8 +1,11 @@
 package com.bsfeng.monitor.totp
 
+import android.annotation.SuppressLint
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.PersistableBundle
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +39,7 @@ class TotpClipboard(
     fun copy(text: String): Boolean {
         val manager = clipboard ?: return false
         val wrote = runCatching {
-            manager.setPrimaryClip(ClipData.newPlainText(CLIP_LABEL, text))
+            manager.setPrimaryClip(sensitiveClip(text))
         }.isSuccess
         if (!wrote) return false
         cancelPendingClear()
@@ -78,8 +81,30 @@ class TotpClipboard(
         return clip.getItemAt(0)?.coerceToText(appContext)?.toString()
     }
 
-    private companion object {
+    internal companion object {
         const val TAG = "TotpClipboard"
+
+        /** 剪贴板标签：部分 ROM 的剪贴板历史会显示它，所以只写「验证码」，不带账号 / 发行方。 */
         const val CLIP_LABEL = "验证码"
+
+        /**
+         * 组装「敏感剪贴板条目」：Android 13+ 读 [ClipDescription.EXTRA_IS_SENSITIVE]，
+         * 系统剪贴板预览（含「已复制到剪贴板」浮层）会遮成「敏感内容」，不再直出 6 位验证码。
+         *
+         * 低版本不认识这个 extra，写入只是无害的附加键 —— 不必按 SDK 分支。
+         * 必须写进 [ClipData.getDescription] 的 extras（类型是 [PersistableBundle]）：
+         * 挂在 ClipData.Item 上的 extras 系统不读。
+         *
+         * 常量标了 InlinedApi：「低版本不必分支」成立的前提正是它被内联成字面量写进 class，
+         * 老系统上只是多一个无人识别的键，不会 NoSuchFieldError。
+         */
+        @SuppressLint("InlinedApi")
+        fun sensitiveClip(text: String): ClipData {
+            val clip = ClipData.newPlainText(CLIP_LABEL, text)
+            val extras = clip.description.extras ?: PersistableBundle()
+            extras.putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            clip.description.extras = extras
+            return clip
+        }
     }
 }
