@@ -77,10 +77,12 @@ internal fun TransferEngine.uriForPersist(task: TransferTask): String? {
 }
 
 internal fun TransferEngine.persistTask(task: TransferTask, fileUri: String?) {
-    scope.launch {
+    val job = scope.launch {
         runCatching { taskStore.upsert(TransferTaskStore.Entry(task = task, fileUri = fileUri)) }
             .onFailure { Log.w(TransferEngine.TAG, "任务历史写库失败: ${it.message}") }
     }
+    // 让测试能「等落库完成」而不是 sleep 赌调度；生产路径不读这个队列
+    trackPersist(job)
 }
 
 /**

@@ -162,6 +162,17 @@ fun MainScreen(
     val visibleEvents = remember(state.recentEvents, filterIndex) {
         state.recentEvents.matching(filter)
     }
+    // A10：requester 表按当前可见行裁剪。focusRequesterFor 在每行组合时 getOrPut，
+    // LazyColumn 只回收 composable、不回收这张 Map —— 不裁的话滚动过的事件会永久累计。
+    // 待回焦的 id 与抽屉里的 id 一并保留：那一行可能刚好不在当前页。
+    val visibleRowIds = remember(visibleEvents, pendingRowFocus, selected?.id) {
+        buildSet {
+            visibleEvents.forEach { add(it.id) }
+            pendingRowFocus?.let { add(it) }
+            selected?.id?.let { add(it) }
+        }
+    }
+    LaunchedEffect(visibleRowIds) { rowRequesters.retainOnly(visibleRowIds) }
     val groups = remember(visibleEvents) { groupByHourDesc(visibleEvents) }
 
     val realState = when {
@@ -295,6 +306,16 @@ fun MainScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
+}
+
+/**
+ * 把 requester 表裁剪到当前可见行集合（A10）。
+ *
+ * 泛型而不是只收 FocusRequester：单测不需要构造 Compose 对象，直接拿 String 断言
+ * 「表大小 ≤ 当前列表长度」；生产调用点见 [MainScreen]。
+ */
+internal fun <V> MutableMap<String, V>.retainOnly(visibleIds: Collection<String>) {
+    keys.retainAll(visibleIds.toSet())
 }
 
 /** 页头：「今日已记录 N 条 · 最近更新 HH:mm」+ 大标题 + 排序按钮（44dp，0.96，LIGHT）。 */

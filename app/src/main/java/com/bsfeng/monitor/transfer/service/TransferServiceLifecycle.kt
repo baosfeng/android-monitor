@@ -12,7 +12,6 @@ import com.bsfeng.monitor.transfer.discovery.UdpDiscoveryService
 import com.bsfeng.monitor.transfer.transport.MiniHttpServer
 import com.bsfeng.monitor.transfer.policy.SendStallReason
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.bsfeng.monitor.transfer.service.TransferEngine.Companion.TAG
 import com.bsfeng.monitor.transfer.service.TransferEngine.Companion.PAUSE_MINUTES
@@ -44,7 +43,10 @@ internal fun TransferEngine.startImpl(): Int {
                 udp.start(scope)
             }
             _discoverable.value = settings.discoverable
-            scope.launch { tickerLoop() }
+            // 幂等：startImpl 只在 started 翻转时走到这里，正常路径旧 job 已是 null；
+            // 先 cancel 兜住「上次 stop 之前抛异常」的残留，保证任意时刻只有一条 ticker。
+            tickerJob?.cancel()
+            tickerJob = scope.launch { tickerLoop() }
             historyLoaded.set(true)
             scope.launch { loadPersistedHistory() }
             _running.value = true
@@ -71,6 +73,10 @@ internal fun TransferEngine.startImpl(): Int {
 internal fun TransferEngine.stopImpl() {
     // 手动关闭 / 服务销毁：取消「自动关闭」计时（重新 start 会重新计时）
     autoClose.cancel()
+    // 先 cancel 再翻转 started：反过来的话，ticker 可能在 cancel 之前就看到 started=false
+    // 并「正常退出」，那样 Job 是 completed 而不是 cancelled，外部无法区分「被停止」。
+    tickerJob?.cancel()
+    tickerJob = null
     if (!started.compareAndSet(true, false)) return
     server?.stop()
     server = null
@@ -102,8 +108,13 @@ internal fun TransferEngine.refreshAutoCloseScheduleImpl() {
 // ─────────────────────────── 后台 ticker 与超时收敛 ───────────────────────────
 
 internal suspend fun TransferEngine.tickerLoop() {
-    while (scope.isActive) {
+    // 条件用 started：引擎 scope 是进程级、永不取消，用它会让每次 start 都多叠一条
+    // 永不退出的 ticker（每 5 秒多一次 refreshDevices / 超时收敛）。
+    while (started.get()) {
         delay(tickMs)
+        // stop 可能就发生在 delay 期间：醒来后再判一次，避免多跑一拍
+        if (!started.get()) break
+        tickerTicks.incrementAndGet()
         refreshDevices()
         enforceTimeouts()
         sessionTasks.pruneExpiredSessions()

@@ -21,7 +21,12 @@ internal object TransferEngineHolder {
 
     @Synchronized
     fun reset() {
-        instance?.let { runCatching { it.stop() } }
+        instance?.let { engine ->
+            runCatching { engine.stop() }
+            // 只 stop 会留下在途 persistTask：Robolectric 跨用例共享同一个 DatabaseHelper，
+            // 它们会在下一个用例里落库，把共享表写成多余行（本仓实测 6 行 / 期望 1 行）。
+            runCatching { engine.disposeForTesting() }
+        }
         instance = null
     }
 }

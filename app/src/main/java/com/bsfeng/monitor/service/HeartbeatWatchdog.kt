@@ -8,6 +8,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val PREFS_NAME = "monitor_prefs"
+private const val KEY_LAST_BEAT_MS = "heartbeat_last_ms"
+private const val KEY_GAP_MS = "heartbeat_gap_ms"
+private const val KEY_GAP_RECOVERED_AT = "heartbeat_gap_recovered_at"
+
 /**
  * 进程活性心跳：把「无障碍服务是否真的在跑」变成可观测的历史事实。
  *
@@ -35,10 +40,6 @@ import java.util.Locale
 object HeartbeatWatchdog {
 
     private const val TAG = "Heartbeat"
-    private const val PREFS_NAME = "monitor_prefs"
-    private const val KEY_LAST_BEAT_MS = "heartbeat_last_ms"
-    private const val KEY_GAP_MS = "heartbeat_gap_ms"
-    private const val KEY_GAP_RECOVERED_AT = "heartbeat_gap_recovered_at"
 
     /**
      * 心跳超时阈值：tick 间隔超过它就认为中间「进程没被调度」。
@@ -67,30 +68,28 @@ object HeartbeatWatchdog {
     /**
      * 落一次心跳（轮询链每次跳到时调用）。
      *
-     * 顺带回看与上次心跳的间隔：若超过阈值，说明这段时间进程没在跑（冻结或被杀），
-     * 记一条中断记录供设置页展示。恢复后心跳会连续更新，因此不会重复记录。
+     * 每拍只更新进程内快照；prefs 由 [HeartbeatTracker] 节流写（首次 / 每 [HeartbeatTracker.FLUSH_INTERVAL_MS]
+     * / 检测到中断时才落盘）。轮询在息屏后照跑，整夜 1Hz 写 prefs 会持续触发磁盘合并，
+     * 而设置页 / 健康检查要的只是「秒级新鲜」这个读数，内存快照就够。
      *
      * @param wallClockMs 墙钟时间，仅用于「中断发生在几点」的展示
      */
     fun beat(context: Context, nowMs: Long, wallClockMs: Long = System.currentTimeMillis()) {
         runCatching {
-            val p = prefs(context)
-            val last = p.getLong(KEY_LAST_BEAT_MS, 0L)
+            val tracker = tracker(context)
+            val last = tracker.currentLastBeatMs()
+            tracker.beat(nowMs, wallClockMs)
             // 恢复正常后才有可能「看到」中断：此刻进程在跑，说明刚被唤醒/重启
             if (isStale(last, nowMs)) {
-                p.edit {
-                    putLong(KEY_GAP_MS, nowMs - last)
-                    putLong(KEY_GAP_RECOVERED_AT, wallClockMs)
-                }
                 Log.w(TAG, "检测到监控中断 " + (nowMs - last) / 1000 + " 秒（进程可能被冻结）")
             }
-            p.edit { putLong(KEY_LAST_BEAT_MS, nowMs) }
-        }.onFailure { Log.w(TAG, "心跳落盘失败", it) }
+        }.onFailure { Log.w(TAG, "心跳记录失败", it) }
     }
 
     /** 服务主动停止（`onDestroy`）时清掉心跳，避免「用户自己关掉服务」被当成中断。 */
     fun onServiceStopped(context: Context) {
-        runCatching { prefs(context).edit { putLong(KEY_LAST_BEAT_MS, 0L) } }
+        runCatching { tracker(context).reset() }
+            .onFailure { Log.w(TAG, "清心跳失败", it) }
     }
 
     /**
@@ -132,9 +131,14 @@ object HeartbeatWatchdog {
         return isStale(lastBeatMs(context), nowMs, thresholdMs)
     }
 
-    /** 上次心跳时间（`elapsedRealtime()`；0 = 从未记录）。 */
+    /**
+     * 上次心跳时间（`elapsedRealtime()`；0 = 从未记录）。
+     *
+     * 优先读进程内快照：它比 prefs 新（最多差 [HeartbeatTracker.FLUSH_INTERVAL_MS]），
+     * 否则健康检查会在两次落盘之间把「活着」误判成「停更」。
+     */
     fun lastBeatMs(context: Context): Long =
-        runCatching { prefs(context).getLong(KEY_LAST_BEAT_MS, 0L) }.getOrDefault(0L)
+        runCatching { tracker(context).currentLastBeatMs() }.getOrDefault(0L)
 
     /**
      * 设置页提示文案。
@@ -166,4 +170,115 @@ object HeartbeatWatchdog {
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    /** 进程内单例：心跳是全局事实，一个进程一份快照即可。 */
+    @Volatile
+    private var trackerInstance: HeartbeatTracker? = null
+
+    @Synchronized
+    private fun tracker(context: Context): HeartbeatTracker =
+        trackerInstance ?: HeartbeatTracker(PrefsHeartbeatStore(context.applicationContext))
+            .also { trackerInstance = it }
+}
+
+/** 心跳的持久化面：抽成接口只为单测能用「可计数假实现」钉住落盘次数。 */
+internal interface HeartbeatStore {
+    fun readLastBeatMs(): Long
+    fun writeLastBeatMs(nowMs: Long)
+    fun writeGap(gapMs: Long, recoveredAtWallClockMs: Long)
+    fun clearLastBeatMs()
+}
+
+/**
+ * 心跳的「内存快照 + 节流落盘」逻辑（纯逻辑，不碰 Context）。
+ *
+ * 为什么节流：轮询链每秒 beat 一次，息屏 / 整夜照跑；每次 prefs.edit{apply} 都会触发
+ * 一次磁盘合并，只为「设置页可能看一眼心跳」不值得。内存值每拍更新（健康判定与设置页
+ * 读到的仍是秒级新鲜度），prefs 只在首次、距上次落盘超过 [FLUSH_INTERVAL_MS]、或检测到
+ * 中断（罕见、必须立刻留痕）时写。
+ */
+internal class HeartbeatTracker(
+    private val store: HeartbeatStore,
+    private val thresholdMs: Long = HeartbeatWatchdog.STALE_THRESHOLD_MS,
+    private val flushIntervalMs: Long = FLUSH_INTERVAL_MS,
+) {
+    // 心跳从轮询主线程写、设置页 / 桌面组件从各自线程读：64 位 long 在 32 位进程上不保证原子
+    @Volatile
+    private var lastBeatMs = 0L
+
+    @Volatile
+    private var lastFlushAtMs = 0L
+
+    @Volatile
+    private var loaded = false
+
+    /** 本进程是否已落过盘：首拍必须写一次，否则「进程起来不到 1 分钟就被杀」会丢整个心跳。 */
+    @Volatile
+    private var flushed = false
+
+    /** 落一次心跳；返回时内存快照一定是 [nowMs]。 */
+    fun beat(nowMs: Long, wallClockMs: Long) {
+        val last = currentLastBeatMs()
+        if (HeartbeatWatchdog.isStale(last, nowMs, thresholdMs)) {
+            // 中断是罕见事件：立即落盘，进程即便下一秒被杀也不丢这条记录
+            store.writeGap(nowMs - last, wallClockMs)
+            persist(nowMs)
+        } else if (!flushed || nowMs - lastFlushAtMs >= flushIntervalMs) {
+            persist(nowMs)
+        }
+        lastBeatMs = nowMs
+        loaded = true
+    }
+
+    /** 进程内最新心跳；首次读取时从落盘值装载。 */
+    fun currentLastBeatMs(): Long {
+        if (!loaded) {
+            lastBeatMs = store.readLastBeatMs()
+            loaded = true
+        }
+        return lastBeatMs
+    }
+
+    /** 服务主动停止：清空内存与落盘（下次 beat 从头算，不留下假中断）。 */
+    fun reset() {
+        lastBeatMs = 0L
+        loaded = true
+        lastFlushAtMs = 0L
+        flushed = false
+        store.clearLastBeatMs()
+    }
+
+    private fun persist(nowMs: Long) {
+        store.writeLastBeatMs(nowMs)
+        lastFlushAtMs = nowMs
+        flushed = true
+    }
+
+    companion object {
+        /** 落盘节流窗口：1 分钟。300 拍（约 5 分钟）最多写 6 次。 */
+        const val FLUSH_INTERVAL_MS: Long = 60_000L
+    }
+}
+
+/** [HeartbeatStore] 的 SharedPreferences 实现。 */
+private class PrefsHeartbeatStore(private val appContext: Context) : HeartbeatStore {
+    override fun readLastBeatMs(): Long = prefs().getLong(KEY_LAST_BEAT_MS, 0L)
+
+    override fun writeLastBeatMs(nowMs: Long) {
+        prefs().edit { putLong(KEY_LAST_BEAT_MS, nowMs) }
+    }
+
+    override fun writeGap(gapMs: Long, recoveredAtWallClockMs: Long) {
+        prefs().edit {
+            putLong(KEY_GAP_MS, gapMs)
+            putLong(KEY_GAP_RECOVERED_AT, recoveredAtWallClockMs)
+        }
+    }
+
+    override fun clearLastBeatMs() {
+        prefs().edit { putLong(KEY_LAST_BEAT_MS, 0L) }
+    }
+
+    private fun prefs() =
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 }

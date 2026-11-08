@@ -59,6 +59,8 @@ class TransferResendSourceTest {
     @After
     fun tearDown() {
         engine?.stop()
+        // 测试结束即取消进程级 scope：排队中的 persistTask 不能在下一个用例里落库
+        engine?.disposeForTesting()
         engine = null
         File(context.cacheDir, "transfer").deleteRecursively()
         ShadowStatFs.reset()
@@ -98,15 +100,6 @@ class TransferResendSourceTest {
         return Uri.fromFile(file)
     }
 
-    private fun await(timeoutMs: Long = 3_000L, condition: () -> Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return true
-            Thread.sleep(20)
-        }
-        return condition()
-    }
-
     @Test
     fun `发送任务按方向落库源 Uri 而不是 publishedFiles`() {
         val transferEngine = newEngine()
@@ -115,9 +108,10 @@ class TransferResendSourceTest {
         transferEngine.sourceFiles[transferEngine.taskKey(target.sessionId, target.file.fileId)] = uri
 
         transferEngine.upsertTask(target)
+        // 确定性等待在途落库，而不是 sleep 赌调度
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
 
-        assertTrue("发送任务的源 Uri 必须落库", await { store.loadRecent().singleOrNull()?.fileUri != null })
-        assertEquals(uri.toString(), store.loadRecent().single().fileUri)
+        assertEquals("发送任务的源 Uri 必须落库", uri.toString(), store.loadRecent().single().fileUri)
     }
 
     @Test
@@ -128,8 +122,8 @@ class TransferResendSourceTest {
         transferEngine.publishedFiles[transferEngine.taskKey(target.sessionId, target.file.fileId)] = uri
 
         transferEngine.upsertTask(target)
+        runBlocking { transferEngine.awaitPendingPersistsForTesting() }
 
-        assertTrue(await { store.loadRecent().singleOrNull()?.fileUri != null })
         assertEquals(uri.toString(), store.loadRecent().single().fileUri)
     }
 
@@ -140,7 +134,7 @@ class TransferResendSourceTest {
         val uri = readableUri()
         first.sourceFiles[first.taskKey(target.sessionId, target.file.fileId)] = uri
         first.upsertTask(target)
-        assertTrue(await { store.loadRecent().singleOrNull()?.fileUri != null })
+        runBlocking { first.awaitPendingPersistsForTesting() }
         assertEquals(uri.toString(), store.loadRecent().single().fileUri)
 
         // 模拟进程重启：新实例从库里加载历史

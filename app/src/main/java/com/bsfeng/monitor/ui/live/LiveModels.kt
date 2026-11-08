@@ -99,16 +99,51 @@ fun peakOf(values: List<Float>): Pair<Int, Float> {
     return idx to max
 }
 
-/** 当天本地 00:00 的毫秒时间戳（按系统时区取日界，不用 UTC 偏移）。 */
-fun startOfDay(now: Long): Long =
-    Instant.ofEpochMilli(now).atZone(ZONE).toLocalDate().atStartOfDay(ZONE).toInstant().toEpochMilli()
+/**
+ * 当天本地 00:00 的毫秒时间戳。
+ *
+ * 每次调用都取 [ZoneId.systemDefault]：用户改系统时区后，日界要立刻跟上，不能像旧的
+ * `static val ZONE` 那样固化到进程重启。[zone] 供单测钉住 DST 边界。
+ */
+fun startOfDay(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+    Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+
+/**
+ * N 天前那一天的本地 00:00（按日历回推）。
+ *
+ * 不要用 `todayStart - N * DAY_MS`：DST 切换日只有 23 / 25 小时，定长回推会落在
+ * 前一天 23 点或当天 1 点，周 / 月窗口的起点与轴标签一起偏一小时。
+ */
+fun startOfDaysAgo(
+    days: Int,
+    now: Long = System.currentTimeMillis(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): Long = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    .minusDays(days.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
+
+/** 从 [days]-1 天前到今天的每个本地 00:00（升序），供按自然日切桶的 SQL 聚合用。 */
+fun dayStarts(
+    days: Int,
+    now: Long = System.currentTimeMillis(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): LongArray {
+    require(days > 0) { "天数必须为正" }
+    val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return LongArray(days) { index ->
+        today.minusDays((days - 1 - index).toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+}
+
+/** 时间戳在本地时区下的日期（财务的 date 字符串口径与它同源）。 */
+fun localDateOf(timestamp: Long, zone: ZoneId = ZoneId.systemDefault()): java.time.LocalDate =
+    Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
 
 const val DAY_MS: Long = 86_400_000L
 const val HOUR_MS: Long = 3_600_000L
 const val HOURS_PER_DAY: Int = 24
 
-// J8：DateTimeFormatter 不可变且线程安全（SimpleDateFormat 非线程安全，且随默认时区在类加载时固化）。
-private val ZONE: ZoneId = ZoneId.systemDefault()
+// J8：DateTimeFormatter 不可变且线程安全（SimpleDateFormat 非线程安全）。
+// 时区不缓存：DateTimeFormatter 的 format 入参自带时区，改系统时区后下一次调用即生效。
 // 固定 Locale.CHINA：这些格式只含数字与中文字面量，跟随系统语言没有意义；
 // 用常量还避免「用户切系统语言后静态 formatter 不更新」的 ConstantLocale 问题
 private val clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)
@@ -116,7 +151,8 @@ private val clockSecFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.CHIN
 private val dayLabelFormat = DateTimeFormatter.ofPattern("MM-dd", Locale.CHINA)
 private val fullDateFormat = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日", Locale.CHINA)
 
-private fun zonedOf(timestamp: Long): ZonedDateTime = Instant.ofEpochMilli(timestamp).atZone(ZONE)
+private fun zonedOf(timestamp: Long): ZonedDateTime =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault())
 
 fun formatClock(timestamp: Long): String = clockFormat.format(zonedOf(timestamp).toLocalTime())
 fun formatClockSec(timestamp: Long): String = clockSecFormat.format(zonedOf(timestamp).toLocalTime())

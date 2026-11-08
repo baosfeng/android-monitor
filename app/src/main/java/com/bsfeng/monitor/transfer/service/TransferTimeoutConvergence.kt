@@ -55,6 +55,11 @@ internal class TransferTimeoutConvergence(private val engine: TransferEngine) {
         session.failureCode = code
         session.failureMessage = message
         session.pin = null
+        // 失败会话不再续传（续传只认还活着的 /upload 会话），分片留着只会把
+        // cacheDir/transfer 堆到几百 MB，且 UI 没有清理入口：与取消 / 拒绝同口径一起删。
+        session.files.values.forEach { incoming ->
+            incoming.part?.let { part -> if (part.exists()) part.delete() }
+        }
         // 先同步任务行再清 PIN 弹层：观察者看到弹层消失时任务状态已经是最终态
         engine.refreshSessionTasks(session)
         if (engine._pinPrompt.value?.sessionId == session.sessionId) engine._pinPrompt.value = null

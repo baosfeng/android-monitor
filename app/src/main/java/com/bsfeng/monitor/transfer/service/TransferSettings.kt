@@ -1,8 +1,12 @@
 package com.bsfeng.monitor.transfer.service
 
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import com.bsfeng.monitor.domain.transfer.PairingPolicy
+import com.bsfeng.monitor.util.KeystoreAesGcmCipher
+import com.bsfeng.monitor.util.SecretBox
+import com.bsfeng.monitor.util.SecretCipher
 import org.json.JSONException
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -11,12 +15,16 @@ import java.security.SecureRandom
  * 「传送」的持久化设置（协议 §5）：本端身份、配对密钥、提示音开关。
  *
  * - `deviceId` 首次生成后固定（`and-` + 6 位 hex），与协议示例 `and-7f3a9c` 同形；
- * - 配对密钥按 `deviceId` 持久化，32 字节随机 hex，可在设置里移除；
+ * - 配对密钥按 `deviceId` 持久化（32 字节随机 hex），落盘前整体走 Keystore AES-GCM 加密 ——
+ *   它命中即免 PIN 直批，明文存等于「拿到文件＝拿到通行证」，可在设置里移除；
  * - 提示音三项默认值按协议 §7：完成开、失败关、新设备关；
  * - 发现开关 / 免配对窗口 / 体积阈值：新增的「少打断」设置，策略判定在
  *   [PairingPolicy]（纯函数），本类只负责持久化。
  */
-class TransferSettings(context: Context) {
+class TransferSettings(
+    context: Context,
+    private val cipher: SecretCipher = resolveCipher(),
+) {
 
     private val appContext: Context = context.applicationContext
     private val prefs = appContext
@@ -194,12 +202,45 @@ class TransferSettings(context: Context) {
         if (map.remove(deviceId) != null) writePairingKeys(map)
     }
 
-    /** 全部配对密钥（`deviceId` → key）。 */
-    fun pairingKeys(): Map<String, String> =
-        PairingCodec.decode(prefs.getString(KEY_PAIRING, null))
+    /**
+     * 全部配对密钥（`deviceId` → key）。
+     *
+     * 读口径（fail-closed）：密文解不开——Keystore 被系统重置、值被改坏——一律按空表处理。
+     * 这张表是「命中即免 PIN 直批」的凭据，宁可让对端重新配一次，也不能拿半截数据去比。
+     */
+    fun pairingKeys(): Map<String, String> = PairingCodec.decode(readPairingJson())
+
+    /**
+     * 读 `pairing_keys` 的 JSON 正文。
+     *
+     * 新格式是 `v1:` + Keystore 密文；老版本直接存明文 JSON，读到即就地加密回写（升级一次，
+     * 之后盘上不再有明文）。明文迁移失败（加密不可用）仍返回旧正文，配对关系不丢。
+     */
+    private fun readPairingJson(): String? {
+        val stored = prefs.getString(KEY_PAIRING, null) ?: return null
+        if (!SecretBox.isEncoded(stored)) {
+            if (stored.isNotBlank()) writePairingCiphertext(stored)
+            return stored
+        }
+        return runCatching { String(SecretBox.decode(cipher, stored), Charsets.UTF_8) }
+            .onFailure { Log.w(TAG, "配对密钥解密失败，按未配对处理：" + it.javaClass.simpleName) }
+            .getOrNull()
+    }
 
     private fun writePairingKeys(map: Map<String, String>) {
-        prefs.edit { putString(KEY_PAIRING, PairingCodec.encode(map)) }
+        if (map.isEmpty()) {
+            // 清空时删键而不是留一密文空表：让「没有配对」在盘上也看得出来
+            prefs.edit { remove(KEY_PAIRING) }
+            return
+        }
+        writePairingCiphertext(PairingCodec.encode(map))
+    }
+
+    /** 加密后落盘；加密不可用只记日志、不退回明文。 */
+    private fun writePairingCiphertext(json: String) {
+        runCatching { SecretBox.encode(cipher, json.toByteArray(Charsets.UTF_8)) }
+            .onSuccess { encoded -> prefs.edit { putString(KEY_PAIRING, encoded) } }
+            .onFailure { Log.w(TAG, "配对密钥加密失败（未落盘）：" + it.javaClass.simpleName) }
     }
 
     private fun newDeviceId(): String {
@@ -233,6 +274,22 @@ class TransferSettings(context: Context) {
         /** 上次解析出的本机名称，仅作展示缓存。 */
         private const val KEY_ALIAS_CACHE = "alias"
         private const val KEY_PAIRING = "pairing_keys"
+
+        /** 配对密钥的 Keystore 别名（独立于 auth_token_key / quota_credential_key）。 */
+        private const val KEY_ALIAS = "lan_transfer_pairing_key"
+
+        /**
+         * 默认 cipher 的替身口子：Robolectric 沙箱没有 AndroidKeyStore，引擎级用例
+         * （TransferEngineAutoApproveTest）经由 TransferEngine 内部构造设置，没法从外面传参。
+         * 生产恒为 null → Keystore；显式传入 cipher 的构造永远优先于这里。
+         */
+        @Volatile
+        internal var overrideCipherForTesting: SecretCipher? = null
+
+        private fun resolveCipher(): SecretCipher =
+            overrideCipherForTesting ?: KeystoreAesGcmCipher(KEY_ALIAS)
+
+        private const val TAG = "TransferSettings"
         private const val KEY_SOUND_COMPLETE = "sound_complete"
         private const val KEY_SOUND_FAILURE = "sound_failure"
         private const val KEY_SOUND_NEW_DEVICE = "sound_new_device"
@@ -250,7 +307,7 @@ class TransferSettings(context: Context) {
 }
 
 /**
- * 配对密钥表的序列化（`pairing_keys` 一行 JSON）。
+ * 配对密钥表的序列化（`pairing_keys` 的 JSON 正文；整段在落盘前已加密，见 [TransferSettings]）。
  *
  * fail-closed：非 JSON / 非对象一律解码为空表，不让坏数据阻断传输。
  */

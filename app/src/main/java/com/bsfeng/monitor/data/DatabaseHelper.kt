@@ -24,13 +24,35 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(
         /** 局域网互传任务历史表（v4 新增）。 */
         const val TABLE_TRANSFER_TASKS = "transfer_tasks"
 
-        @Volatile
-        private var INSTANCE: DatabaseHelper? = null
+        /**
+         * application 实例 → helper（弱键 + 弱引用值）。
+         *
+         * 不用「全局单例 + 换 application 就 close 重建」：并发调用会互相劫持——测试里上一个用例
+         * 残留的协程用旧 Application 调进来，会把当前用例的 helper 关掉，两次读写分裂到两个连接上
+         * （实测 transfer 任务历史 count 偶发为 0 / SQLITE_BUSY）。也不做 LRU 淘汰：淘汰会把仍被
+         * 业务对象持有的 helper 关掉，下一次再访问变成「同一路径两条连接」。
+         *
+         * 弱引用意味着：调用方（ServiceContainer / 引擎 / store）持有期间恒为同一个实例；
+         * 用例结束后对象可被回收，helper 由 SQLiteClosable 的 finalizer 关连接，测试进程里
+         * 不会无限堆积。生产进程 Application 唯一且长期被持引用，行为等价单例。
+         */
+        private val helpers =
+            java.util.WeakHashMap<Context, java.lang.ref.WeakReference<DatabaseHelper>>()
 
-        fun getInstance(context: Context): DatabaseHelper =
-            INSTANCE ?: synchronized(this) {
-                INSTANCE ?: DatabaseHelper(context.applicationContext).also { INSTANCE = it }
+        /**
+         * 取当前 application 对应的 helper。
+         *
+         * 判据用 `applicationContext` 的**身份**：生产进程内 Application 唯一，永远命中同一项；
+         * Robolectric 每个用例新建 Application，各自一份干净库，避免上一个用例排队中的异步落库
+         * （transfer 的 persistTask 等）写进下一个用例的共享表。
+         */
+        fun getInstance(context: Context): DatabaseHelper {
+            val app = context.applicationContext ?: context
+            synchronized(this) {
+                helpers[app]?.get()?.let { return it }
+                return DatabaseHelper(app).also { helpers[app] = java.lang.ref.WeakReference(it) }
             }
+        }
     }
 
     /** PRAGMA table_info 判断列是否存在（不依赖异常做流程控制）。 */
