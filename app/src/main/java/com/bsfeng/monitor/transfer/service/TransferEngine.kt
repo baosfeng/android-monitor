@@ -90,7 +90,8 @@ class TransferEngine internal constructor(
     internal val settings = TransferSettings(appContext)
     internal val registry = DeviceRegistry()
     internal val downloads = DownloadsSink(appContext)
-    internal val client = MiniHttpClient()
+    /** HTTP 客户端（测试可换成只记录请求的替身，见 [createForTesting]）。 */
+    internal var client: MiniHttpClient = MiniHttpClient()
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     internal val taskStore: TransferTaskStore by lazy { TransferTaskStore(DatabaseHelper.getInstance(appContext)) }
     internal val started = AtomicBoolean(false)
@@ -196,10 +197,10 @@ class TransferEngine internal constructor(
     // ───────── 接收（实现见 TransferReceiveRoutes） ─────────
 
     override suspend fun info(): ApiResponse = receiveRoutes.info()
-    override suspend fun offer(body: JSONObject, pairKey: String?): ApiResponse =
-        receiveRoutes.offer(body, pairKey)
-    override suspend fun offerStatus(sessionId: String): ApiResponse =
-        receiveRoutes.offerStatus(sessionId)
+    override suspend fun offer(body: JSONObject, pairKey: String?, source: String): ApiResponse =
+        receiveRoutes.offer(body, pairKey, source)
+    override suspend fun offerStatus(sessionId: String, token: String?): ApiResponse =
+        receiveRoutes.offerStatus(sessionId, token)
 
     override suspend fun upload(
         sessionId: String,
@@ -209,7 +210,8 @@ class TransferEngine internal constructor(
         body: InputStream,
         contentLength: Long,
     ): ApiResponse = receiveRoutes.upload(sessionId, fileId, offset, token, body, contentLength)
-    override suspend fun cancel(sessionId: String): ApiResponse = receiveRoutes.cancel(sessionId)
+    override suspend fun cancel(sessionId: String, token: String?, senderDeviceId: String?): ApiResponse =
+        receiveRoutes.cancel(sessionId, token, senderDeviceId)
 
     // ───────── 发送 ─────────
     /** 把选中的 URI 发给 [peer]（后台执行，进度写回 tasks）。 */
@@ -277,6 +279,8 @@ class TransferEngine internal constructor(
 
     internal val deletedSnapshots = ConcurrentHashMap<String, DeletedTask>()
     internal val sessions = ConcurrentHashMap<String, IncomingSession>()
+    /** 每来源 IP 的 offer 冷却窗（SEC-04；纯逻辑见 [com.bsfeng.monitor.transfer.policy.OfferRateLimiter]）。 */
+    internal val offerLimiter = com.bsfeng.monitor.transfer.policy.OfferRateLimiter()
     internal val outgoing = ConcurrentHashMap<String, OutgoingSession>()
     internal val publishedFiles = ConcurrentHashMap<String, Uri>()
     /**
@@ -311,8 +315,10 @@ class TransferEngine internal constructor(
             confirmTimeoutMs: Long = CONFIRM_TIMEOUT_MS,
             noProgressTimeoutMs: Long = NO_PROGRESS_TIMEOUT_MS,
             tickMs: Long = DEVICE_TICK_MS,
+            client: MiniHttpClient = MiniHttpClient(),
         ): TransferEngine =
             TransferEngine(context.applicationContext, confirmTimeoutMs, noProgressTimeoutMs, tickMs)
+                .also { it.client = client }
 
         /** 单例复位（仅供测试，见 [TransferEngineHolder]）。 */
         fun resetForTesting() = TransferEngineHolder.reset()

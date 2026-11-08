@@ -7,6 +7,8 @@ import android.util.Log
 import com.bsfeng.monitor.domain.transfer.HTTP_PORT_BASE
 import com.bsfeng.monitor.domain.transfer.HTTP_PORT_MAX
 import com.bsfeng.monitor.domain.transfer.TransferErrorCode
+import com.bsfeng.monitor.transfer.policy.ConnectionBudget
+import com.bsfeng.monitor.transfer.policy.InboundLimits
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,17 +24,22 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /** 路由处理口径（由 `TransferEngine` 落地，服务器只负责解析与分发）。 */
 interface TransferRoutes {
     /** `GET /info`：设备信息与能力。 */
     suspend fun info(): ApiResponse
 
-    /** `POST /offer`：提交文件清单，建立会话。 */
-    suspend fun offer(body: JSONObject, pairKey: String?): ApiResponse
+    /**
+     * `POST /offer`：提交文件清单，建立会话。
+     *
+     * @param source 来源标识（来源 IP，取不到时为空串）：接收侧按它做每来源冷却窗（SEC-04）。
+     */
+    suspend fun offer(body: JSONObject, pairKey: String?, source: String = ""): ApiResponse
 
-    /** `GET /offer/status?session=`：查询会话确认状态。 */
-    suspend fun offerStatus(sessionId: String): ApiResponse
+    /** `GET /offer/status?session=`：查询会话确认状态（需 `X-Transfer-Token`，与 `/upload` 同口径）。 */
+    suspend fun offerStatus(sessionId: String, token: String?): ApiResponse
 
     /** `PUT /upload?session=&file=&offset=`：单文件裸字节流上传。 */
     suspend fun upload(
@@ -44,8 +51,13 @@ interface TransferRoutes {
         contentLength: Long,
     ): ApiResponse
 
-    /** `POST /cancel?session=`：中止会话。 */
-    suspend fun cancel(sessionId: String): ApiResponse
+    /**
+     * `POST /cancel?session=&sender=`：中止会话。
+     *
+     * 鉴权：`X-Transfer-Token` 必须等于本次会话 token，且 `sender` 必须等于
+     * `session.senderDeviceId` —— 否则明文 HTTP 下嗅到会话 id 的人能删光 `.part`、把任务打成取消态。
+     */
+    suspend fun cancel(sessionId: String, token: String?, senderDeviceId: String?): ApiResponse
 }
 
 /**
@@ -62,6 +74,8 @@ class MiniHttpServer(
     private val running = AtomicBoolean(false)
     private var serverSocket: ServerSocket? = null
     private var acceptJob: Job? = null
+    /** 当前服务中的连接数（并发上限见 [InboundLimits.MAX_CONCURRENT_CONNECTIONS]）。 */
+    private val activeConnections = AtomicInteger(0)
 
     /** 实际绑定端口；未启动返回 -1。 */
     val port: Int get() = serverSocket?.localPort ?: -1
@@ -119,7 +133,21 @@ class MiniHttpServer(
                     if (running.get()) Log.w(TAG, "accept 失败: ${e.message}")
                     continue
                 }
-                scope.launch { serve(socket) }
+                // 并发连接上限（SEC-04）：超限直接关 socket，不读请求 —— 读一次报文就等于
+                // 让对方占用一条连接与一次解析，几十条并发就能把 IO 线程与任务表打爆。
+                if (!ConnectionBudget.admit(activeConnections.get())) {
+                    Log.w(TAG, "并发连接已达上限 ${InboundLimits.MAX_CONCURRENT_CONNECTIONS}，拒绝新连接")
+                    runCatching { socket.close() }
+                    continue
+                }
+                activeConnections.incrementAndGet()
+                scope.launch {
+                    try {
+                        serve(socket)
+                    } finally {
+                        activeConnections.decrementAndGet()
+                    }
+                }
             }
         }
 
@@ -134,7 +162,7 @@ class MiniHttpServer(
                 return
             }
             val body = LimitedInputStream(input, head.contentLength)
-            val response = handle(head, body)
+            val response = handle(head, body, sourceOf(socket))
             writeResponse(output, response.first, response.second)
         } catch (e: IOException) {
             Log.w(TAG, "连接处理失败: ${e.message}")
@@ -144,20 +172,35 @@ class MiniHttpServer(
     }
 
     /**
+     * 连接来源标识（来源 IP）。
+     *
+     * 取不到地址时回落空串 —— 限流器把空串当成「同一个来源」，宁可收紧也不放行。
+     */
+    private fun sourceOf(socket: Socket): String =
+        runCatching { socket.inetAddress?.hostAddress.orEmpty() }.getOrDefault("")
+
+    /**
      * 路由分发（[head] 已解析，[body] 只含 `Content-Length` 内的字节）。
      *
      * @return HTTP 状态码 + 响应包。
      */
-    suspend fun handle(head: HttpHead, body: InputStream): Pair<Int, ApiResponse> {
+    suspend fun handle(head: HttpHead, body: InputStream, source: String = ""): Pair<Int, ApiResponse> {
         val route = TransferRouter.match(head.path)
             ?: return HttpStatus.NOT_FOUND to ApiResponse.error(NOT_FOUND_CODE, "未知路由：${head.path}")
         return when (route) {
             TransferRoute.INFO -> onlyMethod(head, "GET") ?: (HttpStatus.OK to routes.info())
             TransferRoute.OFFER -> onlyMethod(head, "POST") ?: (
-                HttpStatus.OK to routes.offer(readJson(body, head.contentLength) ?: return INVALID_JSON, head.header(HEADER_PAIR_KEY))
+                HttpStatus.OK to routes.offer(
+                    readJson(body, head.contentLength) ?: return INVALID_JSON,
+                    head.header(HEADER_PAIR_KEY),
+                    source,
+                )
                 )
             TransferRoute.OFFER_STATUS -> onlyMethod(head, "GET") ?: (
-                HttpStatus.OK to routes.offerStatus(head.queryParam(QUERY_SESSION, ""))
+                HttpStatus.OK to routes.offerStatus(
+                    sessionId = head.queryParam(QUERY_SESSION, ""),
+                    token = head.header(HEADER_TOKEN),
+                )
                 )
             TransferRoute.UPLOAD -> onlyMethod(head, "PUT") ?: (
                 HttpStatus.OK to routes.upload(
@@ -174,7 +217,11 @@ class MiniHttpServer(
                 )
                 )
             TransferRoute.CANCEL -> onlyMethod(head, "POST") ?: (
-                HttpStatus.OK to routes.cancel(head.queryParam(QUERY_SESSION, ""))
+                HttpStatus.OK to routes.cancel(
+                    sessionId = head.queryParam(QUERY_SESSION, ""),
+                    token = head.header(HEADER_TOKEN),
+                    senderDeviceId = head.queryParam(QUERY_SENDER, ""),
+                )
                 )
         }
     }
@@ -229,6 +276,9 @@ class MiniHttpServer(
         const val QUERY_SESSION = "session"
         const val QUERY_FILE = "file"
         const val QUERY_OFFSET = "offset"
+
+        /** `/cancel` 的来源设备 id（协议 §4：与 token 一起证明「这是本次会话的发送方」）。 */
+        const val QUERY_SENDER = "sender"
 
         /** 请求体上限（清单报文，非文件字节）。 */
         const val MAX_BODY_BYTES: Long = 4L * 1024 * 1024

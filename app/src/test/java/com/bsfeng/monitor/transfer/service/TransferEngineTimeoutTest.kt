@@ -104,7 +104,7 @@ class TransferEngineTimeoutTest {
 
         // 轮询 offerStatus（对端就是这么查的）：超时检查会在其中触发
         val failed = await(3_000L) {
-            runBlocking { transferEngine.offerStatus(sessionId) }
+            runBlocking { transferEngine.offerStatus(sessionId, transferEngine.sessions[sessionId]?.token) }
             transferEngine.tasks.value.single().status == TransferStatus.FAILED
         }
         assertTrue("任务应在超时后变为失败", failed)
@@ -124,7 +124,7 @@ class TransferEngineTimeoutTest {
         val sessionId = pending.string("sessionId")
 
         val failed = await(3_000L) {
-            runBlocking { transferEngine.offerStatus(sessionId) }
+            runBlocking { transferEngine.offerStatus(sessionId, transferEngine.sessions[sessionId]?.token) }
             transferEngine.tasks.value.single().status == TransferStatus.FAILED
         }
         assertTrue("待确认超时应变为失败", failed)

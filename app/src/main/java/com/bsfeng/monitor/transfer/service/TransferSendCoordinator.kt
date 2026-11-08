@@ -29,7 +29,11 @@ internal class TransferSendCoordinator(private val engine: TransferEngine) {
     private val _tasks get() = engine._tasks
     private val _pinPrompt get() = engine._pinPrompt
 
-    internal var pendingSend: PendingSend? = null
+    // 待确认的发送（PIN 流程）：**只有** engine.pendingSend 这一处状态。
+    // 这里曾另有一个同名字段：写入点在 sendFilesInternal、读取点在 submitPin，而 submitPin
+    // 读的是本类字段 —— 该字段全仓没有写入点，于是首行的空值提前返回恒成立：对端弹 PIN、
+    // 发送端输完 PIN 什么都不发生，只能等 60 秒确认超时收敛（R1）。
+    private val pendingSend: PendingSend? get() = engine.pendingSend
 
     private val TokenHeader = TransferEngine.TokenHeader
     private val PairKeyHeader = TransferEngine.PairKeyHeader
@@ -101,6 +105,7 @@ internal class TransferSendCoordinator(private val engine: TransferEngine) {
             }
 
             TransferStatus.AWAITING_CONFIRM -> {
+                // 单一状态源：submitPin / dismissPin 都读 engine.pendingSend（TransferSessionActions 同口径）
                 engine.pendingSend = PendingSend(peer, sources, remoteSessionId)
                 engine.renameTasks(sessionId, remoteSessionId)
                 engine._pinPrompt.value = TransferEngine.PinPrompt(

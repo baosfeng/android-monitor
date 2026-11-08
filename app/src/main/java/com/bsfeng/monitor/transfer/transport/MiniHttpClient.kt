@@ -14,8 +14,11 @@ import java.net.URLEncoder
  * - 每次请求 `Connection: close`，`finally` 断开连接（不泄漏）；
  * - 上传用 `setFixedLengthStreamingMode`，边读边写，内存占用与文件大小无关；
  * - 只做一次网络尝试，重试节奏（1s/2s/4s）由调用方按 [com.bsfeng.monitor.domain.transfer.RETRY_DELAYS_MS] 控制。
+ *
+ * 为什么是 open：单测需要断言「发送端到底发了几次 /offer、带了什么字段」，
+ * 用一个只记录请求、不落网的子类替身比起本地桩服务器便宜得多。
  */
-class MiniHttpClient(
+open class MiniHttpClient(
     private val connectTimeoutMs: Int = HTTP_CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = HTTP_READ_TIMEOUT_MS,
 ) {
@@ -30,7 +33,7 @@ class MiniHttpClient(
     }
 
     /** `GET`。 */
-    fun get(url: String, headers: Map<String, String> = emptyMap()): HttpResponse {
+    open fun get(url: String, headers: Map<String, String> = emptyMap()): HttpResponse {
         var conn: HttpURLConnection? = null
         return try {
             conn = open(url, "GET", headers)
@@ -41,7 +44,7 @@ class MiniHttpClient(
     }
 
     /** `POST` JSON。 */
-    fun postJson(
+    open fun postJson(
         url: String,
         body: String,
         headers: Map<String, String> = emptyMap(),
@@ -60,7 +63,7 @@ class MiniHttpClient(
     }
 
     /** `POST` 空体（`/cancel` 用，会话参数走 query）。 */
-    fun postEmpty(url: String, headers: Map<String, String> = emptyMap()): HttpResponse {
+    open fun postEmpty(url: String, headers: Map<String, String> = emptyMap()): HttpResponse {
         var conn: HttpURLConnection? = null
         return try {
             conn = open(url, "POST", headers)
@@ -79,7 +82,7 @@ class MiniHttpClient(
      * @param contentLength 本次要发的字节数（= 文件大小 - offset）。
      * @param onProgress 已发送字节回调。
      */
-    fun putStream(
+    open fun putStream(
         url: String,
         input: InputStream,
         contentLength: Long,
