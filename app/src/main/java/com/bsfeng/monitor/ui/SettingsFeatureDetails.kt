@@ -77,9 +77,19 @@ internal fun SettingsSkipDetail(rt: SettingsScreenRuntime) {
     )
 }
 
-/** 记账细则：开关 + 支付后弹窗确认，正文见 SettingsFinanceFeatureCard.kt。 */
+/**
+ * 记账细则：开关 + 支付后弹窗确认（SettingsFinanceFeatureCard.kt） + 「记账功能（可按需开启）」三开关组
+ * （SettingsFinanceUiSection.kt）+ 桌面小组件入口。
+ *
+ * 顺序按原型 s09：先回答「记账开不开、怎么自动记」，再回答「记账页上还要不要预算 / 多周期这些呈现件」。
+ * 预算设置入口由宿主接线 [onOpenBudget]；未接线时该行仍在但不带点击（不伪造跳转）。
+ */
 @Composable
-internal fun SettingsFinanceDetail(rt: SettingsScreenRuntime, onOpenSubPage: (SettingsSubPage) -> Unit) {
+internal fun SettingsFinanceDetail(
+    rt: SettingsScreenRuntime,
+    onOpenSubPage: (SettingsSubPage) -> Unit,
+    onOpenBudget: (() -> Unit)? = null,
+) {
     SettingsFinanceFeatureCard(
         t = rt.t,
         context = rt.context,
@@ -89,6 +99,7 @@ internal fun SettingsFinanceDetail(rt: SettingsScreenRuntime, onOpenSubPage: (Se
         setFeature = rt.setFeature,
         onOpenWidgetDetail = { onOpenSubPage(SettingsSubPage.WIDGET_DETAIL) },
     )
+    SettingsFinanceUiSection(rt = rt, onOpenBudget = onOpenBudget)
 }
 
 /**

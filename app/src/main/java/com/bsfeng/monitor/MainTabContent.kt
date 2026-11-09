@@ -264,6 +264,15 @@ internal fun MainTabContent(
             onNavigateToGallery = onOpenGallery,
             onNavigateToQuotaSettings = onOpenQuotaSettings,
             onNavigateToTotp = if (featureOn(Feature.TOTP)) onOpenTotp else null,
+            // 记账「预算设置」行 → 切到记账 Tab 并直接进预算页；功能关闭时不给入口（不伪造跳转）。
+            onNavigateToBudget = if (featureOn(Feature.FINANCE)) {
+                {
+                    onSelectTab(AppTab.FINANCE)
+                    onFinanceRoute(FinanceRoute.Budget)
+                }
+            } else {
+                null
+            },
             modifier = Modifier.fillMaxSize()
         )
     }

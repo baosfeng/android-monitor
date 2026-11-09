@@ -290,6 +290,19 @@ internal fun LazyListScope.todayPanelS01(
         }
     }
 
+    // s01-finance：记账图表卡（原型 s01-finance 区块）。卡片只在「首页记账卡」开关开着时出现：
+    // state.financeCard 为 null（开关关 / 本轮未取数）时整块不打节点，语义树里连容器都没有。
+    state.financeCard?.let { card ->
+        item(key = "card-finance") {
+            OverviewFinanceCard(
+                state = card,
+                onOpenFinance = onOpenFinance,
+                onHaptic = onHaptic,
+                modifier = Modifier.staggerEnterAt(8),
+            )
+        }
+    }
+
     item(key = "quick") {
         val t = LocalDesignTokens.current
         Column(

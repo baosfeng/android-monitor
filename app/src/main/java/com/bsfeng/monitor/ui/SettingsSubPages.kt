@@ -29,7 +29,9 @@ internal fun SettingsSubPageBody(
 
         SettingsSubPage.LIVE_DETAIL -> SettingsLiveDetail(rt)
         SettingsSubPage.SKIP_DETAIL -> SettingsSkipDetail(rt)
-        SettingsSubPage.FINANCE_DETAIL -> SettingsFinanceDetail(rt, onOpenSubPage)
+        SettingsSubPage.FINANCE_DETAIL -> SettingsFinanceDetail(
+            rt, onOpenSubPage, onOpenBudget = rt.onNavigateToBudget,
+        )
         SettingsSubPage.TRANSPORT_DETAIL -> SettingsTransportDetail(rt, onOpenSubPage)
         SettingsSubPage.TRANSPORT_RECEIVING_DETAIL -> SettingsTransportReceivingDetail(rt)
         SettingsSubPage.TRANSPORT_ALERTS_DETAIL -> SettingsTransportAlertsDetail(rt)

@@ -57,11 +57,15 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.bsfeng.monitor.ui.foundation.FinanceUiPrefs
+import com.bsfeng.monitor.ui.foundation.FinanceUiToggle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.trip.DayTimeline
@@ -152,6 +156,15 @@ fun OverviewScreen(
     val t = LocalDesignTokens.current
     val toast = rememberToastHostState()
     val haptic = rememberHaptic()
+    // 记账界面开关：概览屏是「首页记账卡」的一个消费点（切开关后本屏要立刻变），
+    // 因此在组合期绑定一次并从盘上装载（幂等，VM 构造期也会调）。
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { FinanceUiPrefs.attach(context) }
+    val financeUi by FinanceUiPrefs.values.collectAsState()
+    // 拨开「首页记账卡」时补一轮数据：否则卡片要等下一次轮询（最长 5s）才有内容。
+    LaunchedEffect(financeUi[FinanceUiToggle.HOME_CARD]) {
+        if (financeUi[FinanceUiToggle.HOME_CARD] == true) viewModel.refreshFinanceCardNow()
+    }
     var rangeIndex by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()

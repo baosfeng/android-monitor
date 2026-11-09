@@ -79,6 +79,7 @@ internal fun rememberSettingsScreenRuntime(
     onNavigateToGallery: (() -> Unit)?,
     onNavigateToQuotaSettings: () -> Unit,
     onNavigateToTotp: (Boolean) -> Unit,
+    onNavigateToBudget: (() -> Unit)?,
 ): SettingsScreenRuntime {
     val t = LocalDesignTokens.current
     val context = LocalContext.current
@@ -277,6 +278,7 @@ internal fun rememberSettingsScreenRuntime(
         onNavigateToAppearance = onNavigateToAppearance,
         onNavigateToGallery = onNavigateToGallery,
         onNavigateToQuotaSettings = onNavigateToQuotaSettings,
+        onNavigateToBudget = onNavigateToBudget,
         onNavigateToTotp = onNavigateToTotp,
     )
 }

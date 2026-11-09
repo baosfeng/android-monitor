@@ -23,6 +23,9 @@ import com.bsfeng.monitor.ui.live.localDateOf
 import com.bsfeng.monitor.ui.live.recordTypeLabel
 import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.ui.live.startOfDaysAgo
+import com.bsfeng.monitor.ui.foundation.FinanceUiPrefs
+import com.bsfeng.monitor.ui.foundation.FinanceUiToggle
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,6 +92,8 @@ data class OverviewState(
     val prevWeekSkipCount: Int = 0,
     val prevMonthEventCount: Int = 0,
     val prevMonthSkipCount: Int = 0,
+    /** 记账图表卡快照；「首页记账卡」开关关闭时为 null（卡片不渲染）。 */
+    val financeCard: FinanceCardState? = null,
     /** 边界态内容：今日标题最长的那条事件（真实记录，不编造）；今日无记录时为 null。 */
     val longestEvent: Record? = null,
     /** 今日行程时间轴（概览「今日行程」卡用）；零点整点等窗口为 0 的情况下为 null。 */
@@ -114,6 +119,9 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
     val state: StateFlow<OverviewState> = _state.asStateFlow()
 
     init {
+        // 记账界面开关：VM 每轮要按它决定「首卡是否取数」，所以在构造期就把盘上的值装载进来
+        // （幂等；设置页 / 概览屏也会 attach，谁先到谁装）。
+        FinanceUiPrefs.attach(application)
         viewModelScope.launch {
             // 轮询只在 UI 订阅期间运行：本屏退出组合（切到记账 Tab）或
             // 退到后台（collectAsStateWithLifecycle 取消收集）时订阅数归零，
@@ -140,6 +148,15 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             _state.value = _state.value.copy(isLoading = true, loadError = null)
             load()
         }
+    }
+
+    /**
+     * 记账卡开关刚被拨开：立刻补一轮数据，而不是等下一次轮询（最多 [REFRESH_MS]）。
+     *
+     * 关掉时不需要：UI 侧按内存开关即时不渲染卡片，[buildSnapshot] 下一轮自然给出 null。
+     */
+    fun refreshFinanceCardNow() {
+        viewModelScope.launch { load() }
     }
 
     private suspend fun load() {
@@ -212,6 +229,14 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
         val topSkippedApps = skippedByLabel.entries.sortedByDescending { it.value }
             .take(TOP_LIMIT).map { TypeSlice(it.key, it.value) }
 
+        // 记账图表卡：只在「首页记账卡」开关开着时取数（关掉的卡不该每 5s 继续拉 7 次 SUM + 分类聚合）；
+        // 开关是热路径内存读，不碰磁盘（见 FinanceUiPrefs.isEnabled）。
+        val financeCard = if (FinanceUiPrefs.isEnabled(FinanceUiToggle.HOME_CARD)) {
+            loadFinanceCard(finance, now)
+        } else {
+            null
+        }
+
         // 今日行程：复用本轮已查到的今日记录现算（不额外查库、不建表）；
         // 窗口为 0（零点整点那一瞬）时聚合器会拒绝非法区间，这里按「暂无行程」处理。
         val trip = if (now > todayStart) {
@@ -265,6 +290,7 @@ class OverviewViewModel(application: Application) : AndroidViewModel(application
             prevMonthEventCount = prevMonthEvents,
             prevMonthSkipCount = prevMonthSkips,
             // 边界态要展示「最长的那条真实记录」：取今日标题最长的一条，没有记录就不编一条。
+            financeCard = financeCard,
             longestEvent = today.maxByOrNull { it.label.length },
             trip = trip,
             tripDayStart = todayStart,

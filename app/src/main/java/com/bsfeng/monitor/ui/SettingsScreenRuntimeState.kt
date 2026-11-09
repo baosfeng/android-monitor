@@ -92,6 +92,8 @@ internal class SettingsScreenRuntime(
     val onNavigateToAppearance: (() -> Unit)?,
     val onNavigateToGallery: (() -> Unit)?,
     val onNavigateToQuotaSettings: () -> Unit,
+    /** 记账「预算设置」行的落点（记账 Tab 的预算页）；null = 宿主未接线，该行不可点。 */
+    val onNavigateToBudget: (() -> Unit)?,
     /** 验证器模块的 push 入口：true = 直接落在备份页。 */
     val onNavigateToTotp: (Boolean) -> Unit,
 )
