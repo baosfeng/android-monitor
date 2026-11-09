@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -35,12 +36,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -171,6 +176,14 @@ fun SegmentedControl(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 每段的稳定锚点（可选）：长度与 [options] 一致时逐个挂到该段的**点击节点**上；
+     * null 或长度不符则不挂（默认行为与旧版完全一致，现有调用点无需改动）。
+     *
+     * 为什么挂在段级而不是容器上：调用方只能把 modifier 传到这里给整组 Row，
+     * 段级 testTag 只能在组件内部挂；挂在段上才能让「s04-unit-day」这类逐段锚点被点到。
+     */
+    optionTags: List<String>? = null,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -228,10 +241,21 @@ fun SegmentedControl(
                 animationSpec = tween(t.durState),
                 label = "segFg",
             )
+            // 段级锚点（可选）：与点击同节点，语义合并后仍可定位。
+            // 挂不挂由这个布尔决定，testTag 的实参直接引用 optionTags 形参：静态对账
+            // （scripts/check-anchors.mjs）只从「形参 → 调用点 → 常量表」回溯字面量，
+            // 中间隔一层小写局部变量（segmentTag）就断链，逐段锚点会被判成「代码里没有」。
+            val segmentTagReady = optionTags
+                ?.takeIf { it.size == options.size }
+                ?.getOrNull(index)
+                ?.isNotBlank() == true
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(t.tapMin)
+                    .then(
+                        if (segmentTagReady) Modifier.testTag(optionTags.orEmpty()[index]) else Modifier,
+                    )
                     .focusRequester(focusRequesters[index])
                     // roving tabindex：只有选中段可聚焦 → Tab 进组一次，方向键由组统一处理
                     .focusProperties { canFocus = selected }
@@ -239,11 +263,22 @@ fun SegmentedControl(
                     .tokenShadow(if (selected) 1 else 0, shape)
                     .clip(shape)
                     .background(bg)
-                    .clickable {
-                        // 切换属轻触级；重复点当前段不再震
-                        if (!selected) haptic(HapticTone.LIGHT)
-                        onSelect(index)
-                    },
+                    // 状态可读（无障碍基线红线 4）：selected 语义写在 clickable 之外层，
+                    // 读屏才会念「已选中 / 未选中」，与原型 .segmented 的 role=tablist + checked 对齐。
+                    // 为什么不用 selectable：实测它把选中段的无障碍节点 isClickable 变 false
+                    // （未选中段仍 true），ACTION_CLICK 落空 → 读屏点不动当前档。
+                    // 选中状态必须走 selectable 的 selected 参数：另写 .semantics { selected = … }
+                    // 时它被 clickable 的合并节点吞掉，dump 里 selected 恒为 false（实测两次）。
+                    // 用 selectable 后该段仍是可点节点（ACTION_CLICK 命中），role = Tab 与原型对齐。
+                    .selectable(
+                        selected = selected,
+                        role = Role.Tab,
+                        onClick = {
+                            // 切换属轻触级；重复点当前段不再震
+                            if (!selected) haptic(HapticTone.LIGHT)
+                            onSelect(index)
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 // 同 chip：组件标识落在文本上，保住调用方的分段锚点

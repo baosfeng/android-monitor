@@ -41,6 +41,8 @@ fun LineChart(
     color: Color? = null,
     animated: Boolean = rememberMotionEnabled(),
     showGrid: Boolean = true,
+    /** 曲线高度基准；含义同 [AreaChart] 的 maxValue（外壳带 Y 轴刻度时必须传）。 */
+    maxValue: Float? = null,
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
@@ -49,7 +51,9 @@ fun LineChart(
     val anim = chartAnim(values, animated, t.durChart)
     Spacer(
         modifier.drawWithCache {
-            val pts = normalize(values)
+            val ceiling = maxValue?.takeIf { it > 0f }
+            val pts = if (ceiling == null) normalize(values) else
+                values.map { (it / ceiling).coerceIn(0f, 1f) }
             val stroke = 2.dp.toPx()
             val dot = 4.dp.toPx()
             val halo = 8.dp.toPx()
@@ -89,6 +93,13 @@ fun AreaChart(
     animated: Boolean = rememberMotionEnabled(),
     /** 峰值点上方 9px 标「峰值 N」；关掉可省一次文本测量（原型 d.peak !== false）。 */
     markPeak: Boolean = true,
+    /**
+     * 曲线高度基准（默认 null = min-max 归一，强调波动）。
+     *
+     * 带 Y 轴刻度的外壳（[ChartFrame]）传非 null 时改为「按上限缩放 + 从基线起」，
+     * 与刻度数值同口径；否则刻度标着 0..上限、曲线却从 min-max 拉伸出来，读数对不上。
+     */
+    maxValue: Float? = null,
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
@@ -102,7 +113,9 @@ fun AreaChart(
     Spacer(
         modifier.drawWithCache {
             cache.onSize(size)
-            val pts = normalize(values)
+            val ceiling = maxValue?.takeIf { it > 0f }
+            val pts = if (ceiling == null) normalize(values) else
+                values.map { (it / ceiling).coerceIn(0f, 1f) }
             val padT = AREA_PAD_TOP.toPx()
             val plot = (size.height - padT).coerceAtLeast(1f)
             val stroke = 2.dp.toPx()

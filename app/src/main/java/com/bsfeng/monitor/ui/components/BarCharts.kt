@@ -46,6 +46,13 @@ fun BarChart(
     animated: Boolean = rememberMotionEnabled(),
     /** 柱顶直标数值（原型 d.vlabels !== false）。 */
     showValues: Boolean = true,
+    /**
+     * 柱高缩放基准（默认取 values 的最大值）。
+     *
+     * 带 Y 轴刻度的外壳（[ChartFrame]）必须传同一个值，否则柱高与刻度各按一种口径：
+     * 柱顶标着 468、刻度却把 468 画在 93% 高度处，读数自相矛盾。
+     */
+    maxValue: Float? = null,
 ) {
     val t = LocalDesignTokens.current
     val ramp = colors ?: listOf(t.chartSeq)
@@ -56,7 +63,9 @@ fun BarChart(
     Spacer(
         modifier.drawWithCache {
             // 柱高按最大值缩放，与柱顶数值同口径（原型 bars 的 val/mx）
-            val pts = normalizeByMax(values)
+            val ceiling = maxValue?.takeIf { it > 0f }
+            val pts = if (ceiling == null) normalizeByMax(values) else
+                values.map { (it / ceiling).coerceIn(0f, 1f) }
             val padT = BAR_PAD_TOP.toPx()
             val plot = (size.height - padT).coerceAtLeast(1f)
             val gap = size.width * 0.02f

@@ -6,6 +6,7 @@ package com.bsfeng.monitor.finance
 import androidx.core.database.sqlite.transaction
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Budget
+import com.bsfeng.monitor.finance.model.PeriodBucket
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
 
@@ -15,7 +16,7 @@ import com.bsfeng.monitor.finance.model.Transaction
  * 所有数据库读写操作集中在此类中，FinanceManager 通过此类访问数据。
  * 实现按实体拆到四个 internal DAO，本类只做同签名转发（调用方与测试无需改 import）。
  */
-class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
+class FinanceDao(internal val dbHelper: FinanceDatabaseHelper) {
 
     internal val transactionDao = FinanceTransactionDao(dbHelper)
     internal val categoryDao = FinanceCategoryDao(dbHelper)
@@ -84,6 +85,27 @@ class FinanceDao(private val dbHelper: FinanceDatabaseHelper) {
     /** 搜索交易（按说明或分类名模糊匹配） */
     fun searchTransactions(query: String, limit: Int = 50): List<Transaction> =
         transactionDao.searchTransactions(query, limit)
+
+    // ========== 周期（今日 / 本周 / 本月 / 本年 / 全部）==========
+
+    /**
+     * 区间内某类型的合计：直接复用 [sumByDateRange]（同为「含两端」的 SQL SUM），
+     * 不另写第二份 SQL，避免两处口径漂移。
+     */
+    fun sumByPeriod(fromDate: String, toDate: String, type: Int): Double =
+        transactionDao.sumByDateRange(fromDate, toDate, type)
+
+    /** 区间内（含两端）的交易笔数 */
+    fun countByPeriod(fromDate: String, toDate: String): Int =
+        FinancePeriodAggregator.countByPeriod(dbHelper.readableDatabase, fromDate, toDate)
+
+    /** 区间内的分桶序列（分桶键与标签口径见 [FinancePeriodRange]） */
+    fun bucketsByPeriod(period: FinancePeriod, fromDate: String, toDate: String): List<PeriodBucket> =
+        FinancePeriodAggregator.bucketsByPeriod(dbHelper.readableDatabase, period, fromDate, toDate)
+
+    /** 库内最早一笔交易日期（all 档区间起点）；空库返回 null */
+    fun earliestTransactionDate(): String? =
+        FinancePeriodAggregator.earliestDate(dbHelper.readableDatabase)
 
     /** 获取某月的总支出 */
     fun getMonthlyExpenseTotal(yearMonth: String): Double = transactionDao.getMonthlyExpenseTotal(yearMonth)

@@ -11,6 +11,7 @@ import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.CategoryCatalog
 import com.bsfeng.monitor.finance.model.FinanceStats
+import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.finance.model.Transaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,7 @@ class FinanceManager internal constructor(context: Context) {
 
     private val accountBalance = FinanceAccountBalance(dao)
     private val statsService = FinanceStatsService(dao)
+    private val periodService = FinancePeriodService(dao)
     private val categorySeeder = FinanceCategorySeeder(dao)
     private val budgetService = FinanceBudgetService(dao)
     private val legacyCleanup = FinanceLegacyCleanup(dao)
@@ -141,6 +143,26 @@ class FinanceManager internal constructor(context: Context) {
     suspend fun getAvailableMonths(): List<String> = withContext(Dispatchers.IO) {
         dao.getAvailableMonths()
     }
+
+    /**
+     * 五档周期统计（今日 / 本周 / 本月 / 本年 / 全部）：支出、收入、结余、笔数 + 分桶序列。
+     *
+     * 三值一律走 SQL SUM（与月度 KPI 同口径，退款负额抵扣支出）；分桶长度与档位绑定：
+     * day=24 小时、week=7 日、month=当月逐日、year=12 月、all=逐月。界面图表直接吃
+     * [PeriodStats.expenseValues] / [PeriodStats.labels]。
+     */
+    suspend fun getPeriodStats(period: FinancePeriod): PeriodStats = withContext(Dispatchers.IO) {
+        periodService.periodStats(period)
+    }
+
+    /** 五档一次取齐（顺序与 unitbar 一致：今日 / 本周 / 本月 / 本年 / 全部）。 */
+    suspend fun getPeriodStatsAll(): List<PeriodStats> = withContext(Dispatchers.IO) {
+        periodService.allPeriods()
+    }
+
+    /** 单测可直接注入固定「今天」，避免跨零点抖动。 */
+    internal suspend fun getPeriodStatsAt(period: FinancePeriod, today: java.time.LocalDate): PeriodStats =
+        withContext(Dispatchers.IO) { periodService.periodStats(period, today) }
 
     // ========== 分类 ==========
 
