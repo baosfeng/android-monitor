@@ -7,8 +7,12 @@ package com.bsfeng.monitor.finance.ui
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -39,6 +43,8 @@ import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.components.rememberDemoVisible
 import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.foundation.FinanceUiPrefs
+import com.bsfeng.monitor.ui.foundation.FinanceUiToggle
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -80,10 +86,18 @@ fun FinanceMainScreen(
     val transactions by viewModel.monthlyTransactions.collectAsState()
     val stats by viewModel.monthlyStats.collectAsState()
     val budgets by viewModel.budgets.collectAsState()
+    val categoryBreakdown by viewModel.categoryBreakdown.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val loadFailed by viewModel.loadFailed.collectAsState()
     val monthNotice by viewModel.monthNotice.collectAsState()
     val actionNotice by viewModel.actionNotice.collectAsState()
+
+    // 记账界面「按需开启」开关的两个消费点（设置页随时可改，改完本屏立即重组）：
+    // 多周期查询入口（默认开）→ 统计汇总 pane 的 unitbar；预算与预警（默认关）→ 明细 pane 的 s04-ring。
+    // 订阅只读这一层（[FinanceUiPrefs.values]），attach 由概览页 / 设置页负责，本屏不自建持久化。
+    val financeUi by FinanceUiPrefs.values.collectAsState()
+    val periodBarEnabled = financeUi[FinanceUiToggle.PERIOD_BAR] ?: FinanceUiToggle.PERIOD_BAR.defaultOn
+    val budgetEnabled = financeUi[FinanceUiToggle.BUDGET] ?: FinanceUiToggle.BUDGET.defaultOn
 
     // 自动记账落库后的一次性「新行高亮」：信号只消费一次（clear 后不再亮），
     // 所以切 Tab / 回前台重新加载列表都不会重复高亮 —— 它表示「刚刚多了这笔」。
@@ -106,6 +120,8 @@ fun FinanceMainScreen(
         haptic(if (notice.deleted) HapticTone.REJECT else HapticTone.SUCCESS)
         toast.show(notice.message)
         viewModel.consumeActionNotice()
+        // 写操作落地后五档统计随之失效：与列表重载同一时机重算，避免统计汇总显示旧金额。
+        viewModel.loadPeriods()
     }
 
     // 显式持有滚动状态：每次进入本屏（entryKey 变化）把头部复位，
@@ -117,6 +133,8 @@ fun FinanceMainScreen(
     LaunchedEffect(entryKey) {
         listState.scrollToItem(0)
         viewModel.loadCurrentMonth()
+        // 五档统计与当月数据一起刷新：切 Tab / 回前台后，统计汇总里的数字与明细保持同源同刻。
+        viewModel.loadPeriods()
     }
 
     // App 从后台回前台时 Activity 重新 resume，但本 composable 一直在组合里（entryKey 不变），
@@ -124,7 +142,10 @@ fun FinanceMainScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadCurrentMonth()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadCurrentMonth()
+                viewModel.loadPeriods()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -154,6 +175,15 @@ fun FinanceMainScreen(
         // 移除后五问（滚动 / 焦点）：列表回顶、焦点回明细区标题；计数与 KPI 由数据重算
         listState.scrollToItem(0)
         listHeadFocus.requestFocus()
+    }
+    // 子 Tab（交易明细 / 统计汇总）与档位状态都存在 ViewModel：
+    // 本屏随底部 Tab 切换整体离开组合（MainTabContent 是 when 分支，没有 SaveableStateHolder 保留），
+    // rememberSaveable 实测会被重置回默认值；ViewModel 活在 Activity 里，切走再回来保住选择。
+    val subTab by viewModel.subTab.collectAsState()
+    val selectedPeriod by viewModel.selectedPeriod.collectAsState()
+    val allPeriodStats by viewModel.allPeriodStats.collectAsState()
+    val activePeriodStats = remember(allPeriodStats, selectedPeriod) {
+        viewModel.periodStatsOf(allPeriodStats, selectedPeriod)
     }
     val monthDisplay = monthLabelOf(currentMonth)
     val grouped = remember(transactions) { viewModel.getTransactionsGroupedByDate(transactions) }
@@ -218,14 +248,17 @@ fun FinanceMainScreen(
             .fillMaxSize()
             .testTag("screen-s04"),
     ) {
-        // 底部避让：列表末端留出 FAB 盒（fab-size 56）+ FAB 外边距（16）+ 一行余量（24）= 96dp，
-        // 滚到列表底部时最后一行金额不再压在 FAB 下（原先是列表尾部的假 item，等效但不可见）。
+        // 底部避让：列表末端留出 FAB 盒（fab-size 56）+ FAB 外边距（16）+ 一段净空（48），
+        // 滚到底时最后一张卡（统计汇总的分类占比）与右下角 FAB 之间仍有整段留白，
+        // 金额读数不会被悬浮按钮压住（口径见 docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md）。
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("s04-content"),
-            contentPadding = PaddingValues(bottom = t.fabSize + t.space4 + t.space6),
+            // 两个 pane 都留 FAB 净空（FAB 在两段都存在，见下方调用点）：
+            // 滚到列表末端时最后一张卡与右下角 FAB 之间仍有整段留白，金额读数不会被压住。
+            contentPadding = PaddingValues(bottom = t.fabSize + t.space4 + t.space12),
         ) {
             item(key = "head") {
                 // 页头：长按（锚点 s04-head）由共享屏头承载；此处只负责锚点与「收起后焦点回标题」。
@@ -257,21 +290,54 @@ fun FinanceMainScreen(
                 }
             }
 
+            // 月份条与子 Tab 条放在同一个 item 里：头部 item 数保持 5，
+            // 既有「删除后焦点复位」的项下标口径（financeMainItemIndexOf）无需改动。
             item(key = "month") {
-                S04MonthBar(
-                    monthText = monthDisplay,
-                    onPrevious = { viewModel.previousMonth() },
-                    onNext = { viewModel.nextMonth() },
-                )
+                Column {
+                    S04MonthBar(
+                        monthText = monthDisplay,
+                        onPrevious = { viewModel.previousMonth() },
+                        onNext = { viewModel.nextMonth() },
+                    )
+                    FinanceSubTabBar(
+                        selected = subTab,
+                        onSelect = { viewModel.selectSubTab(it) },
+                    )
+                }
             }
 
-            item(key = "kpis") {
-                FinanceMainKpiSection(
+            if (subTab == FINANCE_SUBTAB_STATS) {
+                statsPane(
+                    viewModel = viewModel,
+                    allPeriodStats = allPeriodStats,
+                    activePeriodStats = activePeriodStats,
+                    selectedPeriod = selectedPeriod,
                     stats = stats,
-                    today = today,
+                    categoryBreakdown = categoryBreakdown,
+                    overallBudget = overallBudget,
+                    onPeriodSelect = { viewModel.selectPeriod(it) },
+                    onStatsClick = onStatsClick,
+                    onBudgetClick = onBudgetClick,
+                    periodBarEnabled = periodBarEnabled,
+                    // 审计 P2-3：统计 pane 也显示本月三值，数据与明细 pane 的 KPI 卡同源
+                    // （同一个 stats / today / transactions.size），两处数字必然一致。
+                    budgetEnabled = budgetEnabled,
+                    kpiToday = today,
                     currentMonth = currentMonth,
                     transactionCount = transactions.size,
                 )
+            } else {
+            item(key = "kpis") {
+                // 交易明细 pane 的容器锚点（s04-pane-tx）：与统计 pane 的 s04-pane-stats 同位置换名
+                Box(Modifier.fillMaxWidth().testTag("s04-pane-tx")) {
+                    FinanceMainKpiSection(
+                        stats = stats,
+                        today = today,
+                        currentMonth = currentMonth,
+                        transactionCount = transactions.size,
+                        budgetEnabled = budgetEnabled,
+                    )
+                }
             }
 
             item(key = "entries") {
@@ -320,11 +386,14 @@ fun FinanceMainScreen(
                     }
                 },
             )
+            }
         }
 
         // FAB：直接 align(BottomEnd)，禁止外包 inset 高度容器（踩坑文档见类注释）。
         // 按压缩放（0.96）与 MEDIUM 触觉由 AppFab 内部统一提供（PressFeedback + Haptics），
         // 调用点不要再叠 graphicsLayer 缩放：外层 0.88 × 组件内 0.96 实际压到 0.845。
+        // FAB 在两段子 Tab 都存在（原型 s04 是单屏一个 FAB，新增一笔是记账 Tab 的主操作）。
+        // 与内容的避让靠上面 LazyColumn 的底部净空：滚到末端的卡片不会被它压住。
         AppFab(
             onClick = onAddClick,
             contentDescription = "新增交易",

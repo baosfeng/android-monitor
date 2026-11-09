@@ -194,6 +194,13 @@ private fun S04MonthArrow(
  *
  * 卡片与圆环都不可点（口径：无按下反馈、点击不跳转），锚点只做定位用。
  * 金额走 [animatedAmount] 做滚动数字；预算进度用 accent（与 BudgetScreen 同一口径）。
+ *
+ * @param budgetEnabled 「预算与预警」开关（[com.bsfeng.monitor.ui.foundation.FinanceUiToggle.BUDGET]）：
+ *   默认关。关掉时 s04-ring（预算环 + 环心「预算」字样）整个不渲染，KPI 三行独占整卡宽度；
+ *   卡片底部的「预算使用 X%」也随之换成笔数口径，不留半句预算文案。
+ * @param anchorTagged 是否挂 s04-kpis / s04-ring 锚点。统计汇总 pane（审计 P2-3）也渲染同一张三值卡，
+ *   而锚点账本已冻结、同名 testTag 不宜在第二处复用；那份传 false，卡片内容与交互不变，
+ *   只少一个定位锚点（卡上没有任何可点元素，读屏直接读文本，不违反无障碍基线）。
  */
 @Composable
 internal fun FinanceMainKpiSection(
@@ -201,10 +208,14 @@ internal fun FinanceMainKpiSection(
     today: Pair<Double, Double>,
     currentMonth: String,
     transactionCount: Int,
+    budgetEnabled: Boolean,
+    anchorTagged: Boolean = true,
 ) {
     val t = LocalDesignTokens.current
     Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
-        GlassCard(modifier = Modifier.testTag("s04-kpis")) {
+        GlassCard(
+            modifier = if (anchorTagged) Modifier.testTag("s04-kpis") else Modifier,
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -227,17 +238,20 @@ internal fun FinanceMainKpiSection(
                         color = t.fg,
                     )
                 }
-                Spacer(Modifier.width(t.space3))
-                Box(Modifier.testTag("s04-ring")) {
-                    FinanceRingGauge(
-                        // 口径：无预算 0% / 超 100% 环描满一圈、环心仍显示真实值
-                        fraction = stats.budgetProgress,
-                        big = ((stats.budgetProgress * 100).toInt()).toString() + "%",
-                        small = "预算",
-                        // 预算进度 = accent（蓝）：原型 s04/s06 circle.chart-gauge 实测
-                        // stroke rgb(0,113,227) = --accent（设计规范 §2.4），与 BudgetScreen 同一口径
-                        color = t.accent,
-                    )
+                // 开关关掉时连 Spacer 一起不渲染：否则三行 KPI 右侧会留一段没有内容的空隙
+                if (budgetEnabled) {
+                    Spacer(Modifier.width(t.space3))
+                    Box(if (anchorTagged) Modifier.testTag("s04-ring") else Modifier) {
+                        FinanceRingGauge(
+                            // 口径：无预算 0% / 超 100% 环描满一圈、环心仍显示真实值
+                            fraction = stats.budgetProgress,
+                            big = ((stats.budgetProgress * 100).toInt()).toString() + "%",
+                            small = "预算",
+                            // 预算进度 = accent（蓝）：原型 s04/s06 circle.chart-gauge 实测
+                            // stroke rgb(0,113,227) = --accent（设计规范 §2.4），与 BudgetScreen 同一口径
+                            color = t.accent,
+                        )
+                    }
                 }
             }
         }
@@ -247,9 +261,12 @@ internal fun FinanceMainKpiSection(
                 "今日 支出 " + yen(today.first, 0) +
                     " · 收入 " + yen(today.second, 0) +
                     " · 结余 " + yen(today.second - today.first, 0)
-            } else {
+            } else if (budgetEnabled) {
                 "共 " + transactionCount + " 笔 · 预算使用 " +
                     (stats.budgetProgress * 100).toInt() + "%"
+            } else {
+                // 预算关着时这行不留「预算使用 X%」：环都没有了，再报一个百分比会让人找不到出处
+                "共 " + transactionCount + " 笔"
             },
             style = MaterialTheme.typography.labelSmall,
             color = t.meta,

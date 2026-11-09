@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.FinanceManager
+import com.bsfeng.monitor.finance.FinancePeriod
+import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.finance.importer.BillImporter
 import com.bsfeng.monitor.finance.PandaImporter
 import com.bsfeng.monitor.finance.importer.BillImportResult
@@ -110,6 +112,94 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
      */
     private val _loadFailed = MutableStateFlow(false)
     val loadFailed: StateFlow<Boolean> = _loadFailed.asStateFlow()
+
+    // ========== 五档周期统计（s04 统计汇总 pane） ==========
+
+    /**
+     * 当前选中的时间单位（今日 / 本周 / 本月 / 本年 / 全部）。
+     *
+     * 只存「选中哪一档」，不存数据本身：数据由 [allPeriodStats] 一次取齐，切换档位不重新查库。
+     */
+    private val _selectedPeriod = MutableStateFlow(FinancePeriod.DAY)
+    val selectedPeriod: StateFlow<FinancePeriod> = _selectedPeriod.asStateFlow()
+
+    /** 五档一次取齐的结果（顺序与 unitbar 一致）；没取到时为空列表（界面显示占位而不是 0）。 */
+    private val _allPeriodStats = MutableStateFlow<List<PeriodStats>>(emptyList())
+    val allPeriodStats: StateFlow<List<PeriodStats>> = _allPeriodStats.asStateFlow()
+
+    /** 周期聚合入口是否可用（设置页开关的消费点；关闭时不发查询）。 */
+    private var periodEnabled: Boolean = true
+
+    /** 周期统计加载序号：只有最新一次有权写状态（同 [loadSequence] 的口径）。 */
+    private val periodSequence = AtomicInteger(0)
+    private var periodJob: Job? = null
+
+    /** 选中某一档：只改选中态，数据已经一次取齐，不再发查询。 */
+    fun selectPeriod(period: FinancePeriod) {
+        _selectedPeriod.value = period
+    }
+
+    /**
+     * 记账页子 Tab（0=交易明细 / 1=统计汇总）。
+     *
+     * 放在 ViewModel 而不是屏内 rememberSaveable：本屏随 Tab 切换整体离开组合，
+     * rememberSaveable 依赖同一调用点复入才恢复，实测切走再回来会被重置成「交易明细」；
+     * ViewModel 活在 Activity 生命周期里，切 Tab / 进出子路由都保住用户选的那一段。
+     */
+    private val _subTab = MutableStateFlow(FINANCE_SUBTAB_DETAIL)
+    val subTab: StateFlow<Int> = _subTab.asStateFlow()
+
+    fun selectSubTab(index: Int) {
+        _subTab.value = index.coerceIn(0, FINANCE_SUBTAB_STATS)
+    }
+
+    /**
+     * 重新取五档统计（进入本屏 / 写操作后调用）。
+     *
+     * 一次查询取齐五档：切档时界面零等待；比「切一档查一次」少 4 次库查询，
+     * 也避免快速来回切档时旧档结果覆盖新档。
+     */
+    fun loadPeriods() {
+        if (!periodEnabled) return
+        val token = periodSequence.incrementAndGet()
+        periodJob?.cancel()
+        periodJob = viewModelScope.launch {
+            try {
+                val all = manager.getPeriodStatsAll()
+                if (token != periodSequence.get()) return@launch
+                _allPeriodStats.value = all
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 周期统计失败不清空已有结果：图表继续显示上一次算出的值，
+                // 免得出一次抖动就把整块统计变成空白（与列表页「有缓存不清」同一口径）。
+                Log.w("FinanceViewModel", "读取五档周期统计失败", e)
+            }
+        }
+    }
+
+    /** 由设置页的「多周期查询入口」开关驱动：关闭后不再取数，直接把结果清空。 */
+    fun setPeriodEnabled(enabled: Boolean) {
+        periodEnabled = enabled
+        if (!enabled) {
+            periodJob?.cancel()
+            _allPeriodStats.value = emptyList()
+        } else {
+            loadPeriods()
+        }
+    }
+
+    /** 当前选中档的结果（未取到时返回 null，界面按空态渲染）。 */
+    fun currentPeriodStats(): PeriodStats? = periodStatsOf(_allPeriodStats.value, _selectedPeriod.value)
+
+    /**
+     * 从一次取齐的五档结果里挑出指定档（纯函数，界面可直接用，便于 JVM 单测）。
+     *
+     * 找不到该档时返回 null 而不是「随便给一档」：把别的档金额画到「今日」下面比留空更糟，
+     * 界面用 null 渲染占位。
+     */
+    fun periodStatsOf(all: List<PeriodStats>, period: FinancePeriod): PeriodStats? =
+        all.firstOrNull { it.unitKey == period.key }
 
     /** 当前这次加载的协程（新加载会取消它，避免过期结果覆盖新结果） */
     private var loadJob: Job? = null

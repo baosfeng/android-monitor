@@ -535,7 +535,13 @@ internal fun LazyListScope.financeMainItems(
     }
 }
 
-/** 明细区之前固定有 5 个页头 item（head / month / kpis / entries / listhead）。加了新 item 必须同步这里。 */
+/**
+ * 明细区之前固定有 5 个页头 item（head / month / kpis / entries / listhead）。
+ *
+ * s04 的子 Tab 条（交易明细 / 统计汇总）与月份条共用 month 这一项、统计 pane 的容器锚点
+ * 挂在已有 item 上，都不额外占位 —— 所以项数仍是 5。加了新 item 必须同步这里，
+ * 否则删除后的焦点复位会差一行。
+ */
 internal const val FINANCE_MAIN_HEADER_ITEMS = 5
 
 /**
