@@ -636,9 +636,12 @@
     function area(d) {
       d = d || {};
       var v = nums(d.values);
-      var w = d.w || 340, h = d.h || 148, padT = 24, padB = 24, padL = 30, padR = 12;
+      var w = d.w || 340, h = d.h || 148, padT = 24, padB = 24, padR = 12;
       if (!v.length) v = [0];
       var mx = maxOf(v), n = v.length;
+      /* 左轴留白按 Y 刻度最长的数字宽度自适应，避免「18420」这类 5 位数被裁到画布外 */
+      var digits = String(Math.round(mx)).length;
+      var padL = d.padL || (digits >= 5 ? 44 : (digits === 4 ? 38 : 30));
       function X(i) { return padL + (n > 1 ? i * (w - padL - padR) / (n - 1) : (w - padL - padR) / 2); }
       function Y(val) { return (h - padB) - (val / mx) * (h - padB - padT); }
       var pts = v.map(function (val, i) { return fx(X(i)) + ',' + fx(Y(val)); });
@@ -659,7 +662,11 @@
         if (lbls.length > 7 && i % 2 !== 0) return;
         var f = lbls.length > 1 ? i / (lbls.length - 1) : 0.5;
         var lx = padL + f * (w - padL - padR);
-        inner += '<text x="' + fx(lx) + '" y="' + (h - 7) + '" text-anchor="middle">' + esc(lb) + '</text>';
+        /* 首末刻度改端点锚，避免半个字宽越出画布右缘 */
+        var anchor = i === 0 ? 'start' : (i === lbls.length - 1 ? 'end' : 'middle');
+        if (i === lbls.length - 1) lx = w - padR;
+        if (i === 0) lx = padL;
+        inner += '<text x="' + fx(lx) + '" y="' + (h - 7) + '" text-anchor="' + anchor + '">' + esc(lb) + '</text>';
       });
       inner += '<path class="chart-area" d="' + fill + '" fill="url(#' + gid + ')"/>';
       inner += '<path class="chart-line seq" pathLength="1" d="' + line + '"/>';
@@ -667,8 +674,13 @@
       if (d.peak !== false) {
         var pi = 0;
         for (var k = 1; k < n; k++) { if (v[k] > v[pi]) pi = k; }
-        inner += '<text class="chart-value" x="' + fx(X(pi)) + '" y="' + fx(Y(v[pi]) - 9) +
-          '" text-anchor="middle">峰值 ' + v[pi] + '</text>';
+        /* 峰值标签贴边时改端点锚，保证整串数字留在 padL..(w-padR) 之间 */
+        var px = X(pi), panchor = 'middle';
+        var half = String('峰值 ' + v[pi]).length * 3.6;
+        if (px + half > w - padR) { panchor = 'end'; px = w - padR; }
+        else if (px - half < padL) { panchor = 'start'; px = padL; }
+        inner += '<text class="chart-value" x="' + fx(px) + '" y="' + fx(Y(v[pi]) - 9) +
+          '" text-anchor="' + panchor + '">峰值 ' + v[pi] + '</text>';
       }
       return wrap('chart-area-chart', w, h, inner, d.label || '24 小时曲线');
     }
@@ -724,10 +736,19 @@
     function bars(d) {
       d = d || {};
       var v = nums(d.values);
-      var w = d.w || 340, h = d.h || 150, padT = 22, padB = 24, padL = 30, padR = 12, gap = 8;
+      var w = d.w || 340, h = d.h || 150, padT = 22, padB = 24, padL = 30, padR = 12;
       if (!v.length) v = [0];
-      var mx = maxOf(v);
-      var bw = Math.max(4, (w - padL - padR - gap * (v.length + 1)) / v.length);
+      var n = v.length, mx = maxOf(v);
+      /* 柱间距随柱数收紧：30 根柱留 2px，7 根柱留 8px；总宽严格落在 padL..(w-padR) 内，避免右侧溢出 */
+      var gap = n > 20 ? 2 : (n > 10 ? 4 : 8);
+      var bw = Math.max(2, (w - padL - padR - gap * (n - 1)) / n);
+      /* 值直标：true = 每根都标；'peak' = 只标峰值；false = 不标（柱多时用 'peak' 防重叠） */
+      var vm = d.vlabels === undefined ? true : d.vlabels;
+      if (vm === true && n > 10) vm = 'peak';
+      var pi = 0;
+      for (var p = 1; p < n; p++) { if (v[p] > v[pi]) pi = p; }
+      /* X 刻度抽稀：柱数 > 10 时默认只留首根 + 每 5 根 + 末根 */
+      var step = Number(d.tick) || (n > 10 ? 5 : 0);
       var inner = '';
       [0, 1].forEach(function (t) {
         var y = fx((h - padB) - t * (h - padB - padT));
@@ -736,15 +757,21 @@
       });
       v.forEach(function (val, i) {
         var bh = Math.max(2, (h - padB - padT) * (val / mx));
-        var x = padL + gap * (i + 1) + bw * i;
+        var x = padL + i * (bw + gap);
         inner += '<rect class="chart-bar ' + (d.cls || 'seq') + '" x="' + fx(x) + '" y="' + fx(h - padB - bh) + '" width="' + fx(bw) +
           '" height="' + fx(bh) + '" rx="4" style="--bar-d:' + (i * 40) + 'ms"/>';
-        if (d.vlabels !== false) {
+        if (vm === 'peak' ? i === pi : vm !== false) {
           inner += '<text class="chart-value" x="' + fx(x + bw / 2) + '" y="' + fx(h - padB - bh - 6) +
             '" text-anchor="middle">' + val + '</text>';
         }
         var lb = (d.labels || [])[i];
-        if (lb) inner += '<text x="' + fx(x + bw / 2) + '" y="' + (h - 7) + '" text-anchor="middle">' + esc(lb) + '</text>';
+        if (!lb) return;
+        if (step && i !== 0 && (n - 1 - i) % step !== 0) return;
+        var anchor = 'middle';
+        if (step && i === 0) anchor = 'start';
+        if (step && i === n - 1) anchor = 'end';
+        inner += '<text x="' + fx(x + (anchor === 'start' ? 0 : (anchor === 'end' ? bw : bw / 2)) ) + '" y="' + (h - 7) +
+          '" text-anchor="' + anchor + '">' + esc(lb) + '</text>';
       });
       return wrap('chart-bars', w, h, inner, d.label || '柱状图');
     }
@@ -778,17 +805,33 @@
     function heat(d) {
       d = d || {};
       var v = nums(d.values);
-      var w = d.w || 340, h = d.h || 44, gap = 2;
+      var w = d.w || 340, cellH = d.h || 44, gap = 2;
       if (!v.length) v = [0];
-      var cw = (w - gap * (v.length - 1)) / v.length;
+      var n = v.length;
+      var axis = d.axis === true || d.axis === 'true';  /* 默认不带轴；显式 axis:true 才画小时刻度（避免改动其它屏的既有热力条） */
+      var h = axis ? cellH + 18 : cellH;
+      var cw = (w - gap * (n - 1)) / n;
       var mx = maxOf(v);
       var inner = '';
       v.forEach(function (val, i) {
         var t = Math.max(0, Math.min(1, val / mx));
         var lv = t <= 0 ? 0 : Math.min(5, Math.max(1, Math.ceil(t * 5)));
-        inner += '<rect class="heat-cell h' + lv + '" x="' + fx(i * (cw + gap)) + '" y="0" width="' + fx(cw) + '" height="' + h +
+        inner += '<rect class="heat-cell h' + lv + '" x="' + fx(i * (cw + gap)) + '" y="0" width="' + fx(cw) + '" height="' + cellH +
           '" rx="2" style="--heat-d:' + (i * 20) + 'ms"/>';
       });
+      /* 小时刻度轴：按总格数均分成 4 段（24 格 → 0/6/12/18/24，12 格 → 0/3/6/9/12） */
+      if (axis && n >= 8) {
+        var step = Math.max(1, Math.round(n / 4));
+        var y = cellH + 13;
+        inner += '<line class="chart-grid" x1="0" y1="' + (cellH + 3) + '" x2="' + w + '" y2="' + (cellH + 3) + '"/>';
+        for (var i2 = 0; i2 <= n; i2 += step) {
+          if (i2 > n) break;
+          var lx = Math.min(w, i2 * (cw + gap));
+          var anchor = i2 === 0 ? 'start' : (i2 >= n - step / 2 ? 'end' : 'middle');
+          var lx2 = anchor === 'end' ? w : lx;
+          inner += '<text x="' + fx(lx2) + '" y="' + y + '" text-anchor="' + anchor + '">' + i2 + '</text>';
+        }
+      }
       return wrap('chart-heat', w, h, inner, d.label || '24 小时活跃热力');
     }
 
@@ -815,12 +858,16 @@
       Array.prototype.forEach.call(list, function (el) {
         if (el.getAttribute('data-chart-done') === '1') return;
         try {
+          var vl = el.getAttribute('data-chart-vlabels');
           var html = render(el.getAttribute('data-chart'), {
             values: el.getAttribute('data-chart-values') || '',
             labels: (el.getAttribute('data-chart-labels') || '').split(',').filter(function (s) { return s !== ''; }),
             value: el.getAttribute('data-chart-value'),
             label: el.getAttribute('data-chart-label') || '',
-            vlabels: el.getAttribute('data-chart-vlabels') !== 'false',
+            /* 'false' = 全部不标；'peak' = 只标峰值；缺省 = 每根都标 */
+            vlabels: vl === 'false' ? false : (vl === 'peak' ? 'peak' : true),
+            tick: el.getAttribute('data-chart-tick'),
+            axis: el.getAttribute('data-chart-axis') === 'true',
             peak: el.getAttribute('data-chart-peak') !== 'false'
           });
           if (html) { el.innerHTML = html; el.setAttribute('data-chart-done', '1'); }

@@ -1,96 +1,56 @@
-# 交付自检 · 每日行程 + 页面轨迹（增量原型）
+# 交付自检 · 记账查询与图表优化（r5）
 
-基线 `fa35ed6781429ea5e417971d4d502cf403fbbc4f` · 作者自测一遍，独立取证归审查。
+基线 `5797250`（`原型：统计 tab 增加日/周/月/年/全部单位切换与交互式图表`）· 作者自测 + 独立审计，结论归 leader。
+
+## 本轮交付（用户拍板的原型 → 实现）
+
+| 交付 | 落点 |
+|---|---|
+| 记账 Tab 两个子 Tab（交易明细 / 统计汇总） | `finance/ui/FinanceSubTabBar.kt`、`FinanceMainScreen.kt` |
+| 五档时间单位查询（今日 / 本周 / 本月 / 本年 / 全部） | `finance/FinancePeriod*.kt`（数据层）+ `finance/ui/FinancePeriodSection.kt` |
+| 每档「两格 KPI + 带坐标轴图表」 | `ui/components/ChartFrame.kt`（Y 轴刻度 / X 轴标签 / 单位 / 数值直标） |
+| 概览页内嵌记账图表卡 | `ui/overview/OverviewFinanceCard.kt` + `OverviewViewModel` |
+| 设置页「记账功能（可按需开启）」三开关 | `ui/foundation/FinanceUiPrefs.kt` + `ui/SettingsFinanceUiSection.kt` |
 
 ## 门禁结果（本机实跑）
 
 | 项 | 命令 | 结果 |
 |---|---|---|
-| 产物与分片一致 | `node scripts/assemble-prototype.mjs --check` | `产物与分片一致 ✓` · exit 0 |
-| 产物自测 | `odops verify .open-design/08-prototype.html --platform mobile` | 无「打不开 / 破图 / 主流程不可用」；2 项 FAIL 为既有静态项（见下） |
-| 渲染层 | 同上加 `--browser` | `ok 无横向溢出` · `ok 强调色用法 0 次` · `ok 23 个顶层区块都有 data-od-id` |
-| 截图 | `odops shot … --out .open-design/shots/trips-390.jpg --wait 2600` | `1440x900，jpg q80，56 KB` |
-| 手机尺寸截图 | `odops shot … --width 450 --height 930 --wait 2600` | `450x930，jpg q80，48 KB` |
+| 构建 | `./gradlew :app:assembleDebug` | BUILD SUCCESSFUL；`adb install -r` Success |
+| 原型一致 | `node scripts/assemble-prototype.mjs --check` | `产物与分片一致 ✓` · exit 0 |
+| 锚点账 | `node scripts/check-anchors.mjs` | 账本 740 / 落地 617 / 缺失 123（全在作废清单）· **自增 0** · exit 0 |
+| 无障碍 | `bash scripts/check-a11y.sh` | PASS（ERROR 0 / WARN 1 存量 totp） |
+| UI 规则 | `bash scripts/check-ui-rules.sh` | PASS（4 项 0 命中） |
+| 覆盖率 | `bash scripts/check-coverage.sh` | PASS（domain 78.71% ≥ 35%） |
+| 文档 | `node scripts/check-docs.mjs` | PASS（死链 0 / 孤立 0） |
+| 单测（本改动范围） | `./gradlew :app:testDebugUnitTest --tests 'com.bsfeng.monitor.finance.*'` | 351 例 0 失败（含新增 14 例） |
 
-> `odops shot` 默认在开屏 1.9s 内就抓图，会拍到开屏页；加 `--wait 2600` 才是界面。默认画布 1440×900，设备框（417 宽）在 450 宽视口才不被裁。
+> 全量 `./gradlew :app:testDebugUnitTest`（2560 例）在 `transfer` 包有 3–4 例偶发失败（TransferResendSourceTest / TransferEngineDeletionTest / TransferEngineSendTimeoutTest），**单独重跑该组即绿**，且本轮未触碰 `transfer/**`（`git status` 佐证）。属既有 flaky，不阻塞本轮。
 
-## 关键交互实测（agent-browser 真点击 + DOM 断言）
+## 关键交互实测（模拟器 emulator-5554，`scripts/debug-cli.sh` 语义树 + 截图）
 
-```json
-{"net_notification":true,"net_page":false,"app_page":true,"app_notification":false,"all_page":true,"all_notification":true}
-{"default_privacy":"a","a_visible":true,"b_visible":false,"after_b_attr":"b","after_b_a":false,"after_b_b":true,"badge":"档 B","after_c_texts":true}
-{"s2_checked":true,"s2_sheet_visible":true,"focus":"关闭","s2_closed":false,"focus_back":"s16-seg-cafe"}
-```
+| 动作 | 断言 |
+|---|---|
+| 子 Tab 切换 | 两段 bounds 可点，`selected` 语义随之翻转（selectable + role Tab） |
+| 五档切换 | 今日 ¥96 / 本周 ¥96 / 本月 ¥588 / 本年 ¥2,116 / 全部 ¥2,226，与库表 SUM 逐位一致 |
+| 图表带轴 | 每档有 Y 刻度值 + X 标签 + 右上单位 + 图注峰值；今日档 24 格有 0/6/12/18/24 刻度 |
+| 概览记账卡 | 三行金额 + 分类环 + 带轴趋势（X 7 个日期、Y 3 档刻度、峰值标注） |
+| 三开关联动 | 关首页卡 133→125 节点、关多周期入口 144→120 节点、开预算与预警出现「预算」环 |
+| 默认值 | 清 prefs 后：预算与预警关 / 首页记账卡开 / 多周期查询入口开（与原型 s09 的 aria-checked 一致） |
 
-- 筛选并组：网络档只见通知、应用档只见页面、全部档两者都见。
-- 隐私三档：默认 A；切 B 后 `.pv-a` 隐藏 / `.pv-b` 显示、角标「档 B」；切 C 后文本样例块显示。
-- 停留段抽屉：点段打开、焦点进「关闭」、关闭后焦点回原段。
+## 有意偏离（逐条报备，均已复核）
 
-## 待办（不阻塞本轮拍板）
+| id | 属性 | 原型值 | 实现值 | 类型 | 保留理由 |
+|---|---|---|---|---|---|
+| s01-legend | 图例条数 | 固定 6 类 | Top3 + 「其他 N 类」 | C 原型没画 | 真实数据分类数不固定，固定 6 行会出现空行 |
+| s04-chart-day | 今日档图表口径 | 逐时**支出金额**热力 | 同（金额口径，标题「今日 24 小时消费金额」） | 一致 | 审计曾误报「实现用笔数」，已改为金额并订正 |
+| s04-multiperiod | 卡底说明 | 两段长文案 | 一行「按日 / 周 / 月 / 年 / 全部统计，收入与结余同口径」 | A 翻译损耗 | 移动端一行放不下两段；信息量保留 |
+| s04-stats-kpis | KPI 卡位置 | stats pane 内 | stats pane 内（多周期卡之后、双入口之前）；与明细 pane 同源同值 | 一致 | 两份不挂同名锚点，避免 testTag 双渲染 |
+| s09-finance | 行副标题 | 完整一句 | 一行 clamp（不省略） | A 翻译损耗 | 390dp 宽卡内一行放不下原文 |
 
-- P1 · 裸色值 47 处（既有 46 + 新增 1 = 新增 PAGE 行沿用微信品牌绿 `--app:#07c160`）。全部在主题 `[data-theme]` 命名空间块与 `app-icon` 内联变量，收敛方案归「token 化 app 图标」独立任务。
-- P1 · `ai-default-indigo` P0 来自 `--chart-10: #6366f1`（token 命名空间块），既有问题，与本轮无关。
-- P1 · `app-icon` 白字压品牌绿对比度 2.38:1（既有模式，新增 PAGE 行沿用）；Tab 文案「概览」4.31:1（既有）。
-- P2 · 时间轴 5 个停留段复用 3 张详情抽屉（同地点共用），非逐段独立内容。
-- P2 · 日期切换「前一天 / 后一天」只出 Toast，未做真实数据切换。
-- P2 · 无 `00-brief.md`，`verify` 的画布/断点核对项未生效（沿用仓库既有状态）。
-- P2 · 时间带轴标签 12px（已挂 `data-od-min-fs` 豁免），`verify` 仍会列进「小于 14px」提醒。
+## 待办（不阻塞交付，用户决定做不做）
 
-## 演示件（不进产品）
-
-| 演示件 | 锚点 | 隔离方式 |
-|---|---|---|
-| 「重新检测」按序循环三态（未授权 → 缺后台定位 → 已就绪） | `s09-loc-recheck` | 实现时只保留真实自检结果，去掉循环 |
-| 前一天 / 后一天 Toast | `s16-prev` / `s16-next` | 实现时接真实日期参数 |
-| 文本样例占位「示例文本一 / 二」 | `.s16-texts` | 仅原型演示，实现侧不落库 |
-
-## 取证截图（本地，不入库）
-
-`shots/trips-390.jpg`（1440×900 首屏）· `trips-mobile.jpg`（450×930 首屏）· `trips-s01-band.jpg`（时间带）· `trips-s16.jpg` / `trips-s16-lower.jpg` / `trips-s16-b.jpg` / `trips-s16-sheet.jpg`（行程屏 + 口径 + 抽屉）· `trips-s09.jpg` / `trips-s09-collapsed.jpg`（定位卡两态）· `trips-s02-app.jpg`（应用档筛选）· `trips-band-zoom.jpg`（时间带放大）
-
----
-
-# r2 增量自检（四档粒度 + 操作记录 + s17）
-
-## 门禁
-
-| 项 | 命令 | 结果 |
-|---|---|---|
-| 产物一致 | `node scripts/assemble-prototype.mjs --check` | `产物与分片一致 ✓` · exit 0 |
-| 产物自测 | `odops verify … --platform mobile` | 无阻塞项；`ok 25 个顶层区块都有 data-od-id`、`ok 强调色用法 0 次` |
-| 渲染层 | 同上 `--browser` | `ok 无横向溢出`；对比度 FAIL 仍是既有 3 项（`微` 2.38:1 ×2、`概览` 4.31:1） |
-| 裸色值 | 同上 | 47 处，与 r1 持平（本轮新增页面全走 token，未新增字面量） |
-| 截图 | `odops shot … --out .open-design/shots/trips-390.jpg --wait 2600` | `1440x900，jpg q80，56 KB` |
-
-## DOM 断言（agent-browser 真点击）
-
-```json
-{"levels":4,"default":"a","c_texts":"flex","c_fold":"block","c_ctrl":"none",
- "sheet1_checked":true,"fold_lines":20,"fold_open":true,"d_ctrl":"block","d_chips":15,
- "log_checked":true,"log_hint":"flex","badge":"档 D"}
-{"empty_main":"none","empty_block":"grid","populated_main":"block","opened":true}
-{"after_reenter_s2":false,"sheet_visible":false,"active":true}
-{"title":"微信 · 记录粒度","badge":"当前 标题","opt_a":"true","sheet_closed":true,
- "wechat_level":"c","wechat_tail":"全文","douyin_opt":"true","black_before":3,"black_after":2,"icon_size":44}
-```
-
-- 四档：默认 A；档 C 出 3 行文本 + 展开全文（20 行，可展开）；档 D 追加可操作项与 5 个 chip。
-- 开关：默认关；开启后卡头隐私提示显示、三张抽屉的「操作记录」分组显示。
-- 进屏复位：开过详情 → `App.go('s01')` → `App.go('s16')` → 抽屉全部取消勾选（观察器异步 50ms 内生效）。
-- 空态：`App.state('s16','empty')` → 主区 `display:none`、`.st-empty` `display:grid`；`populated` 恢复。
-- s17：抽屉标题/当前值随行变化；选「全文」写回行内档位并收起；黑名单移除 3→2，删除按钮 44px。
-
-## 本轮修掉的既有坑（写一次防复发）
-
-- **flex 子项收缩**：`.s16-full` 是 `flex-direction:column` + `max-height` + `li{overflow:hidden}`，`min-height:auto` 被 `overflow:hidden` 归零，20 行被压成 8px 一条（截图肉眼可见）。修法：`li{flex:0 0 auto}`。
-- **说明文案共用名称变体**：`.pv-c` 同时被「名称」和「说明」使用，导致档 D 把 C/D 两句说明一起显示。修法：说明另起 `.cap-*`。
-
-## 待办（不阻塞）
-
-- P2 · 单个 App 的档位尚未与 s16 时间轴联动（s16 仍按屏内口径显示）。
-- P2 · 敏感页「添加」只出 Toast，无真实规则编辑。
-- P2 · `.app-icon` 白字压品牌色对比度问题在 s16/s17 同样存在（当前 `verify` 只量首屏，未命中）。
-
-## 取证截图
-
-`shots/r2-s16-sheet-d.jpg`（档 D + 全文展开 + chip）· `r2-s16-ops.jpg`（操作记录分组）· `r2-s17-list.jpg`（App 分档列表）· `r2-s17-sheet.jpg`（四档弹层）· `r2-s09-entry.jpg`（设置入口卡）· `r2-zoom-fulltext.jpg`（全文行高修复前后对照）
+- 原型侧：`.open-design/src/styles/10-tokens.html` :root 外 47 处裸色值（`--chart-1..16`）、未使用槽 `--chart-10 #6366f1`、底部 Tab 文案对比度 4.31:1。
+- 门禁侧：`check-anchors` 的 `missing` 只从账本算，原型 790 vs 账本 740 的差集结构上看不见 → 建议加「spec ⊄ 账本」检查。
+- 运行时 a11y：设置细则页顶部演示条 4 处 41.9dp（既有演示件，非本轮引入）。
+- `transfer` 包 3–4 例 flaky（与本轮无关），建议单独跟进。

@@ -382,25 +382,25 @@
         </div>
       </div>
 
-      <div class="set-group">
-        <p class="group-label">记账功能（可按需开启）</p>
-        <div class="group">
-          <div class="row">
+      <div class="set-group" data-od-id="s09-finance-group">
+        <p class="group-label" data-od-id="s09-finance-grouphead">记账功能（可按需开启）</p>
+        <div class="group" data-od-id="s09-finance-list">
+          <div class="row" data-od-id="s09-finance-budget">
             <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
             <span class="row-body"><span class="row-title">预算与预警</span><span class="row-sub">默认关闭；开启后在记账页显示预算进度与预警</span></span>
-            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="预算与预警" data-toggle data-on-msg="预算与预警已开启" data-off-msg="预算与预警已关闭"></button>
+            <button class="switch" type="button" role="switch" aria-checked="false" aria-label="预算与预警" data-toggle data-on-msg="预算与预警已开启" data-off-msg="预算与预警已关闭" data-od-id="s09-finance-budget-switch"></button>
           </div>
-          <div class="row">
+          <div class="row" data-od-id="s09-finance-homecard">
             <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
-            <span class="row-body"><span class="row-title">首页记账卡</span><span class="row-sub">概览页显示本月收支柱状与趋势</span></span>
-            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="首页记账卡" data-toggle data-on-msg="首页记账卡已开启" data-off-msg="首页记账卡已关闭"></button>
+            <span class="row-body"><span class="row-title">首页记账卡</span><span class="row-sub">概览页显示分类支出环图与近 7 天趋势</span></span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="首页记账卡" data-toggle data-on-msg="首页记账卡已开启" data-off-msg="首页记账卡已关闭" data-od-id="s09-finance-homecard-switch"></button>
           </div>
-          <div class="row">
+          <div class="row" data-od-id="s09-finance-multiperiod">
             <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3 6.5h18M7 12h10M10 17.5h4"/></svg></span>
             <span class="row-body"><span class="row-title">多周期查询入口</span><span class="row-sub">记账页顶部显示 日 / 周 / 月 / 年 / 全部</span></span>
-            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="多周期查询入口" data-toggle data-on-msg="多周期查询入口已开启" data-off-msg="多周期查询入口已关闭"></button>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="多周期查询入口" data-toggle data-on-msg="多周期查询入口已开启" data-off-msg="多周期查询入口已关闭" data-od-id="s09-finance-multiperiod-switch"></button>
           </div>
-          <button class="row" type="button" data-goto="s06">
+          <button class="row" type="button" data-goto="s06" data-od-id="s09-finance-budgetentry">
             <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
             <span class="row-body"><span class="row-title">预算设置</span><span class="row-sub">按需进入，不再占用记账首页</span></span>
             <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
