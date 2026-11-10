@@ -170,6 +170,165 @@ class OtpauthUriTest {
         )
     }
 
+    // ───────────────────────── Steam：两种真实导出形态 ─────────────────────────
+
+    /** Steam Guard 的 base64 密钥（真实样本，长度余数过不了严格 Base32）。 */
+    private companion object {
+        const val STEAM_SECRET = "cnOgvVunvLFR1gZAwzDxDrgbXWM="
+    }
+
+    @Test
+    fun `steam host 被认成 Steam 变体且固定五位`() {
+        val account = success(OtpauthUri.parse("otpauth://steam/alice?secret=$STEAM_SECRET&period=30"))
+        assertEquals("alice", account.accountName)
+        assertEquals(TotpAccount.VARIANT_STEAM, account.variant)
+        assertEquals(5, account.params.digits)
+        assertEquals(TotpParams.TYPE_TOTP, account.params.type)
+        assertTrue(SecretCodec.decodeToBytes(account.secretBase32)!!.isNotEmpty())
+    }
+
+    @Test
+    fun `steam host 大小写不敏感`() {
+        // scheme 是 otpauth://，能大写的只有 host 那一段：大写 STEAM 必须与 steam 同义
+        val account = success(OtpauthUri.parse("OTPAUTH://STEAM/alice?secret=$STEAM_SECRET"))
+        assertEquals(TotpAccount.VARIANT_STEAM, account.variant)
+        assertEquals(5, account.params.digits)
+    }
+
+    @Test
+    fun `steam host 即使显式给别的位数也按五位入库`() {
+        val account = success(OtpauthUri.parse("otpauth://steam/alice?secret=$STEAM_SECRET&digits=6"))
+        assertEquals(5, account.params.digits)
+    }
+
+    @Test
+    fun `标准 totp 形态的 Steam 链接位数也归一成五位`() {
+        val account = success(
+            OtpauthUri.parse("otpauth://totp/Steam:alice?secret=$STEAM_SECRET&issuer=Steam"),
+        )
+        assertEquals(TotpAccount.VARIANT_STEAM, account.variant)
+        assertEquals(5, account.params.digits)
+        // 显式 digits=6 也收敛成 5：Steam 码长由字母表决定
+        assertEquals(5, success(OtpauthUri.parse("otpauth://totp/Steam:alice?secret=$STEAM_SECRET&issuer=Steam&digits=6")).params.digits)
+    }
+
+    @Test
+    fun `Steam 变体解析结果的位数恒为五位`() {
+        // 不变量：variant == STEAM ⟹ params.digits == 5，任意入口都必须收敛
+        val inputs = listOf(
+            "otpauth://steam/alice?secret=$STEAM_SECRET&digits=8",
+            "OTPAUTH://STEAM/alice?secret=$STEAM_SECRET",
+            "otpauth://totp/Steam:alice?secret=$STEAM_SECRET&issuer=Steam",
+            "otpauth://totp/Steam:alice?secret=$STEAM_SECRET&issuer=Steam&digits=6",
+            "otpauth://totp/steam:alice?secret=$STEAM_SECRET&digits=10",
+        )
+        for (input in inputs) {
+            val account = success(OtpauthUri.parse(input))
+            assertEquals(input, TotpAccount.VARIANT_STEAM, account.variant)
+            assertEquals(input, 5, account.params.digits)
+        }
+        // 反例：只有 digits=5 而 issuer/label 都不含 steam → 仍是 STANDARD，位数保持 5
+        val valve = success(OtpauthUri.parse("otpauth://totp/Valve:alice?secret=$STEAM_SECRET&digits=5"))
+        assertEquals(TotpAccount.VARIANT_STANDARD, valve.variant)
+        assertEquals(5, valve.params.digits)
+    }
+
+    @Test
+    fun `build 只产标准 totp 形态且往返后仍是 Steam 变体`() {
+        val account = TotpAccount(
+            issuer = "Valve",
+            accountName = "alice",
+            secretBase32 = STEAM_SECRET,
+            params = TotpParams(digits = 5),
+            variant = TotpAccount.VARIANT_STEAM,
+        )
+        val uri = OtpauthUri.build(account)
+        assertTrue(uri, uri.startsWith("otpauth://totp/"))
+        assertTrue(uri, uri.contains("digits=5"))
+        val parsed = success(OtpauthUri.parse(uri))
+        assertEquals(TotpAccount.VARIANT_STEAM, parsed.variant)
+        assertEquals(5, parsed.params.digits)
+        assertEquals("alice", parsed.accountName)
+    }
+
+    // ───────────────────────── Google 迁移串：data 里的 '+' 不能被当空格 ─────────────────────────
+
+    /** payload hex → 标准 Base64 / URL-safe / 手抄换行，覆盖 data 参数的全部真实形态。 */
+    private val migrationPayload = "ChUKB/s+Pj4+Pj4SAVgaAVggASgBMAIQAQ=="
+    private val migrationPayloadUrlSafe = "ChUKB_s-Pj4-Pj4SAVgaAVggASgBMAIQAQ=="
+
+    @Test
+    fun `迁移串里字面加号仍能解析`() {
+        val batch = OtpauthMigration.parse("otpauth-migration://offline?data=" + migrationPayload)
+        assertEquals(1, batch.accounts.size)
+        assertEquals(emptyList<String>(), batch.skipped)
+        assertEquals("X", batch.accounts[0].accountName)
+        assertEquals("X", batch.accounts[0].issuer)
+        assertEquals(TotpParams.TYPE_TOTP, batch.accounts[0].params.type)
+    }
+
+    @Test
+    fun `迁移串里的加号被百分号编码成 %2B 同样能解析`() {
+        val batch = OtpauthMigration.parse("otpauth-migration://offline?data=" + migrationPayload.replace("+", "%2B"))
+        assertEquals(1, batch.accounts.size)
+        assertEquals(emptyList<String>(), batch.skipped)
+    }
+
+    @Test
+    fun `迁移串的 URL-safe 字母表同样能解析`() {
+        val batch = OtpauthMigration.parse("otpauth-migration://offline?data=" + migrationPayloadUrlSafe)
+        assertEquals(1, batch.accounts.size)
+        assertEquals(emptyList<String>(), batch.skipped)
+        assertEquals(migrationPayload.let { OtpauthMigration.parse("otpauth-migration://offline?data=" + it) }.accounts[0].secretBase32, batch.accounts[0].secretBase32)
+    }
+
+    @Test
+    fun `迁移串带换行的手抄形态仍能解析`() {
+        val wrapped = migrationPayload.chunked(20).joinToString("\n")
+        val batch = OtpauthMigration.parse("otpauth-migration://offline?data=" + wrapped)
+        assertEquals(1, batch.accounts.size)
+        assertEquals(emptyList<String>(), batch.skipped)
+    }
+
+    // ───────────────────────── Base64 回落的可信门槛（手抄错的 Base32 不得被收下） ─────────────────────────
+
+    @Test
+    fun `手抄错的 Base32 不得被当成 base64 收下`() {
+        // 回归：Base64 字母表几乎覆盖 [A-Za-z0-9]，回落若无门槛，"解不开" 就不再等于 "写错了"
+        assertFailure(OtpauthUri.parse("otpauth://totp/C:a?secret=ABC"), OtpauthUri.REASON_SECRET_INVALID)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSW1Y3P"), OtpauthUri.REASON_SECRET_INVALID)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=ABCDEF"), OtpauthUri.REASON_SECRET_INVALID)
+        assertEquals(
+            SecretDecoded.Invalid(OtpauthUri.REASON_SECRET_INVALID),
+            SecretCodec.decodeOrNull("JBSW1Y3P"),
+        )
+    }
+
+    @Test
+    fun `纯 Base32 字母表但长度非法时直接拒绝不回落`() {
+        // 纯 [A-Z2-7] 且大小写统一：只可能是手抄错的 Base32，不是 base64 密钥
+        for (raw in listOf("A", "ABC", "ABCDEF", "ABCDEFG")) {
+            assertEquals(raw, SecretDecoded.Invalid(OtpauthUri.REASON_SECRET_INVALID), SecretCodec.decodeOrNull(raw))
+        }
+    }
+
+    @Test
+    fun `Steam 的 base64 密钥仍走回落分支`() {
+        val decoded = SecretCodec.decodeOrNull(STEAM_SECRET) as? SecretDecoded.Ok
+            ?: throw AssertionError("Steam 密钥必须仍能解码")
+        assertEquals(SECRET_KIND_BASE64, decoded.kind)
+        assertEquals(20, decoded.bytes.size)
+        val account = success(OtpauthUri.parse("otpauth://steam/alice?secret=$STEAM_SECRET"))
+        assertEquals(Base32.encode(decoded.bytes), account.secretBase32)
+    }
+
+    @Test
+    fun `规范 Base32 仍走 Base32 分支不被回落干扰`() {
+        val decoded = SecretCodec.decodeOrNull("JBSWY3DPEHPK3PXP") as? SecretDecoded.Ok
+            ?: throw AssertionError("规范 Base32 必须可解")
+        assertEquals(SECRET_KIND_BASE32, decoded.kind)
+    }
+
     // ───────────────────────── 生成与往返 ─────────────────────────
 
     @Test

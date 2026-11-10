@@ -37,6 +37,14 @@ object OtpauthUri {
     private const val TYPE_TOTP = "totp"
     private const val TYPE_HOTP = "hotp"
 
+    /** Steam Guard 的另一种真实导出形态是 host 直接写 steam（Aegis 按 `case "steam"` 分支处理）；解析端认，生成端不产。 */
+    private const val TYPE_STEAM = "steam"
+
+    /** Steam 字母表码长恒为 5，与 [TotpAlgorithm.steam] 的输出长度一致。 */
+    private const val STEAM_DIGITS = 5
+
+    private const val STEAM_ISSUER_LABEL = "Steam"
+
     /**
      * 上限取 4096：Google 迁移串常 1–2 KB，512 会直接拒掉；
      * 4 KB 之外的内容更可能是误扫整段文本，没必要为它跑完整条解析。
@@ -83,14 +91,14 @@ object OtpauthUri {
         val boundary = rest.indexOfFirst { it == '/' || it == '?' || it == '#' }
             .let { if (it < 0) rest.length else it }
         val type = rest.substring(0, boundary).lowercase()
-        if (type != TYPE_TOTP && type != TYPE_HOTP) return failure(REASON_BAD_TYPE)
+        if (type != TYPE_TOTP && type != TYPE_HOTP && type != TYPE_STEAM) return failure(REASON_BAD_TYPE)
 
         val afterType = rest.substring(boundary)
         val queryAt = afterType.indexOf('?')
         val rawLabel = if (queryAt < 0) afterType else afterType.substring(0, queryAt)
         val rawQuery = if (queryAt < 0) "" else afterType.substring(queryAt + 1)
 
-        return parseSingle(rawLabel, rawQuery, type == TYPE_HOTP)
+        return parseSingle(rawLabel, rawQuery, isHotp = type == TYPE_HOTP, isSteam = type == TYPE_STEAM)
     }
 
     /**
@@ -107,7 +115,12 @@ object OtpauthUri {
         }
     }
 
-    private fun parseSingle(rawLabel: String, rawQuery: String, isHotp: Boolean): OtpauthParseResult {
+    private fun parseSingle(
+        rawLabel: String,
+        rawQuery: String,
+        isHotp: Boolean,
+        isSteam: Boolean,
+    ): OtpauthParseResult {
         val params = parseQuery(rawQuery) ?: return failure(REASON_BAD_ENCODING)
 
         val secretText = params[KEY_SECRET] ?: return failure(REASON_SECRET_MISSING)
@@ -117,7 +130,11 @@ object OtpauthUri {
             is SecretDecoded.Invalid -> return failure(REASON_SECRET_INVALID)
         }
 
-        val digits = params[KEY_DIGITS].let { value ->
+        // 位数先按链接原文解析（steam host 不看 digit 参数，Steam 码长恒为 5）；
+        // 是否归一成 5 由变体判定决定，见下面 digits 的收敛
+        val declaredDigits = if (isSteam) {
+            STEAM_DIGITS
+        } else params[KEY_DIGITS].let { value ->
             if (value == null) {
                 TotpParams.DEFAULT_DIGITS
             } else {
@@ -154,7 +171,15 @@ object OtpauthUri {
         val resolvedName = accountName.ifEmpty { issuer }
         if (resolvedName.isEmpty()) return failure(REASON_LABEL_MISSING)
 
-        val variant = detectTotpVariant(issuer, resolvedName, digits)
+        // host 写 steam 时直接判 Steam 变体，不再依赖 label/issuer 里的字样
+        val variant = if (isSteam) {
+            TotpAccount.VARIANT_STEAM
+        } else {
+            detectTotpVariant(issuer, resolvedName, declaredDigits)
+        }
+        // 不变量：variant == STEAM ⟹ digits == 5。Steam 的码是 5 个字母，位数由字母表决定；
+        // 不收敛的话详情页会显示「6 位」却出字母码，用户改成 8 位后码仍然是 5 个字母
+        val digits = if (variant == TotpAccount.VARIANT_STEAM) STEAM_DIGITS else declaredDigits
 
         return OtpauthParseResult.Success(
             TotpAccount(
@@ -179,12 +204,25 @@ object OtpauthUri {
      *
      * 默认值不写进 query：SHA1/6 位/30 秒/TOTP 是绝大多数客户端的默认，省掉能显著缩短二维码，
      * 而解析端对缺失参数的处理与本函数一致，往返仍然等价。HOTP 必须写 type 与 counter。
+     *
+     * **只产标准形态**：Steam 也写成 `otpauth://totp/<issuer>:<name>?secret=...&digits=5`，
+     * `otpauth://steam/...` 只在解析端兼容——多数验证器不认那个 host，导出成它等于把二维码做废。
+     * Steam 账户的 issuer 统一规范成 `Steam`：解析端判变体靠「issuer/label 含 steam」的强信号，
+     * digits=5 只是弱信号，原 issuer 若是 `Valve` 之类，导出再导入就会退化成 STANDARD。
      */
     fun build(account: TotpAccount): String {
-        val issuer = account.issuer.trim()
+        val isSteamVariant = account.variant == TotpAccount.VARIANT_STEAM
+        val rawIssuer = account.issuer.trim()
+        val issuer = if (isSteamVariant && !rawIssuer.contains("steam", ignoreCase = true)) {
+            STEAM_ISSUER_LABEL
+        } else {
+            rawIssuer
+        }
         val name = account.accountName.trim()
         val label = if (issuer.isEmpty()) name else issuer + ":" + name
         val isHotp = TotpParams.isHotpType(account.params.type)
+        // Steam 的码恒为 5 个字母，位数由字母表决定，不沿用账户里可能被改坏的 digits
+        val digits = if (isSteamVariant) STEAM_DIGITS else account.params.digits
         val out = StringBuilder(SCHEME)
             .append(if (isHotp) TYPE_HOTP else TYPE_TOTP)
             .append('/')
@@ -204,8 +242,8 @@ object OtpauthUri {
                 out.append('&').append(KEY_ALGORITHM).append('=').append(algorithm)
             }
         }
-        if (account.params.digits != TotpParams.DEFAULT_DIGITS) {
-            out.append('&').append(KEY_DIGITS).append('=').append(account.params.digits)
+        if (digits != TotpParams.DEFAULT_DIGITS) {
+            out.append('&').append(KEY_DIGITS).append('=').append(digits)
         }
         if (account.params.periodSec != TotpParams.DEFAULT_PERIOD_SEC) {
             out.append('&').append(KEY_PERIOD).append('=').append(account.params.periodSec)
@@ -243,10 +281,7 @@ object OtpauthUri {
         null
     }
 
-    /**
-     * 百分号解码；[keepPlus] 时字面 '+' 原样保留（base64 字母表里它是数据，不是空格）。
-     * 先占位再交给 URLDecoder，非法编码（%ZZ、尾部裸 %）返回 null 而不是抛出去。
-     */
+    /** 百分号解码；[keepPlus] 时字面 '+' 保留（base64 里它是数据不是空格）。坏编码返回 null。 */
     private fun percentDecode(text: String, keepPlus: Boolean): String? {
         val prepared = if (keepPlus) text.replace("+", "%2B") else text
         if ('%' !in prepared) return prepared

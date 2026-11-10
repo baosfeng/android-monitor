@@ -139,14 +139,20 @@ object OtpauthMigration {
         )
     }
 
-    /** query 里取指定的百分号解码后参数；迁移串只认 data，其余忽略。 */
+    /**
+     * query 里取指定的参数值；迁移串只认 data，其余忽略。
+     *
+     * 不能直接用 URLDecoder.decode：它按 application/x-www-form-urlencoded 语义把字面 '+' 解成空格，
+     * 而标准 Base64 里 '+' 是常态数据（不是空格——空格会写成 %20）。一个 '+' 就能让整张迁移图失败，
+     * 所以先把 '+' 占位成 %2B 再解码，与 [OtpauthUri] 的 percentDecode(keepPlus = true) 同一口径。
+     */
     private fun queryValue(query: String, key: String): String? {
         for (pair in query.substringBefore('#').split('&')) {
             val eq = pair.indexOf('=')
             if (eq <= 0) continue
             if (pair.substring(0, eq).trim().lowercase() != key) continue
             return try {
-                java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8)
+                java.net.URLDecoder.decode(pair.substring(eq + 1).replace("+", "%2B"), StandardCharsets.UTF_8)
             } catch (e: IllegalArgumentException) {
                 null
             }
@@ -154,7 +160,10 @@ object OtpauthMigration {
         return null
     }
 
-    /** 标准 Base64 优先（官方 sample 带 padding），再 base64url，最后补 padding 重试。 */
+    /**
+     * 标准 Base64 优先（官方 sample 带 padding，'+' 是常态），再 base64url，最后补 padding 重试。
+     * 去掉空白只为兼容手抄时误带的换行/空格，不是用来修被 URLDecoder 吃掉的 '+'（那已在 [queryValue] 拦住）。
+     */
     private fun decodeData(text: String): ByteArray? {
         val compact = text.filterNot { it.isWhitespace() }
         if (compact.isEmpty()) return null
