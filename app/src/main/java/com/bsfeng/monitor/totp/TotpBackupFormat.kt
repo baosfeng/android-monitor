@@ -6,6 +6,7 @@ import com.bsfeng.monitor.domain.totp.TotpParams
  * 备份条目 —— 加密备份与第三方导入共用的线格式，不含 id / 排序等本机字段。
  *
  * secret 保留 Base32 原文（不在这里解码）；合法性统一交给 domain 层 OtpauthUri.parse 判定。
+ * V2 起带 [type]（TOTP / HOTP）与 [counter]（HOTP 计数器）；V1 备份缺这两项时按 TOTP / 0 处理。
  */
 data class TotpBackupEntry(
     val issuer: String,
@@ -14,8 +15,14 @@ data class TotpBackupEntry(
     val algorithm: String = TotpParams.ALGORITHM_SHA1,
     val digits: Int = TotpParams.DEFAULT_DIGITS,
     val period: Int = TotpParams.DEFAULT_PERIOD_SEC,
-    val type: String = "TOTP",
-)
+    val type: String = TYPE_TOTP,
+    val counter: Long = 0L,
+) {
+    companion object {
+        const val TYPE_TOTP = "TOTP"
+        const val TYPE_HOTP = "HOTP"
+    }
+}
 
 /**
  * 导入结果：可导入条目 + 被跳过条目及原因。

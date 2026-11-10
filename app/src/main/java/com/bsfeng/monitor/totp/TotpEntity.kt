@@ -10,6 +10,10 @@ import com.bsfeng.monitor.domain.totp.TotpParams
  *
  * 与 domain 的 TotpAccount 分开是因为后者带 secretBase32 且没有时间戳：
  * 密钥单独加密存、时间戳属存储层职责，硬塞进领域模型会让两边都别扭。
+ *
+ * V2 新增 [otpType]（TOTP / HOTP）与 [counter]（HOTP 计数器）：与 domain 的
+ * TotpParams.type / TotpAccount.counter 一一对应，两个字段都带列默认值，
+ * 老库 ADD COLUMN 后旧行自动落默认值（TOTP / 0），不会读出 null。
  */
 data class TotpAccountRow(
     val id: Long = 0L,
@@ -21,6 +25,8 @@ data class TotpAccountRow(
     val sortOrder: Int = 0,
     val iconKey: String = "",
     val variant: String = TotpAccount.VARIANT_STANDARD,
+    val otpType: String = TYPE_TOTP,
+    val counter: Long = 0L,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 ) {
@@ -31,11 +37,22 @@ data class TotpAccountRow(
         issuer = issuer,
         accountName = accountName,
         secretBase32 = secretBase32,
-        params = TotpParams(algorithm = algorithm, digits = digits, periodSec = periodSec),
+        params = TotpParams(
+            algorithm = algorithm,
+            digits = digits,
+            periodSec = periodSec,
+            type = otpType,
+        ),
         sortOrder = sortOrder,
         iconKey = iconKey,
         variant = variant,
+        counter = counter,
     )
+
+    private companion object {
+        /** 与 domain TotpParams.TYPE_TOTP 同值；这里落成字面量以便存储层不引用领域常量做默认参数。 */
+        const val TYPE_TOTP = "TOTP"
+    }
 }
 
 /**
@@ -55,6 +72,8 @@ object TotpEntity {
     const val COL_SORT_ORDER = "sort_order"
     const val COL_ICON_KEY = "icon_key"
     const val COL_VARIANT = "variant"
+    const val COL_OTP_TYPE = "otp_type"
+    const val COL_COUNTER = "counter"
     const val COL_CREATED_AT = "created_at"
     const val COL_UPDATED_AT = "updated_at"
 
@@ -70,9 +89,25 @@ object TotpEntity {
             $COL_SORT_ORDER INTEGER NOT NULL DEFAULT 0,
             $COL_ICON_KEY TEXT NOT NULL DEFAULT '',
             $COL_VARIANT TEXT NOT NULL DEFAULT 'STANDARD',
+            $COL_OTP_TYPE TEXT NOT NULL DEFAULT 'TOTP',
+            $COL_COUNTER INTEGER NOT NULL DEFAULT 0,
             $COL_CREATED_AT INTEGER NOT NULL DEFAULT 0,
             $COL_UPDATED_AT INTEGER NOT NULL DEFAULT 0
         )
+    """
+
+    /**
+     * V1 → V2 补列 DDL（只给已存在的旧表用；新表由 [CREATE_TABLE] 一次建全）。
+     *
+     * 必须带 NOT NULL DEFAULT：SQLite 的 ADD COLUMN 只有给默认值时才能落在非空旧行上，
+     * 否则历史账户会读出 NULL 并在 Kotlin 侧炸成「列不存在」。
+     */
+    const val ADD_COLUMN_OTP_TYPE = """
+        ALTER TABLE $TABLE_NAME ADD COLUMN $COL_OTP_TYPE TEXT NOT NULL DEFAULT 'TOTP'
+    """
+
+    const val ADD_COLUMN_COUNTER = """
+        ALTER TABLE $TABLE_NAME ADD COLUMN $COL_COUNTER INTEGER NOT NULL DEFAULT 0
     """
 
     /** 列表按 sort_order 全表扫，建索引。 */
@@ -90,6 +125,8 @@ object TotpEntity {
         put(COL_SORT_ORDER, row.sortOrder)
         put(COL_ICON_KEY, row.iconKey)
         put(COL_VARIANT, row.variant)
+        put(COL_OTP_TYPE, row.otpType)
+        put(COL_COUNTER, row.counter)
         put(COL_CREATED_AT, row.createdAt)
         put(COL_UPDATED_AT, row.updatedAt)
     }
@@ -105,6 +142,8 @@ object TotpEntity {
         sortOrder = cursor.getInt(cursor.getColumnIndexOrThrow(COL_SORT_ORDER)),
         iconKey = cursor.getString(cursor.getColumnIndexOrThrow(COL_ICON_KEY)),
         variant = cursor.getString(cursor.getColumnIndexOrThrow(COL_VARIANT)),
+        otpType = cursor.getString(cursor.getColumnIndexOrThrow(COL_OTP_TYPE)),
+        counter = cursor.getLong(cursor.getColumnIndexOrThrow(COL_COUNTER)),
         createdAt = cursor.getLong(cursor.getColumnIndexOrThrow(COL_CREATED_AT)),
         updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow(COL_UPDATED_AT)),
     )
@@ -130,6 +169,8 @@ object TotpEntity {
             sortOrder = sortOrder,
             iconKey = account.iconKey,
             variant = account.variant,
+            otpType = account.params.type,
+            counter = account.counter,
             createdAt = createdAt,
             updatedAt = now,
         )

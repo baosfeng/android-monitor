@@ -122,48 +122,76 @@ class TotpBackupTest {
     }
 
     @Test
-    fun `Aegis 明文导入：可用条目收下，HOTP 缺密钥 7 位码全部跳过并说明原因`() {
+    fun `Aegis 明文导入：TOTP 与 HOTP 都收下（含 7 位码），只有缺密钥那条跳过并说明原因`() {
         val json = """
             {"version":1,"entries":[
               {"type":"totp","name":"alice@acme.com","issuer":"GitHub",
                "info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"period":30}},
               {"type":"hotp","name":"legacy","issuer":"Old",
-               "info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"period":30}},
+               "info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"period":30,"counter":5}},
               {"type":"totp","name":"no-secret","issuer":"X","info":{"algo":"SHA1"}},
-              {"type":"totp","name":"bad-digits","issuer":"Y",
+              {"type":"totp","name":"seven-digits","issuer":"Y",
                "info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":7,"period":30}}
             ]}
         """.trimIndent()
 
         val result = backup.importExternal(json)
 
-        assertEquals(1, result.entries.size)
-        assertEquals("GitHub", result.entries[0].issuer)
-        assertEquals(3, result.skipped.size)
+        // 契约放宽后 7 位码与 HOTP 都在支持面内，不再是「跳过」
+        assertEquals(3, result.entries.size)
+        assertEquals(1, result.skipped.size)
         assertEquals(4, result.total)
-        assertTrue(result.skipped.any { it.contains("legacy") })
-        assertTrue(result.skipped.any { it.contains("no-secret") })
-        assertTrue(result.skipped.any { it.contains("bad-digits") })
+        assertEquals("GitHub", result.entries[0].issuer)
+        assertTrue(result.skipped[0].contains("no-secret"))
+        assertEquals("HOTP", result.entries[1].type)
+        assertEquals(5L, result.entries[1].counter)
+        assertEquals(7, result.entries[2].digits)
     }
 
     @Test
-    fun `2FAS 导入：STEAM 变体跳过且不静默`() {
+    fun `2FAS 导入：STEAM 是展示变体不是类型，按 TOTP 收下不跳过`() {
         val json = """
             {"services":[
               {"name":"GitHub","secret":"JBSWY3DPEHPK3PXP",
                "otp":{"label":"alice","account":"alice@acme.com","issuer":"GitHub",
                       "digits":6,"period":30,"algorithm":"SHA1","tokenType":"TOTP"}},
-              {"name":"Steam","secret":"JBSWY3DPEHPK3PXP",
+              {"name":"Steam","secret":"cnOgvVunvLFR1gZAwzDxDrgbXWM=",
                "otp":{"label":"steam","issuer":"Steam","tokenType":"STEAM"}}
             ],"schemaVersion":3}
         """.trimIndent()
 
         val result = backup.importExternal(json)
 
-        assertEquals(1, result.entries.size)
+        // STEAM 只影响展示形态（5 位字母表），出码口径仍是 TOTP，因此不再当作不支持而跳过
+        assertEquals(2, result.entries.size)
         assertEquals("alice@acme.com", result.entries[0].account)
-        assertEquals(1, result.skipped.size)
-        assertTrue(result.skipped[0].contains("Steam"))
+        assertEquals("Steam", result.entries[1].issuer)
+        assertEquals(TotpBackupEntry.TYPE_TOTP, result.entries[1].type)
+        assertTrue(result.skipped.isEmpty())
+    }
+
+    @Test
+    fun `2FAS v4 有 otp_link 时以 link 为准，7 位码与 20 秒周期原样收下`() {
+        val json = """
+            {"services":[
+              {"name":"Real","secret":"JBSWY3DPEHPK3PXP",
+               "otp":{"link":"otpauth://totp/Real:acct@acme.com?secret=JBSWY3DPEHPK3PXP&issuer=Real&digits=7&period=20&algorithm=SHA256"}},
+              {"name":"Bad link","secret":"JBSWY3DPEHPK3PXP",
+               "otp":{"link":"otpauth://totp/Bad?secret="}},
+              {"name":"Broken link","secret":"JBSWY3DPEHPK3PXP",
+               "otp":{"link":"https://example.com/steal"}}
+            ],"schemaVersion":4}
+        """.trimIndent()
+
+        val result = backup.importExternal(json)
+
+        assertEquals(1, result.entries.size)
+        assertEquals(7, result.entries[0].digits)
+        assertEquals(20, result.entries[0].period)
+        assertEquals("SHA256", result.entries[0].algorithm)
+        assertEquals(2, result.skipped.size)
+        assertTrue(result.skipped.any { it.contains("Bad link") })
+        assertTrue(result.skipped.any { it.contains("Broken link") })
     }
 
     @Test

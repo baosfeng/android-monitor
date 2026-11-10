@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.totp
 
+import com.bsfeng.monitor.domain.totp.OtpauthMigration
 import com.bsfeng.monitor.domain.totp.OtpauthParseResult
 import com.bsfeng.monitor.domain.totp.OtpauthUri
 import com.bsfeng.monitor.domain.totp.TotpAccount
@@ -15,7 +16,7 @@ import kotlinx.coroutines.withContext
  * 所有 IO 走 [io]（默认 Dispatchers.IO），调用方在主线程 await 即可。
  *
  * 错误口径：
- * - 参数不合法（位数 / 周期 / 算法 / Base32）→ IllegalArgumentException，消息面向用户；
+ * - 参数不合法（位数 / 周期 / 算法 / 密钥格式）→ IllegalArgumentException，消息面向用户；
  * - 密钥解密失败 → 账户仍在列表里，secretBase32 为空串，[unreadableAccountIds] 给出 id，
  *   **不清数据**（唯一一份 2FA 密钥删了不可恢复，让用户自行删除或重装）；
  * - 加账户时密钥写失败 → 回滚刚插入的行，不留半个账户。
@@ -85,16 +86,100 @@ class TotpRepository(
     }
 
     /**
+     * HOTP 账户前进一格计数器，返回**前进后**的值（UI 拿它算下一码）。
+     *
+     * 计数只增不减：每验证一次就必须前进一格，否则同一个码可被重复使用。
+     * 行不存在抛 [NoSuchElementException]（账户已被删除）。
+     */
+    suspend fun advanceHotpCounter(id: Long): Long = withContext(io) {
+        val row = dao.getById(id) ?: throw NoSuchElementException("账户不存在：" + id)
+        val next = if (row.counter < 0L) 1L else row.counter + 1L
+        val updated = dao.update(row.copy(counter = next, updatedAt = clock()))
+        if (updated == 0) throw NoSuchElementException("账户不存在：" + id)
+        next
+    }
+
+    /**
      * 扫码 / 粘贴 / 手动输入的统一入口：先走 domain 校验，通过后才落库。
      *
      * 返回 [OtpauthParseResult]：Success 表示已入库，Failure 的 reason 原样交给 UI 翻译。
+     * **只处理单条 otpauth URI**；Google 迁移二维码（otpauth-migration://）走 [addBatchFromUri]。
      */
-    suspend fun addFromUri(uri: String): OtpauthParseResult = when (val parsed = OtpauthUri.parse(uri)) {
-        is OtpauthParseResult.Success -> {
-            add(parsed.account)
-            parsed
+    suspend fun addFromUri(uri: String): OtpauthParseResult {
+        val raw = uri.trim()
+        // 迁移二维码一图多账户：走批量入口把**全部**账户都落库，再返回第一条给调用方做提示，
+        // 不让 OtpauthUri.parse 的「只取第一条」把其余账户静默丢掉。
+        if (raw.startsWith(MIGRATION_SCHEME, ignoreCase = true)) return addMigrationFromUri(raw)
+        return when (val parsed = OtpauthUri.parse(raw)) {
+            is OtpauthParseResult.Success -> {
+                add(parsed.account)
+                parsed
+            }
+            is OtpauthParseResult.Failure -> parsed
         }
-        is OtpauthParseResult.Failure -> parsed
+    }
+
+    /** 迁移链接收敛成单条结果：账户已全部入库，返回第一条已入库账户（无成功项则给整体失败原因）。 */
+    private suspend fun addMigrationFromUri(uri: String): OtpauthParseResult {
+        val batch = addBatchFromUri(uri)
+        val first = batch.entries.firstOrNull()
+            ?: return OtpauthParseResult.Failure(OtpauthUri.REASON_MIGRATION_INVALID)
+        return OtpauthParseResult.Success(
+            TotpAccount(
+                issuer = first.issuer,
+                accountName = first.account,
+                secretBase32 = first.secret,
+                params = TotpParams(
+                    algorithm = first.algorithm,
+                    digits = first.digits,
+                    periodSec = first.period,
+                    type = first.type,
+                ),
+                counter = first.counter,
+            ),
+        )
+    }
+
+    /**
+     * 批量入口：Google 迁移二维码（otpauth-migration://）一图多账户，逐条入库。
+     *
+     * 口径与 [importEntries] 一致 —— 单条失败只进 skipped（中文原因），不中断整批；
+     * 传进来的若是普通 otpauth:// 链接，就退化成一条的批（成功 1 条或 skipped 1 条），
+     * 好让扫码页不必按 scheme 分叉。
+     */
+    suspend fun addBatchFromUri(uri: String): TotpImportResult {
+        val raw = uri.trim()
+        if (!raw.startsWith(MIGRATION_SCHEME, ignoreCase = true)) return singleFromUri(raw)
+        val parsed = runCatching { OtpauthMigration.parse(raw) }.getOrElse { error ->
+            return TotpImportResult(emptyList(), listOf(error.message ?: "迁移二维码解析失败"))
+        }
+        val accepted = mutableListOf<TotpBackupEntry>()
+        val skipped = parsed.skipped.toMutableList()
+        parsed.accounts.forEach { account ->
+            val entry = account.toBackupEntry()
+            runCatching { add(account) }.fold(
+                onSuccess = { accepted += entry },
+                onFailure = { error ->
+                    skipped += labelOf(account) + "：" + (error.message ?: "导入失败")
+                },
+            )
+        }
+        return TotpImportResult(accepted, skipped)
+    }
+
+    /** 普通 otpauth:// 链接包成一条的批结果。 */
+    private suspend fun singleFromUri(uri: String): TotpImportResult = when (val parsed = OtpauthUri.parse(uri)) {
+        is OtpauthParseResult.Success -> {
+            val entry = parsed.account.toBackupEntry()
+            runCatching { add(parsed.account) }.fold(
+                onSuccess = { TotpImportResult(listOf(entry), emptyList()) },
+                onFailure = { error ->
+                    TotpImportResult(emptyList(), listOf(labelOf(parsed.account) + "：" + (error.message ?: "导入失败")))
+                },
+            )
+        }
+        is OtpauthParseResult.Failure ->
+            TotpImportResult(emptyList(), listOf(OtpauthUri.reasonMessage(parsed.reason)))
     }
 
     /** 导出用条目（只含密钥可读的账户）。 */
@@ -108,6 +193,8 @@ class TotpRepository(
                 algorithm = row.algorithm,
                 digits = row.digits,
                 period = row.periodSec,
+                type = row.otpType,
+                counter = row.counter,
             )
         }
     }
@@ -129,9 +216,21 @@ class TotpRepository(
                     algorithm = entry.algorithm,
                     digits = entry.digits,
                     periodSec = entry.period,
+                    type = entry.type,
                 ),
+                counter = entry.counter,
             )
-            runCatching { add(account) }.fold(
+            // 走一遍 build → parse 的往返再把结果落库：secret 规范化、Steam 变体推断、
+            // HOTP 计数器都只由 domain 决定，备份条目本身没带 variant，不能让 Steam 导入后退化成数字码。
+            val normalized = when (val parsed = OtpauthUri.parse(OtpauthUri.build(account))) {
+                is OtpauthParseResult.Success -> parsed.account
+                is OtpauthParseResult.Failure -> {
+                    skipped += entry.issuer + " / " + entry.account + "：" +
+                        OtpauthUri.reasonMessage(parsed.reason)
+                    return@forEach
+                }
+            }
+            runCatching { add(normalized) }.fold(
                 onSuccess = { accepted += entry },
                 onFailure = { error ->
                     skipped += entry.issuer + " / " + entry.account + "：" +
@@ -152,7 +251,28 @@ class TotpRepository(
         when (val parsed = OtpauthUri.parse(OtpauthUri.build(account))) {
             is OtpauthParseResult.Success -> Unit
             is OtpauthParseResult.Failure ->
-                throw IllegalArgumentException("账户参数不被支持：" + parsed.reason)
+                throw IllegalArgumentException(
+                    "账户参数不被支持：" + parsed.reason + "（" + OtpauthUri.reasonMessage(parsed.reason) + "）",
+                )
         }
+    }
+
+    private fun labelOf(account: TotpAccount): String =
+        account.issuer.ifBlank { account.accountName } + " / " + account.accountName
+
+    private companion object {
+        const val MIGRATION_SCHEME = "otpauth-migration://"
+
+        /** domain 账户 → 备份线格式（导入结果与导出共用同一口径）。 */
+        fun TotpAccount.toBackupEntry(): TotpBackupEntry = TotpBackupEntry(
+            issuer = issuer,
+            account = accountName,
+            secret = secretBase32,
+            algorithm = params.algorithm,
+            digits = params.digits,
+            period = params.periodSec,
+            type = params.type,
+            counter = counter,
+        )
     }
 }

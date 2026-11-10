@@ -98,14 +98,20 @@ class TotpRepositoryTest {
     }
 
     @Test
-    fun `非法密钥与非法参数拒绝且不落库`() = runTest {
+    fun `非法密钥与空账户名拒绝且不落库，放宽后的 7 位码与 45 秒周期可入库`() = runTest {
         assertRejected { repo.add(testAccount(secret = "not base32!")) }
-        assertRejected { repo.add(testAccount(digits = 7)) }
-        assertRejected { repo.add(testAccount(periodSec = 45)) }
         assertRejected { repo.add(testAccount(accountName = "   ")) }
 
         assertEquals(0, dao.count())
         assertTrue(repo.accounts().isEmpty())
+
+        // 契约放宽后（位数 1–10、周期 1–86400）这两个参数必须被接受，不再当作非法
+        repo.add(testAccount(accountName = "seven-digits", digits = 7))
+        repo.add(testAccount(accountName = "period-45", periodSec = 45))
+
+        assertEquals(2, dao.count())
+        assertEquals(listOf(7, 6), repo.accounts().map { it.params.digits })
+        assertEquals(listOf(30, 45), repo.accounts().map { it.params.periodSec })
     }
 
     @Test
@@ -163,7 +169,7 @@ class TotpRepositoryTest {
         val result = repo.importEntries(
             listOf(
                 TotpBackupEntry("GitHub", "alice@acme.com", TEST_SECRET),
-                TotpBackupEntry("坏参数", "bad@acme.com", TEST_SECRET, digits = 7),
+                TotpBackupEntry("坏密钥", "bad@acme.com", "not base32!"),
             ),
         )
 
