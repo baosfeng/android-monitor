@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.Countdown
 import com.bsfeng.monitor.domain.totp.TotpAccount
 import com.bsfeng.monitor.domain.totp.TotpCountdown
+import com.bsfeng.monitor.domain.totp.TotpParams
 import com.bsfeng.monitor.ui.AppButton
 import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.components.AppCard
@@ -67,6 +68,7 @@ fun TotpScreen(
     groupOf: (TotpAccount) -> String = { "" },
     onCopy: (TotpAccount) -> Unit = {},
     onEdit: (TotpAccount) -> Unit = {},
+    onAdvanceHotp: (TotpAccount) -> Unit = {},
     onAddAccount: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onRetry: () -> Unit = {},
@@ -109,6 +111,7 @@ fun TotpScreen(
                 groupOf = groupOf,
                 onCopy = onCopy,
                 onEdit = onEdit,
+                onAdvanceHotp = onAdvanceHotp,
                 onAddAccount = onAddAccount,
                 onOpenBackup = onOpenBackup,
             )
@@ -127,6 +130,7 @@ private fun TotpListBody(
     groupOf: (TotpAccount) -> String,
     onCopy: (TotpAccount) -> Unit,
     onEdit: (TotpAccount) -> Unit,
+    onAdvanceHotp: (TotpAccount) -> Unit,
     onAddAccount: () -> Unit,
     onOpenBackup: () -> Unit,
 ) {
@@ -163,12 +167,10 @@ private fun TotpListBody(
                         val countdown = remember(nowMillis, account.params.periodSec) {
                             TotpCountdown.of(nowMillis, account.params.periodSec)
                         }
-                        val code = remember(account.secretBase32, account.params, nowMillis) {
-                            deriveCode(
-                                secretBase32 = account.secretBase32,
-                                epochSecond = nowMillis / 1_000L,
-                                params = account.params,
-                            )
+                        // 码按账户形态派生（Steam 字母表 / HOTP 计数器 / 标准 TOTP），
+                        // 只按 params 算会把 Steam 的 base64 密钥解成空串、HOTP 算成时间码。
+                        val code = remember(account, nowMillis) {
+                            deriveAccountCode(account, nowMillis / 1_000L)
                         }
                         TotpAccountRow(
                             account = account,
@@ -177,6 +179,11 @@ private fun TotpListBody(
                             paused = account.id in pausedIds,
                             onCopy = { onCopy(account) },
                             onEdit = { onEdit(account) },
+                            onAdvanceHotp = if (isHotp(account.params)) {
+                                { onAdvanceHotp(account) }
+                            } else {
+                                null
+                            },
                             modifier = Modifier.padding(horizontal = t.space2),
                         )
                     }
@@ -269,6 +276,26 @@ private fun TotpEdgePreview() {
             secretBase32 = "JBSWY3DPEHPK3PXP",
         )
     }
+    val hotpAccount = remember {
+        TotpAccount(
+            id = -3L,
+            issuer = "内网跳板机",
+            accountName = "ops@acme",
+            secretBase32 = "JBSWY3DPEHPK3PXP",
+            params = TotpParams(type = TotpParams.TYPE_HOTP),
+            counter = 7L,
+        )
+    }
+    val steamAccount = remember {
+        TotpAccount(
+            id = -4L,
+            issuer = "Steam",
+            accountName = "alice",
+            secretBase32 = "cnOgvVunvLFR1gZAwzDxDrgbXWM=",
+            params = TotpParams(digits = 5),
+            variant = TotpAccount.VARIANT_STEAM,
+        )
+    }
     AppCard(padding = t.space2) {
         Column {
             TotpAccountRow(
@@ -285,7 +312,22 @@ private fun TotpEdgePreview() {
                 paused = true,
                 modifier = Modifier.padding(horizontal = t.space2),
             )
+            TotpHairline(Modifier.padding(horizontal = t.space1))
+            TotpAccountRow(
+                account = hotpAccount,
+                countdown = Countdown(remainingSec = 30, progress = 1f),
+                code = "755224",
+                onAdvanceHotp = {},
+                modifier = Modifier.padding(horizontal = t.space2),
+            )
+            TotpHairline(Modifier.padding(horizontal = t.space1))
+            TotpAccountRow(
+                account = steamAccount,
+                countdown = Countdown(remainingSec = 30, progress = 1f),
+                code = "2JB2B",
+                modifier = Modifier.padding(horizontal = t.space2),
+            )
         }
     }
-    TotpFine("超长平台名与账号单行截断；8 位码降一档字号；暂停账户不参与倒计时。")
+    TotpFine("超长平台名与账号单行截断；8 位码降一档字号；暂停账户不参与倒计时；HOTP 行给「下一码」按钮；Steam 是 5 位字母码、不分段。")
 }

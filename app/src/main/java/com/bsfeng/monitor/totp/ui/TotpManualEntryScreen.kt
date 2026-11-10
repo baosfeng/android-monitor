@@ -33,27 +33,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.domain.totp.Base32
+import com.bsfeng.monitor.domain.totp.TotpAccount
+import com.bsfeng.monitor.domain.totp.TotpAlgorithm
 import com.bsfeng.monitor.domain.totp.TotpCountdown
 import com.bsfeng.monitor.domain.totp.TotpParams
 import com.bsfeng.monitor.ui.AppButton
 import com.bsfeng.monitor.ui.AppButtonVariant
-import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 手动输入表单的可编辑字段（不含 id / 排序，落库字段由数据层补）。 */
+/**
+ * 手动输入表单的可编辑字段（不含 id / 排序，落库字段由数据层补）。
+ *
+ * [counter] 只在 params 为 HOTP 时有意义：填错会一直算出错的码，所以它跟着表单一起可改。
+ */
 data class TotpManualForm(
     val issuer: String = "",
     val accountName: String = "",
     val secretBase32: String = "",
     val params: TotpParams = TotpParams(),
+    val counter: Long = 0L,
 )
-
-/** 算法分段选项（顺序即 domain 支持顺序）。 */
-internal val TOTP_ALGORITHM_OPTIONS = listOf(TotpParams.ALGORITHM_SHA1, TotpParams.ALGORITHM_SHA256, TotpParams.ALGORITHM_SHA512)
-internal val TOTP_DIGITS_OPTIONS = listOf(6, 8)
-internal val TOTP_PERIOD_OPTIONS = listOf(30, 60)
 
 /**
  * 手动输入（原型 s25）。
@@ -126,8 +129,8 @@ fun TotpManualEntryScreen(
         AdvancedParams(
             open = advancedOpen,
             onToggle = { advancedOpen = !advancedOpen },
-            params = form.params,
-            onParamsChange = { onFormChange(form.copy(params = it)) },
+            form = form,
+            onFormChange = onFormChange,
         )
 
         Spacer(Modifier.height(t.space2))
@@ -137,15 +140,35 @@ fun TotpManualEntryScreen(
     }
 }
 
-/** 实时预演（原型 .s25-preview）：当前参数下的假数据码 + 环形倒计时。 */
+/**
+ * 实时预演（原型 .s25-preview）：当前参数下的码 + 右侧倒计时。
+ *
+ * HOTP 不随时间换码，右侧改成「计数器 N」而不是环形倒计时——否则用户会以为
+ * 它在按周期自己走，实际永远不会变。
+ */
 @Composable
 private fun ManualPreview(form: TotpManualForm, nowMillis: Long) {
     val t = LocalDesignTokens.current
+    val hotp = isHotp(form.params)
     val countdown = remember(nowMillis, form.params.periodSec) {
         TotpCountdown.of(nowMillis, form.params.periodSec)
     }
-    val code = remember(nowMillis, form.params, form.secretBase32) {
-        deriveCode(form.secretBase32, nowMillis / 1_000L, form.params)
+    val previewAccount = remember(form) {
+        TotpAccount(
+            issuer = form.issuer,
+            accountName = form.accountName,
+            secretBase32 = form.secretBase32,
+            params = form.params,
+            counter = form.counter,
+        )
+    }
+    val code = remember(nowMillis, previewAccount) {
+        if (hotp) {
+            val secret = Base32.decodeOrNull(form.secretBase32) ?: ByteArray(0)
+            TotpAlgorithm.hotp(secret, form.counter, form.params.digits, form.params.algorithm)
+        } else {
+            deriveCode(form.secretBase32, nowMillis / 1_000L, form.params)
+        }
     }
     Row(
         Modifier
@@ -156,26 +179,43 @@ private fun ManualPreview(form: TotpManualForm, nowMillis: Long) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("按当前参数预演（假数据）", style = MaterialTheme.typography.bodySmall, color = t.muted)
+            Text(
+                if (hotp) "按当前参数预演（当前计数器）" else "按当前参数预演（假数据）",
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+            )
             TotpCodeText(code = code, digits = form.params.digits, placeholder = "— — —")
         }
-        TotpCountdownRing(countdown)
-        Text(
-            "${countdown.remainingSec}s",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (isCountdownWarning(countdown)) t.warnText else t.muted,
-            modifier = Modifier.padding(start = t.space2),
-        )
+        if (hotp) {
+            Text(
+                "计数器 ${form.counter}",
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+            )
+        } else {
+            TotpCountdownRing(countdown)
+            Text(
+                "${countdown.remainingSec}s",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isCountdownWarning(countdown)) t.warnText else t.muted,
+                modifier = Modifier.padding(start = t.space2),
+            )
+        }
     }
 }
 
-/** 高级参数折叠（原型 .s25-adv / details）：算法 / 位数 / 周期三段。 */
+/**
+ * 高级参数折叠（原型 .s25-adv / details）：类型 / 算法 / 位数 / 周期。
+ *
+ * 折叠头本身就是可点区域，触达高度取 tap-min（44dp）；锚点打在折叠头上，
+ * 保证「高级参数里有什么」在自动化里点得开（此前这里只有 clickable、没有 testTag）。
+ */
 @Composable
 private fun AdvancedParams(
     open: Boolean,
     onToggle: () -> Unit,
-    params: TotpParams,
-    onParamsChange: (TotpParams) -> Unit,
+    form: TotpManualForm,
+    onFormChange: (TotpManualForm) -> Unit,
 ) {
     val t = LocalDesignTokens.current
     Column(
@@ -189,7 +229,8 @@ private fun AdvancedParams(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = t.tapMin)
-                .clickable { onToggle() },
+                .clickable { onToggle() }
+                .testTag(TOTP_TAG_MANUAL_ADV),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -198,50 +239,33 @@ private fun AdvancedParams(
                 color = t.fg,
                 modifier = Modifier.weight(1f),
             )
+            Text(
+                if (open) "收起" else "展开",
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+                modifier = Modifier.padding(end = t.space1),
+            )
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (open) "收起高级参数" else "展开高级参数",
+                contentDescription = null,
                 tint = t.muted,
                 modifier = Modifier.size(18.dp).rotate(if (open) 90f else 0f),
             )
         }
         if (open) {
-            Column(verticalArrangement = Arrangement.spacedBy(t.space3)) {
-                ParamSegment(
-                    label = "算法",
-                    options = TOTP_ALGORITHM_OPTIONS,
-                    selectedIndex = TOTP_ALGORITHM_OPTIONS.indexOf(params.algorithm).coerceAtLeast(0),
-                    onSelect = { onParamsChange(params.copy(algorithm = TOTP_ALGORITHM_OPTIONS[it])) },
-                )
-                ParamSegment(
-                    label = "位数",
-                    options = TOTP_DIGITS_OPTIONS.map { "$it 位" },
-                    selectedIndex = TOTP_DIGITS_OPTIONS.indexOf(params.digits).coerceAtLeast(0),
-                    onSelect = { onParamsChange(params.copy(digits = TOTP_DIGITS_OPTIONS[it])) },
-                )
-                ParamSegment(
-                    label = "周期",
-                    options = TOTP_PERIOD_OPTIONS.map { "$it 秒" },
-                    selectedIndex = TOTP_PERIOD_OPTIONS.indexOf(params.periodSec).coerceAtLeast(0),
-                    onSelect = { onParamsChange(params.copy(periodSec = TOTP_PERIOD_OPTIONS[it])) },
-                )
-                TotpFine("默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。")
-            }
+            Spacer(Modifier.height(t.space2))
+            TotpParamEditor(
+                params = form.params,
+                counter = form.counter,
+                onParamsChange = { onFormChange(form.copy(params = it)) },
+                onCounterChange = { onFormChange(form.copy(counter = it)) },
+                digitsTag = "s25-digits",
+                periodTag = "s25-period",
+                typeTag = "s25-type",
+                counterTag = "s25-counter",
+            )
+            TotpFine("默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。")
         }
     }
 }
 
-@Composable
-private fun ParamSegment(
-    label: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    Column(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = t.muted)
-        Spacer(Modifier.height(t.space1))
-        SegmentedControl(options = options, selectedIndex = selectedIndex, onSelect = onSelect)
-    }
-}

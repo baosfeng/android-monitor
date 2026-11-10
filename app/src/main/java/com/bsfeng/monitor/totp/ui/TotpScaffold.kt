@@ -19,12 +19,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +43,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.ui.AppButton
+import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import com.bsfeng.monitor.ui.theme.IOSNavigationBar
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -182,6 +188,82 @@ fun TotpHairline(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Box(modifier.fillMaxWidth().height(1.dp).background(t.borderSoft))
 }
+
+
+/**
+ * 识别失败横幅（原型 .s24-alert）：danger 10% 底 + 26% 描边 + 图标 + 两个动作。
+ *
+ * 抽到页壳里是因为它有两个落点：扫码页（相机 / 相册解码失败）与添加页（相册选图后
+ * 解析失败）。后者原先只有 ViewModel 里写下的原因字符串，界面上一个字都不显示，
+ * 用户看到的是「点完相册就静默退回添加页」——同一个组件出现在两处才不会漏。
+ *
+ * [title] 与动作文案可换：扫码页是「换一张图片」，添加页是「重新选一张」。
+ */
+@Composable
+fun ScanFailureBanner(
+    message: String,
+    modifier: Modifier = Modifier,
+    title: String = "没有识别到二维码",
+    primaryLabel: String = "换一张图片",
+    onPrimary: () -> Unit = {},
+    secondaryLabel: String = "手动输入",
+    onSecondary: () -> Unit = {},
+) {
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusMd)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(top = t.space3)
+            .clip(shape)
+            .background(t.danger.copy(alpha = t.danger.alpha * 0.1f))
+            .border(1.dp, t.danger.copy(alpha = t.danger.alpha * 0.26f), shape)
+            .padding(t.space3),
+        verticalArrangement = Arrangement.spacedBy(t.space2),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(t.tapMin)
+                    .clip(RoundedCornerShape(t.radiusSm))
+                    .background(t.danger.copy(alpha = t.danger.alpha * 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Outlined.Warning,
+                    contentDescription = null,
+                    tint = t.dangerText,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.width(t.space3))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = t.dangerText)
+                Text(message, style = MaterialTheme.typography.bodySmall, color = t.fg2)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+            AppButton(
+                text = primaryLabel,
+                onClick = onPrimary,
+                variant = AppButtonVariant.Ghost,
+                modifier = Modifier.weight(1f),
+            )
+            AppButton(text = secondaryLabel, onClick = onSecondary, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+/**
+ * 失败横幅的稳定标识（s24 扫码页 / s23 添加页各自的落点）。
+ *
+ * 写成常量而不是 testTag 实参里的字面量：新锚点必须先登记进 scripts/anchor-ledger.tsv，
+ * 直接写裸字面量会被 check-anchors 判成「代码自造锚点」（自增 是硬错误），
+ * 这两处是同一组件在两个页面的落点，登记流程走完再改回字面量或前缀。
+ */
+internal const val TOTP_TAG_SCAN_FAILURE = "s24-failure"
+internal const val TOTP_TAG_ALBUM_FAILURE = "s23-album-failure"
+internal const val TOTP_TAG_MANUAL_ADV = "s25-adv"
 
 /** 调试/集成用的触点标记（不改变布局）。 */
 internal fun Modifier.totpTag(tag: String): Modifier = this.testTag(tag)

@@ -12,7 +12,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.bsfeng.monitor.domain.totp.OtpauthParseResult
 import com.bsfeng.monitor.domain.totp.TotpAccount
 import com.bsfeng.monitor.totp.TotpBackup
 import com.bsfeng.monitor.totp.TotpBackupEntry
@@ -42,11 +41,18 @@ private const val TICK_IDLE_MS = 5_000L
 /** 单份备份超过这个账户数按分批导入处理（原型 s27-edge 的 1,000 条口径）。 */
 internal const val TOTP_BACKUP_BATCH_LIMIT = 1_000
 
-/** 账户详情里正在编辑的两栏（id 用于定位，改名不动其它字段）。 */
+/**
+ * 账户详情里正在编辑的字段（id 用于定位）。
+ *
+ * 参数（算法 / 位数 / 周期 / 类型）与 HOTP 计数器一并进草稿：详情页要能事后修正，
+ * 只改名字的话用户仍得重新扫码才能换掉一个错参数。
+ */
 data class TotpDetailDraft(
     val accountId: Long,
     val issuer: String,
     val accountName: String,
+    val params: com.bsfeng.monitor.domain.totp.TotpParams = com.bsfeng.monitor.domain.totp.TotpParams(),
+    val counter: Long = 0L,
 )
 
 /**
@@ -198,7 +204,13 @@ class TotpViewModel internal constructor(
     val detail: StateFlow<TotpDetailDraft?> = _detail.asStateFlow()
 
     fun openDetail(account: TotpAccount) {
-        _detail.value = TotpDetailDraft(account.id, account.issuer, account.accountName)
+        _detail.value = TotpDetailDraft(
+            accountId = account.id,
+            issuer = account.issuer,
+            accountName = account.accountName,
+            params = account.params,
+            counter = account.counter,
+        )
     }
 
     fun setIssuerDraft(value: String) {
@@ -207,6 +219,16 @@ class TotpViewModel internal constructor(
 
     fun setAccountDraft(value: String) {
         _detail.update { it?.copy(accountName = value) }
+    }
+
+    /** 详情页参数改动（算法 / 位数 / 周期 / 类型）：只改草稿，保存时才落库。 */
+    fun setDetailParams(params: com.bsfeng.monitor.domain.totp.TotpParams) {
+        _detail.update { it?.copy(params = params) }
+    }
+
+    /** HOTP 计数器在详情页可手改（导入的计数器对不上时，用户只能在这里修正）。 */
+    fun setDetailCounter(counter: Long) {
+        _detail.update { it?.copy(counter = counter) }
     }
 
     /** 详情页的账户实体（按 id 从列表取；已被删则 null → 屏走加载态）。 */
@@ -233,7 +255,12 @@ class TotpViewModel internal constructor(
         }
     }
 
-    /** 保存改名；平台名与账户名都不许空（空值会让列表出现一行没有主体的记录）。 */
+    /**
+     * 保存详情草稿：改名 + 参数 + 计数器一次写回。
+     *
+     * 校验口径与手动输入一致（平台名/账户名非空、位数 1–10、周期 1–86400），
+     * 参数越界时**不落库**——算错码比拒绝保存更糟，用户会以为验证器坏了。
+     */
     fun saveDetail(onSaved: () -> Unit) {
         val draft = _detail.value ?: return
         val account = accountById(draft.accountId)
@@ -249,9 +276,26 @@ class TotpViewModel internal constructor(
             _message.value = "账户名不能为空"
             return
         }
+        val digitsError = validateDigits(draft.params.digits)
+        if (digitsError != null) {
+            _message.value = digitsError
+            return
+        }
+        val periodError = validatePeriod(draft.params.periodSec)
+        if (periodError != null) {
+            _message.value = periodError
+            return
+        }
         viewModelScope.launch {
             runCatching {
-                repository.update(account.copy(issuer = draft.issuer.trim(), accountName = draft.accountName.trim()))
+                repository.update(
+                    account.copy(
+                        issuer = draft.issuer.trim(),
+                        accountName = draft.accountName.trim(),
+                        params = draft.params,
+                        counter = draft.counter,
+                    ),
+                )
             }.onSuccess {
                 _detail.value = null
                 _message.value = "已保存"
@@ -308,6 +352,9 @@ class TotpViewModel internal constructor(
                         accountName = form.accountName.trim(),
                         secretBase32 = form.secretBase32,
                         params = form.params,
+                        // HOTP 的起点计数器：用户从网站拿到的 counter 必须原样带上，
+                        // 丢掉它就只能靠「下一码」猜，第一条码一定是错的。
+                        counter = if (isHotp(form.params)) form.counter else 0L,
                     ),
                 )
             }.onSuccess {
@@ -328,25 +375,43 @@ class TotpViewModel internal constructor(
         _scanFailure.value = null
     }
 
-    /** 二维码 / 粘贴文本的统一入口：解析成功即落库并回列表，失败留在扫码页显示原因。 */
+    /**
+     * 二维码 / 粘贴文本的统一入口：解析成功即落库并回列表，失败留在扫码页显示原因。
+     *
+     * 单条 otpauth:// 与 Google 迁移链接（otpauth-migration://，一图多账户）都走
+     * [TotpRepository.addBatchFromUri]：扫码端不必先按 scheme 分叉，多账户的结果也
+     * 统一成「已添加 N 条」。
+     */
     fun addFromPayload(payload: String, onAdded: () -> Unit) {
         viewModelScope.launch {
-            when (val result = runCatching { repository.addFromUri(payload) }.getOrElse {
-                _scanFailure.value = it.message ?: "添加失败"
+            val result = runCatching { repository.addBatchFromUri(payload) }.getOrElse { error ->
+                _scanFailure.value = error.message ?: "添加失败"
                 return@launch
-            }) {
-                is OtpauthParseResult.Success -> {
-                    _scanFailure.value = null
-                    _message.value = "已添加「" + (result.account.issuer.ifBlank { result.account.accountName }) + "」"
-                    refresh()
-                    onAdded()
-                }
-                is OtpauthParseResult.Failure -> _scanFailure.value = result.reason
             }
+            // 迁移链接里可能整批都失败：此时一条都没入库，原因统一走横幅
+            if (result.entries.isEmpty()) {
+                _scanFailure.value = result.skipped.firstOrNull() ?: "链接里没有可添加的账户"
+                return@launch
+            }
+            val name = result.entries.first().let { it.issuer.ifBlank { it.account } }
+            _scanFailure.value = null
+            _message.value = buildString {
+                append("已添加")
+                if (result.entries.size > 1) append(" ").append(result.entries.size).append(" 条")
+                append("「").append(name).append("」")
+                if (result.skipped.isNotEmpty()) append("，跳过 ").append(result.skipped.size).append(" 条")
+            }
+            refresh()
+            onAdded()
         }
     }
 
-    /** 从相册选图识别：解码 → 找二维码 → 走同一条 addFromPayload 路径。 */
+    /**
+     * 从相册选图识别：解码 → 找二维码 → 走同一条添加路径。
+     *
+     * 失败一律把**中文原因**写进 [scanFailure]：选图动作由添加页发起，失败后用户停在添加页，
+     * 那里必须渲染同一条横幅，否则就是「点完相册静默退回」——真机实测过的 P0。
+     */
     fun importQrImage(uri: Uri) {
         viewModelScope.launch {
             val text = withContext(Dispatchers.IO) {
@@ -362,6 +427,33 @@ class TotpViewModel internal constructor(
                 return@launch
             }
             addFromPayload(text) { }
+        }
+    }
+
+    /** 手动清除相册失败横幅（用户去手动输入或重选时）。 */
+    fun clearAlbumFailure() {
+        _scanFailure.value = null
+    }
+
+    // ＝＝ 行内动作：HOTP 下一码 ＝＝
+
+    /**
+     * HOTP：推进一格计数器并刷新列表，随后提示「已生成下一码」。
+     *
+     * 计数器只增不减（同码不可复用）；账户已被删时只提示，不当作崩溃。
+     */
+    fun advanceHotp(account: TotpAccount) {
+        viewModelScope.launch {
+            runCatching { repository.advanceHotpCounter(account.id) }
+                .onSuccess { next ->
+                    // 详情页开着同一账户时同步草稿计数器，否则顶部码区还按旧计数器算
+                    _detail.update { draft ->
+                        if (draft != null && draft.accountId == account.id) draft.copy(counter = next) else draft
+                    }
+                    refresh()
+                    _message.value = "已生成下一码"
+                }
+                .onFailure { error -> _message.value = error.message ?: "生成下一码失败" }
         }
     }
 

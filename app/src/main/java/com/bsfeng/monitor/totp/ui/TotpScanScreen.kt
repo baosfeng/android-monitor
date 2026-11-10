@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.AppButton
 import com.bsfeng.monitor.ui.AppButtonVariant
@@ -84,11 +85,7 @@ fun TotpScanScreen(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             if (failureMessage != null) {
-                ScanFailureBanner(
-                    message = failureMessage,
-                    onRetry = onPickImage,
-                    onManualEntry = onManualEntry,
-                )
+                ScanFailureSection(message = failureMessage, onRetry = onPickImage, onManualEntry = onManualEntry)
             }
             Spacer(Modifier.height(t.space2))
             Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
@@ -185,50 +182,15 @@ private fun androidx.compose.foundation.layout.BoxScope.ScanCorner(
     }
 }
 
-/** 识别失败横幅（原型 .s24-alert）：danger 10% 底 + 26% 描边 + 两个动作。 */
+/** 识别失败横幅现已抽到 [TotpScaffold.kt] 的 `ScanFailureBanner`（添加页复用同一组件）。 */
 @Composable
-private fun ScanFailureBanner(message: String, onRetry: () -> Unit, onManualEntry: () -> Unit) {
-    val t = LocalDesignTokens.current
-    val shape = RoundedCornerShape(t.radiusMd)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = t.space3)
-            .clip(shape)
-            .background(t.danger.copy(alpha = t.danger.alpha * 0.1f))
-            .border(1.dp, t.danger.copy(alpha = t.danger.alpha * 0.26f), shape)
-            .padding(t.space3),
-        verticalArrangement = Arrangement.spacedBy(t.space2),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(t.radiusSm))
-                    .background(t.danger.copy(alpha = t.danger.alpha * 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Outlined.Warning,
-                    contentDescription = null,
-                    tint = t.dangerText,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Spacer(Modifier.width(t.space3))
-            Column(Modifier.weight(1f)) {
-                Text("没有识别到二维码", style = MaterialTheme.typography.titleSmall, color = t.dangerText)
-                Text(message, style = MaterialTheme.typography.bodySmall, color = t.fg2)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-            AppButton(
-                text = "换一张图片",
-                onClick = onRetry,
-                variant = AppButtonVariant.Ghost,
-                modifier = Modifier.weight(1f),
-            )
-            AppButton(text = "手动输入", onClick = onManualEntry, modifier = Modifier.weight(1f))
-        }
-    }
+private fun ScanFailureSection(message: String, onRetry: () -> Unit, onManualEntry: () -> Unit) {
+    ScanFailureBanner(
+        message = message,
+        primaryLabel = "换一张图片",
+        onPrimary = onRetry,
+        secondaryLabel = "手动输入",
+        onSecondary = onManualEntry,
+        modifier = Modifier.testTag(TOTP_TAG_SCAN_FAILURE),
+    )
 }

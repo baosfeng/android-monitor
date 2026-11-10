@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.TokenDivider
 import com.bsfeng.monitor.ui.TokenRow
@@ -41,6 +42,10 @@ fun TotpAddScreen(
     onManualEntry: () -> Unit = {},
     onPickFromAlbum: () -> Unit = {},
     onBack: (() -> Unit)? = null,
+    /** 上一次「从相册识别」失败的原因（中文）；null 时不渲染横幅。 */
+    failureMessage: String? = null,
+    /** 重选一张图。 */
+    onRetryAlbum: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
     TotpScaffold(title = "添加账户", testTag = "screen-s23", onBack = onBack, modifier = modifier) {
@@ -53,6 +58,19 @@ fun TotpAddScreen(
                 color = t.muted,
                 modifier = Modifier.padding(top = t.space2),
             )
+            // 相册路径失败必须在这里可见：用户是站在添加页点了「从相册识别」，
+            // 失败后仍停在添加页，横幅不渲染就等于静默无响应（真机实测的 P0）。
+            if (failureMessage != null) {
+                ScanFailureBanner(
+                    message = failureMessage,
+                    title = "这张图片没能添加",
+                    primaryLabel = "重新选一张",
+                    onPrimary = onRetryAlbum ?: onPickFromAlbum,
+                    secondaryLabel = "手动输入",
+                    onSecondary = onManualEntry,
+                    modifier = Modifier.testTag(TOTP_TAG_ALBUM_FAILURE),
+                )
+            }
             AppCard(padding = t.space1) {
                 TotpEntryRow(
                     icon = Icons.Outlined.QrCodeScanner,
@@ -90,12 +108,14 @@ fun TotpAddScreen(
                     Badge("RFC 6238")
                 }
                 Spacer(Modifier.height(t.space2))
+                TotpParamRow("类型", "TOTP 时间码 / HOTP 计数器")
+                TotpHairline()
                 TotpParamRow("算法", "SHA1 / SHA256 / SHA512")
                 TotpHairline()
-                TotpParamRow("位数", "6 / 8 位")
+                TotpParamRow("位数", "1–10 位")
                 TotpHairline()
-                TotpParamRow("周期", "30 / 60 秒")
-                TotpFine("扫码优先读 otpauth 里的参数；二维码里没有的项，先按 SHA1 / 6 位 / 30 秒计算，之后可在账户详情里改。")
+                TotpParamRow("周期", "1–86400 秒")
+                TotpFine("扫码优先读 otpauth 里的参数；二维码里没有的项，先按 SHA1 / 6 位 / 30 秒计算，之后可在账户详情里改。Google 迁移二维码（一图多账户）与 Steam Guard 也能直接导入。")
             }
             TotpFine("密钥以 Android Keystore 加密后只存本机，不进备份、不写日志、不上传；卸载 App 即随之删除。")
         }

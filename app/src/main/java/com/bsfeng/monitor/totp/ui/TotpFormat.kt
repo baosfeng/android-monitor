@@ -5,21 +5,34 @@ package com.bsfeng.monitor.totp.ui
 
 import com.bsfeng.monitor.domain.totp.Base32
 import com.bsfeng.monitor.domain.totp.Countdown
+import com.bsfeng.monitor.domain.totp.SecretCodec
+import com.bsfeng.monitor.domain.totp.TotpAccount
 import com.bsfeng.monitor.domain.totp.TotpAlgorithm
 import com.bsfeng.monitor.domain.totp.TotpParams
 
 /** 剩余多少秒切 warning 色（原型 .totp-row.is-warn 的口径）。 */
 const val TOTP_WARN_SECONDS = 5
 
-/** 段间距：6 位 → 「123 456」，8 位 → 「1234 5678」；其它长度按对半切，切不动就原样返回。 */
+/**
+ * 验证码分段显示。
+ *
+ * 只分三档：6 位 → 「123 456」、8 位 → 「1234 5678」、4 位 → 「12 34」。
+ * 其余一律原样：5 / 7 / 9 / 10 位按对半切会把码切成两段不等长的碎片，
+ * 用户对不上网站给的格式；Steam 的 5 位字母码分段更会打断字母串的连读。
+ *
+ * 口径按**码的实际长度**判，不看 [digits]：声明 8 位却只给出 6 位时按 6 位切，
+ * 调用方不必先对齐两个值。[digits] 保留在签名里供调用点继续传参（列表 / 详情 / 预演同源）。
+ */
+@Suppress("UNUSED_PARAMETER")
 fun formatCode(code: String, digits: Int): String {
     if (code.isEmpty()) return code
-    val mid = when {
-        digits == 8 && code.length == 8 -> 4
-        digits == 6 && code.length == 6 -> 3
-        else -> code.length / 2
+    if (!code.all { it.isDigit() }) return code
+    val mid = when (code.length) {
+        4 -> 2
+        6 -> 3
+        8 -> 4
+        else -> return code
     }
-    if (mid <= 0 || mid >= code.length) return code
     return code.substring(0, mid) + " " + code.substring(mid)
 }
 
@@ -49,6 +62,29 @@ fun deriveCode(secretBase32: String, epochSecond: Long, params: TotpParams): Str
     return TotpAlgorithm.totp(secret, epochSecond, params)
 }
 
+/**
+ * 按账户形态派生当前码：标准 TOTP / Steam（5 位字母表）/ HOTP（计数器固定，不随时间变）。
+ *
+ * 三条路径各自的口径都在 domain：UI 只负责「选哪条」。
+ * 密钥先过 [SecretCodec]（Steam 的密钥是 base64 原文，Base32 解不开），为空则返回空串。
+ */
+fun deriveAccountCode(account: TotpAccount, epochSecond: Long): String {
+    val secret = SecretCodec.decodeToBytes(account.secretBase32) ?: return ""
+    if (secret.isEmpty()) return ""
+    return when {
+        isSteam(account.variant) -> TotpAlgorithm.steam(secret, epochSecond)
+        isHotp(account.params) -> TotpAlgorithm.hotp(secret, account.counter, account.params.digits, account.params.algorithm)
+        else -> TotpAlgorithm.totp(secret, epochSecond, account.params)
+    }
+}
+
+/** 码的展示形态标签（详情页「类型」行、HOTP 行说明共用）。 */
+fun codeKindLabel(account: TotpAccount): String = when {
+    isSteam(account.variant) -> "Steam 字母码"
+    isHotp(account.params) -> "HOTP 计数器"
+    else -> "TOTP 时间码"
+}
+
 /** 剩余 ≤5 秒切 warning（纯判断，供环形与秒数共用）。 */
 fun isCountdownWarning(countdown: Countdown): Boolean = countdown.remainingSec <= TOTP_WARN_SECONDS
 
@@ -64,12 +100,37 @@ fun validateManualEntry(issuer: String, secretBase32: String): String? {
     return null
 }
 
-/** 手动输入表单的完整校验：平台名 / 账户 / 密钥逐项过，返回第一条面向用户的提示。 */
+/**
+ * 手动输入表单的完整校验：平台名 / 账户 / 密钥 / 位数 / 周期逐项过，返回第一条面向用户的提示。
+ *
+ * 位数与周期先按「常用档 + 自定义」放宽到 1–10 / 1–86400，再在提交时兜一次范围，
+ * 否则自定义框里手输的越界值会绕过分段控件直接落库。
+ */
 fun validateManualForm(form: TotpManualForm): String? {
     if (form.issuer.isBlank()) return "请填写平台名"
     if (form.accountName.isBlank()) return "请填写账户"
-    return validateManualEntry(form.issuer, form.secretBase32)
+    val error = validateManualEntry(form.issuer, form.secretBase32)
+    if (error != null) return error
+    validateDigits(form.params.digits)?.let { return it }
+    validatePeriod(form.params.periodSec)?.let { return it }
+    return null
 }
+
+/** 位数范围校验：null = 合法；文案与手动输入的自定义框同源。 */
+fun validateDigits(digits: Int): String? =
+    if (digits in TotpParams.MIN_DIGITS..TotpParams.MAX_DIGITS) {
+        null
+    } else {
+        "位数需在 ${TotpParams.MIN_DIGITS}–${TotpParams.MAX_DIGITS} 之间"
+    }
+
+/** 周期范围校验：null = 合法。 */
+fun validatePeriod(periodSec: Int): String? =
+    if (periodSec in TotpParams.MIN_PERIOD_SEC..TotpParams.MAX_PERIOD_SEC) {
+        null
+    } else {
+        "周期需在 ${TotpParams.MIN_PERIOD_SEC}–${TotpParams.MAX_PERIOD_SEC} 秒之间"
+    }
 
 /**
  * 列表分组标题：按平台名分段，空平台归到「未命名平台」。

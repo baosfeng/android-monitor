@@ -154,10 +154,10 @@ fun TotpBackupScreen(
                     }
                     TokenRow(
                         title = "Aegis（JSON 导出）",
-                        subtitle = "支持加密与明文导出，密码在导入时输入",
+                        subtitle = "请先在 Aegis 里选「明文导出」；加密导出用 scrypt，暂不支持",
                         modifier = Modifier.padding(horizontal = t.space2),
                         onClick = { onRequestImport("Aegis") },
-                        trailing = { Badge("可导入") },
+                        trailing = { Badge("明文导出") },
                     )
                     TokenDivider(first = false)
                     TokenRow(
@@ -174,6 +174,7 @@ fun TotpBackupScreen(
                         modifier = Modifier.padding(horizontal = t.space2),
                         trailing = { Badge("不支持") },
                     )
+                    TotpFine("Aegis 请选「明文导出」；加密导出用 scrypt，暂不支持（导入时会直接报格式不识别）。")
                     TotpFine("导入按密钥去重，同名账户保留两条；导入过程不联网，解析失败不会写入任何账户。")
                 }
 

@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.Countdown
 import com.bsfeng.monitor.domain.totp.TotpAccount
+import com.bsfeng.monitor.ui.AppButton
+import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -153,25 +155,44 @@ fun TotpAccountRow(
     paused: Boolean = false,
     onCopy: () -> Unit = {},
     onEdit: () -> Unit = {},
+    /** HOTP 账户：右侧不画倒计时环，改画「下一码」按钮。 */
+    onAdvanceHotp: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
-    val warn = !paused && isCountdownWarning(countdown)
+    val hotp = isHotp(account.params)
+    val steam = isSteam(account.variant)
+    val warn = !paused && !hotp && isCountdownWarning(countdown)
+    // 读屏会逐字念码：Steam 的 5 位字母码念成字母序列，数字码按位念；
+    // HOTP 没有「剩余 N 秒」，改念计数器，否则读屏会播报一个永远不变的倒计时。
     val desc = buildString {
         append(account.issuer)
         if (account.accountName.isNotBlank()) append(" ").append(account.accountName)
-        if (paused) {
-            append("，已暂停")
-        } else {
-            append("，验证码 ").append(code)
-            append("，剩余 ").append(countdown.remainingSec).append(" 秒")
+        when {
+            paused -> append("，已暂停")
+            hotp -> {
+                append("，").append(if (steam) "Steam 字母码 " else "验证码 ").append(code)
+                append("，计数器 ").append(account.counter)
+            }
+            else -> {
+                append("，").append(if (steam) "Steam 字母码 " else "验证码 ").append(code)
+                append("，剩余 ").append(countdown.remainingSec).append(" 秒")
+            }
         }
+    }
+    // HOTP 行里有独立的「下一码」按钮：语义合并会把子节点的点击动作并进父节点，
+    // 读屏就点不到那个按钮（ACTION_CLICK 只剩一个）。所以 HOTP 行不合并，
+    // 描述挂在左侧信息列上，按钮保持独立节点。
+    val rowSemantics = if (hotp) {
+        Modifier
+    } else {
+        Modifier.semantics(mergeDescendants = true) { contentDescription = desc }
     }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = ROW_MIN_HEIGHT)
-            .semantics(mergeDescendants = true) { contentDescription = desc }
+            .then(rowSemantics)
             .combinedClickable(
                 onClick = {
                     haptic(HapticTone.LIGHT)
@@ -199,7 +220,11 @@ fun TotpAccountRow(
                 color = t.fg2,
             )
         }
-        Column(Modifier.weight(1f)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .then(if (hotp) Modifier.semantics { contentDescription = desc } else Modifier),
+        ) {
             Text(
                 text = account.issuer,
                 style = MaterialTheme.typography.titleSmall,
@@ -219,31 +244,37 @@ fun TotpAccountRow(
             TotpCodeText(
                 code = if (paused) "" else code,
                 digits = account.params.digits,
-                wide = account.params.digits == 8,
+                // Steam 是 5 位字母码：降档显示，不按「8 位宽码」处理（后者会压字号）
+                wide = !steam && account.params.digits == 8,
                 warning = warn,
                 placeholder = if (paused) "— — —" else "… … …",
-                modifier = Modifier.padding(
-                    start = if (paused) 0.dp else 0.dp,
-                ),
             )
             Spacer(Modifier.width(t.space2))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(t.space1),
             ) {
-                if (!paused) {
-                    TotpCountdownRing(countdown)
-                    Text(
-                        text = "${countdown.remainingSec}s",
-                        style = monitorMonoMeta.copy(fontSize = t.textXs),
-                        color = if (warn) t.warnText else t.muted,
-                    )
-                } else {
-                    Text(
+                when {
+                    paused -> Text(
                         text = "暂停",
                         style = monitorMonoMeta.copy(fontSize = t.textXs),
                         color = t.muted,
                     )
+                    // HOTP 不随时间换码：没有倒计时，给一个「下一码」按钮推进计数器
+                    hotp -> AppButton(
+                        text = "下一码",
+                        onClick = { onAdvanceHotp?.invoke() },
+                        variant = AppButtonVariant.Ghost,
+                        enabled = onAdvanceHotp != null,
+                    )
+                    else -> {
+                        TotpCountdownRing(countdown)
+                        Text(
+                            text = "${countdown.remainingSec}s",
+                            style = monitorMonoMeta.copy(fontSize = t.textXs),
+                            color = if (warn) t.warnText else t.muted,
+                        )
+                    }
                 }
             }
         }

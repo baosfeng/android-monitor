@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.TotpAccount
 import com.bsfeng.monitor.domain.totp.TotpCountdown
+import com.bsfeng.monitor.domain.totp.TotpParams
 import com.bsfeng.monitor.ui.AppButton
 import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.components.AppCard
@@ -44,6 +45,19 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 import kotlinx.coroutines.delay
+
+/**
+ * 详情页的算法选项：导入来的 MD5 账户把 MD5 补成一段，避免选中态落空（否则用户
+ * 一进详情就看到「SHA1 选中」，一保存就把 MD5 改成了 SHA1，码立刻全错）。
+ */
+internal fun algorithmOptionsFor(current: String): List<String> {
+    val normalized = current.trim().uppercase()
+    return if (normalized.isBlank() || normalized in TOTP_ALGORITHM_OPTIONS) {
+        TOTP_ALGORITHM_OPTIONS
+    } else {
+        TOTP_ALGORITHM_OPTIONS + normalized
+    }
+}
 
 /** 密钥明文停留时长：显示 15 秒后自动收回（原型口径）。 */
 private const val SECRET_REVEAL_MS = 15_000L
@@ -71,10 +85,20 @@ fun TotpDetailScreen(
     onSave: () -> Unit = {},
     onDelete: () -> Unit = {},
     onBack: (() -> Unit)? = null,
+    /** 参数草稿（算法 / 位数 / 周期 / 类型）；null 表示尚未铺开，取 [account] 的原值。 */
+    paramsDraft: TotpParams? = null,
+    /** HOTP 计数器草稿。 */
+    counterDraft: Long? = null,
+    onParamsChange: (TotpParams) -> Unit = {},
+    onCounterChange: (Long) -> Unit = {},
+    /** HOTP 账户：顶部码区给「下一码」按钮（推进计数器并刷新）。 */
+    onAdvanceHotp: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
     var revealed by rememberSaveable(account?.id) { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val params = paramsDraft ?: account?.params ?: TotpParams()
+    val counter = counterDraft ?: account?.counter ?: 0L
 
     LaunchedEffect(revealed) {
         if (revealed) {
@@ -88,11 +112,15 @@ fun TotpDetailScreen(
             AppCard { StateSkeleton(rows = 4) }
             return@TotpScaffold
         }
-        val countdown = remember(nowMillis, account.params.periodSec) {
-            TotpCountdown.of(nowMillis, account.params.periodSec)
+        // 展示码用**草稿参数**：改了位数/周期要当场看到码变化，保存只是把它写回库里
+        val liveAccount = remember(account, params, counter) { account.copy(params = params, counter = counter) }
+        val hotp = isHotp(params)
+        val steam = isSteam(account.variant)
+        val countdown = remember(nowMillis, params.periodSec) {
+            TotpCountdown.of(nowMillis, params.periodSec)
         }
-        val code = remember(nowMillis, account.params, account.secretBase32) {
-            deriveCode(account.secretBase32, nowMillis / 1_000L, account.params)
+        val code = remember(nowMillis, liveAccount, params) {
+            deriveAccountCode(liveAccount, nowMillis / 1_000L)
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -125,16 +153,43 @@ fun TotpDetailScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("当前验证码", style = MaterialTheme.typography.bodySmall, color = t.muted)
-                TotpCodeText(code = code, digits = account.params.digits, wide = account.params.digits == 8)
+                Text(
+                    if (steam) "当前 Steam 字母码" else if (hotp) "当前 HOTP 码" else "当前验证码",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.muted,
+                )
+                TotpCodeText(
+                    code = code,
+                    digits = params.digits,
+                    wide = !steam && params.digits == 8,
+                    placeholder = "— — —",
+                )
             }
-            TotpCountdownRing(countdown)
-            Text(
-                "${countdown.remainingSec}s",
-                style = monitorMonoMeta.copy(fontSize = t.textXs),
-                color = if (isCountdownWarning(countdown)) t.warnText else t.muted,
-                modifier = Modifier.padding(start = t.space2),
-            )
+            // HOTP 不随时间换码：不画倒计时环，改画计数器 + 「下一码」
+            if (hotp) {
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = t.space2)) {
+                    Text(
+                        "计数器 ${counter}",
+                        style = monitorMonoMeta.copy(fontSize = t.textXs),
+                        color = t.muted,
+                    )
+                    Spacer(Modifier.height(t.space1))
+                    AppButton(
+                        text = "下一码",
+                        onClick = { onAdvanceHotp?.invoke() },
+                        variant = AppButtonVariant.Ghost,
+                        enabled = onAdvanceHotp != null,
+                    )
+                }
+            } else {
+                TotpCountdownRing(countdown)
+                Text(
+                    "${countdown.remainingSec}s",
+                    style = monitorMonoMeta.copy(fontSize = t.textXs),
+                    color = if (isCountdownWarning(countdown)) t.warnText else t.muted,
+                    modifier = Modifier.padding(start = t.space2),
+                )
+            }
         }
 
         TotpTextField(
@@ -167,13 +222,31 @@ fun TotpDetailScreen(
         TotpFine("掩码显示，默认不落屏；显示 15 秒后自动收回。")
 
         AppCard {
-            TotpParamRow("算法", "${account.params.algorithm} · ${account.params.digits} 位 · ${account.params.periodSec} 秒")
+            TotpParamRow("形态", codeKindLabel(account))
             TotpHairline()
             TotpParamRow("来源", sourceLabel)
             TotpHairline()
             TotpParamRow("最近使用", lastUsedLabel)
         }
-        TotpFine("参数由二维码决定，改错会算出错码，所以这里只读；要换参数请重新扫码添加。")
+
+        // 参数可编辑：二维码给错参数（周期 15 秒、7 位码、HOTP 计数器对不上）时，
+        // 用户只能在这里修正；保存走同一套范围校验，改错只会算错码，不会损坏密钥。
+        AppCard {
+            Text("验证码参数", style = MaterialTheme.typography.titleMedium, color = t.fg)
+            Spacer(Modifier.height(t.space2))
+            TotpParamEditor(
+                params = params,
+                counter = counter,
+                onParamsChange = onParamsChange,
+                onCounterChange = onCounterChange,
+                algorithmOptions = algorithmOptionsFor(params.algorithm),
+                digitsTag = "s26-digits",
+                periodTag = "s26-period",
+                typeTag = "s26-type",
+                counterTag = "s26-counter",
+            )
+        }
+        TotpFine("参数由二维码决定，事后可在这里修正；改错会一直算出错的码，但不会损坏密钥。")
 
         AppCard(padding = t.space2) {
             Row(

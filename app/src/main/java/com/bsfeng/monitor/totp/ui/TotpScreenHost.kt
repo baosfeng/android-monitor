@@ -188,6 +188,7 @@ fun TotpScreenHost(
                     viewModel.openDetail(account)
                     route = TotpRoute.Detail(account.id)
                 },
+                onAdvanceHotp = { viewModel.advanceHotp(it) },
                 onAddAccount = { route = TotpRoute.Add },
                 onOpenBackup = { route = TotpRoute.Backup },
                 onRetry = { viewModel.refresh() },
@@ -200,8 +201,18 @@ fun TotpScreenHost(
                     viewModel.resetManualForm()
                     route = TotpRoute.Manual
                 },
-                onPickFromAlbum = { albumLauncher.launch("image/*") },
+                onPickFromAlbum = {
+                    // 重选前先清掉上一次的失败原因，否则会挂着旧横幅让人以为又失败了
+                    viewModel.clearAlbumFailure()
+                    albumLauncher.launch("image/*")
+                },
                 onBack = { back() },
+                // 相册路径的失败原因（中文）在这里可见：用户停在添加页，横幅是唯一的反馈
+                failureMessage = scanFailure,
+                onRetryAlbum = {
+                    viewModel.clearAlbumFailure()
+                    albumLauncher.launch("image/*")
+                },
             )
 
             TotpRoute.Scan -> TotpScanScreen(
@@ -280,7 +291,12 @@ fun TotpScreenHost(
                     onAccountChange = viewModel::setAccountDraft,
                     nowMillis = nowMillis,
                     positionLabel = viewModel.positionLabel(current.accountId),
-                    sourceLabel = "本机 · TOTP",
+                    sourceLabel = account?.let { "本机 · " + codeKindLabel(it) } ?: "—",
+                    paramsDraft = draft?.params,
+                    counterDraft = draft?.counter,
+                    onParamsChange = viewModel::setDetailParams,
+                    onCounterChange = viewModel::setDetailCounter,
+                    onAdvanceHotp = account?.let { acc -> { viewModel.advanceHotp(acc) } },
                     onMoveUp = { viewModel.move(current.accountId, -1) },
                     onMoveDown = { viewModel.move(current.accountId, 1) },
                     onSave = { viewModel.saveDetail { route = TotpRoute.List } },
