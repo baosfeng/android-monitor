@@ -55,9 +55,11 @@ internal fun MainBottomBar(
     onTapHaptic: () -> Unit,
 ) {
     val tokens = LocalDesignTokens.current
+    // 选中态用 accentText 而不是 accent：accent 是填充色，当文字色时掉到 4.5:1 以下
+    // （apple #0071e3 在 surface 上 4.31:1、notion 4.19:1）；accent-text 8 套主题实测 4.78–12.24:1。
     val barColors = NavigationBarItemDefaults.colors(
-        selectedIconColor = tokens.accent,
-        selectedTextColor = tokens.accent,
+        selectedIconColor = tokens.accentText,
+        selectedTextColor = tokens.accentText,
         indicatorColor = tokens.accentFade(14),
         unselectedIconColor = tokens.muted,
         unselectedTextColor = tokens.muted,
@@ -78,8 +80,9 @@ internal fun MainBottomBar(
     ) {
         tabs.forEach { tab ->
             val isSelected = selectedTab == tab
+            // 图标与文案都吃这个 tabColor（会压过 barColors 的同名字段），所以选中态也走 accentText。
             val tabColor by animateColorAsState(
-                targetValue = if (isSelected) tokens.accent else tokens.muted,
+                targetValue = if (isSelected) tokens.accentText else tokens.muted,
                 animationSpec = tokens.springOf<Color>(MotionToken.State),
             )
             NavigationBarItem(

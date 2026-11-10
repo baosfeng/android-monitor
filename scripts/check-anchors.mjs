@@ -15,6 +15,12 @@
 //      运行时拼接前缀（"s15-l1-" 这类以 - 结尾的常量）同样只能来自上述三条证据的文本，
 //      不再接受「全仓任意处出现过 testTag( 」「任意文件任意一行出现过该字符串」两个宽口子。
 //   3. 自增 = 代码有、账本无 —— 这是硬错误：锚点集合必须能逐字对账
+//   4. 原型登记 = .open-design/src/**/*.html 的 data-od-id 里，s\d\d[a-z]?- 前缀的页面锚点
+//      必须出现在账本或作废清单之一；两处都没有 → 硬错误，按分片文件名列出
+//      补的是「原型加了锚点却不登记」的盲区：旧口径的缺失只从账本算，原型新增的锚点
+//      既不进 missing 也不进自增，永远判不红（基建审计 P1-1）。
+//      外壳 / 调试装饰（appbar / dev-* / demo-only:* / screen-* / theme-* / state-* / statusbar
+//      / device / stage …）不是 sXX- 前缀，不纳入判据。
 //
 // 为什么收窄（基建审计 I1）：旧实现的前缀判定只要求「全仓库某处出现过 testTag(」，
 // 映射表兜底只要求「锚点字符串出现在任意文件任意一行」，两条都与锚点本身无关：
@@ -27,10 +33,10 @@
 // 以前 CI 注释把 123 条缺失一锅端归给「作废页」，而其中 s05 / s16 约 40 条来自在用页面。
 //
 // 用法：
-//   node scripts/check-anchors.mjs            # 打印四列账本；自增 / 清单外缺失非 0 时 exit 1
+//   node scripts/check-anchors.mjs            # 打印四列账本；自增 / 清单外缺失 / 原型未登记非 0 时 exit 1
 //   node scripts/check-anchors.mjs --strict   # 连清单内的容忍缺失也要求为 0（清理完再启用）
 //   node scripts/check-anchors.mjs --json     # 机器可读输出
-//   node scripts/check-anchors.mjs --self-test # 用 fixture 校验上面三条判定本身
+//   node scripts/check-anchors.mjs --self-test # 用 fixture 校验上面四条判定本身
 //
 // 已知局限：testTag 实参是复杂表达式（三元、集合下标算出来的值、超过深度上限的跨文件
 // 参数链）时静态求值不到，这类锚点会落进「缺失」——实现侧应把锚点写成字面量，
@@ -53,6 +59,11 @@ const COMPONENT_DOC = path.resolve(ROOT, process.env.ANCHORS_COMPONENTS || 'docs
 // 作废 / 未实现的锚点清单：只容忍这里列出的缺失（见文件头的 I10 说明）。
 const RETIRED_TSV = path.resolve(ROOT, process.env.ANCHORS_RETIRED || 'scripts/anchor-retired.tsv');
 const ANCHOR_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/;
+
+// 原型源码目录：只为「原型有、账本无」这条检查读，不改原型（见文件头判据 4）。
+const PROTOTYPE_DIR = path.resolve(ROOT, process.env.ANCHORS_PROTOTYPE || '.open-design/src');
+// 页面级锚点：s01-… / s20a-…（分片文件名首段是 s\d\d[a-z]?-），外壳 / 调试锚点不匹配。
+const PAGE_ANCHOR_RE = /^s\d\d[a-z]?-/;
 
 // 证据追踪深度：常量 / 辅助函数链与参数透传链分别计，防止在大型 UI 组件里扩散成全仓搜索。
 const MAX_DECL_HOPS = 3;
@@ -120,6 +131,42 @@ function readRetired() {
     retired.set(anchor, { page: page || '(无)', status, reason });
   }
   return retired;
+}
+
+/**
+ * 原型页面锚点：data-od-id="…" / data-od-id='…' → { anchor, file }（file 是分片文件名）。
+ *
+ * 只收 s\d\d[a-z]?- 前缀的真页面锚点；外壳 / 调试装饰（appbar、dev-*、demo-only:*、
+ * screen-*、theme-*、state-*、device、statusbar、stage…）不是界面元素，按文件头判据 4 排除。
+ * 同一锚点出现在多个分片时按出现顺序全部记下，报错时能定位到每一处。
+ */
+function readPrototypeAnchors() {
+  const out = new Map();
+  if (!fs.existsSync(PROTOTYPE_DIR)) {
+    console.error('缺原型目录：' + path.relative(ROOT, PROTOTYPE_DIR));
+    process.exit(2);
+  }
+  for (const file of walkHtml(PROTOTYPE_DIR)) {
+    const rel = path.relative(PROTOTYPE_DIR, file);
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(/data-od-id\s*=\s*["']([^"']*)["']/g)) {
+      const anchor = m[1].trim();
+      // 与账本同一条字符集：锚点只能用 [A-Za-z0-9.-]，否则登记了也读不进来。
+      if (!PAGE_ANCHOR_RE.test(anchor) || !ANCHOR_RE.test(anchor)) continue;
+      if (!out.has(anchor)) out.set(anchor, []);
+      const files = out.get(anchor);
+      if (!files.includes(rel)) files.push(rel);
+    }
+  }
+  return out;
+}
+
+function walkHtml(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkHtml(p, out);
+    else if (entry.name.endsWith('.html')) out.push(p);
+  }
+  return out;
 }
 
 function walk(dir, out = []) {
@@ -513,6 +560,7 @@ function expand(index, text, ctx, declHops, callHops, seen, acc) {
 
 const ledger = readLedgerAnchors();
 const retired = readRetired();
+const prototype = readPrototypeAnchors();
 const index = buildIndex();
 
 // 从每个 testTag 调用点出发收集证据；只有「从调用点走得到」的字面量 / 前缀才算落地证据。
@@ -549,8 +597,26 @@ const extra = [...directLiterals].filter((a) => !ledger.has(a));
 // 反方向：清单里写着「作废」但代码里已落地的锚点，说明清单该缩了，也判红——
 // 否则这清单会越滚越大，重新变成「缺失无人负责」的挡箭牌。
 const unretired = missing.filter((a) => !retired.has(a));
-const staleRetired = [...retired.keys()].filter((a) => !missing.includes(a));
+// 清单失效 = 这条登记已经用不上：代码里已落地（清单该缩），或账本与原型里都已不存在。
+// 只登记在清单里的页面锚点（原型有、账本无）不算失效——那正是判据 4 的登记位置。
+const prototypeSet = new Set(prototype.keys());
+const staleRetired = [...retired.keys()].filter(
+  (a) => landed.has(a) || (!ledger.has(a) && !prototypeSet.has(a)),
+);
 const pendingCount = missing.filter((a) => retired.get(a)?.status === '待实现').length;
+// 清单本身登记的「待实现」总数：包含只登记在清单里、账本还没收的原型锚点。
+const retiredPending = [...retired.values()].filter((r) => r.status === '待实现').length;
+
+// 原型有、账本与清单都没有（文件头判据 4）：锚点先加在原型上却没登记，旧口径永远看不见。
+// 按分片文件名分组，报错时能直接定位到屏。
+const unregistered = [...prototype.keys()].filter((a) => !ledger.has(a) && !retired.has(a));
+const unregisteredByFile = new Map();
+for (const a of unregistered) {
+  for (const f of prototype.get(a)) {
+    if (!unregisteredByFile.has(f)) unregisteredByFile.set(f, []);
+    unregisteredByFile.get(f).push(a);
+  }
+}
 
 const pageOf = (a) => ledger.get(a) || '(无)';
 const pages = new Map();
@@ -573,6 +639,12 @@ if (JSON_OUT) {
     extraList: extra,
     retiredTolerated: missing.length - unretired.length,
     pending: pendingCount,
+    prototypePages: prototype.size,
+    retiredPending,
+    unregistered,
+    unregisteredPages: [...unregisteredByFile.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([file, anchors]) => ({ file, anchors })),
     unretired,
     staleRetired,
     pages: [...pages.entries()].map(([p, s]) => ({ page: p, ...s })),
@@ -580,7 +652,9 @@ if (JSON_OUT) {
 } else {
   console.log('=== 锚点对账 ===');
   console.log('账本锚点 ' + ledger.size + ' | 代码落地 ' + landed.size + ' | 缺失 ' + missing.length +
-    '（清单内 ' + (missing.length - unretired.length) + '，其中待实现 ' + pendingCount + '） | 自增 ' + extra.length);
+    '（清单内 ' + (missing.length - unretired.length) + '，其中待实现 ' + pendingCount + '） | 自增 ' + extra.length +
+    ' | 原型页面锚点 ' + prototype.size + '（未登记 ' + unregistered.length + '）' +
+    ' | 清单 ' + retired.size + ' 条（待实现 ' + retiredPending + '）');
   if (varGen.size) console.log('（其中 ' + varGen.size + ' 个由运行时前缀生成）');
   console.log('');
   const rows = [...pages.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -611,8 +685,16 @@ if (JSON_OUT) {
   }
   if (staleRetired.length) {
     console.log('');
-    console.log('=== 清单已失效（硬错误：这些锚点已落地或不在账本，删掉对应行）===');
+    console.log('=== 清单已失效（硬错误：这些锚点已落地，或账本与原型里都没有了，删掉对应行）===');
     console.log(staleRetired.join(', '));
+  }
+  if (unregistered.length) {
+    console.log('');
+    console.log('=== 原型未登记（硬错误：原型 data-od-id 有，账本与清单都没有）===');
+    for (const [file, anchors] of [...unregisteredByFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      console.log('--- ' + file + ' (' + anchors.length + ') ---');
+      console.log(anchors.join(', '));
+    }
   }
 }
 
@@ -622,7 +704,13 @@ if (extra.length > 0) {
 }
 if (staleRetired.length > 0) {
   console.error('\n作废清单有 ' + staleRetired.length + ' 条已失效：删掉 ' +
-    path.relative(ROOT, RETIRED_TSV) + ' 里对应行（清单只容忍仍然缺失的锚点）。');
+    path.relative(ROOT, RETIRED_TSV) + ' 里对应行（清单只容忍仍然缺失、或原型里仍存在的锚点）。');
+  process.exit(1);
+}
+if (unregistered.length > 0) {
+  console.error('\n原型有 ' + unregistered.length + ' 个页面锚点既不在账本、也不在 ' +
+    path.relative(ROOT, RETIRED_TSV) + ' 里（' + unregisteredByFile.size + ' 个分片）：' +
+    '要么补进 ' + path.relative(ROOT, LEDGER_TSV) + '，要么在清单里登记状态与理由。');
   process.exit(1);
 }
 if (unretired.length > 0) {
@@ -635,15 +723,26 @@ if (STRICT && missing.length > 0) {
   process.exit(1);
 }
 
-// ── fixture 自测：三条判定本身的回归（--self-test）────────────────────────
-// 每个用例在临时目录里造一份最小 fixture（账本 / 组件级 md / 源码 / 作废清单），
+// ── fixture 自测：四条判定本身的回归（--self-test）────────────────────────
+// 每个用例在临时目录里造一份最小 fixture（账本 / 组件级 md / 源码 / 作废清单 / 原型分片），
 // 再用 ANCHORS_* 环境变量把同一个脚本指过去跑一遍，断言退出码与 JSON 字段。
-// 三种输入：清单外缺失判红、全部清单内判绿、清单已失效判红。
+// 五种输入：清单外缺失判红、全部清单内判绿、清单已失效判红、原型未登记判红、原型登记后放行。
 function selfTest() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'anchors-selftest-'));
-  const build = (name, ledgerAnchors, codeAnchors, retiredRows) => {
+  /**
+   * protoFiles：{ 分片文件名: [data-od-id…] } —— 造原型分片；非 sXX- 锚点（dev-* / screen-* 等）
+   * 一并写进去，用来证明外壳 / 调试锚点不进判据。
+   */
+  const build = (name, ledgerAnchors, codeAnchors, retiredRows, protoFiles = {}) => {
     const dir = path.join(tmp, name);
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'proto'), { recursive: true });
+    for (const [file, anchors] of Object.entries(protoFiles)) {
+      const body = anchors
+        .map((a, i) => (i % 2 ? "<div data-od-id='" + a + "'></div>" : '<div data-od-id="' + a + '"></div>'))
+        .join('\n');
+      fs.writeFileSync(path.join(dir, 'proto', file), '<body>\n' + body + '\n</body>\n');
+    }
     fs.writeFileSync(
       path.join(dir, 'ledger.tsv'),
       ['锚点\t来源页面', ...ledgerAnchors.map((a) => a + '\t页面A')].join('\n') + '\n',
@@ -665,6 +764,7 @@ function selfTest() {
     env.ANCHORS_COMPONENTS = path.join(dir, 'components.md');
     env.ANCHORS_RETIRED = path.join(dir, 'retired.tsv');
     env.ANCHORS_SRC = path.join(dir, 'src');
+    env.ANCHORS_PROTOTYPE = path.join(dir, 'proto');
     try {
       const out = execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--json'], {
         env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
@@ -697,6 +797,31 @@ function selfTest() {
       why: '清单里写「作废」但代码已落地 → 判红（清单必须跟着缩）',
       check: (j) => j && j.staleRetired.length === 1 && j.staleRetired[0] === 'a2',
     },
+    {
+      // 账本与代码都齐全，只有原型分片里新加了一个没登记的页面锚点 → 判红；
+      // 同分片里的 dev-* / screen-* 是外壳装饰，不进判据。
+      name: 'unregistered-prototype',
+      dir: build('proto-unregistered', ['s01-hero'], ['s01-hero'], [], {
+        's01-页面.html': ['s01-hero', 's01-new-card', 'dev-replay', 'screen-s01', 'demo-only:probe'],
+      }),
+      expect: 1,
+      why: '原型新增 s01-new-card 却没登记账本 / 清单 → 判红（外壳 dev-* / screen-* 不纳入）',
+      check: (j) => j && j.unregistered.length === 1 && j.unregistered[0] === 's01-new-card' &&
+        j.unregisteredPages.length === 1 &&
+        j.unregisteredPages[0].file.endsWith('s01-页面.html') &&
+        j.unregisteredPages[0].anchors[0] === 's01-new-card',
+    },
+    {
+      // 同一条锚点登记进作废清单（待实现）→ 放行；证明登记是这条检查的正解。
+      name: 'registered-prototype-retired',
+      dir: build('proto-registered', ['s01-hero', 's01-new-card'], ['s01-hero'],
+        ['s01-new-card\ts01-页面\t待实现\t示例理由'], {
+          's01-页面.html': ['s01-hero', 's01-new-card', 'appbar', 'statusbar'],
+        }),
+      expect: 0,
+      why: '原型锚点在清单里登记了状态与理由 → 放行',
+      check: (j) => j && j.unregistered.length === 0 && j.staleRetired.length === 0 && j.prototypePages === 2,
+    },
   ];
 
   let failed = 0;
@@ -715,7 +840,7 @@ function selfTest() {
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('');
   if (failed === 0) {
-    console.log('自测结果：PASS（清单内放行 / 清单外判红 / 失效清单判红 三条都成立）');
+    console.log('自测结果：PASS（清单内放行 / 清单外判红 / 失效清单判红 / 原型未登记判红 / 原型登记放行 五条都成立）');
     return 0;
   }
   console.log('自测结果：FAIL（判据与 fixture 期望不符）');

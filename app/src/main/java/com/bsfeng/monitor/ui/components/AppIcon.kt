@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +64,9 @@ internal object AppIconCache {
     }
 }
 
+/** 身份色压暗档的混合比例：原色 60% + 前景 40%（与原型 --app-*-ink 同一公式）。 */
+private const val INK_MIX_TO_FG: Float = 0.40f
+
 /** 原型 .app-icon 的尺寸（30px 方块）。 */
 private val APP_ICON_SIZE: Dp = 30.dp
 
@@ -103,17 +107,26 @@ fun AppIcon(
                 .clip(RoundedCornerShape(t.radiusSm)),
         )
     } else {
+        // 身份色当「色块 + 白字」时必须走压暗档：品牌原色上白字最低只有 2.38:1（微信绿），
+        // 分类色板最亮一档 4.31:1，都过不了 4.5:1。压暗 = 原色 60% + 前景 40%，
+        // 与原型 token --app-<slug>-ink / --chart-N-ink 同一公式（11 个品牌色压暗后 ≥5:1）。
+        val brand = AppBrandColors.colorOf(packageName)
+        val plate = if (brand != null) {
+            lerp(brand, t.fg, INK_MIX_TO_FG)
+        } else {
+            t.fg2
+        }
         Box(
             modifier = modifier
                 .size(size)
                 .clip(RoundedCornerShape(t.radiusSm))
-                .background(AppBrandColors.colorOf(packageName) ?: t.fg2)
+                .background(plate)
                 .semantics { contentDescription = appName },
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = appName.take(1),
-                color = Color.White,
+                color = t.appOn,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
