@@ -14,11 +14,11 @@ object TotpCountdown {
      * 口径：
      * - 剩余秒数向上取整并夹在 1..periodSec——换码瞬间显示满格而不是 0；
      * - progress 为剩余比例，恰好落在整窗口时 = 1.0；
-     * - 非法 periodSec 按 30 秒、负时间按 0 处理（与 TotpAlgorithm.totp 的降级口径一致，
+     * - 非法 periodSec 夹紧到 1..86400 秒、负时间按 0 处理（与 TotpAlgorithm.totp 的夹紧口径一致，
      *   否则倒计时和验证码会按不同周期各走各的）。
      */
     fun of(epochMillis: Long, periodSec: Int): Countdown {
-        val period = if (isSupportedPeriod(periodSec)) periodSec else TotpParams.DEFAULT_PERIOD_SEC
+        val period = TotpParams.clampPeriod(periodSec)
         val safeMillis = if (epochMillis < 0L) 0L else epochMillis
         val periodMs = period * 1000L
         val remainingMs = periodMs - (safeMillis % periodMs)

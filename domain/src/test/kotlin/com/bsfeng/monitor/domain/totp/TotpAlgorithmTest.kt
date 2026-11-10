@@ -138,17 +138,47 @@ class TotpAlgorithmTest {
     }
 
     @Test
-    fun `非法位数与未知算法降级为六位 SHA1`() {
-        val baseline = totp6(RFC_SHA1, 59L)
-        assertEquals(baseline, TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(digits = 7)))
-        assertEquals(baseline, TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(algorithm = "MD5")))
-        assertEquals(baseline, TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(algorithm = "")))
+    fun `位数按真实值出码不再降级`() {
+        // 7 位码必须与参考实现逐码一致，而不是被压回 6 位
+        assertEquals("4287082", TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(digits = 7)))
+        assertEquals("2", TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(digits = 1)))
+        assertTrue(TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(digits = 7)) != totp6(RFC_SHA1, 59L))
     }
 
     @Test
-    fun `非法周期降级为三十秒`() {
-        assertEquals(totp6(RFC_SHA1, 59L), TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(periodSec = 45)))
-        assertEquals(totp6(RFC_SHA1, 59L), TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(periodSec = 0)))
+    fun `位数越界夹紧到十位仍按夹紧后的位数出码`() {
+        assertEquals(10, TotpAlgorithm.hotp(RFC_SHA1, 1L, 11, "SHA1").length)
+        assertEquals(10, TotpAlgorithm.hotp(RFC_SHA1, 1L, 99, "SHA1").length)
+        assertEquals(1, TotpAlgorithm.hotp(RFC_SHA1, 1L, 0, "SHA1").length)
+    }
+
+    @Test
+    fun `MD5 算法可出码未知算法降级为 SHA1`() {
+        assertEquals("532013", TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(algorithm = "MD5")))
+        assertEquals(totp6(RFC_SHA1, 59L), TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(algorithm = "")))
+        assertEquals(totp6(RFC_SHA1, 59L), TotpAlgorithm.totp(RFC_SHA1, 59L, TotpParams(algorithm = "SHA3-256")))
+    }
+
+    @Test
+    fun `Steam 五位字母码与参考实现一致`() {
+        val secret = SecretCodec.decodeToBytes("cnOgvVunvLFR1gZAwzDxDrgbXWM=")!!
+        assertEquals("2JB2B", TotpAlgorithm.steam(secret, 1794321949L))
+        assertEquals(TotpAlgorithm.steam(secret, 1794321949L), TotpAlgorithm.steam(secret, 1794321940L))
+        assertTrue(TotpAlgorithm.steam(secret, 1794321949L) != TotpAlgorithm.steam(secret, 1794321979L))
+        assertEquals("", TotpAlgorithm.steam(ByteArray(0), 1794321949L))
+    }
+
+    @Test
+    fun `周期按真实值计时只在越界时夹紧`() {
+        // 45 秒周期：文本 1949 秒落在第 39873821 个窗口，与 30 秒口径不是同一个码
+        val period45 = TotpAlgorithm.totp(RFC_SHA1, 1794321949L, TotpParams(periodSec = 45))
+        assertEquals("248426", period45)
+        assertTrue(period45 != TotpAlgorithm.totp(RFC_SHA1, 1794321949L, TotpParams()))
+        // 15 秒周期与参考实现逐码一致（JBSWY3DP 密钥的口径见 TotpParams 用例）
+        assertEquals("114936", TotpAlgorithm.totp(RFC_SHA1, 1794321949L, TotpParams(periodSec = 15)))
+        // 越界才夹紧：0 → 1 秒，超上限 → 86400 秒
+        assertEquals(TotpParams.MIN_PERIOD_SEC, TotpParams.clampPeriod(0))
+        assertEquals(TotpParams.MAX_PERIOD_SEC, TotpParams.clampPeriod(TotpParams.MAX_PERIOD_SEC + 1))
     }
 
     @Test

@@ -1,7 +1,5 @@
 package com.bsfeng.monitor.domain.totp
 
-import java.net.URLDecoder
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
@@ -9,12 +7,15 @@ import java.nio.charset.StandardCharsets
  *
  * 解析的是**不可信输入**（扫码、转发、剪贴板），因此：
  * - 全程不抛异常，任何拒绝都走 [OtpauthParseResult.Failure] 并带上机器可读的 reason，
- *   由 UI 翻译成「链接太长」「密钥格式不对」「不支持 7 位码」这类可操作提示；
+ *   中文提示由 [reasonMessage] 统一翻译（domain 只产机器码，不产英文句子）；
  * - 先卡长度再解析，避免超长串把后面每一步都拖一遍；
- * - 只认 otpauth scheme：http/https 链接虽然也长得像，但那是钓鱼入口，直接拒。
+ * - 只认 otpauth / otpauth-migration 两种 scheme：http/https 链接虽然也长得像，但那是钓鱼入口，直接拒。
  *
- * 已知取舍：[TotpAccount] 没有 counter 字段，所以 hotp 链接能解析成功但计数器不进模型，
- * 以「每 periodSec 换一次码」的 TOTP 口径入库；真要做 HOTP 需要模型扩展，不在本期范围。
+ * 支持面按主流验证器的实际口径：位数 1–10、周期 1–86400 秒、算法 SHA1/SHA256/SHA512/MD5、
+ * TOTP 与 HOTP 两种类型、Steam 变体；密钥原文走 [SecretCodec]（Base32 优先，Base64 兜底）。
+ *
+ * 已知取舍：迁移链接（otpauth-migration://）里常有多条账户，[parse] 只返回第一条——
+ * 批量导入请用 [parseBatch]，否则其余条目会被静默丢掉。
  */
 object OtpauthUri {
 
@@ -29,24 +30,53 @@ object OtpauthUri {
     const val REASON_DIGITS_UNSUPPORTED = "digits_unsupported"
     const val REASON_PERIOD_UNSUPPORTED = "period_unsupported"
     const val REASON_ALGORITHM_UNSUPPORTED = "algorithm_unsupported"
+    const val REASON_MIGRATION_INVALID = "migration_invalid"
 
     private const val SCHEME = "otpauth://"
+    private const val MIGRATION_SCHEME = "otpauth-migration://"
     private const val TYPE_TOTP = "totp"
     private const val TYPE_HOTP = "hotp"
 
-    /** 上限取 512：够装下 issuer + 邮箱 + 32 字节密钥，又能在解析前挡掉粘贴错的大段文本。 */
-    private const val MAX_URI_LENGTH = 512
+    /**
+     * 上限取 4096：Google 迁移串常 1–2 KB，512 会直接拒掉；
+     * 4 KB 之外的内容更可能是误扫整段文本，没必要为它跑完整条解析。
+     */
+    const val MAX_URI_LENGTH = 4096
 
     private const val KEY_SECRET = "secret"
     private const val KEY_ISSUER = "issuer"
     private const val KEY_ALGORITHM = "algorithm"
     private const val KEY_DIGITS = "digits"
     private const val KEY_PERIOD = "period"
+    private const val KEY_COUNTER = "counter"
 
+    /** reason → 用户可读的中文提示。查不到时给一句兜底，不把机器码漏到界面。 */
+    fun reasonMessage(reason: String): String = when (reason) {
+        REASON_EMPTY -> "链接是空的"
+        REASON_TOO_LONG -> "二维码内容太长（超过 4 KB）"
+        REASON_BAD_SCHEME -> "不是 otpauth 链接（http 链接是钓鱼入口，已拒绝）"
+        REASON_BAD_TYPE -> "只支持 TOTP / HOTP"
+        REASON_BAD_ENCODING -> "链接里的百分号编码坏了"
+        REASON_LABEL_MISSING -> "链接里没有账户名"
+        REASON_SECRET_MISSING -> "链接里没有密钥"
+        REASON_SECRET_INVALID -> "密钥格式不对：Base32 只允许 A–Z 与 2–7"
+        REASON_DIGITS_UNSUPPORTED -> "位数不在 1–10 之间"
+        REASON_PERIOD_UNSUPPORTED -> "周期不在 1–86400 秒之间"
+        REASON_ALGORITHM_UNSUPPORTED -> "不支持这个算法（只认 SHA1 / SHA256 / SHA512 / MD5）"
+        REASON_MIGRATION_INVALID -> "Google 迁移二维码损坏或版本不支持"
+        else -> "这个二维码暂不支持"
+    }
+
+    /** 单条解析入口：迁移链接只取第一条成功项（多条请走 [parseBatch]）。 */
     fun parse(uri: String): OtpauthParseResult {
         val raw = uri.trim()
         if (raw.isEmpty()) return failure(REASON_EMPTY)
         if (raw.length > MAX_URI_LENGTH) return failure(REASON_TOO_LONG)
+        if (raw.startsWith(MIGRATION_SCHEME, ignoreCase = true)) {
+            val batch = OtpauthMigration.parse(raw)
+            val first = batch.accounts.firstOrNull() ?: return failure(REASON_MIGRATION_INVALID)
+            return OtpauthParseResult.Success(first)
+        }
         if (!raw.startsWith(SCHEME, ignoreCase = true)) return failure(REASON_BAD_SCHEME)
 
         val rest = raw.substring(SCHEME.length)
@@ -60,17 +90,38 @@ object OtpauthUri {
         val rawLabel = if (queryAt < 0) afterType else afterType.substring(0, queryAt)
         val rawQuery = if (queryAt < 0) "" else afterType.substring(queryAt + 1)
 
+        return parseSingle(rawLabel, rawQuery, type == TYPE_HOTP)
+    }
+
+    /**
+     * 批量解析入口：普通 otpauth 链接得到 1 条，迁移链接得到 N 条；
+     * 失败原因全部进 skipped（中文），调用方可以一次列给用户看。
+     */
+    fun parseBatch(uri: String): OtpauthBatchResult {
+        val raw = uri.trim()
+        if (raw.isEmpty()) return OtpauthBatchResult(emptyList(), listOf(reasonMessage(REASON_EMPTY)))
+        if (raw.startsWith(MIGRATION_SCHEME, ignoreCase = true)) return OtpauthMigration.parse(raw)
+        return when (val single = parse(raw)) {
+            is OtpauthParseResult.Success -> OtpauthBatchResult(listOf(single.account), emptyList())
+            is OtpauthParseResult.Failure -> OtpauthBatchResult(emptyList(), listOf(reasonMessage(single.reason)))
+        }
+    }
+
+    private fun parseSingle(rawLabel: String, rawQuery: String, isHotp: Boolean): OtpauthParseResult {
         val params = parseQuery(rawQuery) ?: return failure(REASON_BAD_ENCODING)
 
         val secretText = params[KEY_SECRET] ?: return failure(REASON_SECRET_MISSING)
-        val secretBytes = Base32.decodeOrNull(secretText) ?: return failure(REASON_SECRET_INVALID)
-        if (secretBytes.isEmpty()) return failure(REASON_SECRET_INVALID)
+        val secretBytes = when (val decoded = SecretCodec.decodeOrNull(secretText)) {
+            is SecretDecoded.Ok -> decoded.bytes
+            is SecretDecoded.Empty -> return failure(REASON_SECRET_INVALID)
+            is SecretDecoded.Invalid -> return failure(REASON_SECRET_INVALID)
+        }
 
         val digits = params[KEY_DIGITS].let { value ->
             if (value == null) {
                 TotpParams.DEFAULT_DIGITS
             } else {
-                value.trim().toIntOrNull()?.takeIf { isSupportedDigits(it) }
+                value.trim().toIntOrNull()?.takeIf { TotpParams.isSupportedDigits(it) }
                     ?: return failure(REASON_DIGITS_UNSUPPORTED)
             }
         }
@@ -78,7 +129,7 @@ object OtpauthUri {
             if (value == null) {
                 TotpParams.DEFAULT_PERIOD_SEC
             } else {
-                value.trim().toIntOrNull()?.takeIf { isSupportedPeriod(it) }
+                value.trim().toIntOrNull()?.takeIf { TotpParams.isSupportedPeriod(it) }
                     ?: return failure(REASON_PERIOD_UNSUPPORTED)
             }
         }
@@ -89,46 +140,62 @@ object OtpauthUri {
                 normalizeTotpAlgorithm(value) ?: return failure(REASON_ALGORITHM_UNSUPPORTED)
             }
         }
+        // counter 只在 HOTP 有意义；非数字按 0，不让一个坏参数把整条链接拒掉
+        val counter = params[KEY_COUNTER]?.trim()?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
 
         val label = decode(rawLabel.trim().trimStart('/').trim())
             ?: return failure(REASON_BAD_ENCODING)
         val hasIssuerPrefix = ':' in label
         val labelIssuer = if (hasIssuerPrefix) label.substringBefore(':').trim() else ""
         val accountName = if (hasIssuerPrefix) label.substringAfter(':').trim() else label.trim()
-        if (accountName.isEmpty()) return failure(REASON_LABEL_MISSING)
-
         val issuerParam = params[KEY_ISSUER]?.trim().orEmpty()
         val issuer = if (issuerParam.isNotEmpty()) issuerParam else labelIssuer
+        // 账户名缺失但 issuer 在：用 issuer 顶替，比让用户对着「链接里没有账户名」重扫有用
+        val resolvedName = accountName.ifEmpty { issuer }
+        if (resolvedName.isEmpty()) return failure(REASON_LABEL_MISSING)
+
+        val variant = detectTotpVariant(issuer, resolvedName, digits)
 
         return OtpauthParseResult.Success(
             TotpAccount(
                 issuer = issuer,
-                accountName = accountName,
-                // 归一化成无填充大写，保证同一账户重复导入不会因写法差异产生重复记录
+                accountName = resolvedName,
+                // 归一化成无填充大写 Base32：base64 来源（Steam）也转成 Base32 存，存储口径统一
                 secretBase32 = Base32.encode(secretBytes),
-                params = TotpParams(algorithm = algorithm, digits = digits, periodSec = period),
+                params = TotpParams(
+                    algorithm = algorithm,
+                    digits = digits,
+                    periodSec = period,
+                    type = if (isHotp) TotpParams.TYPE_HOTP else TotpParams.TYPE_TOTP,
+                ),
+                variant = variant,
+                counter = if (isHotp) counter else 0L,
             ),
         )
     }
 
     /**
-     * 生成标准 otpauth://totp 链接（备份导出、二维码分享用）。
+     * 生成 otpauth:// 链接（备份导出、二维码分享用）。
      *
-     * 默认值不写进 query：SHA1/6 位/30 秒是绝大多数客户端的默认，省掉能显著缩短二维码，
-     * 而解析端对缺失参数的处理与本函数一致，往返仍然等价。
+     * 默认值不写进 query：SHA1/6 位/30 秒/TOTP 是绝大多数客户端的默认，省掉能显著缩短二维码，
+     * 而解析端对缺失参数的处理与本函数一致，往返仍然等价。HOTP 必须写 type 与 counter。
      */
     fun build(account: TotpAccount): String {
         val issuer = account.issuer.trim()
         val name = account.accountName.trim()
         val label = if (issuer.isEmpty()) name else issuer + ":" + name
+        val isHotp = TotpParams.isHotpType(account.params.type)
         val out = StringBuilder(SCHEME)
-            .append(TYPE_TOTP)
+            .append(if (isHotp) TYPE_HOTP else TYPE_TOTP)
             .append('/')
             .append(encode(label))
             .append('?')
             .append(KEY_SECRET)
             .append('=')
             .append(normalizeSecret(account.secretBase32))
+        if (isHotp) {
+            out.append('&').append(KEY_COUNTER).append('=').append(account.counter.coerceAtLeast(0L))
+        }
         if (issuer.isNotEmpty()) {
             out.append('&').append(KEY_ISSUER).append('=').append(encode(issuer))
         }
@@ -157,24 +224,40 @@ object OtpauthUri {
             val eq = pair.indexOf('=')
             val rawKey = if (eq < 0) pair else pair.substring(0, eq)
             val rawValue = if (eq < 0) "" else pair.substring(eq + 1)
-            val key = decode(rawKey)?.trim()?.lowercase() ?: return null
-            val value = decode(rawValue) ?: return null
+            val key = percentDecode(rawKey, keepPlus = false)?.trim()?.lowercase() ?: return null
+            // 值里的字面 + 保留：base64 密钥（Steam）会出现 +，把它当空格会毁掉密钥
+            val value = percentDecode(rawValue, keepPlus = true) ?: return null
             if (key.isNotEmpty() && !out.containsKey(key)) out[key] = value
         }
         return out
     }
 
+    /** 密钥统一编码成无填充大写 Base32；解不开就只去掉空白，交给下游再报错。 */
     private fun normalizeSecret(secretBase32: String): String =
-        Base32.decodeOrNull(secretBase32)?.let(Base32::encode)
+        SecretCodec.decodeToBytes(secretBase32)?.let(Base32::encode)
             ?: secretBase32.filterNot { it.isWhitespace() || it == '-' || it == '=' }.uppercase()
 
     private fun decode(text: String): String? = try {
-        URLDecoder.decode(text, StandardCharsets.UTF_8)
+        java.net.URLDecoder.decode(text, StandardCharsets.UTF_8)
     } catch (e: IllegalArgumentException) {
         null
     }
 
+    /**
+     * 百分号解码；[keepPlus] 时字面 '+' 原样保留（base64 字母表里它是数据，不是空格）。
+     * 先占位再交给 URLDecoder，非法编码（%ZZ、尾部裸 %）返回 null 而不是抛出去。
+     */
+    private fun percentDecode(text: String, keepPlus: Boolean): String? {
+        val prepared = if (keepPlus) text.replace("+", "%2B") else text
+        if ('%' !in prepared) return prepared
+        return try {
+            java.net.URLDecoder.decode(prepared, StandardCharsets.UTF_8)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+
     /** 空格编码成 %20 而不是 +：label 位于 path 段，+ 在 path 里是字面量。 */
     private fun encode(text: String): String =
-        URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20")
+        java.net.URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20")
 }

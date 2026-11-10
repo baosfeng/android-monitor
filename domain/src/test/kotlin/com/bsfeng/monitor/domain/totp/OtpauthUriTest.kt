@@ -57,10 +57,11 @@ class OtpauthUriTest {
     }
 
     @Test
-    fun `hotp 链接可解析按 TOTP 口径入库`() {
+    fun `hotp 链接保留类型与计数器`() {
         val account = success(OtpauthUri.parse("otpauth://hotp/alice?secret=JBSWY3DPEHPK3PXP&counter=7"))
         assertEquals("alice", account.accountName)
-        assertEquals(TotpParams(), account.params)
+        assertEquals(TotpParams.TYPE_HOTP, account.params.type)
+        assertEquals(7L, account.counter)
     }
 
     @Test
@@ -96,17 +97,18 @@ class OtpauthUriTest {
     }
 
     @Test
-    fun `超过 512 字符的链接被拒`() {
-        val uri = "otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&pad=" + "y".repeat(500)
-        assertTrue(uri.length > 512)
+    fun `超过长度上限的链接被拒`() {
+        val prefix = "otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&pad="
+        val uri = prefix + "y".repeat(OtpauthUri.MAX_URI_LENGTH)
+        assertTrue(uri.length > OtpauthUri.MAX_URI_LENGTH)
         assertFailure(OtpauthUri.parse(uri), OtpauthUri.REASON_TOO_LONG)
     }
 
     @Test
-    fun `恰好 512 字符仍按正常链接解析`() {
+    fun `恰好等于长度上限仍按正常链接解析`() {
         val prefix = "otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&pad="
-        val uri = prefix + "y".repeat(512 - prefix.length)
-        assertEquals(512, uri.length)
+        val uri = prefix + "y".repeat(OtpauthUri.MAX_URI_LENGTH - prefix.length)
+        assertEquals(OtpauthUri.MAX_URI_LENGTH, uri.length)
         success(OtpauthUri.parse(uri))
     }
 
@@ -131,7 +133,7 @@ class OtpauthUriTest {
     @Test
     fun `缺少账户名被拒`() {
         assertFailure(OtpauthUri.parse("otpauth://totp/?secret=JBSWY3DPEHPK3PXP"), OtpauthUri.REASON_LABEL_MISSING)
-        assertFailure(OtpauthUri.parse("otpauth://totp/ACME%20Co:?secret=JBSWY3DPEHPK3PXP"), OtpauthUri.REASON_LABEL_MISSING)
+        assertFailure(OtpauthUri.parse("otpauth://totp/?secret=JBSWY3DPEHPK3PXP&issuer="), OtpauthUri.REASON_LABEL_MISSING)
     }
 
     @Test
@@ -142,27 +144,28 @@ class OtpauthUriTest {
 
     @Test
     fun `非法 Base32 密钥被拒`() {
-        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=11111111"), OtpauthUri.REASON_SECRET_INVALID)
-        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=ABC"), OtpauthUri.REASON_SECRET_INVALID)
         assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DP!"), OtpauthUri.REASON_SECRET_INVALID)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSW*Y3DP"), OtpauthUri.REASON_SECRET_INVALID)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=%C3%A9%C3%A9"), OtpauthUri.REASON_SECRET_INVALID)
     }
 
     @Test
     fun `不支持的位数被拒`() {
-        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&digits=7"), OtpauthUri.REASON_DIGITS_UNSUPPORTED)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&digits=11"), OtpauthUri.REASON_DIGITS_UNSUPPORTED)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&digits=0"), OtpauthUri.REASON_DIGITS_UNSUPPORTED)
         assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&digits=abc"), OtpauthUri.REASON_DIGITS_UNSUPPORTED)
     }
 
     @Test
     fun `不支持的周期被拒`() {
-        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&period=45"), OtpauthUri.REASON_PERIOD_UNSUPPORTED)
+        assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&period=86401"), OtpauthUri.REASON_PERIOD_UNSUPPORTED)
         assertFailure(OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&period=0"), OtpauthUri.REASON_PERIOD_UNSUPPORTED)
     }
 
     @Test
     fun `不支持的算法被拒`() {
         assertFailure(
-            OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&algorithm=MD5"),
+            OtpauthUri.parse("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&algorithm=SHA384"),
             OtpauthUri.REASON_ALGORITHM_UNSUPPORTED,
         )
     }

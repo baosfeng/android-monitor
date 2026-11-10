@@ -40,10 +40,15 @@ class TotpCountdownTest {
     }
 
     @Test
-    fun `非法周期降级为三十秒`() {
-        assertEquals(TotpCountdown.of(15_000L, 30), TotpCountdown.of(15_000L, 45))
-        assertEquals(TotpCountdown.of(15_000L, 30), TotpCountdown.of(15_000L, 0))
-        assertEquals(TotpCountdown.of(15_000L, 30), TotpCountdown.of(15_000L, -60))
+    fun `周期按真实值计时只在越界时夹紧`() {
+        // 45 秒周期按 45 秒整窗走，不再降级成 30
+        assertEquals(45, TotpCountdown.of(0L, 45).remainingSec)
+        assertEquals(30, TotpCountdown.of(15_000L, 45).remainingSec)
+        assertEquals(1, TotpCountdown.of(44_500L, 45).remainingSec)
+        // 越界夹紧：0 / 负数 → 1 秒，超上限 → 86400 秒
+        assertEquals(TotpCountdown.of(0L, 1), TotpCountdown.of(0L, 0))
+        assertEquals(TotpCountdown.of(0L, 1), TotpCountdown.of(0L, -60))
+        assertEquals(86_400, TotpCountdown.of(0L, TotpParams.MAX_PERIOD_SEC + 1).remainingSec)
     }
 
     @Test
