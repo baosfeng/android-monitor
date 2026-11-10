@@ -406,7 +406,7 @@
  *      全部写在本区，且必须建立在官方槽位之上（换主题时由 [data-theme] 覆盖）；
  *   3. 本区之外一律不得出现颜色字面量，必须走 var(--token)。
  * ───────────────────────────────────────────────────────────────────────── */
-:where(html) {
+:root {
   /* ── 原型页画布（设备框之外） ─────────────────────────────────── */
   --page-bg: color-mix(in srgb, var(--fg) 5%, var(--bg));
 
@@ -463,19 +463,59 @@
      ③ 强度阶 .h0..h5：热力条，用序列色的透明阶梯表达强度，不占用分类色板。 */
   --chart-seq: var(--accent);
 
+  /* ── 分籿色的压暗档（--chart-N-ink） ────────────────────────
+     分籿色叶与品牏色都是「躯弧色」：把它们当字栢格时，白字头上没有一个能过 4.5:1（chart-9 只有 4.31:1）。
+     每条 -ink = 原色 60% + --fg 40%（chart-9 / chart-16 原色太亮，用 65% 档），
+     压暗后 16 个分籿色对白字全部 ≥4.5:1。只用在「色块 + 白字」的图标底；
+     图表本身用原色（那里不可要求文字对比）。 */
+  --chart-1-ink: #975a2f;
+  --chart-2-ink: #2f5aa0;
+  --chart-3-ink: #803314;
+  --chart-4-ink: #157b5a;
+  --chart-5-ink: #9b3435;
+  --chart-6-ink: #8e702a;
+  --chart-7-ink: #0f798c;
+  --chart-8-ink: #993768;
+  --chart-9-ink: #608f19;
+  --chart-10-ink: #15395a;
+  --chart-11-ink: #187a70;
+  --chart-12-ink: #a1511a;
+  --chart-13-ink: #5a1a35;
+  --chart-14-ink: #146f98;
+  --chart-15-ink: #208245;
+  --chart-16-ink: #a27e10;
+
+  /* ── 应用品牌色（分类身份色之外的第二种身份色） ───────────────
+     原型里每个应用的品牌色写在行内 style="--app:#xxxxxx" 上；改成 token 后行内只写
+     var(--app-<slug>-ink)，全产物不再出现裸色值。
+     ink = 品牌色 60% + --fg 40% 的压暗档：白字压在原色上最低只有 2.38:1（微信绿），
+     压暗后 11 个应用对白字全部 ≥5:1。品牌原值仍是身份基准，住在 Kotlin 的 AppBrandColors。 */
+  --app-wechat-ink: #107f46;
+  --app-bili-ink: #a25068;
+  --app-taobao-ink: #a53c0c;
+  --app-amap-ink: #0c6fa3;
+  --app-zhihu-ink: #0c5ba5;
+  --app-netease-music-ink: #801314;
+  --app-alipay-ink: #1953a5;
+  --app-jd-ink: #93221d;
+  --app-weibo-ink: #961927;
+  --app-xhs-ink: #a52134;
+  --app-douyin-ink: #191a21;
+  --app-on: #ffffff;
+
   --chart-1: #e8833a;
   --chart-2: #3b82f6;
-  --chart-3: #8b5cf6;
+  --chart-3: #c2410c;
   --chart-4: #10b981;
   --chart-5: #ef4444;
   --chart-6: #d9a832;
   --chart-7: #06b6d4;
   --chart-8: #ec4899;
   --chart-9: #84cc16;
-  --chart-10: #6366f1;
+  --chart-10: #0f4c81;
   --chart-11: #14b8a6;
   --chart-12: #f97316;
-  --chart-13: #a855f7;
+  --chart-13: #831843;
   --chart-14: #0ea5e9;
   --chart-15: #22c55e;
   --chart-16: #eab308;
@@ -1165,7 +1205,10 @@ body{
   transition:background var(--dur-state) var(--ease-standard),transform var(--dur-press) var(--ease-out);
 }
 .tab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.tab[aria-selected="true"]{color:var(--accent);font-weight:600}
+/* 选中态用 accent-text 而不是 accent：accent 是「填充色」，当文字色用时会掉到 4.5:1 以下
+   （apple 的 accent 在 --surface 上 4.31:1，notion 4.19:1）。accent-text = accent 88% + fg，
+   8 套主题实测 4.78–12.24:1，图标同色（stroke:currentColor）。 */
+.tab[aria-selected="true"]{color:var(--accent-text);font-weight:600}
 .tab[aria-selected="true"] .tab-icon{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .tab:active .tab-icon{transform:scale(.92)}
 .gesture-bar{position:absolute;left:0;right:0;bottom:0;z-index:20;height:var(--gesture-h);display:grid;place-items:center}
@@ -1373,7 +1416,10 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
    实现侧优先取 PackageManager 的真实图标，取不到时回落到本形态（--app 缺省即中性底色）。 */
 .app-icon{
   flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
-  background:var(--app,var(--fg-2));color:#fff;font-size:13px;font-weight:600;line-height:1;
+  /* 底色取已压暗的身份色（--app-*-ink）；写 color-mix 会序列化成 color(srgb …)，
+     对比度度量与老设备都不认，所以压暗值在 token 里算好。缺省中性 --fg-2 也够 9:1。 */
+  background:var(--app,var(--fg-2));
+  color:var(--app-on);font-size:13px;font-weight:600;line-height:1;
   overflow:hidden;
 }
 .app-icon img{width:100%;height:100%;object-fit:cover;display:block}
@@ -3883,7 +3929,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </div>
           <button class="s01-ev" type="button" data-goto="s02" data-od-id="s01-recent-1">
             <span class="s01-ev-t">09:41</span>
-            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span>
             <span class="s01-ev-x">微信 · 前台 12 分钟</span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
@@ -4161,13 +4207,13 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <div class="grp-head"><span class="grp-time num">09:00</span><span class="badge grp-cnt" data-od-min-fs>5 条事件</span></div>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x1" data-type="APP_USAGE">
             <span class="s02-t num">09:41</span>
-            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span>
         <span class="row-body"><span class="row-title">微信 · 前台 12 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x14" data-type="PAGE" data-od-id="s02-ev-page">
             <span class="s02-t num">09:38</span>
-            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span>
             <span class="row-body"><span class="row-title">微信 › 朋友圈</span><span class="row-sub">页面轨迹 · 无障碍服务</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
@@ -4185,7 +4231,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </button>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x4" data-type="AUDIO">
             <span class="s02-t num">09:03</span>
-            <span class="app-icon" style="--app:#c20c0c" aria-hidden>乐</span>
+            <span class="app-icon" style="--app:var(--app-netease-music-ink)" aria-hidden>乐</span>
         <span class="row-body"><span class="row-title">网易云音乐 · 开始播放「岛屿」</span><span class="row-sub">音频事件 · 音频焦点</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
@@ -4212,7 +4258,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </button>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x7" data-type="APP_USAGE">
             <span class="s02-t num">08:11</span>
-            <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+            <span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span>
         <span class="row-body"><span class="row-title">微信 · 前台 23 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
@@ -4249,7 +4295,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <div class="grp-head"><span class="grp-time num">06:00</span><span class="badge grp-cnt" data-od-min-fs>2 条事件</span></div>
           <button class="list-row s02-ev" type="button" data-ctl-open="s02-x11" data-type="APP_USAGE">
             <span class="s02-t num">06:58</span>
-            <span class="app-icon" style="--app:#ff2442" aria-hidden>小</span>
+            <span class="app-icon" style="--app:var(--app-xhs-ink)" aria-hidden>小</span>
         <span class="row-body"><span class="row-title">小红书 · 前台 6 分钟</span><span class="row-sub">前台使用 · 无障碍服务</span></span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
           </button>
@@ -4453,7 +4499,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <div class="tl" role="list">
         <button class="tl-item has-icon od-d1" type="button" data-ctl-open="s03-x1" data-method="rule">
           <span class="tl-time num">17:34:04</span>
-          <span class="app-icon" style="--app:#07c160">微</span>
+          <span class="app-icon" style="--app:var(--app-wechat-ink)">微</span>
           <span class="tl-body">
             <span class="tl-title">微信</span>
             <span class="tl-sub">规则匹配 · 128 ms</span>
@@ -4461,7 +4507,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d2" type="button" data-ctl-open="s03-x2" data-method="rule">
           <span class="tl-time num">17:33:51</span>
-          <span class="app-icon" style="--app:#fb7299">哔</span>
+          <span class="app-icon" style="--app:var(--app-bili-ink)">哔</span>
           <span class="tl-body">
             <span class="tl-title">哔哩哔哩</span>
             <span class="tl-sub">规则匹配 · 96 ms</span>
@@ -4469,7 +4515,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d3" type="button" data-ctl-open="s03-x3" data-method="coord">
           <span class="tl-time num">17:12:37</span>
-          <span class="app-icon" style="--app:#e6162d">微</span>
+          <span class="app-icon" style="--app:var(--app-weibo-ink)">微</span>
           <span class="tl-body">
             <span class="tl-title">微博</span>
             <span class="tl-sub">坐标点击兜底 · 342 ms</span>
@@ -4477,7 +4523,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d4" type="button" data-ctl-open="s03-x4" data-method="rule">
           <span class="tl-time num">16:48:02</span>
-          <span class="app-icon" style="--app:#00a6fb">高</span>
+          <span class="app-icon" style="--app:var(--app-amap-ink)">高</span>
           <span class="tl-body">
             <span class="tl-title">高德地图</span>
             <span class="tl-sub">规则匹配 · 87 ms</span>
@@ -4485,7 +4531,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d5" type="button" data-ctl-open="s03-x5" data-method="rule">
           <span class="tl-time num">15:20:44</span>
-          <span class="app-icon" style="--app:#ff2442">小</span>
+          <span class="app-icon" style="--app:var(--app-xhs-ink)">小</span>
           <span class="tl-body">
             <span class="tl-title">小红书</span>
             <span class="tl-sub">规则匹配 · 104 ms</span>
@@ -4493,7 +4539,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d6" type="button" data-ctl-open="s03-x6" data-method="a11y">
           <span class="tl-time num">14:05:19</span>
-          <span class="app-icon" style="--app:#0084ff">知</span>
+          <span class="app-icon" style="--app:var(--app-zhihu-ink)">知</span>
           <span class="tl-body">
             <span class="tl-title">知乎</span>
             <span class="tl-sub">无障碍事件兜底 · 512 ms</span>
@@ -4501,7 +4547,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d7" type="button" data-ctl-open="s03-x7" data-method="rule">
           <span class="tl-time num">13:41:08</span>
-          <span class="app-icon" style="--app:#c20c0c">网</span>
+          <span class="app-icon" style="--app:var(--app-netease-music-ink)">网</span>
           <span class="tl-body">
             <span class="tl-title">网易云音乐</span>
             <span class="tl-sub">规则匹配 · 76 ms</span>
@@ -4509,7 +4555,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d8" type="button" data-ctl-open="s03-x8" data-method="coord">
           <span class="tl-time num">12:58:33</span>
-          <span class="app-icon" style="--app:#ff5000">淘</span>
+          <span class="app-icon" style="--app:var(--app-taobao-ink)">淘</span>
           <span class="tl-body">
             <span class="tl-title">淘宝</span>
             <span class="tl-sub">坐标点击兜底 · 388 ms</span>
@@ -4517,7 +4563,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d9" type="button" data-ctl-open="s03-x9" data-method="rule">
           <span class="tl-time num">11:30:26</span>
-          <span class="app-icon" style="--app:#07c160">微</span>
+          <span class="app-icon" style="--app:var(--app-wechat-ink)">微</span>
           <span class="tl-body">
             <span class="tl-title">微信</span>
             <span class="tl-sub">规则匹配 · 92 ms</span>
@@ -4525,7 +4571,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         </button>
         <button class="tl-item has-icon od-d10" type="button" data-ctl-open="s03-x10" data-method="rule">
           <span class="tl-time num">10:12:55</span>
-          <span class="app-icon" style="--app:#161823">抖</span>
+          <span class="app-icon" style="--app:var(--app-douyin-ink)">抖</span>
           <span class="tl-body">
             <span class="tl-title">抖音</span>
             <span class="tl-sub">规则匹配 · 118 ms</span>
@@ -6898,7 +6944,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <div class="group rule-list" data-od-id="s10-rules">
           <div class="rule" data-rule>
             <div class="row">
-              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#07c160" aria-hidden>微</span><span class="rule-text"><span class="row-title">微信</span><span class="row-sub">3 个选择器 · 命中 412 次</span></span></button>
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span><span class="rule-text"><span class="row-title">微信</span><span class="row-sub">3 个选择器 · 命中 412 次</span></span></button>
               <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
               <button class="switch" type="button" role="switch" aria-checked="true" aria-label="微信 跳过规则" data-toggle data-on-msg="已启用 微信 跳过规则" data-off-msg="已停用 微信 跳过规则"></button>
             </div>
@@ -6913,7 +6959,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
           <div class="rule" data-rule>
             <div class="row">
-              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#fb7299" aria-hidden>哔</span><span class="rule-text"><span class="row-title">哔哩哔哩</span><span class="row-sub">4 个选择器 · 命中 386 次</span></span></button>
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:var(--app-bili-ink)" aria-hidden>哔</span><span class="rule-text"><span class="row-title">哔哩哔哩</span><span class="row-sub">4 个选择器 · 命中 386 次</span></span></button>
               <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
               <button class="switch" type="button" role="switch" aria-checked="true" aria-label="哔哩哔哩 跳过规则" data-toggle data-on-msg="已启用 哔哩哔哩 跳过规则" data-off-msg="已停用 哔哩哔哩 跳过规则"></button>
             </div>
@@ -6929,7 +6975,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
           <div class="rule" data-rule>
             <div class="row">
-              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#ff5000" aria-hidden>淘</span><span class="rule-text"><span class="row-title">淘宝</span><span class="row-sub">2 个选择器 · 命中 268 次</span></span></button>
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:var(--app-taobao-ink)" aria-hidden>淘</span><span class="rule-text"><span class="row-title">淘宝</span><span class="row-sub">2 个选择器 · 命中 268 次</span></span></button>
               <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
               <button class="switch" type="button" role="switch" aria-checked="true" aria-label="淘宝 跳过规则" data-toggle data-on-msg="已启用 淘宝 跳过规则" data-off-msg="已停用 淘宝 跳过规则"></button>
             </div>
@@ -6943,7 +6989,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
           <div class="rule" data-rule>
             <div class="row">
-              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#00a6fb" aria-hidden>高</span><span class="rule-text"><span class="row-title">高德地图</span><span class="row-sub">2 个选择器 · 命中 154 次</span></span></button>
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:var(--app-amap-ink)" aria-hidden>高</span><span class="rule-text"><span class="row-title">高德地图</span><span class="row-sub">2 个选择器 · 命中 154 次</span></span></button>
               <span class="row-tail"><span class="badge" data-od-min-fs>启用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
               <button class="switch" type="button" role="switch" aria-checked="true" aria-label="高德地图 跳过规则" data-toggle data-on-msg="已启用 高德地图 跳过规则" data-off-msg="已停用 高德地图 跳过规则"></button>
             </div>
@@ -6957,7 +7003,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
           <div class="rule" data-rule>
             <div class="row">
-              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:#0084ff" aria-hidden>知</span><span class="rule-text"><span class="row-title">知乎</span><span class="row-sub">1 个选择器 · 命中 66 次</span></span></button>
+              <button class="rule-main has-icon" type="button" data-expand aria-expanded="false"><span class="app-icon" style="--app:var(--app-zhihu-ink)" aria-hidden>知</span><span class="rule-text"><span class="row-title">知乎</span><span class="row-sub">1 个选择器 · 命中 66 次</span></span></button>
               <span class="row-tail"><span class="badge" data-od-min-fs>停用</span><svg class="chev rule-chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
               <button class="switch" type="button" role="switch" aria-checked="false" aria-label="知乎 跳过规则" data-toggle data-on-msg="已启用 知乎 跳过规则" data-off-msg="已停用 知乎 跳过规则"></button>
             </div>
@@ -7150,47 +7196,47 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 
       <div class="group" data-od-id="s11-list">
         <div class="row app-row" data-app data-name="微信" data-pkg="com.tencent.mm">
-          <span class="app-icon" style="--app:#07c160" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--app-wechat-ink)" aria-hidden>微</span>
           <span class="row-body"><span class="row-title">微信</span><span class="row-sub app-pkg">com.tencent.mm</span></span>
           <button class="switch" type="button" role="switch" aria-checked="true" aria-label="微信 白名单" data-toggle data-on-msg="微信 已加入白名单" data-off-msg="微信 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="哔哩哔哩" data-pkg="tv.danmaku.bili">
-          <span class="app-icon" style="--app:#fb7299" aria-hidden>哔</span>
+          <span class="app-icon" style="--app:var(--app-bili-ink)" aria-hidden>哔</span>
           <span class="row-body"><span class="row-title">哔哩哔哩</span><span class="row-sub app-pkg">tv.danmaku.bili</span></span>
           <button class="switch" type="button" role="switch" aria-checked="true" aria-label="哔哩哔哩 白名单" data-toggle data-on-msg="哔哩哔哩 已加入白名单" data-off-msg="哔哩哔哩 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="淘宝" data-pkg="com.taobao.taobao">
-          <span class="app-icon" style="--app:#ff5000" aria-hidden>淘</span>
+          <span class="app-icon" style="--app:var(--app-taobao-ink)" aria-hidden>淘</span>
           <span class="row-body"><span class="row-title">淘宝</span><span class="row-sub app-pkg">com.taobao.taobao</span></span>
           <button class="switch" type="button" role="switch" aria-checked="true" aria-label="淘宝 白名单" data-toggle data-on-msg="淘宝 已加入白名单" data-off-msg="淘宝 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="高德地图" data-pkg="com.autonavi.minimap">
-          <span class="app-icon" style="--app:#00a6fb" aria-hidden>高</span>
+          <span class="app-icon" style="--app:var(--app-amap-ink)" aria-hidden>高</span>
           <span class="row-body"><span class="row-title">高德地图</span><span class="row-sub app-pkg">com.autonavi.minimap</span></span>
           <button class="switch" type="button" role="switch" aria-checked="true" aria-label="高德地图 白名单" data-toggle data-on-msg="高德地图 已加入白名单" data-off-msg="高德地图 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="知乎" data-pkg="com.zhihu.android">
-          <span class="app-icon" style="--app:#0084ff" aria-hidden>知</span>
+          <span class="app-icon" style="--app:var(--app-zhihu-ink)" aria-hidden>知</span>
           <span class="row-body"><span class="row-title">知乎</span><span class="row-sub app-pkg">com.zhihu.android</span></span>
           <button class="switch" type="button" role="switch" aria-checked="false" aria-label="知乎 白名单" data-toggle data-on-msg="知乎 已加入白名单" data-off-msg="知乎 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="网易云音乐" data-pkg="com.netease.cloudmusic">
-          <span class="app-icon" style="--app:#c20c0c" aria-hidden>乐</span>
+          <span class="app-icon" style="--app:var(--app-netease-music-ink)" aria-hidden>乐</span>
           <span class="row-body"><span class="row-title">网易云音乐</span><span class="row-sub app-pkg">com.netease.cloudmusic</span></span>
           <button class="switch" type="button" role="switch" aria-checked="false" aria-label="网易云音乐 白名单" data-toggle data-on-msg="网易云音乐 已加入白名单" data-off-msg="网易云音乐 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="支付宝" data-pkg="com.eg.android.AlipayGphone">
-          <span class="app-icon" style="--app:#1677ff" aria-hidden>支</span>
+          <span class="app-icon" style="--app:var(--app-alipay-ink)" aria-hidden>支</span>
           <span class="row-body"><span class="row-title">支付宝</span><span class="row-sub app-pkg">com.eg.android.AlipayGphone</span></span>
           <button class="switch" type="button" role="switch" aria-checked="true" aria-label="支付宝 白名单" data-toggle data-on-msg="支付宝 已加入白名单" data-off-msg="支付宝 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="京东" data-pkg="com.jingdong.app.mall">
-          <span class="app-icon" style="--app:#e1251b" aria-hidden>京</span>
+          <span class="app-icon" style="--app:var(--app-jd-ink)" aria-hidden>京</span>
           <span class="row-body"><span class="row-title">京东</span><span class="row-sub app-pkg">com.jingdong.app.mall</span></span>
           <button class="switch" type="button" role="switch" aria-checked="false" aria-label="京东 白名单" data-toggle data-on-msg="京东 已加入白名单" data-off-msg="京东 已移出白名单"></button>
         </div>
         <div class="row app-row" data-app data-name="微博" data-pkg="com.sina.weibo">
-          <span class="app-icon" style="--app:#e6162d" aria-hidden>博</span>
+          <span class="app-icon" style="--app:var(--app-weibo-ink)" aria-hidden>博</span>
           <span class="row-body"><span class="row-title">微博</span><span class="row-sub app-pkg">com.sina.weibo</span></span>
           <button class="switch" type="button" role="switch" aria-checked="false" aria-label="微博 白名单" data-toggle data-on-msg="微博 已加入白名单" data-off-msg="微博 已移出白名单"></button>
         </div>
@@ -9023,17 +9069,17 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       <p class="group-label mt-3">期间应用 · Top 3</p>
       <ul class="s16-apps">
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:36%"></span></span></span>
           <span class="s16-app-val">3 小时 20 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
           <span class="s16-app-body"><span class="s16-app-name">抖音</span><span class="s16-bar"><span style="--w:12%"></span></span></span>
           <span class="s16-app-val">1 小时 5 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>哔</span>
+          <span class="app-icon" style="--app:var(--chart-8-ink)" aria-hidden>哔</span>
           <span class="s16-app-body"><span class="s16-app-name">哔哩哔哩</span><span class="s16-bar"><span style="--w:8%"></span></span></span>
           <span class="s16-app-val">42 分</span>
         </li>
@@ -9044,7 +9090,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
       <ul class="s16-pages">
         <li class="s16-pg" data-level="a">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 朋友圈</span><span class="s16-pg-name pv-b">微信 › 页面 a3f2</span><span class="s16-pg-name pv-c">微信 › 朋友圈</span><span class="s16-pg-num">12 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9086,14 +9132,14 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </span>
         </li>
         <li class="s16-pg" data-level="a">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 公众号文章</span><span class="s16-pg-name pv-b">微信 › 页面 f40b</span><span class="s16-pg-name pv-c">微信 › 公众号文章</span><span class="s16-pg-num">6 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
           </span>
         </li>
         <li class="s16-pg" data-level="b">
-          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">抖音 › 推荐页</span><span class="s16-pg-name pv-b">抖音 › 页面 c81d</span><span class="s16-pg-name pv-c">抖音 › 推荐页</span><span class="s16-pg-num">8 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9124,17 +9170,17 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       <p class="group-label mt-3">期间应用 · Top 3</p>
       <ul class="s16-apps">
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:40%"></span></span></span>
           <span class="s16-app-val">18 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="app-icon" style="--app:var(--chart-8-ink)" aria-hidden>小</span>
           <span class="s16-app-body"><span class="s16-app-name">小红书</span><span class="s16-bar"><span style="--w:27%"></span></span></span>
           <span class="s16-app-val">12 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
           <span class="s16-app-body"><span class="s16-app-name">抖音</span><span class="s16-bar"><span style="--w:20%"></span></span></span>
           <span class="s16-app-val">9 分</span>
         </li>
@@ -9145,7 +9191,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
       <ul class="s16-pages">
         <li class="s16-pg" data-level="a">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 朋友圈</span><span class="s16-pg-name pv-b">微信 › 页面 a3f2</span><span class="s16-pg-name pv-c">微信 › 朋友圈</span><span class="s16-pg-num">6 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9187,7 +9233,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </span>
         </li>
         <li class="s16-pg" data-level="c">
-          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="app-icon" style="--app:var(--chart-8-ink)" aria-hidden>小</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">小红书 › 笔记详情</span><span class="s16-pg-name pv-b">小红书 › 页面 7e05</span><span class="s16-pg-name pv-c">小红书 › 笔记详情</span><span class="s16-pg-num">4 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9219,7 +9265,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </span>
         </li>
         <li class="s16-pg" data-level="b" data-od-id="s16-pg-douyin">
-          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">抖音 › 推荐页</span><span class="s16-pg-name pv-b">抖音 › 页面 c81d</span><span class="s16-pg-name pv-c">抖音 › 推荐页</span><span class="s16-pg-num">8 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9250,17 +9296,17 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       <p class="group-label mt-3">期间应用 · Top 3</p>
       <ul class="s16-apps">
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-app-body"><span class="s16-app-name">微信</span><span class="s16-bar"><span style="--w:44%"></span></span></span>
           <span class="s16-app-val">11 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>钉</span>
+          <span class="app-icon" style="--app:var(--chart-7-ink)" aria-hidden>钉</span>
           <span class="s16-app-body"><span class="s16-app-name">钉钉</span><span class="s16-bar"><span style="--w:32%"></span></span></span>
           <span class="s16-app-val">8 分</span>
         </li>
         <li class="s16-app">
-          <span class="app-icon" style="--app:var(--chart-6)" aria-hidden>浏</span>
+          <span class="app-icon" style="--app:var(--chart-6-ink)" aria-hidden>浏</span>
           <span class="s16-app-body"><span class="s16-app-name">浏览器</span><span class="s16-bar"><span style="--w:16%"></span></span></span>
           <span class="s16-app-val">4 分</span>
         </li>
@@ -9271,7 +9317,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       </div>
       <ul class="s16-pages">
         <li class="s16-pg" data-level="a">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">微信 › 会话列表</span><span class="s16-pg-name pv-b">微信 › 页面 b1c4</span><span class="s16-pg-name pv-c">微信 › 会话列表</span><span class="s16-pg-num">5 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9313,7 +9359,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </span>
         </li>
         <li class="s16-pg" data-level="a">
-          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>钉</span>
+          <span class="app-icon" style="--app:var(--chart-7-ink)" aria-hidden>钉</span>
           <span class="s16-pg-body">
             <span class="s16-pg-line"><span class="s16-pg-name pv-a">钉钉 › 工作台</span><span class="s16-pg-name pv-b">钉钉 › 页面 5d92</span><span class="s16-pg-name pv-c">钉钉 › 工作台</span><span class="s16-pg-num">3 次</span></span>
             <ul class="s16-texts"><li>示例文本一 · 仅占位</li><li>示例文本二 · 仅占位</li><li>示例文本三 · 仅占位</li></ul>
@@ -9448,7 +9494,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       <p class="group-label">按 App 设置</p>
       <div class="group">
         <button class="row s17-app" type="button" data-app="微信" data-level="a" data-od-id="s17-app-wechat">
-          <span class="app-icon" style="--app:var(--chart-2)" aria-hidden>微</span>
+          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
           <span class="row-body">
             <span class="row-title">微信</span>
             <span class="row-sub">页面 42 条 / 日 · 覆盖 6 个页面</span>
@@ -9456,7 +9502,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
         </button>
         <button class="row s17-app" type="button" data-app="小红书" data-level="c" data-od-id="s17-app-xhs">
-          <span class="app-icon" style="--app:var(--chart-8)" aria-hidden>小</span>
+          <span class="app-icon" style="--app:var(--chart-8-ink)" aria-hidden>小</span>
           <span class="row-body">
             <span class="row-title">小红书</span>
             <span class="row-sub">页面 18 条 / 日 · 覆盖 4 个页面</span>
@@ -9464,7 +9510,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="row-tail"><span class="badge s17-level" data-od-min-fs>全文</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
         </button>
         <button class="row s17-app" type="button" data-app="抖音" data-level="b" data-od-id="s17-app-douyin">
-          <span class="app-icon" style="--app:var(--chart-5)" aria-hidden>抖</span>
+          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
           <span class="row-body">
             <span class="row-title">抖音</span>
             <span class="row-sub">页面 31 条 / 日 · 覆盖 3 个页面</span>
@@ -9472,7 +9518,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="row-tail"><span class="badge s17-level" data-od-min-fs>指纹</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
         </button>
         <button class="row s17-app" type="button" data-app="支付宝" data-level="a" data-od-id="s17-app-alipay">
-          <span class="app-icon" style="--app:var(--chart-7)" aria-hidden>支</span>
+          <span class="app-icon" style="--app:var(--chart-7-ink)" aria-hidden>支</span>
           <span class="row-body">
             <span class="row-title">支付宝</span>
             <span class="row-sub">敏感页只留包名 · 其余按档位</span>
@@ -9480,7 +9526,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
         </button>
         <button class="row s17-app" type="button" data-app="浏览器" data-level="b" data-od-id="s17-app-browser">
-          <span class="app-icon" style="--app:var(--chart-6)" aria-hidden>浏</span>
+          <span class="app-icon" style="--app:var(--chart-6-ink)" aria-hidden>浏</span>
           <span class="row-body">
             <span class="row-title">浏览器</span>
             <span class="row-sub">页面 9 条 / 日 · 覆盖 5 个页面</span>

@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 
 /**
- * 8 套主题的全部非 Material 语义 token（132 个 getter）。
+ * 8 套主题的全部非 Material 语义 token（160 个 getter）。
  * 每个 getter 直接读 DesignTokenTable，因此本文件里没有任何色值/尺寸被手抄。
  * themeId 非法时回落到 apple（DesignTokenTable.raw 内保证）。
  */
@@ -110,6 +110,34 @@ class DesignTokens(val themeId: String) {
     val incomeText: Color get() = DesignTokenTable.colorOf(themeId, "income-text")
     val expenseText: Color get() = DesignTokenTable.colorOf(themeId, "expense-text")
     val chartSeq: Color get() = DesignTokenTable.colorOf(themeId, "chart-seq")
+    val chart1Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-1-ink")
+    val chart2Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-2-ink")
+    val chart3Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-3-ink")
+    val chart4Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-4-ink")
+    val chart5Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-5-ink")
+    val chart6Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-6-ink")
+    val chart7Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-7-ink")
+    val chart8Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-8-ink")
+    val chart9Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-9-ink")
+    val chart10Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-10-ink")
+    val chart11Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-11-ink")
+    val chart12Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-12-ink")
+    val chart13Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-13-ink")
+    val chart14Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-14-ink")
+    val chart15Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-15-ink")
+    val chart16Ink: Color get() = DesignTokenTable.colorOf(themeId, "chart-16-ink")
+    val appWechatInk: Color get() = DesignTokenTable.colorOf(themeId, "app-wechat-ink")
+    val appBiliInk: Color get() = DesignTokenTable.colorOf(themeId, "app-bili-ink")
+    val appTaobaoInk: Color get() = DesignTokenTable.colorOf(themeId, "app-taobao-ink")
+    val appAmapInk: Color get() = DesignTokenTable.colorOf(themeId, "app-amap-ink")
+    val appZhihuInk: Color get() = DesignTokenTable.colorOf(themeId, "app-zhihu-ink")
+    val appNeteaseMusicInk: Color get() = DesignTokenTable.colorOf(themeId, "app-netease-music-ink")
+    val appAlipayInk: Color get() = DesignTokenTable.colorOf(themeId, "app-alipay-ink")
+    val appJdInk: Color get() = DesignTokenTable.colorOf(themeId, "app-jd-ink")
+    val appWeiboInk: Color get() = DesignTokenTable.colorOf(themeId, "app-weibo-ink")
+    val appXhsInk: Color get() = DesignTokenTable.colorOf(themeId, "app-xhs-ink")
+    val appDouyinInk: Color get() = DesignTokenTable.colorOf(themeId, "app-douyin-ink")
+    val appOn: Color get() = DesignTokenTable.colorOf(themeId, "app-on")
     val chart1: Color get() = DesignTokenTable.colorOf(themeId, "chart-1")
     val chart2: Color get() = DesignTokenTable.colorOf(themeId, "chart-2")
     val chart3: Color get() = DesignTokenTable.colorOf(themeId, "chart-3")
@@ -158,6 +186,49 @@ internal object LegacyTokenMap {
     class Entry(val legacy: String, val token: String, val note: String)
 
     val TABLE: List<Entry> = listOf(
+        Entry("IOSColors.blue", "accent", "主强调色（唯一持久色彩动作）"),
+        Entry("IOSColors.red", "danger", "危险语义色"),
+        Entry("IOSColors.green", "success", "成功语义色（实时事件流的活跃点）"),
+        Entry("IOSColors.orange", "warn", "警告语义色"),
+        Entry("IOSColors.yellow", "chart-4", "中性图表色阶第 4 级"),
+        Entry("IOSColors.lightBlue", "chart-5", "中性图表色阶第 5 级"),
+        Entry("IOSColors.purple", "chart-3", "中性图表色阶第 3 级"),
+        Entry("IOSColors.pink", "chart-2", "中性图表色阶第 2 级"),
+        Entry("IOSColors.indigo", "chart-6", "中性图表色阶第 6 级（原 ColorScheme.secondary）"),
+        Entry("IOSColors.teal", "chart-7", "中性图表色阶第 7 级（原 ColorScheme.tertiary）"),
+        Entry("IOSColors.gray", "muted", "次要文本 / 中性填充"),
+        Entry("IOSColors.lightGray", "border-soft", "进度条轨道 / chip 底色"),
+        Entry("IOSColors.systemBackground", "bg", "页面底色"),
+        Entry("IOSColors.groupedBackground", "surface", "卡片底色"),
+        Entry("FinanceColors.expense", "danger", "填充态；文本态用 expense-text"),
+        Entry("FinanceColors.income", "success", "填充态；文本态用 income-text"),
+        Entry("FinanceColors.budget", "accent", "预算进度强调色"),
+        Entry("RecordType.SCREEN", "chart-1", "事件类型色"),
+        Entry("RecordType.APP_USAGE", "chart-2", "事件类型色"),
+        Entry("RecordType.CHARGING", "warn", "事件类型色"),
+        Entry("RecordType.BATTERY", "warn", "事件类型色"),
+        Entry("RecordType.WIFI", "accent", "事件类型色"),
+        Entry("RecordType.AUDIO", "chart-3", "事件类型色"),
+        Entry("RecordType.PACKAGE", "chart-4", "事件类型色"),
+        Entry("RecordType.POWER_SAVE", "muted", "事件类型色"),
+        Entry("RecordType.AIRPLANE", "chart-5", "事件类型色"),
+        Entry("RecordType.PHONE_STATE", "chart-6", "事件类型色"),
+        Entry("RecordType.LOCATION", "success", "事件类型色"),
+        Entry("categoryPalette[0]", "chart-1", "循环色阶"),
+        Entry("categoryPalette[1]", "chart-2", "循环色阶"),
+        Entry("categoryPalette[2]", "chart-3", "循环色阶"),
+        Entry("categoryPalette[3]", "chart-4", "循环色阶"),
+        Entry("categoryPalette[4]", "chart-5", "循环色阶"),
+        Entry("categoryPalette[5]", "chart-6", "循环色阶"),
+        Entry("categoryPalette[6]", "chart-7", "循环色阶"),
+        Entry("categoryPalette[7]", "chart-8", "循环色阶"),
+        Entry("categoryPalette[8]", "chart-1", "循环色阶"),
+        Entry("categoryPalette[9]", "chart-2", "循环色阶"),
+        Entry("categoryPalette[10]", "chart-3", "循环色阶"),
+        Entry("categoryPalette[11]", "chart-4", "循环色阶"),
+        Entry("categoryPalette[12]", "chart-5", "循环色阶"),
+        Entry("categoryPalette[13]", "chart-6", "循环色阶"),
+        Entry("categoryPalette[14]", "chart-7", "循环色阶"),
         Entry("FinanceStatsScreen.legend[0]", "chart-1", "循环色阶（W2 删私有副本）"),
         Entry("FinanceStatsScreen.legend[1]", "chart-2", "循环色阶（W2 删私有副本）"),
         Entry("FinanceStatsScreen.legend[2]", "chart-3", "循环色阶（W2 删私有副本）"),

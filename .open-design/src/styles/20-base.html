@@ -140,7 +140,10 @@ body{
   transition:background var(--dur-state) var(--ease-standard),transform var(--dur-press) var(--ease-out);
 }
 .tab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.tab[aria-selected="true"]{color:var(--accent);font-weight:600}
+/* 选中态用 accent-text 而不是 accent：accent 是「填充色」，当文字色用时会掉到 4.5:1 以下
+   （apple 的 accent 在 --surface 上 4.31:1，notion 4.19:1）。accent-text = accent 88% + fg，
+   8 套主题实测 4.78–12.24:1，图标同色（stroke:currentColor）。 */
+.tab[aria-selected="true"]{color:var(--accent-text);font-weight:600}
 .tab[aria-selected="true"] .tab-icon{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .tab:active .tab-icon{transform:scale(.92)}
 .gesture-bar{position:absolute;left:0;right:0;bottom:0;z-index:20;height:var(--gesture-h);display:grid;place-items:center}
@@ -348,7 +351,10 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
    实现侧优先取 PackageManager 的真实图标，取不到时回落到本形态（--app 缺省即中性底色）。 */
 .app-icon{
   flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
-  background:var(--app,var(--fg-2));color:#fff;font-size:13px;font-weight:600;line-height:1;
+  /* 底色取已压暗的身份色（--app-*-ink）；写 color-mix 会序列化成 color(srgb …)，
+     对比度度量与老设备都不认，所以压暗值在 token 里算好。缺省中性 --fg-2 也够 9:1。 */
+  background:var(--app,var(--fg-2));
+  color:var(--app-on);font-size:13px;font-weight:600;line-height:1;
   overflow:hidden;
 }
 .app-icon img{width:100%;height:100%;object-fit:cover;display:block}

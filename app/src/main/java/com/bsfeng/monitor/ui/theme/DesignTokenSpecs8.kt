@@ -1,13 +1,13 @@
 // ============================================================================
 // DesignTokenSpecs8.kt —— 生成文件，请勿手改。
-// 职责：SPECS 分片 （第 200–243 个 token：income-text … splash-ink），由 DesignTokenTable 按原顺序合并。
+// 职责：SPECS 分片 （第 200–271 个 token：income-text … splash-ink），由 DesignTokenTable 按原顺序合并。
 // 来源：.open-design/08-prototype.html 的 :root 与 [data-theme] 块
 // 生成器：tools/gen-design-tokens.mjs（重跑：node tools/gen-design-tokens.mjs）
 // ============================================================================
 package com.bsfeng.monitor.ui.theme
 
 /**
- * 把本分片的 44 个 token 追加进接收者映射。
+ * 把本分片的 72 个 token 追加进接收者映射。
  * 由 DesignTokenTable.SPECS 的 buildMap 依次调用，顺序即声明顺序。
  */
 internal fun MutableMap<String, CssToken>.putDesignTokenSpecs8() {
@@ -62,19 +62,47 @@ internal fun MutableMap<String, CssToken>.putDesignTokenSpecs8() {
                 ),
             ),
         )
+        put("chart-1-ink", CssToken("chart-1-ink", TokenKind.COLOR, "#975a2f", emptyMap()))
+        put("chart-2-ink", CssToken("chart-2-ink", TokenKind.COLOR, "#2f5aa0", emptyMap()))
+        put("chart-3-ink", CssToken("chart-3-ink", TokenKind.COLOR, "#803314", emptyMap()))
+        put("chart-4-ink", CssToken("chart-4-ink", TokenKind.COLOR, "#157b5a", emptyMap()))
+        put("chart-5-ink", CssToken("chart-5-ink", TokenKind.COLOR, "#9b3435", emptyMap()))
+        put("chart-6-ink", CssToken("chart-6-ink", TokenKind.COLOR, "#8e702a", emptyMap()))
+        put("chart-7-ink", CssToken("chart-7-ink", TokenKind.COLOR, "#0f798c", emptyMap()))
+        put("chart-8-ink", CssToken("chart-8-ink", TokenKind.COLOR, "#993768", emptyMap()))
+        put("chart-9-ink", CssToken("chart-9-ink", TokenKind.COLOR, "#608f19", emptyMap()))
+        put("chart-10-ink", CssToken("chart-10-ink", TokenKind.COLOR, "#15395a", emptyMap()))
+        put("chart-11-ink", CssToken("chart-11-ink", TokenKind.COLOR, "#187a70", emptyMap()))
+        put("chart-12-ink", CssToken("chart-12-ink", TokenKind.COLOR, "#a1511a", emptyMap()))
+        put("chart-13-ink", CssToken("chart-13-ink", TokenKind.COLOR, "#5a1a35", emptyMap()))
+        put("chart-14-ink", CssToken("chart-14-ink", TokenKind.COLOR, "#146f98", emptyMap()))
+        put("chart-15-ink", CssToken("chart-15-ink", TokenKind.COLOR, "#208245", emptyMap()))
+        put("chart-16-ink", CssToken("chart-16-ink", TokenKind.COLOR, "#a27e10", emptyMap()))
+        put("app-wechat-ink", CssToken("app-wechat-ink", TokenKind.COLOR, "#107f46", emptyMap()))
+        put("app-bili-ink", CssToken("app-bili-ink", TokenKind.COLOR, "#a25068", emptyMap()))
+        put("app-taobao-ink", CssToken("app-taobao-ink", TokenKind.COLOR, "#a53c0c", emptyMap()))
+        put("app-amap-ink", CssToken("app-amap-ink", TokenKind.COLOR, "#0c6fa3", emptyMap()))
+        put("app-zhihu-ink", CssToken("app-zhihu-ink", TokenKind.COLOR, "#0c5ba5", emptyMap()))
+        put("app-netease-music-ink", CssToken("app-netease-music-ink", TokenKind.COLOR, "#801314", emptyMap()))
+        put("app-alipay-ink", CssToken("app-alipay-ink", TokenKind.COLOR, "#1953a5", emptyMap()))
+        put("app-jd-ink", CssToken("app-jd-ink", TokenKind.COLOR, "#93221d", emptyMap()))
+        put("app-weibo-ink", CssToken("app-weibo-ink", TokenKind.COLOR, "#961927", emptyMap()))
+        put("app-xhs-ink", CssToken("app-xhs-ink", TokenKind.COLOR, "#a52134", emptyMap()))
+        put("app-douyin-ink", CssToken("app-douyin-ink", TokenKind.COLOR, "#191a21", emptyMap()))
+        put("app-on", CssToken("app-on", TokenKind.COLOR, "#ffffff", emptyMap()))
         put("chart-1", CssToken("chart-1", TokenKind.COLOR, "#e8833a", emptyMap()))
         put("chart-2", CssToken("chart-2", TokenKind.COLOR, "#3b82f6", emptyMap()))
-        put("chart-3", CssToken("chart-3", TokenKind.COLOR, "#8b5cf6", emptyMap()))
+        put("chart-3", CssToken("chart-3", TokenKind.COLOR, "#c2410c", emptyMap()))
         put("chart-4", CssToken("chart-4", TokenKind.COLOR, "#10b981", emptyMap()))
         put("chart-5", CssToken("chart-5", TokenKind.COLOR, "#ef4444", emptyMap()))
         put("chart-6", CssToken("chart-6", TokenKind.COLOR, "#d9a832", emptyMap()))
         put("chart-7", CssToken("chart-7", TokenKind.COLOR, "#06b6d4", emptyMap()))
         put("chart-8", CssToken("chart-8", TokenKind.COLOR, "#ec4899", emptyMap()))
         put("chart-9", CssToken("chart-9", TokenKind.COLOR, "#84cc16", emptyMap()))
-        put("chart-10", CssToken("chart-10", TokenKind.COLOR, "#6366f1", emptyMap()))
+        put("chart-10", CssToken("chart-10", TokenKind.COLOR, "#0f4c81", emptyMap()))
         put("chart-11", CssToken("chart-11", TokenKind.COLOR, "#14b8a6", emptyMap()))
         put("chart-12", CssToken("chart-12", TokenKind.COLOR, "#f97316", emptyMap()))
-        put("chart-13", CssToken("chart-13", TokenKind.COLOR, "#a855f7", emptyMap()))
+        put("chart-13", CssToken("chart-13", TokenKind.COLOR, "#831843", emptyMap()))
         put("chart-14", CssToken("chart-14", TokenKind.COLOR, "#0ea5e9", emptyMap()))
         put("chart-15", CssToken("chart-15", TokenKind.COLOR, "#22c55e", emptyMap()))
         put("chart-16", CssToken("chart-16", TokenKind.COLOR, "#eab308", emptyMap()))

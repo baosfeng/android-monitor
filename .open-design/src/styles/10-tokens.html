@@ -350,7 +350,7 @@
  *      全部写在本区，且必须建立在官方槽位之上（换主题时由 [data-theme] 覆盖）；
  *   3. 本区之外一律不得出现颜色字面量，必须走 var(--token)。
  * ───────────────────────────────────────────────────────────────────────── */
-:where(html) {
+:root {
   /* ── 原型页画布（设备框之外） ─────────────────────────────────── */
   --page-bg: color-mix(in srgb, var(--fg) 5%, var(--bg));
 
@@ -407,19 +407,59 @@
      ③ 强度阶 .h0..h5：热力条，用序列色的透明阶梯表达强度，不占用分类色板。 */
   --chart-seq: var(--accent);
 
+  /* ── 分籿色的压暗档（--chart-N-ink） ────────────────────────
+     分籿色叶与品牏色都是「躯弧色」：把它们当字栢格时，白字头上没有一个能过 4.5:1（chart-9 只有 4.31:1）。
+     每条 -ink = 原色 60% + --fg 40%（chart-9 / chart-16 原色太亮，用 65% 档），
+     压暗后 16 个分籿色对白字全部 ≥4.5:1。只用在「色块 + 白字」的图标底；
+     图表本身用原色（那里不可要求文字对比）。 */
+  --chart-1-ink: #975a2f;
+  --chart-2-ink: #2f5aa0;
+  --chart-3-ink: #803314;
+  --chart-4-ink: #157b5a;
+  --chart-5-ink: #9b3435;
+  --chart-6-ink: #8e702a;
+  --chart-7-ink: #0f798c;
+  --chart-8-ink: #993768;
+  --chart-9-ink: #608f19;
+  --chart-10-ink: #15395a;
+  --chart-11-ink: #187a70;
+  --chart-12-ink: #a1511a;
+  --chart-13-ink: #5a1a35;
+  --chart-14-ink: #146f98;
+  --chart-15-ink: #208245;
+  --chart-16-ink: #a27e10;
+
+  /* ── 应用品牌色（分类身份色之外的第二种身份色） ───────────────
+     原型里每个应用的品牌色写在行内 style="--app:#xxxxxx" 上；改成 token 后行内只写
+     var(--app-<slug>-ink)，全产物不再出现裸色值。
+     ink = 品牌色 60% + --fg 40% 的压暗档：白字压在原色上最低只有 2.38:1（微信绿），
+     压暗后 11 个应用对白字全部 ≥5:1。品牌原值仍是身份基准，住在 Kotlin 的 AppBrandColors。 */
+  --app-wechat-ink: #107f46;
+  --app-bili-ink: #a25068;
+  --app-taobao-ink: #a53c0c;
+  --app-amap-ink: #0c6fa3;
+  --app-zhihu-ink: #0c5ba5;
+  --app-netease-music-ink: #801314;
+  --app-alipay-ink: #1953a5;
+  --app-jd-ink: #93221d;
+  --app-weibo-ink: #961927;
+  --app-xhs-ink: #a52134;
+  --app-douyin-ink: #191a21;
+  --app-on: #ffffff;
+
   --chart-1: #e8833a;
   --chart-2: #3b82f6;
-  --chart-3: #8b5cf6;
+  --chart-3: #c2410c;
   --chart-4: #10b981;
   --chart-5: #ef4444;
   --chart-6: #d9a832;
   --chart-7: #06b6d4;
   --chart-8: #ec4899;
   --chart-9: #84cc16;
-  --chart-10: #6366f1;
+  --chart-10: #0f4c81;
   --chart-11: #14b8a6;
   --chart-12: #f97316;
-  --chart-13: #a855f7;
+  --chart-13: #831843;
   --chart-14: #0ea5e9;
   --chart-15: #22c55e;
   --chart-16: #eab308;

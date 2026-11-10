@@ -26,9 +26,9 @@ internal class CssToken(val name: String, val kind: TokenKind, val base: String,
 internal object DesignTokenTable {
     const val DEFAULT_THEME: String = "apple"
     /** CSS 变量总数（00-tokens.css 的 :root 声明数；extra 文件只复述同名槽位，不新增名字）。 */
-    const val CSS_VARIABLE_COUNT: Int = 243
+    const val CSS_VARIABLE_COUNT: Int = 271
     /** 其中语义槽位数（其余为 7 套主题的色值命名空间槽位）。 */
-    const val SEMANTIC_COUNT: Int = 132
+    const val SEMANTIC_COUNT: Int = 160
     val THEME_IDS: List<String> = listOf("apple", "glassmorphism", "notion", "stripe", "claude", "ibm", "kami", "bento")
     /** themeId 合法性判定集合：避免 raw() 每次都做 List.contains 线性扫描。 */
     private val THEME_ID_SET: Set<String> = THEME_IDS.toHashSet()
