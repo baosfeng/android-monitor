@@ -801,7 +801,10 @@ class LocationForegroundService : Service() {
                 val fallbackIntervalMs = LocationTickerPolicy.sleepingFallbackIntervalMs(
                     networkStillness.stillSinceMs,
                     now,
+                    isCharging,
                 )
+                // 调试自检：这一拍用的是 30 / 60 分钟哪一档（不参与控制流）
+                lastFallbackIntervalMs = fallbackIntervalMs
                 // 启动后先等满一个窗口，不在 SLEEPING 立刻采点
                 if (lastFallbackAtMs == 0L) {
                     lastFallbackAtMs = now
@@ -990,6 +993,11 @@ class LocationForegroundService : Service() {
 
         /** 门禁证据日志间隔（5 分钟一条，避免刷屏）。 */
         private const val EVIDENCE_LOG_INTERVAL_MS = 5 * 60_000L
+
+        /** 最近一次算出的 SLEEPING 兜底间隔（毫秒）：只给调试自检读，不参与控制流。 */
+        @Volatile
+        var lastFallbackIntervalMs: Long = 0L
+            private set
 
         /** 进程内「前台服务在跑」标志：设置页与调试入口据此判断是否需要重新拉起。 */
         @Volatile

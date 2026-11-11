@@ -17,10 +17,12 @@ import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.record.LocationCollector
+import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.record.LocationPolicy
 import com.bsfeng.monitor.record.LocationSample
 import com.bsfeng.monitor.service.AlarmReceiver
+import com.bsfeng.monitor.service.LocationForegroundService
 import com.bsfeng.monitor.ui.live.startOfDay
 import com.bsfeng.monitor.util.DebugConfig
 import kotlinx.coroutines.CoroutineScope
@@ -330,9 +332,21 @@ class DebugCommandReceiver : BroadcastReceiver() {
         val features = JSONObject()
         flags.snapshot().forEach { (feature, on) -> features.put(feature.name, on) }
 
+        // 定位自检：省电改造之后，用户/调试只看这一组就能判断「现在到底在不在烧电」
+        val collector = LocationCollector.get(context)
+        val health = collector.health(now)
         val location = JSONObject()
-            .put("permission", LocationCollector.get(context).status().name)
+            .put("permission", collector.status().name)
             .put("featureEnabled", flags.isEnabled(Feature.LOCATION))
+            .put("gate", LocationGateState.state?.name ?: "UNKNOWN")
+            .put("fallbackMin", LocationForegroundService.lastFallbackIntervalMs / 60_000L)
+            .put("passive", collector.isPassiveTapActive())
+            .put("subscription", health.subscriptionActive)
+            .put("mode", health.mode.name)
+            .put("lastSuccessAgoSec", health.msSinceLastSuccess?.div(1000) ?: -1L)
+            .put("lastFailure", health.lastFailure.name)
+            .put("lastProvider", health.lastProvider ?: "")
+            .put("lastAccuracyM", health.lastAccuracyMeters?.toInt() ?: -1)
 
         emit(
             cmd = "state",
