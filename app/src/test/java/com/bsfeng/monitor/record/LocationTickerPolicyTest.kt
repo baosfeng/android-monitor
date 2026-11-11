@@ -83,10 +83,10 @@ class LocationTickerPolicyTest {
         assertEquals("SLEEPING 24 小时只该醒 288 次", 288, ticks)
     }
 
-    // ===== 网络静止证据：兜底从 30 分钟放宽到 2 小时 =====
+    // ===== 网络静止证据：兜底从 30 分钟放宽到 60 分钟 =====
 
     @Test
-    fun `兜底间隔随静止证据在 30 分钟与 2 小时之间切换`() {
+    fun `兜底间隔随静止证据在 30 分钟与 60 分钟之间切换`() {
         val origin = now
         assertEquals(
             "没有静止证据：仍是 30 分钟",
@@ -182,7 +182,7 @@ class LocationTickerPolicyTest {
         )
         fallbackAt.zipWithNext().forEach { (previous, next) ->
             assertTrue(
-                "兜底间隔不该超过 2 小时 + 一拍",
+                "兜底间隔不该超过 60 分钟 + 一拍",
                 next - previous <= LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS +
                     LocationTickerPolicy.SLEEPING_MAX_TICK_MS,
             )

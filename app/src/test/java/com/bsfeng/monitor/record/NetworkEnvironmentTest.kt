@@ -7,11 +7,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 网络环境静止证据（纯逻辑）：同一 WiFi + 无步数增量 → SLEEPING 兜底放宽到 2 小时；
+ * 网络环境静止证据（纯逻辑）：同一 WiFi + 无步数增量 → SLEEPING 兜底放宽到 60 分钟；
  * 换网络 / 断网 / 有步数 → 立刻回 30 分钟；读不到 SSID 不算变化。
  *
  * 反向验证（改坏实现时应看到的红）：
- * - 把「未知 SSID」当成变化 → 没给定位权限的机器每次回调都清一次证据，2 小时永远不成立；
+ * - 把「未知 SSID」当成变化 → 没给定位权限的机器每次回调都清一次证据，60 分钟永远不成立；
  * - 去掉 transport 比对 → 从 WiFi 切到移动网络（换地点最典型的一种）仍被当成原地；
  * - 去掉步数证据 → 公司 / 商场同一个 SSID 下走一整天也不恢复 30 分钟。
  */
@@ -218,7 +218,7 @@ class NetworkEnvironmentTest {
 
         gate.onStepCounter(1_010L, base + minute)
         assertEquals(
-            "服务读门禁的活动时刻喂给静止证据，2 小时才会被步数打断",
+            "服务读门禁的活动时刻喂给静止证据，60 分钟档才会被步数打断",
             base + minute,
             gate.lastActivityAtMs,
         )

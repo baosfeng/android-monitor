@@ -84,7 +84,7 @@ class CoverageTimelineTest {
 
     @Test
     fun `中间一个47分钟空洞仍算省电待机 2小时兜底没到期`() {
-        // 静默 47 分钟落在最长兜底（2 小时）以内：原地不动时这就是设计内静默
+        // 静默 47 分钟落在最长兜底（60 分钟）以内：原地不动时这就是设计内静默
         val before = (0..20).map { dayStart + it * 3 * minute }
         val resume = dayStart + 60 * minute + 47 * minute
         val after = (0..20).map { resume + it * 3 * minute }
@@ -99,7 +99,7 @@ class CoverageTimelineTest {
 
     @Test
     fun `越过待机上限的空洞才是GAP`() {
-        // 静默超过「2 小时兜底 + 5 分钟余量」：兜底没跑，这是真断档
+        // 静默超过「60 分钟兜底 + 5 分钟余量」：兜底没跑，这是真断档
         val gapMs = CoverageTimeline.DORMANT_CEILING_MS + 12 * minute
         val before = (0..20).map { dayStart + it * 3 * minute }
         val resume = dayStart + 60 * minute + gapMs
@@ -135,7 +135,7 @@ class CoverageTimelineTest {
 
     @Test
     fun `待机上限差1毫秒是待机 超过1毫秒就是断档`() {
-        // 边界两测：待机上限整点（2 小时兜底 + 5 分钟余量）仍是待机；越过 1ms 才叫断档
+        // 边界两测：待机上限整点（60 分钟兜底 + 5 分钟余量）仍是待机；越过 1ms 才叫断档
         val atCeiling = dayStart + CoverageTimeline.DORMANT_CEILING_MS
         val inWindow = CoverageTimeline.build(
             listOf(dayStart, atCeiling, atCeiling + 3 * minute),
@@ -499,7 +499,7 @@ class CoverageTimelineTest {
         val empty = CoverageTimeline.build(emptyList(), dayStart, dayStart + 24 * 60 * minute, still)
         assertEquals("空窗口 N 写 0，「一条都没有」由卡内空态说明", "过去 24 小时 · 断档 0 次", coverageSubtitle(empty))
 
-        // 空过待机上限（2 小时兜底 + 5 分钟余量）→ 真断档
+        // 空过待机上限（60 分钟兜底 + 5 分钟余量）→ 真断档
         val some = CoverageTimeline.build(
             listOf(dayStart, dayStart + 3 * minute),
             dayStart,
