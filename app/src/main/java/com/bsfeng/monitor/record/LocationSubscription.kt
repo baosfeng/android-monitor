@@ -44,16 +44,16 @@ object LocationSubscriptionPlan {
     const val MIN_DISTANCE_METERS = 0f
 
     /**
-     * 按可用 provider 选出订阅要用的 provider 列表：**并集**，不是「fused 独占」。
+     * 按可用 provider 选出订阅要用的 provider 列表。
      *
-     * 旧实现是「fused 可用就只用 fused」。实测（emulator-5554）推翻了它：
-     * `fused` 被 `getProviders()` 列为可用，但 gms 的 FLP 在没有别的 App 主动请求定位时
-     * **从不给订阅者派点** —— 订阅全程零投递、状态却显示「活跃」。重建多少次都只会选回
-     * 同一个 fused，重启治不好。所以这里改成把所有可用来源一起注册（fused 仍排第一，
-     * 它最省电），任一来源出点即可，由 [LocationQuality.shouldAccept] 与节流去重。
+     * 口径（与旧实现不同，别改回去）：**有 fused 时只挂 fused + network，不挂裸 gps**。
+     * 旧实现把 fused + gps + network 无条件全部注册，起因是 emulator-5554 上 fused 被列为可用、
+     * 但 gms FLP 从不给订阅者派点（订阅零投递却显示活跃）。代价是裸 gps 那一路以
+     * HIGH_ACCURACY + 30 秒常驻，GNSS 长期热着空转 —— 而真机 8 天 2176 个点里 gps 只出 4 个。
      *
-     * 不在这里按 provider 做互斥去重：同一时刻 fused 与 gps 各给一个点，交给质量闸
-     * 与落库节流吸收，比在订阅层维护「谁的优先级更高」简单且不会漏点。
+     * 现在：fused 可用 → fused + network；network 也未启用 → fused + gps（否则把唯一能出点的
+     * 那路丢掉）；fused 不可用 → gps + network。任一来源出点即可，由 [LocationQuality.shouldAccept]
+     * 与落库节流去重。
      */
     fun providersFor(available: Collection<String>): List<String> {
         // 有 fused 时不注册裸 gps：真机 8 天 2176 个点里 gps 只出 4 个，而裸 gps 订阅是
@@ -61,7 +61,13 @@ object LocationSubscriptionPlan {
         // 不需要我们再挂一条并行订阅（两路各吐一条点，还得靠质量闸去重）。
         // 没有 fused 的设备（少数 ROM）才退回 gps + network，否则精度掉到基站级。
         val names = if (FUSED_PROVIDER in available) {
-            listOf(FUSED_PROVIDER, NETWORK_PROVIDER)
+            // 有 fused 时不挂裸 gps（它会以 HIGH_ACCURACY + 30 秒常驻，GNSS 长期热着空转）。
+            // 但 network 也拿不到时保留 gps：否则 available=[fused, gps] 的机型会把唯一能出点的那路丢掉。
+            if (NETWORK_PROVIDER in available) {
+                listOf(FUSED_PROVIDER, NETWORK_PROVIDER)
+            } else {
+                listOf(FUSED_PROVIDER, GPS_PROVIDER)
+            }
         } else {
             listOf(GPS_PROVIDER, NETWORK_PROVIDER)
         }

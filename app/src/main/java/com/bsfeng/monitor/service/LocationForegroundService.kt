@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
  *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册（显著运动 / 抖动提示后 3 分钟），
  *   SLEEPING 平时不注册 —— 提示只买一个「判出 GAIT 的机会」，不是活动证据。
  * - **网络环境静止证据**（见 [NetworkStillnessTracker]）：默认网络的 transport + SSID 未变、且没有
- *   步数增量时，SLEEPING 兜底从 30 分钟放宽到 2 小时；换网络 / 断网 / 有步数立刻回 30 分钟。
+ *   步数增量时，SLEEPING 兜底从 30 分钟放宽到 60 分钟；换网络 / 断网 / 有步数立刻回 30 分钟。
  *   省电体现在「不发起定位请求」——没有新坐标就没有新记录，**不用旧坐标伪造点位**。
  */
 class LocationForegroundService : Service() {
@@ -130,7 +130,7 @@ class LocationForegroundService : Service() {
 
     /**
      * 网络环境的静止证据：默认网络的 transport + SSID 未变、且无步数增量时，
-     * SLEEPING 兜底从 30 分钟放宽到 2 小时（见 [NetworkStillnessTracker]）。
+     * SLEEPING 兜底从 30 分钟放宽到 60 分钟（见 [NetworkStillnessTracker]）。
      */
     private val networkStillness = NetworkStillnessTracker()
 
@@ -267,7 +267,7 @@ class LocationForegroundService : Service() {
 
     /**
      * ticker 拍子：MOVING / PROBING 30 秒；SLEEPING 最长 5 分钟（那时唯一有意义的定时事件是
-     * 30 分钟～2 小时的兜底）。
+     * 30 分钟～60 分钟的兜底）。
      *
      * 拍子的时序（含「状态迁移立刻重排」）在 [LocationTickerScheduler] 里，纯逻辑可单测；
      * 这里只提供 Handler 宿主与三态 / 兜底时刻两个只读来源。
@@ -277,7 +277,7 @@ class LocationForegroundService : Service() {
         clock = { System.currentTimeMillis() },
         stateOf = { appliedGateState },
         lastFallbackAtMsOf = { lastFallbackAtMs },
-        // 兜底间隔与「这一拍要不要补点」同源：两处各读一份，迟早出现「按 2 小时排拍子、按 30 分钟采点」
+        // 兜底间隔与「这一拍要不要补点」同源：两处各读一份，迟早出现「按 60 分钟排拍子、按 30 分钟采点」
         fallbackIntervalMsOf = {
             LocationTickerPolicy.sleepingFallbackIntervalMs(
                 networkStillness.stillSinceMs,
@@ -659,7 +659,7 @@ class LocationForegroundService : Service() {
     /**
      * 应用一次网络观测：换了环境就清掉静止证据，并**立刻**按 30 分钟兜底重排。
      *
-     * 重排不能省：放宽后的一拍可能已经排到 2 小时后，不重排的话「连上另一个 WiFi」要等两小时
+     * 重排不能省：放宽后的一拍可能已经排到 60 分钟后，不重排的话「连上另一个 WiFi」要等两小时
      * 才会有一次探测，环境变化等于没被看见。
      */
     private fun applyNetworkFingerprint(fingerprint: NetworkFingerprint) {
@@ -681,7 +681,7 @@ class LocationForegroundService : Service() {
      * 把门禁记到的「真实活动」转给静止证据：有步数增量 / 步态就不许延长兜底。
      *
      * 必须在 [applyGateState] 的同态早退之前调用：PROBING → PROBING 这类同态调用同样可能带着
-     * 新步数（走两步又停下），漏掉它就会让「已经走过路」的现场继续享受 2 小时兜底。
+     * 新步数（走两步又停下），漏掉它就会让「已经走过路」的现场继续享受 60 分钟兜底。
      */
     private fun syncStillnessEvidence() {
         val activityAtMs = gate.lastActivityAtMs

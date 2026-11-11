@@ -100,7 +100,7 @@ object LocationHealthText {
     /**
      * 副标题：一句话说清「上次成功多久以前 + 订阅状态」，断档时补失败原因。
      *
-     * 待机档只解释「静止不采点、最长 2 小时兜底」：待机不是故障，写失败原因会让用户去修一个没坏的东西。
+     * 待机档只解释「静止不采点、最长 60 分钟兜底」：待机不是故障，写失败原因会让用户去修一个没坏的东西。
      */
     fun describe(status: LocationStatus?, gate: MotionGate.State? = null): String {
         if (status == null) return "读取采集状态失败"

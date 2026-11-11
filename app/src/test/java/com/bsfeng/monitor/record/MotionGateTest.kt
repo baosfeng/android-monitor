@@ -73,6 +73,18 @@ class MotionGateTest {
     }
 
     @Test
+    fun `乱序样本不触发坐车升级`() {
+        val gate = MotionGate()
+        gate.onProbeSample(sample(start, 0.0))
+        gate.onProbeSample(sample(start + 60_000L, 100.0))
+        assertEquals(MotionGate.State.PROBING, gate.state)
+        // 被动点与探测点不同源，样本时刻可能早于锚点：把时间差 coerce 成 1ms 会把速度放大成
+        // 天文数字，一次乱序就误升 MOVING（满预算定位 + 30 秒订阅挂 5 分钟）
+        gate.onProbeSample(sample(start - 120_000L, 400.0))
+        assertEquals(MotionGate.State.PROBING, gate.state)
+    }
+
+    @Test
     fun `步行速度走 300 米不按坐车升级`() {
         val gate = MotionGate()
         gate.onProbeSample(sample(start, 0.0))

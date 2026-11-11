@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  *
  * 三态（口径冻结）：
  * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（网络环境指纹未变时
- *   放宽到 2 小时，见 [NetworkStillnessTracker]；兜底在服务层）。
+ *   放宽到 60 分钟，见 [NetworkStillnessTracker]；兜底在服务层）。
  * - [State.PROBING]：有真实运动证据（步态 / 步数 / 位移）但未确认远行。**不建订阅**，
  *   只做低频单点探测（180 秒起；连续拿不到位移证据按 [probeIntervalMs] 退避到 300 / 600 秒），
  *   拿到点即释放。
@@ -308,13 +308,21 @@ class MotionGate(
             anchor.latitude, anchor.longitude, sample.latitude, sample.longitude,
         )
         if (distance > probeDistanceM) probeDistanceM = distance
-        // 坐车靠「单次位移 + 速度」升级：手机放车上时加速度平稳、没有步数，
-        // 唯一能证明在移动的就是位置本身（见类 KDoc）
-        val gapMs = (sample.timeMs - anchor.timeMs).coerceAtLeast(1L)
-        lastProbeDistanceM = distance
-        lastProbeSpeedMps = distance * 1000.0 / gapMs.toDouble()
         // 精度之和是噪声地板：室内 100m 误差的两个点相距 80m 不是「挪了 80m」
         val noiseFloor = max(PROBE_NOISE_FLOOR_M, anchor.accuracyMeters + sample.accuracyMeters.toDouble())
+        // 坐车靠「单次位移 + 速度」升级：手机放车上时加速度平稳、没有步数，
+        // 唯一能证明在移动的就是位置本身（见类 KDoc）。两条保护：
+        // ① 样本时刻早于锚点（被动点与探测点不同源，乱序会发生）不产生速度证据 ——
+        //    把时间差 coerce 到 1ms 会把速度放大成天文数字，一次乱序就能误升 MOVING；
+        // ② 与位移证据共用噪声地板。
+        // 不满足时清零：byCar 只反映「最近一次有效样本」，不留过期证据给下一次 evaluate。
+        if (sample.timeMs > anchor.timeMs && distance >= noiseFloor) {
+            lastProbeDistanceM = distance
+            lastProbeSpeedMps = distance * 1000.0 / (sample.timeMs - anchor.timeMs).toDouble()
+        } else {
+            lastProbeDistanceM = 0.0
+            lastProbeSpeedMps = 0.0
+        }
         if (distance >= noiseFloor) {
             noteActivity(now)
             // 位移过噪声地板 = 真的挪了地方：探测间隔回 180 秒

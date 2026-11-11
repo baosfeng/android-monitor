@@ -12,12 +12,20 @@
 set -uo pipefail
 
 ADB="${ADB:-$HOME/android-platform-tools/adb}"
-ADB_ARGS=()
-if [ -n "${ANDROID_SERIAL:-}" ]; then ADB_ARGS=(-s "$ANDROID_SERIAL"); fi
 PKG="com.bsfeng.monitor"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-if ! "$ADB" "${ADB_ARGS[@]}" get-state >/dev/null 2>&1; then
+# macOS 自带 bash 3.2 在 set -u 下展开空数组会报 unbound variable，
+# 所以设备参数走函数而不是数组（照 scripts/debug-cli.sh 的写法）
+adb_run() {
+  if [ -n "${ANDROID_SERIAL:-}" ]; then
+    "$ADB" -s "$ANDROID_SERIAL" "$@"
+  else
+    "$ADB" "$@"
+  fi
+}
+
+if ! adb_run get-state >/dev/null 2>&1; then
   echo "设备未连接：先确认 USB 调试已授权（见 docs/开发指南/ADB调试指南.md）" >&2
   exit 2
 fi
@@ -30,11 +38,11 @@ echo "==== 1. 门禁与通道（活着的采集链路） ===="
 
 echo
 echo "==== 2. 三个 provider 的请求统计（回调次数 / 存续时长） ===="
-"$ADB" "${ADB_ARGS[@]}" shell dumpsys location 2>/dev/null | grep -E "${PKG}: min/max interval" | sed 's/^ *//'
+adb_run shell dumpsys location 2>/dev/null | grep -E "${PKG}: min/max interval" | sed 's/^ *//'
 
 echo
 echo "==== 3. GNSS 真实锁星（TTFF） ===="
-"$ADB" "${ADB_ARGS[@]}" shell dumpsys location 2>/dev/null | grep -E "Number of TTFF reports|TTFF mean|Number of location reports" | sed 's/^ *//'
+adb_run shell dumpsys location 2>/dev/null | grep -E "Number of TTFF reports|TTFF mean|Number of location reports" | sed 's/^ *//'
 
 echo
 echo "==== 4. 今天落库的定位条数 ===="
@@ -42,4 +50,4 @@ echo "==== 4. 今天落库的定位条数 ===="
 
 echo
 echo "==== 5. 电池归因（本 App） ===="
-"$ADB" "${ADB_ARGS[@]}" shell dumpsys batterystats "$PKG" 2>/dev/null | grep -E "Estimated power use|GPS wake|Wake lock \*location|Proc $PKG" | head -8
+adb_run shell dumpsys batterystats "$PKG" 2>/dev/null | grep -E "Estimated power use|GPS wake|Wake lock \*location|Proc $PKG" | head -8

@@ -83,9 +83,10 @@ class LocationSubscriptionTest {
     }
 
     @Test
-    fun `不在可用列表里的 provider 不会被注册`() {
-        // 只注册系统确认启用的：注册一个 disabled 的 provider 只会让 start 里多个失败分支
-        assertEquals(listOf("fused"), LocationSubscriptionPlan.providersFor(listOf("fused", "gps")))
+    fun `network 不可用时保留 gps 兜底`() {
+        // available=[fused, gps]（network provider 未启用）时不能只挂 fused：
+        // 那会把唯一能出点的一路丢掉，订阅在 fused 零投递的设备上永远静默
+        assertEquals(listOf("fused", "gps"), LocationSubscriptionPlan.providersFor(listOf("fused", "gps")))
     }
 
     // ===== 首点兜底判定 =====

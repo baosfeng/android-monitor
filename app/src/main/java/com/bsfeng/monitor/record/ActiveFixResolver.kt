@@ -26,6 +26,9 @@ interface SingleFixSource {
  * 预算还有第二维：**档位**（[FixBudget]）。门禁探测用覆盖级（network 4s / gps 8s），
  * 其余路径用满预算（5s / 15s）。两档的超时来源都在 [LocationPolicy]。
  */
+/** 探测档连续全落空多少次后放 gps 兜底一次：3 次 ≈ 9~15 分钟（探测周期 180~300 秒）。 */
+private const val PROBE_GPS_FALLBACK_AFTER_MISSES = 3
+
 class ActiveFixResolver(
     private val source: SingleFixSource,
     val providers: List<String> = LocationPolicy.ACTIVE_PROVIDERS,
@@ -36,6 +39,9 @@ class ActiveFixResolver(
     /** 日志出口：纯 JVM 单测里 android.util.Log 未 mock，只能由生产侧注入。 */
     private val log: (String, Boolean) -> Unit = { _, _ -> },
 ) {
+    /** 探测档连续「全队列拿不到点」的次数：达到阈值时放一次 gps 兜底（见 [resolve] 的注释）。 */
+    private var probeMissStreak = 0
+
     /** 日志用：满预算的各 provider 预算摘要。 */
     val budgetSummary: String get() = budgetSummaryOf(FixBudget.FULL)
 
@@ -63,7 +69,11 @@ class ActiveFixResolver(
         // 换来的点还常被精度闸丢掉。network 不可用时才退回全队列，保证只有 gps 的设备仍能探测。
         val available = providers.filter(isAvailable)
         val probeOnly = available.filter { it == LocationPolicy.PROBE_PROVIDER }
-        val queue = if (budget == FixBudget.PROBE && probeOnly.isNotEmpty()) probeOnly else available
+        // 探测档只问 network（见 LocationPolicy.PROBE_PROVIDER）；但 isProviderEnabled 对 network 几乎恒真，
+        // 飞行模式 / 室内无基站时它是「可用但永不出点」——连续几次全落空就放一次 gps 兜底，
+        // 否则门禁的位移证据链会彻底断掉，探测每轮还白烧 4 秒射频。
+        val gpsFallback = budget == FixBudget.PROBE && probeMissStreak >= PROBE_GPS_FALLBACK_AFTER_MISSES
+        val queue = if (budget == FixBudget.PROBE && probeOnly.isNotEmpty() && !gpsFallback) probeOnly else available
         if (queue.isEmpty()) {
             log("主动定位跳过：没有可用的 provider（${providers.joinToString()}）", true)
             onResult(null)
@@ -72,6 +82,8 @@ class ActiveFixResolver(
         var index = 0
         fun next() {
             if (index >= queue.size) {
+                // 探测档全落空：记账，连续几次后放 gps 兜底一次
+                if (budget == FixBudget.PROBE) probeMissStreak += 1
                 log("主动定位放弃：${queue.joinToString()} 均未拿到可用点", true)
                 onResult(null)
                 return
@@ -79,6 +91,7 @@ class ActiveFixResolver(
             val provider = queue[index++]
             source.request(provider, timeoutFor(provider, budget)) { sample ->
                 if (sample != null && LocationPolicy.isUsable(sample, nowMs)) {
+                    if (budget == FixBudget.PROBE) probeMissStreak = 0
                     log("主动定位成功 provider=$provider accuracy=${sample.accuracyMeters}", false)
                     onResult(sample)
                 } else {

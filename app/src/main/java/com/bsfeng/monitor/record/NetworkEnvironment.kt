@@ -66,7 +66,7 @@ data class NetworkFingerprint(val transport: NetworkTransport, val ssid: String?
  *
  * 为什么证据要熬过一轮 30 分钟才放宽：进程刚起、刚连上 WiFi 时「指纹没变」只说明「这一秒没变」。
  * 先按旧兜底验一轮，确认这一轮里既没换网络也没走路，才允许放宽到
- * [LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS]（2 小时）。
+ * [LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS]（60 分钟）。
  *
  * **transport 未变对 CELLULAR 是弱证据**：系统不告诉我们换了哪个基站，坐车穿过半个城市也是
  * 「CELLULAR 未变」。所以这条证据只用于**降频**，不构成「人没动」的结论 —— 兜底探点、步数增量与
@@ -86,7 +86,7 @@ class NetworkStillnessTracker {
     /**
      * 静止证据的起点（毫秒）；0 = 当前没有静止证据。
      *
-     * [LocationTickerPolicy.sleepingFallbackIntervalMs] 读它决定兜底用 30 分钟还是 2 小时。
+     * [LocationTickerPolicy.sleepingFallbackIntervalMs] 读它决定兜底用 30 分钟还是 60 分钟。
      */
     var stillSinceMs: Long = 0L
         private set
@@ -122,7 +122,12 @@ class NetworkStillnessTracker {
             stillSinceMs = nowMs
             return false
         }
-        if (effective.sameEnvironmentAs(previous)) return false
+        if (effective.sameEnvironmentAs(previous)) {
+            // 证据被「换网 / 断网 / 步数」清零后必须能重建，否则 60 分钟档这辈子只用得上一次：
+            // 同环境持续观测（ticker 每拍 ≤5 分钟喂一次）就从这一刻重新计时，熬满一轮 30 分钟再放宽
+            if (stillSinceMs == 0L) stillSinceMs = nowMs
+            return false
+        }
         lastChangedAtMs = nowMs
         stillSinceMs = 0L
         return true

@@ -139,6 +139,28 @@ class NetworkEnvironmentTest {
     }
 
     @Test
+    fun `证据被清零后同环境能重新攒起来`() {
+        val tracker = NetworkStillnessTracker()
+        tracker.observeNetwork(wifi("家"), base)
+        assertEquals(60 * minute, fallbackInterval(tracker, base + 40 * minute))
+
+        // 走出一步：证据清零，回 30 分钟
+        tracker.onMotionEvidence(base + 41 * minute)
+        assertEquals(
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            fallbackInterval(tracker, base + 42 * minute),
+        )
+
+        // 同环境持续观测：从这一刻重新计时（不能像旧实现那样永久停在 30 分钟档）
+        tracker.observeNetwork(wifi("家"), base + 43 * minute)
+        assertEquals(
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            fallbackInterval(tracker, base + 60 * minute),
+        )
+        assertEquals(60 * minute, fallbackInterval(tracker, base + 73 * minute))
+    }
+
+    @Test
     fun `有步数增量时不延长`() {
         val tracker = NetworkStillnessTracker()
         tracker.observeNetwork(wifi("家"), base)
