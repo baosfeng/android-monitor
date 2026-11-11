@@ -87,6 +87,14 @@ class LocationCollector internal constructor(
         /** 持续订阅通道；无 LocationManager 时返回 null（订阅退化为缓存 + 主动定位）。 */
         fun subscriptionSource(): LocationSubscriptionSource? = null
 
+        /**
+         * 被动定位来源（passive provider）；无 LocationManager 时返回 null。
+         *
+         * 与 [subscriptionSource] 是两个独立实例：被动通道常驻、不参与门禁开合，
+         * 订阅通道按门禁 MOVING 建立/释放，两者共用同一个 location 权限。
+         */
+        fun passiveSource(): LocationSubscriptionSource? = null
+
         /** 当前可用的 provider（fused / gps / network）；无权限或无 LocationManager 时为空。 */
         fun availableProviders(): List<String> = emptyList()
 
@@ -114,6 +122,13 @@ class LocationCollector internal constructor(
         inFlight = { activeFixGate.isInFlight },
         processor = { sample, target -> onSubscriptionSample(sample, target) },
     )
+
+    /** 被动定位的落库出口；null = 未注册（服务 onDestroy 后置空，防止回调打到已销毁的 Service）。 */
+    @Volatile
+    private var passiveConsumer: ((LocationSample) -> Unit)? = null
+
+    /** 最近一次处理过的被动点时刻：别的 App 定位再密，我们最多每 15 秒处理一个。 */
+    private var lastPassiveAtMs = 0L
 
     private val lock = Any()
 
@@ -218,6 +233,79 @@ class LocationCollector internal constructor(
 
     /** 释放订阅。幂等：未建立时是空操作；服务 [onDestroy] 必须调用（否则 listener 跟着进程泄漏）。 */
     fun stopSubscription() = channel.stop()
+
+    // ===== 被动定位（passive）：不点亮芯片的白拿点 =====
+
+    /**
+     * 注册被动定位通道：只接收系统里**别的 App 已经测出来**的点（导航 / 地图 / 音乐 / 健康）。
+     *
+     * 为什么值得常驻：真机 8 天 2176 个点里 2134 个来自 passive（98%），而我们主动定位
+     * 为了 network 4~5 秒 / gps 8~15 秒的预算烧掉的射频，绝大多数时候什么都没换到
+     * （同一批数据里 gps 只出 4 个点）。被动通道**不会让定位芯片启动** ——
+     * 这些点是别人点亮芯片后的副产品，我们只是搭便车。
+     *
+     * 与订阅通道的区别：订阅按门禁 MOVING 建立、30 秒派点；被动通道常驻、派点频率由别人决定
+     * （所以有 [LocationPace.PASSIVE_MIN_INTERVAL_MS] 下限）。
+     *
+     * @param onSample 过了质量闸与落库节流之后的落库出口
+     * @return 是否注册成功（未授权 / 无 LocationManager 时 false，链路退化回原有三级取点）
+     */
+    fun startPassiveTap(onSample: (LocationSample) -> Unit): Boolean {
+        val source = env.passiveSource() ?: return false
+        if (!hasLocationPermission()) {
+            env.log("被动定位跳过：未授权", true)
+            return false
+        }
+        passiveConsumer = onSample
+        val ok = source.start(
+            providers = listOf(LocationPolicy.PASSIVE_PROVIDER),
+            intervalMs = 0L,
+            minDistanceMeters = 0f,
+            onSample = ::onPassiveSample,
+        )
+        env.log(
+            "被动定位：" + (if (ok) "已注册（零射频，搭别的 App 的便车）" else "注册失败：provider 不可用"),
+            !ok,
+        )
+        return ok
+    }
+
+    /** 释放被动定位通道。幂等；服务 onDestroy 必须调用。 */
+    fun stopPassiveTap() {
+        passiveConsumer = null
+        env.passiveSource()?.stop()
+    }
+
+    /** 被动通道是否已注册（设置页自检 / 日志用）。 */
+    fun isPassiveTapActive(): Boolean = passiveConsumer != null
+
+    /**
+     * 被动点处理链：新鲜度 → 质量闸 → 门禁位移证据 → 模式状态机 → 落库节流。
+     *
+     * 顺序与订阅点一致（见 [onSubscriptionSample]），差别只有两处：
+     * - 先按 [LocationPace.PASSIVE_MIN_INTERVAL_MS] 丢高频回调，别把 CPU 唤醒交给别人的定位节奏；
+     * - 新鲜度不达标时**不记失败**：被动点是等别人定位，没有点不是我们的链路故障。
+     */
+    private fun onPassiveSample(sample: LocationSample) {
+        val nowMs = clock()
+        if (lastPassiveAtMs != 0L && nowMs - lastPassiveAtMs < LocationPace.PASSIVE_MIN_INTERVAL_MS) return
+        if (!LocationPolicy.isFresh(sample.timeMs, nowMs)) return
+        if (!LocationQuality.shouldAccept(sample, healthState.lastAccepted, nowMs)) return
+        lastPassiveAtMs = nowMs
+        // 被动点同样进位移证据链：坐车时别人在帮我们测速，门禁靠它才升得上去
+        LocationGateState.offer(sample)
+        observeForMode(sample)
+        if (!throttle.canAcquire(nowMs, captureIntervalMs())) {
+            env.log("被动点位仅更新模式（未到落库窗口 provider=" + sample.provider + "）", false)
+            return
+        }
+        if (shouldIgnoreStillJitter(sample)) {
+            env.log("被动点位位移 < " + LocationQuality.STILL_IGNORE_RADIUS_METERS + "m，忽略", false)
+            return
+        }
+        accept(sample, nowMs)
+        passiveConsumer?.invoke(sample)
+    }
 
     /** 订阅是否活跃（设置页自检 / 日志用）。 */
     fun isSubscriptionActive(): Boolean = channel.isActive()

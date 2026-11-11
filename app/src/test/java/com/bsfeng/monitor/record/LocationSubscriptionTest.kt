@@ -52,29 +52,30 @@ class LocationSubscriptionTest {
     // ===== provider 计划 =====
 
     @Test
-    fun `fused 可用时也同时注册 gps 和 network`() {
-        // 原缺陷：fused 可用就只用 fused。实测（emulator-5554）fused 被列为可用，
-        // 但 gms FLP 从不给订阅者派点 —— 订阅全程零投递、状态却显示「活跃」，
-        // 重建多少次都选回同一个 fused。所以必须并集注册，任一来源出点即可。
+    fun `有 fused 时不注册裸 gps`() {
+        // 真机 8 天 2176 个点里 gps 只出 4 个，而裸 gps 订阅是 HIGH_ACCURACY + 30 秒一次，
+        // 等于让 GNSS 长期热着空转。fused 需要卫星时自己会调 GPS，不需要我们再挂一条并行订阅
+        // （两路各吐一条点，还得靠质量闸去重）。network 保留：室内 fused 不派点时它是唯一活路。
         assertEquals(
-            listOf("fused", "network", "gps"),
+            listOf("fused", "network"),
             LocationSubscriptionPlan.providersFor(listOf("fused", "gps", "network")),
         )
     }
 
     @Test
-    fun `fused 在并集里仍排第一`() {
-        // 顺序有意义：fused 最省电，先注册它；gps/network 是它不派点时的活路
+    fun `fused 在订阅计划里排第一`() {
+        // 顺序有意义：fused 最省电（系统自己合并 provider），先注册它
         val providers = LocationSubscriptionPlan.providersFor(listOf("gps", "network", "fused"))
         assertEquals("fused", providers.first())
-        assertTrue("必须真的带上 gps", providers.contains("gps"))
-        assertTrue("必须真的带上 network", providers.contains("network"))
+        assertTrue("必须真的带上 network（fused 不派点时的活路）", providers.contains("network"))
+        assertFalse("不再挂裸 gps", providers.contains("gps"))
     }
 
     @Test
     fun `fused 不可用时退 gps 加 network`() {
+        // 没有 fused 的机型（少数 ROM）才用裸 gps：否则精度掉到基站级
         assertEquals(
-            listOf("network", "gps"),
+            listOf("gps", "network"),
             LocationSubscriptionPlan.providersFor(listOf("gps", "network")),
         )
         assertEquals(listOf("gps"), LocationSubscriptionPlan.providersFor(listOf("gps")))
@@ -84,7 +85,7 @@ class LocationSubscriptionTest {
     @Test
     fun `不在可用列表里的 provider 不会被注册`() {
         // 只注册系统确认启用的：注册一个 disabled 的 provider 只会让 start 里多个失败分支
-        assertEquals(listOf("fused", "gps"), LocationSubscriptionPlan.providersFor(listOf("fused", "gps")))
+        assertEquals(listOf("fused"), LocationSubscriptionPlan.providersFor(listOf("fused", "gps")))
     }
 
     // ===== 首点兜底判定 =====

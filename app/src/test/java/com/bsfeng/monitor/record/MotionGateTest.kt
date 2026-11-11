@@ -42,6 +42,30 @@ class MotionGateTest {
     }
 
     @Test
+    fun `坐车单次探测 1 公里且速度超阈值直接升级`() {
+        val gate = MotionGate()
+        gate.onProbeSample(sample(start, 0.0))
+        gate.onProbeSample(sample(start + 30_000L, 100.0))
+        assertEquals("只挪 100m 还不算远行", MotionGate.State.PROBING, gate.state)
+
+        // 1 分钟 400m = 6.7 m/s（24 km/h）：够坐车速度、还不到 500m 位移线，
+        // 正好把「坐车判据」与「500m 位移判据」区分开
+        gate.onProbeSample(sample(start + 60_000L, 400.0))
+        assertEquals(MotionGate.State.MOVING, gate.state)
+        assertTrue("升级原因要说清是坐车判据：${gate.reason}", gate.reason.contains("坐车"))
+        assertTrue(gate.wantsSubscription)
+    }
+
+    @Test
+    fun `步行速度走 300 米不按坐车升级`() {
+        val gate = MotionGate()
+        gate.onProbeSample(sample(start, 0.0))
+        gate.onProbeSample(sample(start + 180_000L, 300.0))
+        // 300m / 180s = 1.67 m/s：过了距离线但速度是步行，留给「持续移动 10 分钟」或 500m 判据
+        assertEquals(MotionGate.State.PROBING, gate.state)
+    }
+
+    @Test
     fun `没有运动证据时保持 SLEEPING 且不建订阅`() {
         val gate = MotionGate()
         assertEquals(MotionGate.State.SLEEPING, gate.state)
@@ -280,12 +304,13 @@ class MotionGateTest {
     }
 
     @Test
-    fun `探测 400m 不升级 500m 才升级`() {
+    fun `探测 400m 但速度是步行时不升级 500m 才升级`() {
         val gate = MotionGate()
         gate.onProbeSample(sample(start, 0.0))
-        gate.onProbeSample(sample(start + 60_000L, 400.0))
+        // 240 秒 400m = 1.67 m/s：步行速度，不触发坐车判据，也不够 500m
+        gate.onProbeSample(sample(start + 240_000L, 400.0))
         assertEquals(MotionGate.State.PROBING, gate.state)
-        gate.onProbeSample(sample(start + 120_000L, 500.0))
+        gate.onProbeSample(sample(start + 300_000L, 500.0))
         assertEquals(MotionGate.State.MOVING, gate.state)
     }
 

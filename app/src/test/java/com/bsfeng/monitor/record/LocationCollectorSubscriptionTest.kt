@@ -89,7 +89,7 @@ class LocationCollectorSubscriptionTest {
 
         assertTrue(collector.startSubscription(now) { received += it })
         assertEquals(1, source.starts)
-        assertEquals(listOf("network", "gps"), source.providers)
+        assertEquals(listOf("gps", "network"), source.providers)
         // 静止按 30 秒**探测**（喂模式状态机），落库仍按 180 秒窗口（见 LocationModeSignalTest）
         assertEquals("静止探测 30 秒", LocationPace.STILL_PROBE_INTERVAL_MS, source.intervalMs)
 

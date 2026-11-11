@@ -36,8 +36,14 @@ internal class AndroidEnv(private val context: Context) : LocationCollector.Env 
     /** 持续订阅通道（[LocationCollector] 建立 / 释放，本类只负责持有实例）。 */
     private val subscriber: LocationSubscriptionSource by lazy { AndroidLocationSubscriber(context) }
 
+    /** 被动定位通道：独立实例，常驻注册，只收别人已经测出来的点（零射频）。 */
+    private val passiveSubscriber: LocationSubscriptionSource by lazy { AndroidLocationSubscriber(context) }
+
     override fun subscriptionSource(): LocationSubscriptionSource? =
         if (manager == null) null else subscriber
+
+    override fun passiveSource(): LocationSubscriptionSource? =
+        if (manager == null) null else passiveSubscriber
 
     /**
      * 当前可用的 provider 列表（fused / gps / network）。

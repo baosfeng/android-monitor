@@ -86,6 +86,19 @@ class MotionGate(
     var probeDistanceM: Double = 0.0
         private set
 
+    /**
+     * 最近一次探测相对锚点的位移（米）与推算速度（m/s）。
+     *
+     * 坐车判据专用：累计位移 [probeDistanceM] 会被「来回踱步 + 偶尔挪一次」凑满，
+     * 只有**单次**位移配上算出来的速度才能区分「走路挪了 300m」与「坐车 3 分钟 1 公里」。
+     */
+    var lastProbeDistanceM: Double = 0.0
+        private set
+
+    /** 最近一次探测推算速度（m/s）：位移 ÷ 两次探测的时间差。 */
+    var lastProbeSpeedMps: Double = 0.0
+        private set
+
     /** 两类位移证据里的较大值（日志里的「距离=..m」）。 */
     val movementDistanceM: Double get() = max(stepDistanceM, probeDistanceM)
 
@@ -295,6 +308,11 @@ class MotionGate(
             anchor.latitude, anchor.longitude, sample.latitude, sample.longitude,
         )
         if (distance > probeDistanceM) probeDistanceM = distance
+        // 坐车靠「单次位移 + 速度」升级：手机放车上时加速度平稳、没有步数，
+        // 唯一能证明在移动的就是位置本身（见类 KDoc）
+        val gapMs = (sample.timeMs - anchor.timeMs).coerceAtLeast(1L)
+        lastProbeDistanceM = distance
+        lastProbeSpeedMps = distance * 1000.0 / gapMs.toDouble()
         // 精度之和是噪声地板：室内 100m 误差的两个点相距 80m 不是「挪了 80m」
         val noiseFloor = max(PROBE_NOISE_FLOOR_M, anchor.accuracyMeters + sample.accuracyMeters.toDouble())
         if (distance >= noiseFloor) {
@@ -319,6 +337,8 @@ class MotionGate(
         stepsSinceAnchor = 0L
         probeAnchor = null
         probeDistanceM = 0.0
+        lastProbeDistanceM = 0.0
+        lastProbeSpeedMps = 0.0
         stillSinceMs = 0L
         shakeSinceSampleMs = 0L
         movingSinceMs = 0L
@@ -359,12 +379,17 @@ class MotionGate(
         val byDuration = movingSinceMs > 0L &&
             nowMs - movingSinceMs >= UPGRADE_DURATION_MS &&
             movementDistanceM >= UPGRADE_DURATION_MIN_DISTANCE_M
-        if (bySteps || byProbe || byDuration) {
+        // 坐车：单次探测就走出 300m 且速度 ≥5 m/s（18 km/h，步行 1.4 m/s 不可能到）
+        val byCar = lastProbeDistanceM >= UPGRADE_CAR_DISTANCE_M &&
+            lastProbeSpeedMps >= UPGRADE_CAR_SPEED_MPS
+        if (bySteps || byProbe || byDuration || byCar) {
             val why = when {
                 bySteps -> "步数距离 " + metersText(stepDistanceM) +
                     " ≥ " + metersText(UPGRADE_STEP_DISTANCE_M)
                 byProbe -> "探测位移 " + metersText(probeDistanceM) +
                     " ≥ " + metersText(UPGRADE_PROBE_DISTANCE_M)
+                byCar -> "坐车 " + metersText(lastProbeDistanceM) +
+                    " @ " + String.format("%.1f", lastProbeSpeedMps) + "m/s"
                 else -> "持续移动 " + (UPGRADE_DURATION_MS / 60_000L) + " 分钟且位移 " +
                     metersText(movementDistanceM) + " ≥ " + metersText(UPGRADE_DURATION_MIN_DISTANCE_M)
             }
@@ -379,6 +404,8 @@ class MotionGate(
         stepsSinceAnchor = 0L
         probeAnchor = null
         probeDistanceM = 0.0
+        lastProbeDistanceM = 0.0
+        lastProbeSpeedMps = 0.0
         stillSinceMs = 0L
         movingSinceMs = 0L
         lastActivityAtMs = 0L
@@ -442,6 +469,12 @@ class MotionGate(
 
         /** 升级：持续移动满 10 分钟时仍要求 300m 位移（原地晃 10 分钟不算远行）。 */
         const val UPGRADE_DURATION_MIN_DISTANCE_M = 300.0
+
+        /** 坐车升级：单次探测位移 ≥300m。城市道路 3 分钟约 400~600m，一次探测即可命中。 */
+        const val UPGRADE_CAR_DISTANCE_M = 300.0
+
+        /** 坐车升级：推算速度 ≥5 m/s（18 km/h）。步行 1.4 m/s、跑步 3 m/s 都到不了。 */
+        const val UPGRADE_CAR_SPEED_MPS = 5.0
 
         /** 探测位移噪声地板：小于它的位移视为原地抖动，不刷新活动时间。 */
         const val PROBE_NOISE_FLOOR_M = 30.0

@@ -59,7 +59,11 @@ class ActiveFixResolver(
         budget: FixBudget = FixBudget.FULL,
         onResult: (LocationSample?) -> Unit,
     ) {
-        val queue = providers.filter(isAvailable)
+        // 探测档只问 network（见 LocationPolicy.PROBE_PROVIDER）：为「大致还在原地」等 gps 8 秒，
+        // 换来的点还常被精度闸丢掉。network 不可用时才退回全队列，保证只有 gps 的设备仍能探测。
+        val available = providers.filter(isAvailable)
+        val probeOnly = available.filter { it == LocationPolicy.PROBE_PROVIDER }
+        val queue = if (budget == FixBudget.PROBE && probeOnly.isNotEmpty()) probeOnly else available
         if (queue.isEmpty()) {
             log("主动定位跳过：没有可用的 provider（${providers.joinToString()}）", true)
             onResult(null)

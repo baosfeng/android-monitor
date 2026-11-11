@@ -40,12 +40,13 @@ class ProbeBudgetTest {
     }
 
     @Test
-    fun `单次探测射频上限从 20 秒降到 12 秒`() {
+    fun `探测档实际只发 network 一档 4 秒射频`() {
         val full = LocationPolicy.ACTIVE_PROVIDERS.sumOf { LocationPolicy.activeFixTimeoutMs(it, FixBudget.FULL) }
-        val probe = LocationPolicy.ACTIVE_PROVIDERS.sumOf { LocationPolicy.activeFixTimeoutMs(it, FixBudget.PROBE) }
         assertEquals("满预算 5+15", 20_000L, full)
-        assertEquals("探测预算 4+8", 12_000L, probe)
-        assertTrue("探测预算必须严格小于满预算", probe < full)
+        // 探测档只问 network（见 LocationPolicy.PROBE_PROVIDER）：总射频 = 4 秒，
+        // 不再为「大致还在原地」陪 gps 等 8 秒
+        assertEquals(4_000L, LocationPolicy.activeFixTimeoutMs(LocationPolicy.PROBE_PROVIDER, FixBudget.PROBE))
+        assertTrue("探测射频必须严格小于满预算", 4_000L < full)
     }
 
     @Test
@@ -59,8 +60,8 @@ class ProbeBudgetTest {
         val source = RecordingSource()
         val resolver = ActiveFixResolver(source)
         resolver.resolve(now, { true }, FixBudget.PROBE) { }
-        assertEquals(listOf("network", "gps"), source.calls.map { it.first })
-        assertEquals(listOf(4_000L, 8_000L), source.calls.map { it.second })
+        assertEquals(listOf(LocationPolicy.PROBE_PROVIDER), source.calls.map { it.first })
+        assertEquals(listOf(4_000L), source.calls.map { it.second })
 
         val fullSource = RecordingSource()
         ActiveFixResolver(fullSource).resolve(now, { true }) { }
@@ -68,13 +69,15 @@ class ProbeBudgetTest {
     }
 
     @Test
-    fun `探测档位仍按 provider 逐个降级到下一个`() {
+    fun `探测档 network 拿不到点就放弃 不追 gps`() {
+        // 探测周期本来就是分钟级（180 秒起），这一拍拿不到就等下一拍；
+        // 为它再追 gps 8 秒，换来的点通常还会被精度闸丢掉
         val gpsFix = LocationSample("gps", 39.9042, 116.4074, 5f, now)
         val source = RecordingSource(mapOf("gps" to gpsFix))
         var result: LocationSample? = null
         ActiveFixResolver(source).resolve(now, { true }, FixBudget.PROBE) { result = it }
-        assertEquals(gpsFix, result)
-        assertEquals(2, source.calls.size)
+        assertNull(result)
+        assertEquals(listOf(LocationPolicy.PROBE_PROVIDER), source.calls.map { it.first })
     }
 
     @Test

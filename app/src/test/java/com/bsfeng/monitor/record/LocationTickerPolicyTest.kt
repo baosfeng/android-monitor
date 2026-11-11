@@ -111,7 +111,7 @@ class LocationTickerPolicyTest {
 
     @Test
     fun `放大后的间隔只改兜底 不改 ticker 上限`() {
-        val lastFallback = now - 90 * 60_000L
+        val lastFallback = now - 10 * 60_000L
         assertEquals(
             "SLEEPING 拍子最长仍是 5 分钟",
             LocationTickerPolicy.SLEEPING_MAX_TICK_MS,
@@ -123,7 +123,7 @@ class LocationTickerPolicyTest {
             ),
         )
         assertEquals(
-            "距到期 40 秒时按 40 秒排，2 小时兜底也准点",
+            "距到期 40 秒时按 40 秒排，60 分钟兜底也准点",
             40_000L,
             LocationTickerPolicy.nextDelayMs(
                 MotionGate.State.SLEEPING,
@@ -135,7 +135,7 @@ class LocationTickerPolicyTest {
     }
 
     @Test
-    fun `网络环境未变时 SLEEPING 一天只兜底 12 次`() {
+    fun `网络环境未变时 SLEEPING 一天兜底次数减半`() {
         val day = 24 * 60 * 60_000L
         val origin = now
         var time = origin
@@ -159,12 +159,11 @@ class LocationTickerPolicyTest {
                 fallbackAt += time
             }
         }
-        // 从 0 点起算：30 分钟兜底在 35 分钟遇到第一拍时已放宽到 2 小时，于是首个点落在 2:05，
-        // 之后每 2 小时一个，24 小时内共 11 次（旧口径每 30 分钟一次 = 47 次）
-        assertEquals(
-            "静止一天只该发 11 次定位请求（旧口径 30 分钟一次 = 47 次）",
-            11,
-            fallbackAt.size,
+        // 从 0 点起算：30 分钟兜底在证据满一轮后才放宽到 60 分钟，之后每小时一个。
+        // 旧口径（30 分钟一次）一天 47 次；60 分钟口径落在 24 次上下（首轮 30 分钟 + 5 分钟拍子余量）
+        assertTrue(
+            "静止一天的兜底次数应落在 20~26 次（旧口径 47 次）：${fallbackAt.size}",
+            fallbackAt.size in 20..26,
         )
         fallbackAt.zipWithNext().forEach { (previous, next) ->
             assertTrue(

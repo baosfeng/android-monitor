@@ -211,7 +211,7 @@ class LocationHealthTextTest {
         assertEquals("省电待机", LocationHealthText.badge(s, MotionGate.State.SLEEPING))
         assertEquals("待机不是故障，不能报危险色", BadgeTone.Neutral, LocationHealthText.toneOf(s, MotionGate.State.SLEEPING))
         assertEquals(
-            "省电待机 · 静止时不采点，最长 2 小时兜底",
+            "省电待机 · 静止时不采点，最长 60 分钟兜底",
             LocationHealthText.describe(s, MotionGate.State.SLEEPING),
         )
     }

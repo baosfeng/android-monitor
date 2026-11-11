@@ -11,7 +11,7 @@ import kotlin.math.min
  * 为什么要单独定节奏：旧实现固定 30 秒一拍、无条件重排，SLEEPING 时每拍只做三件事
  * （onTick 评估、syncSensors、比一次兜底是否到期），一整天 2880 次纯空转唤醒 ——
  * 比 1 分钟心跳还多一倍。SLEEPING 下唯一有意义的定时事件就是那条兜底（30 分钟，网络环境指纹未变时
- * 2 小时，见 [sleepingFallbackIntervalMs]），拍子可以放到 5 分钟。
+ * 60 分钟，见 [sleepingFallbackIntervalMs]），拍子可以放到 5 分钟。
  *
  * 上界 5 分钟不是随手给的：兜底时刻是「上次兜底 + 兜底间隔」，拍子必须能在到期**前一拍**排到，
  * 所以取 min(5 分钟, 距到期剩余)；下限 30 秒保证到期那一拍不会迟到超过 30 秒（与旧的 30 秒拍同精度）。
@@ -36,22 +36,26 @@ object LocationTickerPolicy {
     const val SLEEPING_FALLBACK_INTERVAL_MS = 30 * 60_000L
 
     /**
-     * SLEEPING 且「网络环境指纹未变」时的兜底间隔：2 小时。
+     * SLEEPING 且「网络环境指纹未变」时的兜底间隔：60 分钟。
      *
      * 依据：默认网络的 transport 与 SSID 都没变、期间又没有步数增量（见
      * [NetworkStillnessTracker]），人几乎不可能离开这块 AP 的覆盖；此时每 30 分钟叫醒一次定位芯片
      * 只是白烧射频（真机：三个 provider 的请求各存续约 7 小时）。
      *
+     * 上限定在 60 分钟而不是更长：手机连着车载 WiFi / 手机热点时，SSID 一路不变，
+     * 但人已经在车里跑了几十公里 —— 2 小时的窗口会把整段短途车程吞成空白。
+     * 60 分钟是「最坏情况漏一段」与「一天省 30 次探测」的折中。
+     *
      * 仍然兜底 —— 同一 SSID **不是**同地点证据（公司 / 商场 AP 覆盖几百米，换楼层也不换 SSID），
      * 所以是「降频」不是「关掉」：换网络 / 断网 / 出现步数增量或步态，立刻回
      * [SLEEPING_FALLBACK_INTERVAL_MS]。省电体现在不发起定位请求，不伪造点位。
      */
-    const val SLEEPING_STILL_FALLBACK_INTERVAL_MS = 2 * 60 * 60_000L
+    const val SLEEPING_STILL_FALLBACK_INTERVAL_MS = 60 * 60_000L
 
     /**
-     * SLEEPING 兜底间隔（毫秒）：静止证据熬过一轮 30 分钟兜底 → 2 小时；否则 30 分钟。
+     * SLEEPING 兜底间隔（毫秒）：静止证据熬过一轮 30 分钟兜底 → 60 分钟；否则 30 分钟。
      *
-     * 为什么要熬一轮：指纹「这一秒没变」不足以放宽到 2 小时，先按旧节奏验一个完整窗口，
+     * 为什么要熬一轮：指纹「这一秒没变」不足以放宽，先按旧节奏验一个完整窗口，
      * 窗口里既没换网络也没走路，才说明真的在原地。
      *
      * @param stillSinceMs 静止证据起点（[NetworkStillnessTracker.stillSinceMs]），0 = 没有证据

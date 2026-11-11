@@ -6,7 +6,7 @@ package com.bsfeng.monitor.ui
 // 授权正常不等于采得到点。这里把 LocationStatus 翻成三句话：上次成功多久以前、
 // 订阅在不在、上一次失败到底是什么原因。判定与措辞都是纯函数，可在 JVM 单测里钉死。
 //
-// 口径（待机 ≠ 断档）：功耗门禁 SLEEPING 时静止不采点是设计内行为，按 30 分钟～2 小时兜底采一点。
+// 口径（待机 ≠ 断档）：功耗门禁 SLEEPING 时静止不采点是设计内行为，按 30～60 分钟兜底采一点。
 // 所以「上一点在 30 分钟前」不代表掉线，判档必须先看门禁态 —— 见 [levelOf] 的 gate 参数。
 // 时间线（过去 24 小时的分段与断档列表）由 record 层的 CoverageTimeline 负责，本文件只管徽标与副标题。
 //
@@ -40,7 +40,7 @@ object LocationHealthText {
     const val PACE_SUMMARY = "移动时约 30 秒记录一次，静止时省电降频"
 
     /**
-     * 省电待机的容忍上限：与 record 层同源（最长 2 小时兜底 + 5 分钟调度余量）。
+     * 省电待机的容忍上限：与 record 层同源（最长 60 分钟兜底 + 5 分钟调度余量）。
      *
      * 门禁 SLEEPING 时静止不采点，最后一点常停在 30 分钟前；拿 [FRESH_WINDOW_MS] 判
      * 就会把「照常在待机」读成「已断档」，徽标常年红色。
@@ -48,7 +48,7 @@ object LocationHealthText {
     const val DORMANT_WINDOW_MS = CoverageTimeline.DORMANT_CEILING_MS
 
     /** 待机副标题：说清「为什么不采点」与「兜底节奏」，不出现失败原因。 */
-    private const val DORMANT_TEXT = "省电待机 · 静止时不采点，最长 2 小时兜底"
+    private const val DORMANT_TEXT = "省电待机 · 静止时不采点，最长 60 分钟兜底"
 
     /**
      * 档位判定：没有状态（未开启/读取失败）→ OFF；从未成功且还在预热 → WAITING；

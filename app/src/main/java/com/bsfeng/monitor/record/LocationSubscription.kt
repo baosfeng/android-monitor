@@ -55,8 +55,21 @@ object LocationSubscriptionPlan {
      * 不在这里按 provider 做互斥去重：同一时刻 fused 与 gps 各给一个点，交给质量闸
      * 与落库节流吸收，比在订阅层维护「谁的优先级更高」简单且不会漏点。
      */
-    fun providersFor(available: Collection<String>): List<String> =
-        (listOf(FUSED_PROVIDER) + LocationPolicy.ACTIVE_PROVIDERS).filter { it in available }
+    fun providersFor(available: Collection<String>): List<String> {
+        // 有 fused 时不注册裸 gps：真机 8 天 2176 个点里 gps 只出 4 个，而裸 gps 订阅是
+        // HIGH_ACCURACY + 30 秒一次，等于让 GNSS 长期热着空转。fused 需要卫星时自己会调 GPS，
+        // 不需要我们再挂一条并行订阅（两路各吐一条点，还得靠质量闸去重）。
+        // 没有 fused 的设备（少数 ROM）才退回 gps + network，否则精度掉到基站级。
+        val names = if (FUSED_PROVIDER in available) {
+            listOf(FUSED_PROVIDER, NETWORK_PROVIDER)
+        } else {
+            listOf(GPS_PROVIDER, NETWORK_PROVIDER)
+        }
+        return names.filter { it in available }
+    }
+
+    private const val GPS_PROVIDER = "gps"
+    private const val NETWORK_PROVIDER = "network"
 
     /** 落库节流间隔：移动 30s / 静止 180s（与 [LocationPace.intervalOf] 同源）。 */
     fun intervalMsOf(mode: SampleMode): Long = LocationPace.intervalOf(mode)

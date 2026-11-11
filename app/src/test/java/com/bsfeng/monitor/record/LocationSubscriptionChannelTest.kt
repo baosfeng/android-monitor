@@ -73,7 +73,7 @@ class LocationSubscriptionChannelTest {
         val source = FakeSource()
         val port = channel(source)
         assertTrue(port.start(now) { })
-        assertEquals(listOf("fused", "network", "gps"), source.providers)
+        assertEquals(listOf("fused", "network"), source.providers)
     }
 
     @Test

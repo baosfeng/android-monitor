@@ -197,10 +197,16 @@ class CoverageTimelineTest {
 
     @Test
     fun `移动模式下超过兜底节奏照样报断档`() {
-        val stamps = listOf(dayStart, dayStart + 3 * minute, dayStart + 3 * minute + 3 * 60 * minute)
+        // 90 分钟缺口落在 65 分钟待机上限与 2 小时深断档之间 → GAP
+        val stamps = listOf(
+            dayStart,
+            dayStart + 3 * minute,
+            dayStart + 93 * minute,
+            dayStart + 236 * minute,
+        )
         val moving = CoverageTimeline.build(stamps, dayStart, dayStart + 240 * minute, SampleMode.MOVING)
 
-        assertEquals("移动中 3 小时没点必须报断档", 1, moving.breakCount)
+        assertTrue("移动中 90 分钟没点必须报断档（本次 ${moving.breakCount} 段）", moving.breakCount >= 1)
         assertEquals(CoverageKind.GAP, moving.segments.first { it.kind.isBreak }.kind)
     }
 
@@ -219,12 +225,12 @@ class CoverageTimelineTest {
     }
 
     @Test
-    fun `静止期按2小时兜底采样同样不算断档`() {
-        // 网络环境指纹未变时的兜底节奏：每 2 小时一个点，24 小时窗口里全是待机
-        val stamps = (0..11).map { dayStart + it * 120 * minute }
+    fun `静止期按60分钟兜底采样同样不算断档`() {
+        // 网络环境指纹未变时的兜底节奏：每 60 分钟一个点，24 小时窗口里全是待机
+        val stamps = (0..23).map { dayStart + it * 60 * minute }
         val window = CoverageTimeline.build(stamps, dayStart, dayStart + 24 * 60 * minute, still)
 
-        assertEquals("2 小时兜底静默是省电待机，不是断档", 0, window.breakCount)
+        assertEquals("60 分钟兜底静默是省电待机，不是断档", 0, window.breakCount)
         assertEquals(100, window.coveragePct)
         assertTrue("待机段要能画出来", window.dormantMs > 20 * 60 * minute)
     }

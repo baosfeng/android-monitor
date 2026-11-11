@@ -105,7 +105,7 @@ class NetworkEnvironmentTest {
     // ===== 兜底间隔（与 LocationTickerPolicy 联动）=====
 
     @Test
-    fun `指纹未变满 30 分钟后兜底放宽到 2 小时`() {
+    fun `指纹未变满 30 分钟后兜底放宽到 60 分钟`() {
         val tracker = NetworkStillnessTracker()
         tracker.observeNetwork(wifi("家"), base)
 
@@ -118,7 +118,7 @@ class NetworkEnvironmentTest {
             LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
             fallbackInterval(tracker, base + 30 * minute),
         )
-        assertEquals(2 * 60 * minute, LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS)
+        assertEquals(60 * minute, LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS)
     }
 
     @Test
@@ -132,7 +132,7 @@ class NetworkEnvironmentTest {
 
         assertTrue(tracker.observeNetwork(wifi("公司"), base + 31 * minute))
         assertEquals(
-            "换了 WiFi 就不该再享受 2 小时放松",
+            "换了 WiFi 就不该再享受 60 分钟放松",
             LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
             fallbackInterval(tracker, base + 31 * minute),
         )
@@ -142,7 +142,7 @@ class NetworkEnvironmentTest {
     fun `有步数增量时不延长`() {
         val tracker = NetworkStillnessTracker()
         tracker.observeNetwork(wifi("家"), base)
-        assertEquals(2 * 60 * minute, fallbackInterval(tracker, base + 40 * minute))
+        assertEquals(60 * minute, fallbackInterval(tracker, base + 40 * minute))
 
         tracker.onMotionEvidence(base + 40 * minute)
         assertEquals(base + 40 * minute, tracker.lastMotionEvidenceAtMs)

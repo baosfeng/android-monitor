@@ -294,6 +294,9 @@ class LocationForegroundService : Service() {
         // 首次进入必须强制应用一次门禁态：默认 SLEEPING 是「不定位」，
         // 不强制应用的话订阅会按采集器默认的 30s 一直跑（玩手机照样烧定位）
         applyGateState(gate.onTick(now), force = true)
+        // 被动定位常驻：搭别的 App（导航 / 地图 / 健康）的便车，不点亮定位芯片。
+        // 放在 enterForeground 之后：注册要过 location 权限与前台身份这两道。
+        startPassiveTap()
         return START_STICKY
     }
 
@@ -302,6 +305,8 @@ class LocationForegroundService : Service() {
     override fun onDestroy() {
         stopTicker()
         unregisterNetworkCallback()
+        runCatching { LocationCollector.get(this).stopPassiveTap() }
+            .onFailure { Log.w(TAG, "释放被动定位失败", it) }
         // 先取消落库协程：服务已经不在，再往库里写就是「幽灵写入」（还原 / 备份期间还会撞锁）
         ioWork.cancel()
         releaseSensors()
@@ -794,6 +799,24 @@ class LocationForegroundService : Service() {
                 }
             }
         }.onFailure { Log.w(TAG, "门禁探测采样失败", it) }
+    }
+
+    /**
+     * 注册被动定位通道（常驻，零射频）。
+     *
+     * 只搭别的 App 已经测出来的点，不会让定位芯片启动；点位经采集器的质量闸、落库节流与
+     * 门禁位移证据链（[LocationCollector.startPassiveTap]），这里只负责落库。
+     * 失败（未授权 / provider 不可用）只记日志，链路退化回原有的探测与订阅。
+     */
+    private fun startPassiveTap() {
+        runCatching {
+            LocationCollector.get(this).startPassiveTap { sample ->
+                ioWork.scope.launch {
+                    runCatching { serviceContainer.recordCollector.onLocation(sample) }
+                        .onFailure { Log.w(TAG, "被动定位点位落库失败", it) }
+                }
+            }
+        }.onFailure { Log.w(TAG, "注册被动定位失败", it) }
     }
 
     /** 建立持续订阅（幂等）：采样回调直接落库，落库放 IO 协程。只在门禁 MOVING 时被调用。 */

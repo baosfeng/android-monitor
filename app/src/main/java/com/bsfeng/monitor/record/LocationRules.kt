@@ -53,6 +53,17 @@ object LocationPolicy {
      */
     val ACTIVE_PROVIDERS = listOf("network", "gps")
 
+    /** 被动定位 provider：不主动测，只把别的 App 测出来的结果转发给我们（见 LocationCollector.startPassiveTap）。 */
+    const val PASSIVE_PROVIDER = "passive"
+
+    /**
+     * 探测档（[FixBudget.PROBE]）唯一使用的 provider。
+     *
+     * 门禁探测与 SLEEPING 兜底只要「大致还在原地」，network 靠基站 / WiFi 秒级出点；
+     * 同一批真机数据里 gps 在 2176 个点中只出 4 个，为它等 8 秒纯属烧射频。
+     */
+    const val PROBE_PROVIDER = "network"
+
     /** 主动定位的单 provider 短预算：5 秒拿不到点就放弃（不猜位置、不落库）。 */
     const val ACTIVE_FIX_BUDGET_MS = 5_000L
 
@@ -260,6 +271,14 @@ object LocationPace {
         quietProbeStreak >= PROBE_BACKOFF_MID_STREAK -> HANDHELD_PROBE_INTERVAL_MID_MS
         else -> HANDHELD_PROBE_INTERVAL_MS
     }
+
+    /**
+     * 被动点（passive）的最小处理间隔：15 秒。
+     *
+     * passive 的回调频率由别的 App 决定（导航 1 秒一次），不设下限就等于把我们的
+     * 落库链和 CPU 唤醒交给别人控制；15 秒足够喂门禁位移证据，也不影响轨迹密度。
+     */
+    const val PASSIVE_MIN_INTERVAL_MS = 15_000L
 
     /**
      * 首次成功前的主动定位重试间隔（30 秒）：**固定值，不做指数退避**。

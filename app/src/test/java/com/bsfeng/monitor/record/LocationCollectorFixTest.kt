@@ -89,7 +89,7 @@ class LocationCollectorFixTest {
         val env = FakeEnv(source = source, providers = listOf("fused", "gps", "network"))
         val collector = LocationCollector(env, clock = { now })
         collector.startSubscription(now) { }
-        assertEquals(listOf("fused", "network", "gps"), source.providers)
+        assertEquals(listOf("fused", "network"), source.providers)
     }
 
     @Test
