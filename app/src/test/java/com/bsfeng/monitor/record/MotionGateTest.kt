@@ -42,6 +42,22 @@ class MotionGateTest {
     }
 
     @Test
+    fun `换网络把探测退避阶梯清零`() {
+        val gate = MotionGate()
+        gate.onProbeSample(sample(start, 0.0))
+        // 连续无位移的探测会把间隔从 180 秒推到 600 秒（在家坐着不该频繁搜星）
+        repeat(6) { i -> gate.onProbeSample(sample(start + (i + 1) * 30_000L, 0.0)) }
+        assertEquals(
+            "退避到封顶档",
+            LocationPace.HANDHELD_PROBE_INTERVAL_MAX_MS,
+            gate.probeIntervalMs,
+        )
+        // 断网 / 换 WiFi = 可能离开原地：立刻回 180 秒灵敏度，别把刚上车那一段饿死
+        gate.onEnvironmentChanged()
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
+    }
+
+    @Test
     fun `坐车单次探测 1 公里且速度超阈值直接升级`() {
         val gate = MotionGate()
         gate.onProbeSample(sample(start, 0.0))

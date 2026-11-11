@@ -327,6 +327,17 @@ class MotionGate(
         return evaluate(now)
     }
 
+    /**
+     * 外部环境变化（换网络 / 断网 / 刚插上充电）：把探测退避阶梯清零。
+     *
+     * 坐车场景的关键补丁：在家连续几次探测没位移，退避会拉到 600 秒；用户出门上车后
+     * 要等最多 10 分钟才探一次，再等一次确认 —— 轨迹起点晚 10~20 分钟。环境变化是
+     * 「可能离开原地」的便宜信号，立刻回 180 秒灵敏度，代价只是多一次探测。
+     */
+    fun onEnvironmentChanged() {
+        quietProbeCount = 0
+    }
+
     /** 时间推进：静止 / 无活动 5 分钟就降级（服务每 30 秒 tick 一次）。 */
     fun onTick(nowMs: Long): State = evaluate(nowMs)
 

@@ -623,6 +623,9 @@ class LocationForegroundService : Service() {
             "网络环境变化：transport=" + fingerprint.transport + "，静止证据清零，兜底恢复 " +
                 (LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS / 60_000L) + " 分钟",
         )
+        // 换网络 / 断网 = 可能离开原地：探测退避阶梯清零，别让「在家坐了 10 分钟」的 600 秒
+        // 退避把刚上车那一段饿死（见 MotionGate.onEnvironmentChanged）
+        gate.onEnvironmentChanged()
         tickerScheduler.onStateChanged()
     }
 
