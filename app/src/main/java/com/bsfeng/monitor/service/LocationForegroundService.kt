@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -19,6 +21,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -133,6 +136,27 @@ class LocationForegroundService : Service() {
 
     /** 已经同步给 [networkStillness] 的活动证据时刻（去重：同一次步数只喂一次）。 */
     private var appliedActivityAtMs = 0L
+
+    /** 是否充电中：充电时不必省电，SLEEPING 兜底回 30 分钟；断电立刻恢复 60 分钟。 */
+    private var isCharging = false
+
+    /**
+     * 充电状态监听：断电瞬间就把兜底拉回 60 分钟，不用等下一拍或下一次兜底。
+     *
+     * 用广播而不是轮询 BatteryManager：插拔是事件，轮询要额外唤醒；只有启动时读一次初值。
+     */
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val charging = intent?.action == Intent.ACTION_POWER_CONNECTED
+            if (charging == isCharging) return
+            isCharging = charging
+            Log.i(
+                TAG,
+                "充电状态变化：" + if (charging) "已接电源，兜底回 30 分钟" else "已断电，恢复 60 分钟兜底",
+            )
+            tickerScheduler.onStateChanged()
+        }
+    }
 
     private val connectivityManager: ConnectivityManager? by lazy {
         runCatching { getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager }.getOrNull()
@@ -258,6 +282,7 @@ class LocationForegroundService : Service() {
             LocationTickerPolicy.sleepingFallbackIntervalMs(
                 networkStillness.stillSinceMs,
                 System.currentTimeMillis(),
+                isCharging,
             )
         },
         log = { message -> Log.d(TAG, message) },
@@ -275,6 +300,8 @@ class LocationForegroundService : Service() {
         // 网络环境监听不依赖前台身份，onCreate 就能注册（真机在 onStartCommand 之后注册会丢掉
         // 「启动时已经连着 WiFi」这条基线，第一次兜底就白白按 30 分钟走）
         registerNetworkCallback()
+        // 充电状态：插电时不必省电（兜底回 30 分钟），断电立刻恢复 60 分钟
+        registerPowerReceiver()
         // 传感器注册不在这里：onCreate 时还没 startForeground，进程没有前台优先级，
         // 部分 ROM（实测 HyperOS）会直接拒绝后台应用的传感器注册且不报错 ——
         // 表现为 sensorservice 的连接列表里根本没有本进程，运动识别永远收不到数据。
@@ -305,6 +332,7 @@ class LocationForegroundService : Service() {
     override fun onDestroy() {
         stopTicker()
         unregisterNetworkCallback()
+        unregisterPowerReceiver()
         runCatching { LocationCollector.get(this).stopPassiveTap() }
             .onFailure { Log.w(TAG, "释放被动定位失败", it) }
         // 先取消落库协程：服务已经不在，再往库里写就是「幽灵写入」（还原 / 备份期间还会撞锁）
@@ -549,6 +577,26 @@ class LocationForegroundService : Service() {
         if (hint <= appliedHintAtMs) return
         appliedHintAtMs = hint
         observingUntilMs = maxOf(observingUntilMs, nowMs + OBSERVE_WINDOW_MS)
+    }
+
+    // ===== 充电状态（充电时不省电）=====
+
+    /** 注册充电状态监听：启动时读一次初值（插着电开机收不到「已连接」广播）。 */
+    private fun registerPowerReceiver() {
+        isCharging = runCatching {
+            (getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)?.isCharging == true
+        }.getOrDefault(false)
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        runCatching {
+            ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        }.onFailure { Log.w(TAG, "充电状态监听注册失败（兜底保持 60 分钟）", it) }
+    }
+
+    private fun unregisterPowerReceiver() {
+        runCatching { unregisterReceiver(powerReceiver) }
     }
 
     // ===== 网络环境（静止负向证据）=====

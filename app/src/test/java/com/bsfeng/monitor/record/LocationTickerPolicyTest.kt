@@ -135,6 +135,21 @@ class LocationTickerPolicyTest {
     }
 
     @Test
+    fun `充电时兜底回到 30 分钟`() {
+        val origin = now
+        assertEquals(
+            "断电：静止证据满一轮后放宽到 60 分钟",
+            LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(origin, origin + 40 * 60_000L),
+        )
+        assertEquals(
+            "插着电不必省电：轨迹密一点更有价值",
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(origin, origin + 40 * 60_000L, charging = true),
+        )
+    }
+
+    @Test
     fun `网络环境未变时 SLEEPING 一天兜底次数减半`() {
         val day = 24 * 60 * 60_000L
         val origin = now

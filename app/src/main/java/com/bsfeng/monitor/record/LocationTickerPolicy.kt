@@ -59,8 +59,12 @@ object LocationTickerPolicy {
      * 窗口里既没换网络也没走路，才说明真的在原地。
      *
      * @param stillSinceMs 静止证据起点（[NetworkStillnessTracker.stillSinceMs]），0 = 没有证据
+     * @param charging 是否在充电：充电时不用省电，兜底回到 30 分钟
      */
-    fun sleepingFallbackIntervalMs(stillSinceMs: Long, nowMs: Long): Long {
+    fun sleepingFallbackIntervalMs(stillSinceMs: Long, nowMs: Long, charging: Boolean = false): Long {
+        // 插着电就不必省电：兜底回到 30 分钟，轨迹更完整 —— 电池不在用户心上的时候，
+        // 唯一还剩的诉求是「别漏点」
+        if (charging) return SLEEPING_FALLBACK_INTERVAL_MS
         if (stillSinceMs <= 0L || nowMs < stillSinceMs) return SLEEPING_FALLBACK_INTERVAL_MS
         if (nowMs - stillSinceMs < SLEEPING_FALLBACK_INTERVAL_MS) return SLEEPING_FALLBACK_INTERVAL_MS
         return SLEEPING_STILL_FALLBACK_INTERVAL_MS
