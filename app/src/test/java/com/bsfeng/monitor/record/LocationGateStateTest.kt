@@ -72,7 +72,7 @@ class LocationGateStateTest {
     @Test
     fun `offer 把点位转发给注册的 listener`() {
         val received = mutableListOf<LocationSample>()
-        LocationGateState.registerLocationListener { received += it }
+        LocationGateState.registerLocationListener { sample, _ -> received += sample }
         try {
             val sample = LocationSample("gps", 31.2304, 121.4737, 8f, 1_700_000_000_000L)
             LocationGateState.offer(sample)

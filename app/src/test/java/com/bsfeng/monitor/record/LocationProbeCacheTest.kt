@@ -54,7 +54,7 @@ class LocationProbeCacheTest {
         val collector = LocationCollector(env, clock = { now })
 
         val offered = mutableListOf<LocationSample>()
-        LocationGateState.registerLocationListener { offered += it }
+        LocationGateState.registerLocationListener { sample, _ -> offered += sample }
         var result: LocationSample? = null
         try {
             collector.collectThrottledAsync(now, force = true, budget = FixBudget.PROBE) { result = it }
@@ -106,7 +106,7 @@ class LocationProbeCacheTest {
         val collector = LocationCollector(env, clock = { now })
 
         val offered = mutableListOf<LocationSample>()
-        LocationGateState.registerLocationListener { offered += it }
+        LocationGateState.registerLocationListener { sample, _ -> offered += sample }
         var result: LocationSample? = null
         try {
             collector.collectThrottledAsync(now) { result = it }

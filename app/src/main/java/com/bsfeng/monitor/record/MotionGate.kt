@@ -295,13 +295,14 @@ class MotionGate(
      * 位移取「相对锚点」而不是「相邻两点」：相邻点会把来回踱步累加成几公里，
      * 相对锚点才能证明「人真的离开了出发地」。
      */
-    fun onProbeSample(sample: LocationSample): State {
+    fun onProbeSample(sample: LocationSample, fromProbe: Boolean = true): State {
         val now = sample.timeMs
         val anchor = probeAnchor
         if (anchor == null) {
             probeAnchor = sample
-            // 首个点只建锚点，拿不出位移证据：同样算一次「无位移证据的探测」
-            quietProbeCount += 1
+            // 首个点只建锚点，拿不出位移证据：同样算一次「无位移证据的探测」。
+            // 被动点不计数：它的频率由别的 App 决定，15 秒一个点能在 90 秒内把退避顶到 600 秒
+            if (fromProbe) quietProbeCount += 1
             return evaluate(now)
         }
         val distance = LocationPace.distanceMeters(
@@ -329,8 +330,9 @@ class MotionGate(
             quietProbeCount = 0
             if (state == State.SLEEPING) transition(State.PROBING, "探测位移 " + metersText(distance))
         } else {
-            // 没位移证据：下一轮探测按阶梯退避（180 → 300 → 600 秒封顶）
-            quietProbeCount += 1
+            // 没位移证据：下一轮探测按阶梯退避（180 → 300 → 600 秒封顶）。
+            // 只数我们自己的探测点（见类 KDoc 的阶梯口径）
+            if (fromProbe) quietProbeCount += 1
         }
         return evaluate(now)
     }

@@ -294,8 +294,9 @@ class LocationCollector internal constructor(
         if (!LocationPolicy.isFresh(sample.timeMs, nowMs)) return
         if (!LocationQuality.shouldAccept(sample, healthState.lastAccepted, nowMs)) return
         lastPassiveAtMs = nowMs
-        // 被动点同样进位移证据链：坐车时别人在帮我们测速，门禁靠它才升得上去
-        LocationGateState.offer(sample)
+        // 被动点同样进位移证据链：坐车时别人在帮我们测速，门禁靠它才升得上去。
+        // fromProbe=false：它不进探测退避阶梯（频率由别的 App 决定）
+        LocationGateState.offer(sample, fromProbe = false)
         observeForMode(sample)
         if (!throttle.canAcquire(nowMs, captureIntervalMs())) {
             env.log("被动点位仅更新模式（未到落库窗口 provider=" + sample.provider + "）", false)

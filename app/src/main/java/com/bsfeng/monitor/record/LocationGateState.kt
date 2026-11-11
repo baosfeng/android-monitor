@@ -36,7 +36,7 @@ object LocationGateState {
 
     /** 点位的消费者（前台服务注册）；null = 没有服务在听，offer 静默丢弃。 */
     @Volatile
-    private var listener: ((LocationSample) -> Unit)? = null
+    private var listener: ((LocationSample, Boolean) -> Unit)? = null
 
     /** 由前台服务写入；服务销毁时写回 null，心跳恢复原行为。 */
     fun update(state: MotionGate.State?) {
@@ -48,7 +48,7 @@ object LocationGateState {
      *
      * 只保留一个消费者：门禁证据必须汇到一个 MotionGate 实例上，多个消费者会各算各的锚点。
      */
-    fun registerLocationListener(listener: ((LocationSample) -> Unit)?) {
+    fun registerLocationListener(listener: ((LocationSample, Boolean) -> Unit)?) {
         this.listener = listener
     }
 
@@ -57,8 +57,13 @@ object LocationGateState {
      *
      * 未注册（服务没跑）时**不能崩、不能抛**：心跳路径也会调用它，定位失败不能影响上报与保活。
      */
-    fun offer(sample: LocationSample) {
-        listener?.invoke(sample)
+    /**
+     * @param fromProbe true = 我们自己发起的探测 / 补采；false = 搭别的 App 的便车（passive 点）。
+     *   只影响探测退避阶梯的计数（见 [MotionGate.onProbeSample]），位移证据一视同仁 ——
+     *   被动点在坐车时正是最有价值的证据（别人帮我们测速）。
+     */
+    fun offer(sample: LocationSample, fromProbe: Boolean = true) {
+        listener?.invoke(sample, fromProbe)
     }
 
     /**

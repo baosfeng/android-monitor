@@ -294,8 +294,8 @@ class LocationForegroundService : Service() {
         // 门禁位移证据的唯一出口：心跳 / 断档自愈 / 订阅 / 探测拿到的点都从 LocationGateState 进来。
         // 回调线程不固定（传感器、广播 goAsync、定位回调），统一 post 到主线程再动 MotionGate，
         // 这样 MotionGate 保持纯逻辑、不需要锁。
-        LocationGateState.registerLocationListener { sample ->
-            handler.post { onGateEvidence(sample) }
+        LocationGateState.registerLocationListener { sample, fromProbe ->
+            handler.post { onGateEvidence(sample, fromProbe) }
         }
         // 网络环境监听不依赖前台身份，onCreate 就能注册（真机在 onStartCommand 之后注册会丢掉
         // 「启动时已经连着 WiFi」这条基线，第一次兜底就白白按 30 分钟走）
@@ -892,8 +892,8 @@ class LocationForegroundService : Service() {
      * 只在本服务的主线程 handler 里执行（传感器 / 广播 / 定位回调都会 post 到这里），
      * 所以 [MotionGate] 保持无锁纯逻辑；升级/降级后的重配也在这里顺势完成。
      */
-    private fun onGateEvidence(sample: LocationSample) {
-        val state = gate.onProbeSample(sample)
+    private fun onGateEvidence(sample: LocationSample, fromProbe: Boolean = true) {
+        val state = gate.onProbeSample(sample, fromProbe)
         applyGateState(state)
         syncSensors(System.currentTimeMillis())
     }

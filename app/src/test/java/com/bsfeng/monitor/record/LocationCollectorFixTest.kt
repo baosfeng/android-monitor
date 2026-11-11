@@ -462,7 +462,7 @@ class LocationCollectorFixTest {
         assertEquals("非 force 在节流窗口内不应发起主动定位", 0, env.activeRequests)
 
         val offered = mutableListOf<LocationSample>()
-        LocationGateState.registerLocationListener { offered += it }
+        LocationGateState.registerLocationListener { sample, _ -> offered += sample }
         try {
             collector.collectThrottledAsync(now + 2_000L, force = true) { }
         } finally {
