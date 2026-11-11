@@ -211,7 +211,7 @@ class LocationHealthTextTest {
         assertEquals("省电待机", LocationHealthText.badge(s, MotionGate.State.SLEEPING))
         assertEquals("待机不是故障，不能报危险色", BadgeTone.Neutral, LocationHealthText.toneOf(s, MotionGate.State.SLEEPING))
         assertEquals(
-            "省电待机 · 静止时不采点，30 分钟兜底",
+            "省电待机 · 静止时不采点，最长 2 小时兜底",
             LocationHealthText.describe(s, MotionGate.State.SLEEPING),
         )
     }
@@ -225,8 +225,15 @@ class LocationHealthTextTest {
 
     @Test
     fun `门禁睡着但超过待机窗口仍判断档`() {
-        val s = status(sinceLastSuccess = 36 * 60_000L, failure = LocationFailureReason.ACTIVE_FIX_TIMEOUT)
-        assertEquals("越过 35 分钟兜底上限就是真断档", LocationHealthLevel.STALE, LocationHealthText.levelOf(s, MotionGate.State.SLEEPING))
+        val s = status(
+            sinceLastSuccess = LocationHealthText.DORMANT_WINDOW_MS + 60_000L,
+            failure = LocationFailureReason.ACTIVE_FIX_TIMEOUT,
+        )
+        assertEquals(
+            "越过待机上限（最长 2 小时兜底）就是真断档",
+            LocationHealthLevel.STALE,
+            LocationHealthText.levelOf(s, MotionGate.State.SLEEPING),
+        )
         assertEquals("已断档", LocationHealthText.badge(s, MotionGate.State.SLEEPING))
         assertEquals(BadgeTone.Danger, LocationHealthText.toneOf(s, MotionGate.State.SLEEPING))
     }

@@ -297,9 +297,10 @@ class LocationCollector internal constructor(
             env.log("位置订阅零投递，发起首点兜底主动定位（" + modeAtStart + "）", true)
         }
         // 断档自愈用满预算，但 SLEEPING 的兜底例外：断档自愈是「现在真的拿不到点」，
-        // 砍预算只会把断档拉得更长；而 SLEEPING 的 30 分钟兜底**本身就是设计好的静默**，
+        // 砍预算只会把断档拉得更长；而 SLEEPING 的兜底（30 分钟，网络指纹未变时 2 小时）
+        // **本身就是设计好的静默**，
         // 距上次成功必然 ≥30 分钟 —— 对它升级满预算等于把「常态低价值探测」全部变成
-        // 每 30 分钟一次 network 5s + gps 15s（室内两个 provider 都超时就是一天白烧 16 分钟射频）。
+        // 每 30 分钟～2 小时一次 network 5s + gps 15s（室内两个 provider 都超时就是白烧射频）。
         val effectiveBudget = LocationProbePolicy.effectiveBudget(budget, plan.isGap, LocationGateState.state)
         if (force) {
             env.log(
@@ -587,8 +588,8 @@ internal object LocationProbePolicy {
      * 本次主动定位真正使用的预算档位。
      *
      * 断档（[isGap]）默认升级到 [FixBudget.FULL]：断档就是「现在真的拿不到点」，这时候砍预算
-     * 只会把断档拉得更长（与首点兜底同理）。**唯一例外是门禁 SLEEPING**：它的 30 分钟兜底
-     * 距上次成功必然 ≥30 分钟，每次都会被判成断档 —— 那不是掉线，是省电设计本来的静默，
+     * 只会把断档拉得更长（与首点兜底同理）。**唯一例外是门禁 SLEEPING**：它的兜底
+     * （30 分钟，网络指纹未变时 2 小时）距上次成功必然 ≥30 分钟，每次都会被判成断档 —— 那不是掉线，是省电设计本来的静默，
      * 升级满预算只会让「什么都没发生」的半小时也烧 20 秒射频（真机实测：改前每 75~94 秒一次
      * 满预算定位，11 小时只落 8 个点）。
      *

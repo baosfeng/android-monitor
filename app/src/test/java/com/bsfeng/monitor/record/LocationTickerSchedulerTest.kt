@@ -102,6 +102,25 @@ class LocationTickerSchedulerTest {
     }
 
     @Test
+    fun `网络环境变化后立刻按 30 分钟重排 不等 2 小时那一拍`() {
+        var interval = LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS
+        val scheduler = LocationTickerScheduler(
+            host = host,
+            clock = { now },
+            stateOf = { gateState },
+            lastFallbackAtMsOf = { lastFallbackAtMs },
+            fallbackIntervalMsOf = { interval },
+        )
+        lastFallbackAtMs = start - 61 * 60_000L
+        scheduler.start()
+        assertEquals("2 小时间隔下还没到期，只按 5 分钟拍子看一眼", 300_000L, host.pendingDelayMs)
+
+        interval = LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS
+        scheduler.onStateChanged()
+        assertEquals("换了网络：兜底已过期，下一拍 30 秒内就补", 30_000L, host.pendingDelayMs)
+    }
+
+    @Test
     fun `stop 之后不再排程`() {
         val scheduler = newScheduler()
         scheduler.start()

@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.record
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -80,6 +81,98 @@ class LocationTickerPolicyTest {
             }
         }
         assertEquals("SLEEPING 24 小时只该醒 288 次", 288, ticks)
+    }
+
+    // ===== 网络静止证据：兜底从 30 分钟放宽到 2 小时 =====
+
+    @Test
+    fun `兜底间隔随静止证据在 30 分钟与 2 小时之间切换`() {
+        val origin = now
+        assertEquals(
+            "没有静止证据：仍是 30 分钟",
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(0L, origin),
+        )
+        assertEquals(
+            "证据不满一轮：先按旧节奏验",
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(origin, origin + 29 * 60_000L),
+        )
+        assertEquals(
+            LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(origin, origin + 30 * 60_000L),
+        )
+        assertEquals(
+            "时钟倒退不放宽",
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.sleepingFallbackIntervalMs(origin, origin - 60_000L),
+        )
+    }
+
+    @Test
+    fun `放大后的间隔只改兜底 不改 ticker 上限`() {
+        val lastFallback = now - 90 * 60_000L
+        assertEquals(
+            "SLEEPING 拍子最长仍是 5 分钟",
+            LocationTickerPolicy.SLEEPING_MAX_TICK_MS,
+            LocationTickerPolicy.nextDelayMs(
+                MotionGate.State.SLEEPING,
+                now,
+                lastFallback,
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            ),
+        )
+        assertEquals(
+            "距到期 40 秒时按 40 秒排，2 小时兜底也准点",
+            40_000L,
+            LocationTickerPolicy.nextDelayMs(
+                MotionGate.State.SLEEPING,
+                now,
+                now - (LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS - 40_000L),
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `网络环境未变时 SLEEPING 一天只兜底 12 次`() {
+        val day = 24 * 60 * 60_000L
+        val origin = now
+        var time = origin
+        var lastFallbackAtMs = 0L
+        val fallbackAt = mutableListOf<Long>()
+        while (true) {
+            val interval = LocationTickerPolicy.sleepingFallbackIntervalMs(origin, time)
+            time += LocationTickerPolicy.nextDelayMs(
+                MotionGate.State.SLEEPING,
+                time,
+                lastFallbackAtMs,
+                interval,
+            )
+            if (time > origin + day) break
+            if (lastFallbackAtMs == 0L) {
+                lastFallbackAtMs = time
+            } else if (time - lastFallbackAtMs >=
+                LocationTickerPolicy.sleepingFallbackIntervalMs(origin, time)
+            ) {
+                lastFallbackAtMs = time
+                fallbackAt += time
+            }
+        }
+        // 从 0 点起算：30 分钟兜底在 35 分钟遇到第一拍时已放宽到 2 小时，于是首个点落在 2:05，
+        // 之后每 2 小时一个，24 小时内共 11 次（旧口径每 30 分钟一次 = 47 次）
+        assertEquals(
+            "静止一天只该发 11 次定位请求（旧口径 30 分钟一次 = 47 次）",
+            11,
+            fallbackAt.size,
+        )
+        fallbackAt.zipWithNext().forEach { (previous, next) ->
+            assertTrue(
+                "兜底间隔不该超过 2 小时 + 一拍",
+                next - previous <= LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS +
+                    LocationTickerPolicy.SLEEPING_MAX_TICK_MS,
+            )
+        }
     }
 
     @Test

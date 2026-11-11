@@ -11,7 +11,8 @@ import kotlin.math.sqrt
  * 手持抖动、室内走动、摇晃都**不是**远行证据；只有步数距离、探测点位移、持续移动时长才是。
  *
  * 三态（口径冻结）：
- * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（兜底在服务层）。
+ * - [State.SLEEPING]：没有运动证据。不建订阅、不采点；30 分钟兜底一次单点（网络环境指纹未变时
+ *   放宽到 2 小时，见 [NetworkStillnessTracker]；兜底在服务层）。
  * - [State.PROBING]：有真实运动证据（步态 / 步数 / 位移）但未确认远行。**不建订阅**，
  *   只做低频单点探测（180 秒起；连续拿不到位移证据按 [probeIntervalMs] 退避到 300 / 600 秒），
  *   拿到点即释放。
@@ -243,7 +244,7 @@ class MotionGate(
                 noteActivity(tsMs)
                 quietProbeCount = 0
                 // 退化模式（无显著运动传感器）里加速度计是常开的：软件步数本身就能唤醒门禁，
-                // 不能只等 30 分钟兜底探点，否则一路走完也停在 SLEEPING
+                // 不能只等兜底探点，否则一路走完也停在 SLEEPING
                 if (state == State.SLEEPING) transition(State.PROBING, "软件步数增量")
             }
         }
@@ -381,7 +382,7 @@ class MotionGate(
         stillSinceMs = 0L
         movingSinceMs = 0L
         lastActivityAtMs = 0L
-        // 回到 SLEEPING 后探测由 30 分钟兜底接管，退避阶梯重新起算
+        // 回到 SLEEPING 后探测由兜底接管，退避阶梯重新起算
         quietProbeCount = 0
     }
 

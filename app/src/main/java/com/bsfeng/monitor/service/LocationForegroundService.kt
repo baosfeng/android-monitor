@@ -14,6 +14,11 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.hardware.TriggerEvent
 import android.hardware.TriggerEventListener
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -35,6 +40,9 @@ import com.bsfeng.monitor.record.LocationTickerPolicy
 import com.bsfeng.monitor.record.LocationTickerScheduler
 import com.bsfeng.monitor.record.MotionDetector
 import com.bsfeng.monitor.record.MotionGate
+import com.bsfeng.monitor.record.NetworkFingerprint
+import com.bsfeng.monitor.record.NetworkStillnessTracker
+import com.bsfeng.monitor.record.NetworkTransport
 import com.bsfeng.monitor.record.TickerHost
 import kotlinx.coroutines.launch
 
@@ -62,6 +70,9 @@ import kotlinx.coroutines.launch
  * - 传感器按能力降级：显著运动（一次性、硬件 hub）常驻；没有它才退化为加速度计常开 + 30s batching；
  *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册（显著运动 / 抖动提示后 3 分钟），
  *   SLEEPING 平时不注册 —— 提示只买一个「判出 GAIT 的机会」，不是活动证据。
+ * - **网络环境静止证据**（见 [NetworkStillnessTracker]）：默认网络的 transport + SSID 未变、且没有
+ *   步数增量时，SLEEPING 兜底从 30 分钟放宽到 2 小时；换网络 / 断网 / 有步数立刻回 30 分钟。
+ *   省电体现在「不发起定位请求」——没有新坐标就没有新记录，**不用旧坐标伪造点位**。
  */
 class LocationForegroundService : Service() {
 
@@ -113,6 +124,34 @@ class LocationForegroundService : Service() {
 
     /** 已经写给采集器的探测间隔（0 = 当前态不看这个值），用于「同态但退避档变了」的补同步。 */
     private var appliedProbeIntervalMs = 0L
+
+    /**
+     * 网络环境的静止证据：默认网络的 transport + SSID 未变、且无步数增量时，
+     * SLEEPING 兜底从 30 分钟放宽到 2 小时（见 [NetworkStillnessTracker]）。
+     */
+    private val networkStillness = NetworkStillnessTracker()
+
+    /** 已经同步给 [networkStillness] 的活动证据时刻（去重：同一次步数只喂一次）。 */
+    private var appliedActivityAtMs = 0L
+
+    private val connectivityManager: ConnectivityManager? by lazy {
+        runCatching { getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager }.getOrNull()
+    }
+
+    /**
+     * 默认网络回调：只在「当前是什么网络环境」可能变了时重新读一次，比对交给纯逻辑。
+     *
+     * 不在回调里直接算差异：onCapabilitiesChanged 会因带宽估计之类的原因频繁触发，
+     * 真正的「换没换环境」由 [NetworkStillnessTracker.observeNetwork] 判定（未变则什么都不做）。
+     */
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = refreshNetworkFingerprint()
+
+        override fun onLost(network: Network) = refreshNetworkFingerprint()
+
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) =
+            refreshNetworkFingerprint(caps)
+    }
 
     /** 观察窗到期时刻（wall clock）；0 = 没开窗。 */
     private var observingUntilMs = 0L
@@ -203,7 +242,8 @@ class LocationForegroundService : Service() {
     }
 
     /**
-     * ticker 拍子：MOVING / PROBING 30 秒；SLEEPING 最长 5 分钟（那时唯一有意义的定时事件是 30 分钟兜底）。
+     * ticker 拍子：MOVING / PROBING 30 秒；SLEEPING 最长 5 分钟（那时唯一有意义的定时事件是
+     * 30 分钟～2 小时的兜底）。
      *
      * 拍子的时序（含「状态迁移立刻重排」）在 [LocationTickerScheduler] 里，纯逻辑可单测；
      * 这里只提供 Handler 宿主与三态 / 兜底时刻两个只读来源。
@@ -213,6 +253,13 @@ class LocationForegroundService : Service() {
         clock = { System.currentTimeMillis() },
         stateOf = { appliedGateState },
         lastFallbackAtMsOf = { lastFallbackAtMs },
+        // 兜底间隔与「这一拍要不要补点」同源：两处各读一份，迟早出现「按 2 小时排拍子、按 30 分钟采点」
+        fallbackIntervalMsOf = {
+            LocationTickerPolicy.sleepingFallbackIntervalMs(
+                networkStillness.stillSinceMs,
+                System.currentTimeMillis(),
+            )
+        },
         log = { message -> Log.d(TAG, message) },
     )
 
@@ -225,6 +272,9 @@ class LocationForegroundService : Service() {
         LocationGateState.registerLocationListener { sample ->
             handler.post { onGateEvidence(sample) }
         }
+        // 网络环境监听不依赖前台身份，onCreate 就能注册（真机在 onStartCommand 之后注册会丢掉
+        // 「启动时已经连着 WiFi」这条基线，第一次兜底就白白按 30 分钟走）
+        registerNetworkCallback()
         // 传感器注册不在这里：onCreate 时还没 startForeground，进程没有前台优先级，
         // 部分 ROM（实测 HyperOS）会直接拒绝后台应用的传感器注册且不报错 ——
         // 表现为 sensorservice 的连接列表里根本没有本进程，运动识别永远收不到数据。
@@ -251,6 +301,7 @@ class LocationForegroundService : Service() {
 
     override fun onDestroy() {
         stopTicker()
+        unregisterNetworkCallback()
         // 先取消落库协程：服务已经不在，再往库里写就是「幽灵写入」（还原 / 备份期间还会撞锁）
         ioWork.cancel()
         releaseSensors()
@@ -495,6 +546,94 @@ class LocationForegroundService : Service() {
         observingUntilMs = maxOf(observingUntilMs, nowMs + OBSERVE_WINDOW_MS)
     }
 
+    // ===== 网络环境（静止负向证据）=====
+
+    /** 注册默认网络监听；失败只能是「拿不到网络信息」，兜底保持 30 分钟（旧行为）。 */
+    private fun registerNetworkCallback() {
+        val manager = connectivityManager ?: return
+        runCatching { manager.registerDefaultNetworkCallback(networkCallback) }
+            .onFailure { Log.w(TAG, "网络环境监听注册失败（兜底保持 30 分钟）", it) }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val manager = connectivityManager ?: return
+        runCatching { manager.unregisterNetworkCallback(networkCallback) }
+    }
+
+    /** 回调线程只负责取指纹，比对与副作用统一 post 到主线程（与 [MotionGate] 同一线程模型）。 */
+    private fun refreshNetworkFingerprint(caps: NetworkCapabilities? = null) {
+        val fingerprint = fingerprintOf(caps)
+        handler.post { applyNetworkFingerprint(fingerprint) }
+    }
+
+    /**
+     * 当前网络环境指纹。
+     *
+     * 回调给了 capability 就直接用（省一次 binder 调用）；没给（onAvailable / onLost）读一次
+     * 当前默认网络 —— 丢失的可能是旧网络，读「现在是什么」才对。
+     */
+    private fun fingerprintOf(caps: NetworkCapabilities?): NetworkFingerprint {
+        val effective = caps ?: activeNetworkCapabilities()
+        if (effective == null) return NetworkFingerprint(NetworkTransport.OTHER, null)
+        val transport = NetworkTransport.of(
+            effective.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+            effective.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+        )
+        val ssid = if (transport == NetworkTransport.WIFI) wifiSsid(effective) else null
+        return NetworkFingerprint(transport, ssid)
+    }
+
+    private fun activeNetworkCapabilities(): NetworkCapabilities? {
+        val manager = connectivityManager ?: return null
+        val network = manager.activeNetwork ?: return null
+        return runCatching { manager.getNetworkCapabilities(network) }.getOrNull()
+    }
+
+    /**
+     * 取 SSID：优先用 capability 自带的 transportInfo（不额外 binder），读不到再退回 WifiManager。
+     *
+     * 读不到（没给定位权限 / 系统脱敏）返回 null，由 [NetworkFingerprint.sameEnvironmentAs]
+     * 按 transport 判同环境 —— 「未知 SSID」不是「换了 WiFi」的证据。
+     */
+    private fun wifiSsid(caps: NetworkCapabilities): String? {
+        val fromCaps = (caps.transportInfo as? WifiInfo)?.ssid
+        if (fromCaps != null) return fromCaps
+        return runCatching {
+            (getSystemService(Context.WIFI_SERVICE) as? WifiManager)?.connectionInfo?.ssid
+        }.getOrNull()
+    }
+
+    /**
+     * 应用一次网络观测：换了环境就清掉静止证据，并**立刻**按 30 分钟兜底重排。
+     *
+     * 重排不能省：放宽后的一拍可能已经排到 2 小时后，不重排的话「连上另一个 WiFi」要等两小时
+     * 才会有一次探测，环境变化等于没被看见。
+     */
+    private fun applyNetworkFingerprint(fingerprint: NetworkFingerprint) {
+        val changed = networkStillness.observeNetwork(fingerprint, System.currentTimeMillis())
+        if (!changed) return
+        // 只打 transport：SSID 是用户位置的一部分，不写进日志（见 NetworkFingerprint 的 KDoc）
+        Log.i(
+            TAG,
+            "网络环境变化：transport=" + fingerprint.transport + "，静止证据清零，兜底恢复 " +
+                (LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS / 60_000L) + " 分钟",
+        )
+        tickerScheduler.onStateChanged()
+    }
+
+    /**
+     * 把门禁记到的「真实活动」转给静止证据：有步数增量 / 步态就不许延长兜底。
+     *
+     * 必须在 [applyGateState] 的同态早退之前调用：PROBING → PROBING 这类同态调用同样可能带着
+     * 新步数（走两步又停下），漏掉它就会让「已经走过路」的现场继续享受 2 小时兜底。
+     */
+    private fun syncStillnessEvidence() {
+        val activityAtMs = gate.lastActivityAtMs
+        if (activityAtMs <= appliedActivityAtMs) return
+        appliedActivityAtMs = activityAtMs
+        networkStillness.onMotionEvidence(activityAtMs)
+    }
+
     // ===== 门禁态 → 定位行为 =====
 
     /**
@@ -507,6 +646,8 @@ class LocationForegroundService : Service() {
      * 状态没变就早退会让退避只落在服务 tick 上、不落到采集器的 probeIntervalOverride 上。
      */
     private fun applyGateState(state: MotionGate.State, force: Boolean = false) {
+        // 先同步活动证据（步数 / 步态）再判早退：同态调用也可能带着新步数
+        syncStillnessEvidence()
         val probeIntervalMs = if (state == MotionGate.State.PROBING) gate.probeIntervalMs else 0L
         if (!force && state == appliedGateState) {
             syncProbeInterval(probeIntervalMs)
@@ -597,13 +738,20 @@ class LocationForegroundService : Service() {
         syncSensors(now)
         when (state) {
             MotionGate.State.SLEEPING -> {
-                // 30 分钟兜底：手机放在车上/传送带上时加速度可能一直平稳（误判静止），
-                // 没有兜底就会一整天零点。启动后先等满一个窗口，不在 SLEEPING 立刻采点。
+                // 兜底频率：手机放在车上/传送带上时加速度可能一直平稳（误判静止），没有兜底就会
+                // 一整天零点。放在这一拍的末尾而不是只靠回调 —— Doze 下网络回调可能被压住，
+                // 每拍（最长 5 分钟）自己读一次，兜底间隔才不会停在过期的判断上。
+                applyNetworkFingerprint(fingerprintOf(null))
+                val fallbackIntervalMs = LocationTickerPolicy.sleepingFallbackIntervalMs(
+                    networkStillness.stillSinceMs,
+                    now,
+                )
+                // 启动后先等满一个窗口，不在 SLEEPING 立刻采点
                 if (lastFallbackAtMs == 0L) {
                     lastFallbackAtMs = now
-                } else if (now - lastFallbackAtMs >= LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS) {
+                } else if (now - lastFallbackAtMs >= fallbackIntervalMs) {
                     lastFallbackAtMs = now
-                    // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每半小时白烧 20 秒射频）
+                    // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每轮白烧 20 秒射频）
                     probeOnce(FixBudget.PROBE)
                 }
             }

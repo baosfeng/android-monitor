@@ -73,7 +73,7 @@ object LocationPolicy {
     /**
      * 覆盖级（探测）network 预算：4 秒。
      *
-     * 只给门禁探测用（PROBING 低频探测 / SLEEPING 30 分钟兜底）。network 靠基站与 WiFi 秒级出点，
+     * 只给门禁探测用（PROBING 低频探测 / SLEEPING 兜底）。network 靠基站与 WiFi 秒级出点，
      * 4 秒已是常态上限；等满 5 秒换不来更准的点，只换来更长的射频开启。
      */
     const val PROBE_FIX_BUDGET_MS = 4_000L
