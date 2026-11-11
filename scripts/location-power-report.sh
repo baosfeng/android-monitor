@@ -5,6 +5,13 @@
 #   scripts/location-power-report.sh              # 当前唯一设备
 #   ANDROID_SERIAL=63caad7a scripts/location-power-report.sh
 #
+# 验收流程（手机插上后按顺序）：
+#   1) ~/android-platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
+#   2) 正常用一天（通勤 / 室内 / 坐车各覆盖一段，别全程插电）
+#   3) 跑本脚本，把五段输出与基线对照
+#   4) 基线（改前同日）：1934 次回调 / 三个 provider 各约 7 小时存续 / 99 条落库
+#      目标：回调次数与存续时长压掉一半以上，落库条数不掉
+#
 # 口径说明（别拿错数）：
 #   - 「请求存续时长」是系统按 provider 记的 active duration，不等于 GNSS 芯片点亮时长；
 #     真机今天这数是 7 小时级，而 GNSS 锁星次数只有几十次 —— 前者看的是「挂着等」的时长。
