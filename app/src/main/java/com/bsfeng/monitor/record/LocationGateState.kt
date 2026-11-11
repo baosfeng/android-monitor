@@ -56,8 +56,7 @@ object LocationGateState {
      * 任意链路拿到的点都从这里进入门禁证据链。
      *
      * 未注册（服务没跑）时**不能崩、不能抛**：心跳路径也会调用它，定位失败不能影响上报与保活。
-     */
-    /**
+     *
      * @param fromProbe true = 我们自己发起的探测 / 补采；false = 搭别的 App 的便车（passive 点）。
      *   只影响探测退避阶梯的计数（见 [MotionGate.onProbeSample]），位移证据一视同仁 ——
      *   被动点在坐车时正是最有价值的证据（别人帮我们测速）。

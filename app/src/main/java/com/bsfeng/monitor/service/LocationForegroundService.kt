@@ -659,7 +659,7 @@ class LocationForegroundService : Service() {
     /**
      * 应用一次网络观测：换了环境就清掉静止证据，并**立刻**按 30 分钟兜底重排。
      *
-     * 重排不能省：放宽后的一拍可能已经排到 60 分钟后，不重排的话「连上另一个 WiFi」要等两小时
+     * 重排不能省：放宽后的一拍最迟也只有 5 分钟（拍子上界），重排只为少等这 5 分钟
      * 才会有一次探测，环境变化等于没被看见。
      */
     private fun applyNetworkFingerprint(fingerprint: NetworkFingerprint) {

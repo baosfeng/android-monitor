@@ -81,6 +81,24 @@ class ProbeBudgetTest {
     }
 
     @Test
+    fun `探测档连续三次落空后放一次 gps 兜底 用完即回退`() {
+        // network 在飞行模式 / 无基站时是「启用但永不出点」：连败 3 次后必须给 gps 一次机会，
+        // 但只能是一次 —— 不复位的话此后每轮都白烧 12 秒，与探测档 4 秒的省电口径相悖
+        val source = RecordingSource()
+        val resolver = ActiveFixResolver(source)
+        repeat(3) { resolver.resolve(now, { true }, FixBudget.PROBE) { } }
+        assertEquals(listOf("network", "network", "network"), source.calls.map { it.first })
+
+        source.calls.clear()
+        resolver.resolve(now, { true }, FixBudget.PROBE) { }
+        assertEquals("第 4 次带上 gps 兜底", listOf("network", "gps"), source.calls.map { it.first })
+
+        source.calls.clear()
+        resolver.resolve(now, { true }, FixBudget.PROBE) { }
+        assertEquals("兜底轮用完即回退", listOf("network"), source.calls.map { it.first })
+    }
+
+    @Test
     fun `没有可用 provider 时探测档位也不发请求`() {
         val source = RecordingSource()
         var result: LocationSample? = null

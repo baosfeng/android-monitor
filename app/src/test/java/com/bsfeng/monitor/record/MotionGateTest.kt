@@ -42,6 +42,18 @@ class MotionGateTest {
     }
 
     @Test
+    fun `被动点不推进探测退避阶梯`() {
+        val gate = MotionGate()
+        gate.onProbeSample(sample(start, 0.0))
+        // 被动点频率由别的 App 决定（导航 1Hz，我们 15 秒限流）：不设防的话 90 秒就能把
+        // 退避从 180 秒顶到 600 秒，坐车检测反而变迟钝
+        repeat(6) { i ->
+            gate.onProbeSample(sample(start + (i + 1) * 15_000L, 0.0), fromProbe = false)
+        }
+        assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
+    }
+
+    @Test
     fun `换网络把探测退避阶梯清零`() {
         val gate = MotionGate()
         gate.onProbeSample(sample(start, 0.0))

@@ -83,7 +83,7 @@ class CoverageTimelineTest {
     }
 
     @Test
-    fun `中间一个47分钟空洞仍算省电待机 2小时兜底没到期`() {
+    fun `中间一个47分钟空洞仍算省电待机 60分钟兜底没到期`() {
         // 静默 47 分钟落在最长兜底（60 分钟）以内：原地不动时这就是设计内静默
         val before = (0..20).map { dayStart + it * 3 * minute }
         val resume = dayStart + 60 * minute + 47 * minute
