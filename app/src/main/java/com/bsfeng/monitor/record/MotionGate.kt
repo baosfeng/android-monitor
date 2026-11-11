@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.record
 
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -410,7 +411,7 @@ class MotionGate(
                 byProbe -> "探测位移 " + metersText(probeDistanceM) +
                     " ≥ " + metersText(UPGRADE_PROBE_DISTANCE_M)
                 byCar -> "坐车 " + metersText(lastProbeDistanceM) +
-                    " @ " + String.format("%.1f", lastProbeSpeedMps) + "m/s"
+                    " @ " + String.format(Locale.ROOT, "%.1f", lastProbeSpeedMps) + "m/s"
                 else -> "持续移动 " + (UPGRADE_DURATION_MS / 60_000L) + " 分钟且位移 " +
                     metersText(movementDistanceM) + " ≥ " + metersText(UPGRADE_DURATION_MIN_DISTANCE_M)
             }
