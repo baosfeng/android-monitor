@@ -20,6 +20,8 @@
 #   - 「落库条数」才是轨迹质量：回调几百上千次只有几十条落库是正常的（探测点只喂门禁不落库）。
 #   - passive 那行存续时长会一路涨（常驻被动通道本身就是一条挂着不动的请求），它不点亮 GNSS；
 #     对比省电只看 network / gps 两行。
+#   - fallbackMin 在服务起来后的第一拍 ticker（SLEEPING 最长 5 分钟）才赋值：刚装包立刻跑是 0，
+#     不是「兜底没生效」（模拟器实测首拍后为 30，插电/网络未变时是 30 / 60）。
 set -uo pipefail
 
 ADB="${ADB:-$HOME/android-platform-tools/adb}"
