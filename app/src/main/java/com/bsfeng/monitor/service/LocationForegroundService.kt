@@ -391,9 +391,8 @@ class LocationForegroundService : Service() {
         // 首次进入必须强制应用一次门禁态：默认 SLEEPING 是「不定位」，
         // 不强制应用的话订阅会按采集器默认的 30s 一直跑（玩手机照样烧定位）
         applyGateState(gate.onTick(now), force = true)
-        // 被动定位常驻：搭别的 App（导航 / 地图 / 健康）的便车，不点亮定位芯片。
-        // 放在 enterForeground 之后：注册要过 location 权限与前台身份这两道。
-        startPassiveTap()
+        // 被动通道不再无条件常驻：由下一行的 applyGateState(force=true) 按门禁态开合 ——
+        // 静止时不注册，系统的「位置访问」记录里就不会一直挂着我们。
         return START_STICKY
     }
 
@@ -880,7 +879,12 @@ class LocationForegroundService : Service() {
                 collector.setCaptureIntervalOverride(LocationPace.STILL_INTERVAL_MS)
                 runCatching { collector.stopSubscription() }
                     .onFailure { Log.w(TAG, "静止时释放订阅失败", it) }
-                Log.i(TAG, "门禁：SLEEPING（不定位）")
+                // 静止时连被动通道也注销：它零射频不假，但系统会把「别的 App 定位 → 投递给我们」
+                // 记成我们的一次位置访问，用户看到的就是「这个 App 时时刻刻在定位」。
+                // 人一动由硬件运动检测拉回 PROBING 并重新注册，不会漏掉出发那一刻。
+                runCatching { collector.stopPassiveTap() }
+                    .onFailure { Log.w(TAG, "静止时释放被动通道失败", it) }
+                Log.i(TAG, "门禁：SLEEPING（不定位，被动通道已注销）")
             }
             MotionGate.State.PROBING -> {
                 // 低频单点探测：覆盖坐车/骑行这类传感器平稳但人在位移的场景，
@@ -891,6 +895,8 @@ class LocationForegroundService : Service() {
                 collector.setCaptureIntervalOverride(LocationPace.STILL_INTERVAL_MS)
                 runCatching { collector.stopSubscription() }
                     .onFailure { Log.w(TAG, "探测态释放订阅失败", it) }
+                // 探测态需要被动点当位移证据（坐车靠它测速），注册回来（幂等）
+                if (!collector.isPassiveTapActive()) startPassiveTap()
                 Log.i(
                     TAG,
                     "门禁：PROBING（未确认远行，不建订阅，探测间隔 " + (probeIntervalMs / 1000) + "s）",
@@ -899,6 +905,8 @@ class LocationForegroundService : Service() {
             MotionGate.State.MOVING -> {
                 collector.setProbeIntervalOverride(null)
                 collector.setCaptureIntervalOverride(LocationPace.MOVING_INTERVAL_MS)
+                // 移动态两路取点：passive 补洞（导航类 App 的便车）+ 30 秒订阅
+                if (!collector.isPassiveTapActive()) startPassiveTap()
                 startSubscription()
                 Log.i(TAG, "门禁：MOVING（已确认远行，30s 订阅）")
                 // 升级瞬间补一个点，避免出门第一段轨迹缺失
