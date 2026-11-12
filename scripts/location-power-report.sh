@@ -9,7 +9,9 @@
 #   1) ~/android-platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 #   2) 正常用一天（通勤 / 室内 / 坐车各覆盖一段，别全程插电）
 #   3) 跑本脚本，把五段输出与基线对照
-#   4) 基线（改前同日）：1934 次回调 / 三个 provider 各约 7 小时存续 / 99 条落库
+#   4) 基线（改前 11-12 00:00–08:43 旧包）：三 provider 各挂 7h29m–7h46m、2180 次回调、
+#      186 次 GNSS 锁星、落库 5 条；改后同日 08:45 装包，静止 5 分钟只有 passive 18s / 1 点，
+#      network 与 gps 无任何请求记录。
 #      目标：回调次数与存续时长压掉一半以上，落库条数不掉
 #
 # 口径说明（别拿错数）：
