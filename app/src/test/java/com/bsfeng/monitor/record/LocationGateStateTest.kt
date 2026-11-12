@@ -26,20 +26,22 @@ class LocationGateStateTest {
     @Test
     fun `SLEEPING 时心跳跳过定位采样`() {
         LocationGateState.update(MotionGate.State.SLEEPING)
-        assertFalse("静止期心跳必须跳过定位", LocationGateState.allowsHeartbeatSample())
+        assertFalse("前台服务在跑（SLEEPING）时心跳不碰定位", LocationGateState.allowsHeartbeatSample())
     }
 
     @Test
-    fun `PROBING 时心跳放行`() {
-        // PROBING 本来就不建订阅；这条单点探测正好可以当门禁的位移证据
+    fun `PROBING 时心跳让路`() {
+        // 服务在跑时它自己的探测阶梯是唯一驱动源：心跳再采就是绕过阶梯的第二条链
+        // （真机 22:17:05：服务刚跳过探测，心跳 1 秒后强制探测一次）
         LocationGateState.update(MotionGate.State.PROBING)
-        assertTrue(LocationGateState.allowsHeartbeatSample())
+        assertFalse(LocationGateState.allowsHeartbeatSample())
     }
 
     @Test
-    fun `MOVING 时心跳放行`() {
+    fun `MOVING 时心跳让路`() {
+        // MOVING 本来就有 30 秒订阅；心跳再采只会与订阅抢 provider
         LocationGateState.update(MotionGate.State.MOVING)
-        assertTrue(LocationGateState.allowsHeartbeatSample())
+        assertFalse(LocationGateState.allowsHeartbeatSample())
     }
 
     @Test

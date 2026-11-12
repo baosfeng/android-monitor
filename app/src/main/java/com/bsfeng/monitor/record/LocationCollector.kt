@@ -267,10 +267,12 @@ class LocationCollector internal constructor(
             return false
         }
         passiveConsumer = onSample
+        // 投递间隔与位移门槛交给系统过滤（不是我们自己丢点）：系统层合并后连唤醒都不会发生。
+        // 传 0 的旧写法让别人的每一次定位都变成我们的一次进程唤醒 + 一条「位置访问」记录。
         val ok = source.start(
             providers = listOf(LocationPolicy.PASSIVE_PROVIDER),
-            intervalMs = 0L,
-            minDistanceMeters = 0f,
+            intervalMs = LocationPace.PASSIVE_TAP_INTERVAL_MS,
+            minDistanceMeters = LocationPace.PASSIVE_TAP_MIN_DISTANCE_M,
             onSample = ::onPassiveSample,
         )
         env.log(

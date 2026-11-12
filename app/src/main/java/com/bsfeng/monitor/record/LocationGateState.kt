@@ -79,10 +79,15 @@ object LocationGateState {
         state == null || state == MotionGate.State.MOVING
 
     /**
-     * 心跳是否允许采点：只有明确 [MotionGate.State.SLEEPING] 才跳过。
+     * 心跳是否允许采点：**只有前台服务没跑（门禁未知）才放行**。
      *
-     * 纯函数、无副作用，边界在单测里钉死（SLEEPING 跳过 / PROBING 放行 / MOVING 放行 / null 放行）。
-     * PROBING 放行是因为心跳的单点探测正好可以充当门禁的位移证据；MOVING 本就在订阅，心跳是补采。
+     * 旧口径是「只有 SLEEPING 跳过」，PROBING / MOVING 都放行。真机实测暴露了两个问题：
+     * 1. 服务在跑时心跳成了第二条独立驱动链，绕过服务的探测阶梯 —— 22:17:05 服务刚判
+     *    「探测跳过（被动通道在投点）」，心跳 1 秒后因「断档 SHORT」强制发起一次主动定位；
+     * 2. 心跳看到的「距上次成功 476s」按静止间隔（180s×1.5=270s）判成断档，而 SLEEPING 的
+     *    兜底本来就是 30/60 分钟 —— 于是每隔几分钟就「自愈」一次，一天几十次白跑。
+     *
+     * 服务在跑时它自己的 ticker 与探测阶梯是唯一驱动源；心跳只在服务死了以后兜底。
      */
-    fun allowsHeartbeatSample(): Boolean = state != MotionGate.State.SLEEPING
+    fun allowsHeartbeatSample(): Boolean = state == null
 }

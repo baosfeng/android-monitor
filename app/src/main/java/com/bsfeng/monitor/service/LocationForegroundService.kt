@@ -886,6 +886,8 @@ class LocationForegroundService : Service() {
                 // 低频单点探测：覆盖坐车/骑行这类传感器平稳但人在位移的场景，
                 // 又不会为玩手机持续烧定位。间隔由门禁的退避阶梯给（180 / 300 / 600 秒）
                 collector.setProbeIntervalOverride(probeIntervalMs)
+                // 服务重建后本字段归零：不置初值的话首拍恒判「间隔已到」，立刻多发一次探测
+                if (lastProbeAtMs == 0L) lastProbeAtMs = System.currentTimeMillis()
                 collector.setCaptureIntervalOverride(LocationPace.STILL_INTERVAL_MS)
                 runCatching { collector.stopSubscription() }
                     .onFailure { Log.w(TAG, "探测态释放订阅失败", it) }

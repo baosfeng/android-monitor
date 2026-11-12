@@ -117,13 +117,13 @@ class AlarmReceiver : BroadcastReceiver() {
         // 开关关闭时不申请 PendingResult，避免无谓地延长广播生命周期
         if (!enabled) return
 
-        // 门禁 SLEEPING 时跳过定位采样：心跳若不看门禁，静止 8 小时会变成每分钟一次
-        // 高精度单点（模拟器实测 network/gps provider +registration），和用户抱怨的
-        // 「拿起手机定位一直开着」是同一类耗电 —— 门禁不能留这条后门。
-        // 其余心跳职责（上报 / 保活 / 唤醒 / 小组件）不受影响，照旧执行；
-        // 门禁为 null（前台服务没跑）时放行，保持原行为，不制造新的漏采。
+        // 前台服务在跑（门禁已知）时，心跳完全不碰定位：服务自己的 ticker 与探测阶梯是唯一驱动源。
+        // 心跳采点会绕过那套阶梯 —— 真机 22:17:05 实测：服务刚判「探测跳过（被动通道在投点）」，
+        // 心跳 1 秒后因「断档 SHORT（476s > 270s）」强制发起一次主动定位。
+        // 只有服务没跑（门禁 null）时心跳才兜底采点，那是它唯一的价值。
+        // 其余心跳职责（上报 / 保活 / 唤醒 / 小组件）不受影响，照旧执行。
         if (!LocationGateState.allowsHeartbeatSample()) {
-            Log.d(TAG, "门禁 SLEEPING：心跳跳过定位采样")
+            Log.d(TAG, "前台服务在跑：心跳跳过定位采样（由服务 ticker 驱动）")
             return
         }
 
