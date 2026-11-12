@@ -102,6 +102,21 @@ class LocationForegroundService : Service() {
         runCatching { sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) }.getOrNull()
     }
 
+    /**
+     * 硬件运动检测（API 29，一次性触发）：设备从静止变为移动。
+     *
+     * 跑在 sensor hub 上、功耗≈0，只在**状态变化**时触发 —— 用它替代「每 180 秒定时探测」
+     * 是这轮省电改造的核心（见 MotionGate.onMotionDetect 的 KDoc）。
+     */
+    private val motionDetectSensor: Sensor? by lazy {
+        runCatching { sensorManager?.getDefaultSensor(Sensor.TYPE_MOTION_DETECT) }.getOrNull()
+    }
+
+    /** 硬件静止检测（API 29，一次性触发）：设备从移动变为静止，触发后门禁直接回 SLEEPING。 */
+    private val stationaryDetectSensor: Sensor? by lazy {
+        runCatching { sensorManager?.getDefaultSensor(Sensor.TYPE_STATIONARY_DETECT) }.getOrNull()
+    }
+
     /** 运动判定：只作为门禁的「静止 / 步态」证据与诊断（见 [MotionDetector] 的 KDoc）。 */
     private val motion = MotionDetector()
 
@@ -114,6 +129,15 @@ class LocationForegroundService : Service() {
     private var accelMode = AccelMode.NONE
     private var stepCounterRegistered = false
     private var significantRegistered = false
+    private var motionDetectRegistered = false
+    private var stationaryDetectRegistered = false
+
+    /** 最近一次处理「运动 / 静止」硬件事件的时间：30 秒内的重复事件只认一次。 */
+    private var lastMotionEventAtMs = 0L
+
+    /** 运动 / 静止检测不可用的日志只打一次（syncSensors 每 30 秒跑一次）。 */
+    private var motionDetectFailureLogged = false
+    private var stationaryDetectFailureLogged = false
 
     /** 显著运动失败日志只打一次：syncSensors 每 30 秒跑一次，重复打会刷屏。 */
     private var significantFailureLogged = false
@@ -239,6 +263,52 @@ class LocationForegroundService : Service() {
             Log.i(TAG, "门禁传感器：显著运动触发，开 " + (OBSERVE_WINDOW_MS / 1000) + "s 观察窗")
             // 重新待命：不重注册的话，这个人再走一整天也不会再有下一次唤醒
             requestSignificantMotion()
+        }
+    }
+
+    /**
+     * 硬件运动 / 静止检测（一次性触发，API 29）：触发即代表「状态换了」，门禁据此启停定时探测。
+     *
+     * 与显著运动的分工：显著运动只说明「手机被拿起来了」，不改门禁态；这两条是真正的
+     * 「开始移动 / 已经静止」，可以直接当门禁证据。
+     */
+    private val motionDetectListener = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent) {
+            if (event.sensor.type != Sensor.TYPE_MOTION_DETECT) return
+            motionDetectRegistered = false
+            val now = System.currentTimeMillis()
+            // 30 秒节流：传感器的误触发会让门禁在 PROBING/SLEEPING 之间来回切，
+            // 每次切换都要重排 ticker、重配传感器。真状态变化不会 30 秒内来回两次。
+            if (now - lastMotionEventAtMs < MOTION_EVENT_MIN_GAP_MS) {
+                syncTriggerSensors()
+                return
+            }
+            lastMotionEventAtMs = now
+            val state = gate.onMotionDetect(now)
+            applyGateState(state)
+            syncSensors(now)
+            Log.i(TAG, "门禁传感器：硬件运动检测 → " + state + "（定时探测恢复）")
+            // 不在这里直接重注册：由 syncTriggerSensors 按新态决定「该等哪一个」，
+            // 否则静止态下会 5 秒一轮自触发（真机实测过这个循环）。
+            syncTriggerSensors()
+        }
+    }
+
+    private val stationaryDetectListener = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent) {
+            if (event.sensor.type != Sensor.TYPE_STATIONARY_DETECT) return
+            stationaryDetectRegistered = false
+            val now = System.currentTimeMillis()
+            if (now - lastMotionEventAtMs < MOTION_EVENT_MIN_GAP_MS) {
+                syncTriggerSensors()
+                return
+            }
+            lastMotionEventAtMs = now
+            val state = gate.onStationaryDetect(now)
+            applyGateState(state)
+            syncSensors(now)
+            Log.i(TAG, "门禁传感器：硬件静止检测 → " + state + "（定时探测停摆，只剩兜底与被动点）")
+            syncTriggerSensors()
         }
     }
 
@@ -381,6 +451,39 @@ class LocationForegroundService : Service() {
         // 只在观察窗里读的话，正常步行 3 分钟才 250m 左右，永远够不到 500m 的升级线；
         // 步数计是硬件累计值 + 30s batching，功耗远低于定位，PROBING 期间值得开着。
         setStepCounterActive(windowActive || appliedGateState == MotionGate.State.PROBING)
+        syncTriggerSensors()
+    }
+
+    /**
+     * 运动 / 静止检测**互斥待命**：静止态只等「开始移动」，移动态只等「停下来」。
+     *
+     * 为什么必须互斥：两者都是一次性触发，触发条件在整个状态期间一直成立。
+     * 同时注册会 5 秒一轮自触发（真机实测：静止检测触发 → 立刻重注册 → 5 秒后再触发，
+     * 每次都要唤醒 CPU，比原来的定时探测更糟）。互斥后，每一次触发都必然对应一次真实状态变化。
+     */
+    private fun syncTriggerSensors() {
+        val moving = appliedGateState != MotionGate.State.SLEEPING
+        if (moving) {
+            cancelMotionDetect()
+            requestStationaryDetect()
+        } else {
+            cancelStationaryDetect()
+            requestMotionDetect()
+        }
+    }
+
+    private fun cancelMotionDetect() {
+        if (!motionDetectRegistered) return
+        motionDetectRegistered = false
+        val sensor = motionDetectSensor ?: return
+        runCatching { sensorManager?.cancelTriggerSensor(motionDetectListener, sensor) }
+    }
+
+    private fun cancelStationaryDetect() {
+        if (!stationaryDetectRegistered) return
+        stationaryDetectRegistered = false
+        val sensor = stationaryDetectSensor ?: return
+        runCatching { sensorManager?.cancelTriggerSensor(stationaryDetectListener, sensor) }
     }
 
     private fun ensureSignificantMotion(): Boolean {
@@ -418,6 +521,47 @@ class LocationForegroundService : Service() {
             }
         } else {
             logSignificantFailureOnce("注册返回 false（" + sensor.name + "）")
+        }
+        return ok
+    }
+
+    /**
+     * 硬件运动检测常驻待命。
+     *
+     * 失败（ROM 裁剪 / 无该传感器）只打一次日志并退回原有定时探测：这只是省电增强，
+     * 不是功能前提。重复调用是幂等的（已注册直接返回）。
+     */
+    private fun requestMotionDetect(): Boolean {
+        if (motionDetectRegistered) return true
+        val manager = sensorManager ?: return false
+        val sensor = motionDetectSensor ?: return false
+        val ok = runCatching { manager.requestTriggerSensor(motionDetectListener, sensor) }
+            .onFailure { Log.w(TAG, "门禁传感器：运动检测注册异常（" + it.javaClass.simpleName + "）") }
+            .getOrDefault(false)
+        motionDetectRegistered = ok
+        if (ok) {
+            Log.i(TAG, "门禁传感器：运动检测已注册（" + sensor.name + "，一次性硬件触发）")
+        } else if (!motionDetectFailureLogged) {
+            motionDetectFailureLogged = true
+            Log.w(TAG, "门禁传感器：运动检测不可用，退回 180 秒定时探测")
+        }
+        return ok
+    }
+
+    /** 硬件静止检测常驻待命：触发即代表「人停下来了」，门禁直接回 SLEEPING。 */
+    private fun requestStationaryDetect(): Boolean {
+        if (stationaryDetectRegistered) return true
+        val manager = sensorManager ?: return false
+        val sensor = stationaryDetectSensor ?: return false
+        val ok = runCatching { manager.requestTriggerSensor(stationaryDetectListener, sensor) }
+            .onFailure { Log.w(TAG, "门禁传感器：静止检测注册异常（" + it.javaClass.simpleName + "）") }
+            .getOrDefault(false)
+        stationaryDetectRegistered = ok
+        if (ok) {
+            Log.i(TAG, "门禁传感器：静止检测已注册（" + sensor.name + "，一次性硬件触发）")
+        } else if (!stationaryDetectFailureLogged) {
+            stationaryDetectFailureLogged = true
+            Log.w(TAG, "门禁传感器：静止检测不可用，静止判定退回加速度计 5 分钟降级")
         }
         return ok
     }
@@ -524,9 +668,22 @@ class LocationForegroundService : Service() {
         if (significantRegistered && manager != null && triggerSensor != null) {
             runCatching { manager.cancelTriggerSensor(significantMotionTriggerListener, triggerSensor) }
         }
+        // 运动 / 静止检测同样是一次性 trigger：摘除也要成对，否则服务重启后会重复注册
+        motionDetectSensor?.let { sensor ->
+            if (motionDetectRegistered) {
+                runCatching { manager?.cancelTriggerSensor(motionDetectListener, sensor) }
+            }
+        }
+        stationaryDetectSensor?.let { sensor ->
+            if (stationaryDetectRegistered) {
+                runCatching { manager?.cancelTriggerSensor(stationaryDetectListener, sensor) }
+            }
+        }
         accelMode = AccelMode.NONE
         stepCounterRegistered = false
         significantRegistered = false
+        motionDetectRegistered = false
+        stationaryDetectRegistered = false
         observingUntilMs = 0L
     }
 
@@ -810,15 +967,31 @@ class LocationForegroundService : Service() {
                     lastFallbackAtMs = now
                 } else if (now - lastFallbackAtMs >= fallbackIntervalMs) {
                     lastFallbackAtMs = now
-                    // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每轮白烧 20 秒射频）
-                    probeOnce(FixBudget.PROBE)
+                    // 被动通道最近还在投点（别的 App 在定位）→ 这一轮兜底完全没必要发请求：
+                    // 别人的点已经证明「还在这一片」，我们主动探测只是白烧射频。
+                    val passiveFresh = now - LocationCollector.get(this).lastPassiveSampleAtMs() <
+                        fallbackIntervalMs
+                    if (passiveFresh) {
+                        Log.i(TAG, "兜底跳过：被动通道最近仍在投点（零射频）")
+                    } else {
+                        // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每轮白烧 20 秒射频）
+                        probeOnce(FixBudget.PROBE)
+                    }
                 }
             }
             MotionGate.State.PROBING -> {
                 // 间隔读门禁的退避阶梯（180 / 300 / 600 秒），与 collector 的 probeIntervalOverride 同源
                 if (now - lastProbeAtMs >= gate.probeIntervalMs) {
-                    lastProbeAtMs = now
-                    probeOnce(FixBudget.PROBE)
+                    // 被动点比探测点更准也更便宜：最近有别人定位到的点，这一轮探测跳过。
+                    // 不为它更新 lastProbeAtMs —— 被动点一断，下一拍立刻按原间隔补上。
+                    val passiveFresh = now - LocationCollector.get(this).lastPassiveSampleAtMs() <
+                        gate.probeIntervalMs
+                    if (passiveFresh) {
+                        Log.i(TAG, "探测跳过：被动通道最近仍在投点（零射频）")
+                    } else {
+                        lastProbeAtMs = now
+                        probeOnce(FixBudget.PROBE)
+                    }
                 }
             }
             MotionGate.State.MOVING -> {
@@ -990,6 +1163,9 @@ class LocationForegroundService : Service() {
 
         /** 运动诊断日志间隔。 */
         private const val MOTION_DIAG_INTERVAL_MS = 5_000L
+
+        /** 运动 / 静止硬件事件的最小间隔：30 秒内的重复事件只认一次（防传感器误触发来回切态）。 */
+        private const val MOTION_EVENT_MIN_GAP_MS = 30_000L
 
         /** 门禁证据日志间隔（5 分钟一条，避免刷屏）。 */
         private const val EVIDENCE_LOG_INTERVAL_MS = 5 * 60_000L

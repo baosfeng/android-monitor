@@ -16,6 +16,21 @@ internal class LocationActiveFixRunner(
     private val gate: LocationActiveFixGate = LocationActiveFixGate(),
     private val noteFailure: (LocationFailureReason, String) -> Unit = { _, _ -> },
     private val log: (String, Boolean) -> Unit = { _, _ -> },
+    /**
+     * 被质量闸拒绝的点仍交给门禁当**位移证据**（不落库、不占节流窗口）。
+     *
+     * 不喂的后果是实测到的一对死结：探测点精度不够被拒 → 门禁既拿不到位移证据、也不进
+     * 退避阶梯（[com.bsfeng.monitor.record.MotionGate.quietProbeCount] 只在 has-sample 时增加）
+     * → 门禁永远停在 180 秒探测，一天几百次白跑射频，而行程里一条记录都没有。
+     */
+    private val onRejected: (LocationSample) -> Unit = {},
+    /**
+     * 是否允许「原地确认点」落库：距上次成功采样已超过窗口（30 分钟）。
+     *
+     * 静止时质量闸会拒掉「位移 < 150m 的低置信点」—— 那条规则本意是防漂移，副作用是
+     * 人一整天待在原地就**一个点都不落**，行程把「没动」判成「采集中断」。
+     */
+    private val allowInPlaceConfirm: (Long) -> Boolean = { false },
 ) {
 
     /** 是否有请求在飞（采集入口让路与订阅重建都读它）。 */
@@ -26,7 +41,8 @@ internal class LocationActiveFixRunner(
      *
      * @param previous 质量闸的对照点（上一次被接受的点）
      * @param budget 主动定位预算档位（门禁探测传 [FixBudget.PROBE]，其余满预算）
-     * @param onDeliver 拿到可用点后的落库路径（更新模式 / 占节流窗口由调用方负责）
+     * @param onDeliver 拿到可用点后的落库路径（更新模式 / 占节流窗口由调用方负责）；
+     *   第二参 true 表示这是「原地确认点」，调用方要跳过去抖过滤（它本来就与上一点重合）
      * @param onSample 最终回调，**恰好一次**
      */
     fun run(
@@ -35,7 +51,7 @@ internal class LocationActiveFixRunner(
         modeAtStart: SampleMode,
         budget: FixBudget = FixBudget.FULL,
         previous: LocationSample?,
-        onDeliver: (LocationSample) -> Unit,
+        onDeliver: (LocationSample, Boolean) -> Unit,
         onSample: (LocationSample?) -> Unit,
     ) {
         // 全路径最小间隔（静止 180s / 移动 30s，首次成功前不短于 30s）：INITIAL 与断档自愈都会
@@ -79,7 +95,7 @@ internal class LocationActiveFixRunner(
         sample: LocationSample?,
         nowMs: Long,
         previous: LocationSample?,
-        onDeliver: (LocationSample) -> Unit,
+        onDeliver: (LocationSample, Boolean) -> Unit,
         onSample: (LocationSample?) -> Unit,
     ) {
         when {
@@ -87,11 +103,19 @@ internal class LocationActiveFixRunner(
                 noteFailure(LocationFailureReason.ACTIVE_FIX_TIMEOUT, "主动定位无可用点")
                 onSample(null)
             }
+            // 原地确认：质量闸本会拒（与上一点重合 / 低置信不许覆盖），但距上次成功已过窗口，
+            // 这条点证明「人还在原地」，落一条才能让行程判成停留而不是采集中断。
+            !LocationQuality.shouldAccept(sample, previous, nowMs) && allowInPlaceConfirm(nowMs) -> {
+                log("定位原地确认落库（质量闸本会拒绝，距上次成功已超窗口）", false)
+                onDeliver(sample, true)
+            }
             !LocationQuality.shouldAccept(sample, previous, nowMs) -> {
                 noteFailure(LocationFailureReason.LOW_CONFIDENCE, "主动定位点位精度不足")
+                // 证据照喂：门禁靠它判断有没有位移、要不要进退避阶梯；被拒的点不落库。
+                onRejected(sample)
                 onSample(null)
             }
-            else -> onDeliver(sample)
+            else -> onDeliver(sample, false)
         }
     }
 }

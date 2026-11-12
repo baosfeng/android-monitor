@@ -95,9 +95,15 @@ internal class LocationHealthState {
     var failureDetail: String? = null
         private set
 
-    /** 记录一次被接受的采样（成功时间 + 对照点）。 */
-    fun onAccepted(sample: LocationSample, nowMs: Long) = synchronized(lock) {
-        lastAccepted = sample
+    /**
+     * 记录一次被接受的采样（成功时间 + 对照点）。
+     *
+     * @param updateReference false 用于「原地确认点」：它只证明链路还活着、人还在原地，
+     *   不配替换质量闸的对照点（否则一个 network 粗点会把更优的 GPS 位置顶掉，
+     *   后续按粗点算位移，轨迹整体漂移）。成功时间照常刷新，避免每拍都再落一条确认点。
+     */
+    fun onAccepted(sample: LocationSample, nowMs: Long, updateReference: Boolean = true) = synchronized(lock) {
+        if (updateReference) lastAccepted = sample
         lastSuccessAtMs = nowMs
         failure = LocationFailureReason.NONE
         failureDetail = null

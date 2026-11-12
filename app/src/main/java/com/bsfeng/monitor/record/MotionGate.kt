@@ -122,6 +122,19 @@ class MotionGate(
      */
     val probeIntervalMs: Long get() = LocationPace.probeIntervalMsFor(quietProbeCount)
 
+    /**
+     * 本轮 MOVING 里最近一次「确认还在远行」的时刻（净位移较上次证据再增 ≥ [MOVING_KEEP_DISTANCE_M]）。
+     *
+     * 为什么需要它：旧的 MOVING 只按「5 分钟无活动」降级，而在办公室来回走动、去倒水、
+     * 上厕所都是「有活动」—— 只要每 5 分钟有几步，MOVING 就永不降级，30 秒订阅一挂就是
+     * 一整天（真机实测 8 小时订阅、network 1095 次 / fused 505 次 / gps 645 次）。
+     * 真正定义「远行」的是位移规模，不是「手在动」。
+     */
+    private var lastFarMoveAtMs: Long = 0L
+
+    /** 上一次「还在远行」证据时刻的净位移（相对本轮锚点，米）：判据用增量，不用绝对值。 */
+    private var lastFarMoveDistanceM: Double = 0.0
+
     /** 服务据此开关订阅：只有 MOVING 才允许 startSubscription。 */
     val wantsSubscription: Boolean get() = state == State.MOVING
 
@@ -196,6 +209,33 @@ class MotionGate(
         lastSignificantMotionAtMs = nowMs
         observationHintAtMs = nowMs
         return evaluate(nowMs)
+    }
+
+    /**
+     * 硬件运动检测（`TYPE_MOTION_DETECT`，一次性触发）：设备开始移动。
+     *
+     * 为什么用它替代定时轮询：成熟方案（AOSP 对 `SIGNIFICANT_MOTION` 的定义、iOS 的
+     * significant location change）都是「静止时让定位睡眠，靠硬件事件唤醒」。真机 11-12 的
+     * 8 小时数据里 network 1095 次 / gps 645 次，几乎全是「定时探测」在没人移动时白烧射频。
+     * 这个传感器跑在 sensor hub 上，功耗≈0，只在**状态变化**时触发一次。
+     */
+    fun onMotionDetect(nowMs: Long): State {
+        // 硬件判定的「真的动了」：算活动证据（比加速度计抖动可信），探测间隔回 180 秒
+        noteActivity(nowMs)
+        quietProbeCount = 0
+        if (state == State.SLEEPING) transition(State.PROBING, "硬件运动检测")
+        return evaluate(nowMs)
+    }
+
+    /**
+     * 硬件静止检测（`TYPE_STATIONARY_DETECT`，一次性触发）：设备已静止。
+     *
+     * 强静止证据，直接回 SLEEPING（清行程锚点）：PROBING 的定时探测由此停摆，
+     * 只剩 30/60 分钟兜底与被动通道 —— 这就是「人没动就不该烧射频」的落点。
+     */
+    fun onStationaryDetect(nowMs: Long): State {
+        if (state != State.SLEEPING) degradeToSleeping("硬件静止检测")
+        return state
     }
 
     /**
@@ -329,6 +369,12 @@ class MotionGate(
             noteActivity(now)
             // 位移过噪声地板 = 真的挪了地方：探测间隔回 180 秒
             quietProbeCount = 0
+            // 「还在远行」的证据只认**净位移增量**（相对锚点再走 300m），不用绝对值：
+            // 人在离家 5km 的办公室坐着时绝对值一直是 5km，用它判会把 MOVING 钉死一整天。
+            if (distance - lastFarMoveDistanceM >= MOVING_KEEP_DISTANCE_M) {
+                lastFarMoveDistanceM = distance
+                lastFarMoveAtMs = now
+            }
             if (state == State.SLEEPING) transition(State.PROBING, "探测位移 " + metersText(distance))
         } else {
             // 没位移证据：下一轮探测按阶梯退避（180 → 300 → 600 秒封顶）。
@@ -364,6 +410,8 @@ class MotionGate(
         stillSinceMs = 0L
         shakeSinceSampleMs = 0L
         movingSinceMs = 0L
+        lastFarMoveAtMs = 0L
+        lastFarMoveDistanceM = 0.0
         lastActivityAtMs = 0L
         lastSignificantMotionAtMs = 0L
         lastShakeAtMs = 0L
@@ -395,6 +443,14 @@ class MotionGate(
             return state
         }
 
+        // MOVING 的维持条件：窗口内必须出现过一次 ≥300m 的位移。办公室里的来回走动、
+        // 拿起手机、去倒水都不产生这种位移 —— 没有它就退回 PROBING（不建订阅、只低频探测）。
+        // 放在 5 分钟降级之后：真躺下不动仍然直接回 SLEEPING，不必多绕一圈 PROBING。
+        if (state == State.MOVING && lastFarMoveAtMs > 0L && nowMs - lastFarMoveAtMs >= MOVING_KEEP_WINDOW_MS) {
+            degradeToProbing("MOVING " + (MOVING_KEEP_WINDOW_MS / 60_000L) + " 分钟无 ≥" + metersText(MOVING_KEEP_DISTANCE_M) + " 位移")
+            return state
+        }
+
         if (state != State.PROBING) return state
         val bySteps = stepDistanceM >= UPGRADE_STEP_DISTANCE_M
         val byProbe = probeDistanceM >= UPGRADE_PROBE_DISTANCE_M
@@ -415,23 +471,49 @@ class MotionGate(
                 else -> "持续移动 " + (UPGRADE_DURATION_MS / 60_000L) + " 分钟且位移 " +
                     metersText(movementDistanceM) + " ≥ " + metersText(UPGRADE_DURATION_MIN_DISTANCE_M)
             }
+            // 升级这一刻本身就是「还在远行」的最新证据；不置位会被下一次 evaluate 立刻判成超窗口
+            if (lastFarMoveAtMs == 0L) {
+                lastFarMoveAtMs = nowMs
+                lastFarMoveDistanceM = probeDistanceM
+            }
             transition(State.MOVING, why)
         }
         return state
     }
 
+    /**
+     * MOVING → PROBING：还在动，但没有远行实质，先收回订阅。
+     *
+     * 与回 SLEEPING 的区别只是目标态：PROBING 仍按 180 秒起的阶梯探测，人真的上车/走远
+     * 下次探测就能重新升级；锚点同样清空（否则「上午从家到公司」的旧锚点会把 PROBING
+     * 一路顶回 MOVING，等于没降级）。
+     */
+    private fun degradeToProbing(why: String) {
+        transition(State.PROBING, why)
+        clearTripAnchors()
+    }
+
     private fun degradeToSleeping(why: String) {
         transition(State.SLEEPING, why)
+        clearTripAnchors()
+        // 回到 SLEEPING 后探测由兜底接管，退避阶梯重新起算
+        quietProbeCount = 0
+    }
+
+    /** 行程锚点整体作废：步数、探测位移、活动时间、远行证据一起清（不清硬件步数基线）。 */
+    private fun clearTripAnchors() {
         // 不清硬件步数基线：步数计是开机累计值，清掉基线会让下一次增量算成「一整天」
         stepsSinceAnchor = 0L
         probeAnchor = null
         probeDistanceM = 0.0
         lastProbeDistanceM = 0.0
         lastProbeSpeedMps = 0.0
+        lastFarMoveAtMs = 0L
+        lastFarMoveDistanceM = 0.0
         stillSinceMs = 0L
         movingSinceMs = 0L
         lastActivityAtMs = 0L
-        // 回到 SLEEPING 后探测由兜底接管，退避阶梯重新起算
+        // 降级后探测阶梯重新起算（PROBING 从 180 秒开始）
         quietProbeCount = 0
     }
 
@@ -500,6 +582,12 @@ class MotionGate(
 
         /** 探测位移噪声地板：小于它的位移视为原地抖动，不刷新活动时间。 */
         const val PROBE_NOISE_FLOOR_M = 30.0
+
+        /** MOVING 维持判据：窗口内必须出现过一次这个规模的位移，否则退回 PROBING。 */
+        const val MOVING_KEEP_DISTANCE_M = 300.0
+
+        /** MOVING 维持窗口：30 分钟。短途车程/通勤远大于它，办公室里待着远小于它。 */
+        const val MOVING_KEEP_WINDOW_MS = 30 * 60_000L
 
         /** 抖动唤醒阈值：模长标准差持续高于它才唤醒。0.8 高于手持静置噪声（0.15）与灰色带。 */
         const val SHAKE_STDDEV = 0.8

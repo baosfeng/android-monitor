@@ -149,6 +149,16 @@ class LocationCollector internal constructor(
         gate = activeFixGate,
         noteFailure = ::noteFailure,
         log = env::log,
+        // 被质量闸拒的探测点照样算门禁位移证据：不喂的话门禁既不升级也不退避，
+        // 探测永远停在 180 秒（一天几百次射频），行程却一条记录都没有。
+        onRejected = { sample -> LocationGateState.offer(sample, fromProbe = true) },
+        // 原地确认：距上次成功已过一个确认窗口（30 分钟），允许落一条「还在原地」的点。
+        // 用本次调用的 nowMs 而不是 clock()：心跳链路会传入自己的时刻，两处时钟混用会让窗口判定失真
+        allowInPlaceConfirm = { nowMs ->
+            // 从未成功过不是「还在原地」，那是还没有基准：照常走质量闸（低置信点仍要拒）
+            val last = healthState.lastSuccessAtMs
+            last != null && nowMs - last >= LocationPace.STILL_CONFIRM_INTERVAL_MS
+        },
     )
 
     /** 当前采样模式（进程内状态；重启回静止）。 */
@@ -280,6 +290,15 @@ class LocationCollector internal constructor(
 
     /** 被动通道是否已注册（设置页自检 / 日志用）。 */
     fun isPassiveTapActive(): Boolean = passiveConsumer != null
+
+    /**
+     * 最近一次被接受的被动点时刻（墙钟）；0 = 从未。
+     *
+     * 服务用它决定「这一拍还要不要自己发请求」：被动点正在源源不断到时，主动探测
+     * 换不来更准的位置，只会白烧射频（真机夜里被动点每 4 分钟一个，同期我们还在按
+     * 兜底节奏主动探测）。
+     */
+    fun lastPassiveSampleAtMs(): Long = lastPassiveAtMs
 
     /**
      * 被动点处理链：新鲜度 → 质量闸 → 门禁位移证据 → 模式状态机 → 落库节流。
@@ -501,11 +520,19 @@ class LocationCollector internal constructor(
         modeAtStart = modeAtStart,
         budget = budget,
         previous = healthState.lastAccepted,
-        onDeliver = { sample ->
+        onDeliver = { sample, inPlaceConfirm ->
             // 主动定位点无条件作为门禁位移证据：50 米抖动过滤 / 落库节流只影响落库，不能影响证据。
             // 缓存点不在这里喂（旧点不是「现在在哪」）；订阅路径的点在 onSubscriptionSample 里 offer。
             LocationGateState.offer(sample)
-            deliver(sample, nowMs, modeAtStart, onResult, forceEmit = plan.forceActiveFix)
+            // 原地确认点本来就和上一点重合，必须跳过去抖过滤，否则「还在原地」永远落不下来
+            deliver(
+                sample,
+                nowMs,
+                modeAtStart,
+                onResult,
+                forceEmit = plan.forceActiveFix || inPlaceConfirm,
+                updateReference = !inPlaceConfirm,
+            )
         },
         onSample = onResult,
     )
@@ -525,6 +552,11 @@ class LocationCollector internal constructor(
          * 人没动也必须留下一个点，否则状态看起来还是掉线的。
          */
         forceEmit: Boolean = false,
+        /**
+         * 是否保留质量闸的对照点：原地确认点传 false —— 它只证明「还在原地」，
+         * 拿低置信粗点顶掉更优位置会让后续位移判定整体漂移。
+         */
+        updateReference: Boolean = true,
     ) {
         // 静止时 50 米内的位移忽略：心跳 / 缓存路径同样适用
         if (!forceEmit && modeAtStart == SampleMode.STILL && shouldIgnoreStillJitter(sample)) {
@@ -532,7 +564,7 @@ class LocationCollector internal constructor(
             onResult(null)
             return
         }
-        val updated = accept(sample, nowMs)
+        val updated = accept(sample, nowMs, updateReference)
         if (updated != modeAtStart) {
             env.log(
                 "定位采样模式切换：" + modeAtStart.name + " → " + updated.name +
@@ -575,8 +607,8 @@ class LocationCollector internal constructor(
     }
 
     /** 记录一次被接受的成功采样：模式状态机、节流窗口、成功时间三处同步。 */
-    private fun accept(sample: LocationSample, nowMs: Long): SampleMode {
-        healthState.onAccepted(sample, nowMs)
+    private fun accept(sample: LocationSample, nowMs: Long, updateReference: Boolean = true): SampleMode {
+        healthState.onAccepted(sample, nowMs, updateReference)
         return synchronized(lock) {
             throttle.markAcquired(nowMs)
             modeTracker.onSample(sample)
@@ -688,7 +720,15 @@ internal object LocationProbePolicy {
      * 等于制造漏采。
      */
     fun effectiveBudget(budget: FixBudget, isGap: Boolean, gateState: MotionGate.State?): FixBudget =
-        if (isGap && gateState != MotionGate.State.SLEEPING) FixBudget.FULL else budget
+        // 只有「已确认远行」（MOVING）才配得上满预算（network 5s + gps 15s）。
+        // PROBING 只是「疑似移动」：断档升到满预算等于每 30 分钟点亮一次 GNSS，
+        // 而这时人可能只是在办公室坐着、精度不够落不了库（真机 gps 645 次就是这么来的）。
+        // 门禁未知（null，服务没跑）仍升：那时心跳是唯一采点路径，砍预算等于制造漏采。
+        if (isGap && (gateState == MotionGate.State.MOVING || gateState == null)) {
+            FixBudget.FULL
+        } else {
+            budget
+        }
 
     fun shouldRequestActiveFix(
         force: Boolean,

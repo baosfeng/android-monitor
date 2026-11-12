@@ -68,8 +68,9 @@ class LocationProbePolicyTest {
             LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, MotionGate.State.SLEEPING),
         )
         assertEquals(
-            "PROBING 的断档要救，升级满预算",
-            FixBudget.FULL,
+            "PROBING 的断档不升级：人可能只是在办公室坐着、精度不够落不了库，" +
+                "升满预算等于每半小时点亮一次 GNSS（真机 gps 645 次就是这么烧的）",
+            FixBudget.PROBE,
             LocationProbePolicy.effectiveBudget(FixBudget.PROBE, true, MotionGate.State.PROBING),
         )
         assertEquals(
