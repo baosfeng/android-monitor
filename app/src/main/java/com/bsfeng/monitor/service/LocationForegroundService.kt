@@ -284,10 +284,13 @@ class LocationForegroundService : Service() {
                 return
             }
             lastMotionEventAtMs = now
+            // 只开观察窗、不改门禁态：与显著运动同源（「设备不再静止」），拿起手机就会触发。
+            // 判出 GAIT / 拿到步数增量 / 探测出位移才升级，见 MotionGate 的 KDoc。
             val state = gate.onMotionDetect(now)
+            applyObservationHint(now)
             applyGateState(state)
             syncSensors(now)
-            Log.i(TAG, "门禁传感器：硬件运动检测 → " + state + "（定时探测恢复）")
+            Log.i(TAG, "门禁传感器：硬件运动检测，开 " + (OBSERVE_WINDOW_MS / 1000) + "s 观察窗（门禁 " + state + "）")
             // 不在这里直接重注册：由 syncTriggerSensors 按新态决定「该等哪一个」，
             // 否则静止态下会 5 秒一轮自触发（真机实测过这个循环）。
             syncTriggerSensors()
@@ -446,10 +449,12 @@ class LocationForegroundService : Service() {
             else -> AccelMode.BATCHED
         }
         setAccelMode(desiredAccel)
-        // 步数计在 PROBING 期间保持注册（口径：PROBING 每 30s 读一次增量）：
-        // 只在观察窗里读的话，正常步行 3 分钟才 250m 左右，永远够不到 500m 的升级线；
-        // 步数计是硬件累计值 + 30s batching，功耗远低于定位，PROBING 期间值得开着。
-        setStepCounterActive(windowActive || appliedGateState == MotionGate.State.PROBING)
+        // 步数计**常驻**注册（不看门禁态）：它是唯一「只在你真的走路才产生数据」的硬件证据源。
+        // 传感器本身是 on-change 计数 + 30s batching（功耗远低于定位，sensor hub 维护累计值），
+        // 而它的价值是反向的 —— 没有它，门禁无法区分「拿起手机」与「真的走了 500m」，
+        // 只能靠加速度峰值软件计步（会被抖动污染，且要 16Hz 常开）。没权限时注册失败，
+        // 服务日志说明原因并退回软件步数，不阻断定位。
+        setStepCounterActive(true)
         syncTriggerSensors()
     }
 

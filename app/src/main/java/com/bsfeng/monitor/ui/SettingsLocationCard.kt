@@ -143,11 +143,15 @@ internal fun SettingsLocationCard(
                     } else {
                         when (LocationCollector.get(context).status()) {
                             // 从未申请过 → 先弹系统权限申请，回调里再决定开关
+                            // 从未申请过 → 先弹系统权限申请，回调里再决定开关。
+                            // 运动识别同批申请：硬件计步器归它守护，没有它门禁只能靠加速度峰值判步态
+                            // （更耗电、更难区分「拿手机」与「走路」）。被拒不影响定位开关。
                             LocationPermissionStatus.NOT_GRANTED ->
                                 locationLauncher.launch(
                                     arrayOf(
                                         Manifest.permission.ACCESS_FINE_LOCATION,
                                         Manifest.permission.ACCESS_COARSE_LOCATION,
+                                        Manifest.permission.ACTIVITY_RECOGNITION,
                                     )
                                 )
                             // 前台已授权：直接开；缺「始终允许」由下面引导卡承担

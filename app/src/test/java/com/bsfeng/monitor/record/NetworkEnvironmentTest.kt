@@ -216,10 +216,14 @@ class NetworkEnvironmentTest {
         gate.onStepCounter(1_000L, base)
         assertEquals("第一次读步数计只建基线", 0L, gate.lastActivityAtMs)
 
+        // 零散步数（拿手机、在工位起身）不刷新活动时刻 —— 必须连续走出唤醒门槛
         gate.onStepCounter(1_010L, base + minute)
+        assertEquals("零散步数不是「离开原地」的证据", 0L, gate.lastActivityAtMs)
+
+        gate.onStepCounter(1_090L, base + minute + 10_000L)
         assertEquals(
             "服务读门禁的活动时刻喂给静止证据，60 分钟档才会被步数打断",
-            base + minute,
+            base + minute + 10_000L,
             gate.lastActivityAtMs,
         )
     }

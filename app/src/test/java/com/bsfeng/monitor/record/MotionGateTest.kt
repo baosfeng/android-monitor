@@ -233,14 +233,33 @@ class MotionGateTest {
     }
 
     @Test
-    fun `步态证据把门禁从 SLEEPING 拉到 PROBING`() {
-        // 显著运动不再唤醒门禁，GAIT 是「真的在走」的第一手证据
+    fun `连续步态把门禁从 SLEEPING 拉到 PROBING`() {
+        // 无硬件步数计时（或没给运动权限）时的唤醒路径：GAIT 是「真的在走」的第一手证据，
+        // 但必须**连续**走够 30 秒 —— 「走去倒水」那种 10 秒步态只开观察窗，不点亮探测。
         val gate = MotionGate()
         gate.onMotionState(MotionDetector.State.GAIT, start)
+        assertEquals("刚走几步不算远行开始", MotionGate.State.SLEEPING, gate.state)
+        assertEquals(0L, gate.lastActivityAtMs)
+
+        gate.onMotionState(MotionDetector.State.GAIT, start + 31_000L)
         assertEquals(MotionGate.State.PROBING, gate.state)
         assertFalse("步态还不足以建订阅", gate.wantsSubscription)
-        assertTrue("原因应说明步频：" + gate.reason, gate.reason.contains("步频"))
-        assertEquals(start, gate.lastActivityAtMs)
+        assertTrue("原因应说明连续步态：" + gate.reason, gate.reason.contains("连续步态"))
+        assertEquals(start + 31_000L, gate.lastActivityAtMs)
+    }
+
+    @Test
+    fun `步态被抖动打断后连续计时重来`() {
+        // 「连续」不等于「累计」：走 20 秒、停下来玩手机 10 秒、再走 20 秒，不该算走够 30 秒
+        val gate = MotionGate()
+        gate.onMotionState(MotionDetector.State.GAIT, start)
+        gate.onMotionState(MotionDetector.State.GAIT, start + 20_000L)
+        assertEquals(MotionGate.State.SLEEPING, gate.state)
+        gate.onMotionState(MotionDetector.State.HANDHELD, start + 21_000L)
+        gate.onMotionState(MotionDetector.State.GAIT, start + 30_000L)
+        assertEquals("断档后要从头计时", MotionGate.State.SLEEPING, gate.state)
+        gate.onMotionState(MotionDetector.State.GAIT, start + 61_000L)
+        assertEquals(MotionGate.State.PROBING, gate.state)
     }
 
     @Test
@@ -362,9 +381,16 @@ class MotionGateTest {
         assertEquals(0.0, gate.stepDistanceM, 0.001)
         assertEquals("没有证据就不该唤醒", MotionGate.State.SLEEPING, gate.state)
 
-        gate.onStepCounter(5_010L, start + 60_000L)
-        assertEquals(10L, gate.stepsSinceAnchor)
+        // 睡着时的零散步数不进行程证据：必须连续走出唤醒门槛才算「开始远行」
+        gate.onStepCounter(5_010L, start + 20_000L)
+        assertEquals("零散步数不能算成行程位移", 0L, gate.stepsSinceAnchor)
+        assertEquals("走 10 步还不够唤醒", MotionGate.State.SLEEPING, gate.state)
+
+        // 连续走出一段（窗口内累计 90 步 ≈ 63m ≥ 40m 门槛）才进 PROBING，
+        // 且只把窗口内这段带进新行程（睡前的零散步数作废）
+        gate.onStepCounter(5_090L, start + 20_500L)
         assertEquals(MotionGate.State.PROBING, gate.state)
+        assertEquals(90L, gate.stepsSinceAnchor)
     }
 
     @Test

@@ -33,6 +33,12 @@ internal class LocationLaunchers(
  * FINE 与 COARSE 必须同批申请：Android 12+ 只申请 FINE 会被系统直接忽略。
  * 后台定位（ACCESS_BACKGROUND_LOCATION）不进这一批：Android 11+ 要求单独引导，
  * 只能由用户在系统设置里选「始终允许」，所以回调后按三态决定是否露出那条引导行。
+ *
+ * ACTIVITY_RECOGNITION 与 FINE/COARSE 同批申请（系统会各自弹一次）：它是**可选增强**，
+ * 硬件计步器由它守护（没有它时 SensorService 直接拒绝注册 step_counter），
+ * 而计步器是「人真的走远了」最便宜的证据。它被拒绝时不回退定位开关 ——
+ * 采集退化为加速度计步态判据（更耗电、也更迟钝），功能不断档，见
+ * [com.bsfeng.monitor.service.LocationForegroundService] 的退化路径。
  */
 @Composable
 internal fun rememberLocationLaunchers(
@@ -52,6 +58,8 @@ internal fun rememberLocationLaunchers(
         val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
             status != LocationPermissionStatus.NOT_GRANTED
+        // 运动识别（ACTIVITY_RECOGNITION）不参与这里判定：它是可选增强，被拒只影响计步器路径
+        // （服务会退回加速度计步态判据），不该把定位开关关掉
         if (!granted) {
             // 分支①：都拒绝（含「不再询问」）→ 开关保持/回到关闭，如实说明未授权。
             // 这里不用 setFeature：开关此刻在 UI 上仍是关，setFeature 会因「值没变」提前 return，

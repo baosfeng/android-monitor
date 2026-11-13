@@ -19,10 +19,15 @@ class MotionGateProbeBackoffTest {
     private fun sample(atMs: Long, meters: Double, accuracy: Float = 10f) =
         LocationSample("gps", 31.2304 + meters / 111_000.0, 121.4737, accuracy, atMs)
 
-    /** 进 PROBING 的合法入口：步数增量（显著运动不再唤醒门禁）。返回最后一条证据的时刻。 */
-    private fun enterProbing(gate: MotionGate): Long {
+    /**
+     * 进 PROBING 的合法入口：连续走出唤醒门槛（≥ [MotionGate] 的 40m ≈ 57 步）。
+     *
+     * 显著运动与硬件运动检测都不是证据（拿起手机就会触发），零散步数也不是 ——
+     * 只有「连续走出一段距离」才算人在远行。返回最后一条证据的时刻。
+     */
+    private fun enterProbing(gate: MotionGate, steps: Long = 80L): Long {
         gate.onStepCounter(1_000L, start)
-        gate.onStepCounter(1_010L, start + 1_000L)
+        gate.onStepCounter(1_000L + steps, start + 1_000L)
         assertEquals(MotionGate.State.PROBING, gate.state)
         return start + 1_000L
     }
@@ -69,7 +74,7 @@ class MotionGateProbeBackoffTest {
         gate.onProbeSample(sample(t0 + 180_000L, 0.0))
         assertEquals(1, gate.quietProbeCount)
 
-        gate.onStepCounter(1_020L, t0 + 200_000L)
+        gate.onStepCounter(1_090L, t0 + 200_000L)
         assertEquals(0, gate.quietProbeCount)
         assertEquals(LocationPace.HANDHELD_PROBE_INTERVAL_MS, gate.probeIntervalMs)
         assertEquals("走了 10 步还不够远行", MotionGate.State.PROBING, gate.state)

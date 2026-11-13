@@ -100,18 +100,24 @@ class MotionGateHardwareDetectTest {
     private val start = 1_700_000_000_000L
 
     @Test
-    fun `硬件运动检测把 SLEEPING 拉到 PROBING`() {
+    fun `硬件运动检测只开观察窗 不改门禁态`() {
+        // 用户原话：只是拿手机出来玩一玩，定位就开始了。motion_detect 与显著运动同源
+        // （判据是「设备不再静止」），拿起手机就会触发 —— 所以它只能是提示，不能是证据。
         val gate = MotionGate()
         assertEquals(MotionGate.State.SLEEPING, gate.state)
-        assertEquals(MotionGate.State.PROBING, gate.onMotionDetect(start))
-        assertEquals("硬件判定的运动是证据：阶梯归零", 0, gate.quietProbeCount)
-        assertEquals("活动时间要被刷新", start, gate.lastActivityAtMs)
+        assertEquals(MotionGate.State.SLEEPING, gate.onMotionDetect(start))
+        assertEquals("要留下诊断时刻", start, gate.lastMotionDetectAtMs)
+        assertEquals("服务靠这个提示开 16Hz 观察窗", start, gate.observationHintAtMs)
+        assertEquals("活动时间不许被它刷新", 0L, gate.lastActivityAtMs)
+        assertFalse("拿起手机绝不能建订阅", gate.wantsSubscription)
     }
 
     @Test
     fun `硬件静止检测把 PROBING 拉回 SLEEPING`() {
         val gate = MotionGate()
-        gate.onMotionDetect(start)
+        gate.onStepCounter(1_000L, start)
+        gate.onStepCounter(1_090L, start + 1_000L)
+        assertEquals(MotionGate.State.PROBING, gate.state)
         assertEquals(MotionGate.State.SLEEPING, gate.onStationaryDetect(start + 60_000L))
         assertFalse(gate.wantsSubscription)
     }
@@ -119,6 +125,7 @@ class MotionGateHardwareDetectTest {
     @Test
     fun `硬件静止检测把 MOVING 也拉回 SLEEPING 并清锚点`() {
         val gate = MotionGate()
+        // 连续走到 500m 才算远行（这里直接喂硬件步数计）
         gate.onStepCounter(1_000L, start)
         var total = 1_000L
         var ts = start

@@ -47,6 +47,12 @@ import kotlin.math.sqrt
  * 没有显著运动传感器、加速度计只能 5Hz batching 的设备（判不出步态）也走这条路：
  * 抖动提示 → 服务开 16Hz 观察窗 → 判出 GAIT 才升级。
  *
+ * **为什么 TYPE_MOTION_DETECT 也只做提示**：它与显著运动同源，判据是「设备不再静止」，
+ * 拿起手机、放进口袋、被人碰一下桌面都会触发（真机 23127PN0CC 实测：22:17–22:46 共触发
+ * 9 次，同期用户没离开座位）。旧实现把它当门禁证据直接拉到 PROBING，观察窗一开就是
+ * 180 秒一次的探测 —— 用户看到的就是「只是拿手机出来玩一玩，定位就开始了」。
+ * 真证的「人在远行」只有步数（硬件计步/步态）与位移两种，见类首段。
+ *
  * 纯逻辑、无 Android 依赖：传感器事件与时钟由服务层注入，全部边界在单测里钉死。
  */
 class MotionGate(
@@ -142,6 +148,10 @@ class MotionGate(
     var lastActivityAtMs: Long = 0L
         private set
 
+    /** 最近一次硬件运动检测触发时刻（纯诊断：与显著运动同源，只说明「设备不再静止」）。 */
+    var lastMotionDetectAtMs: Long = 0L
+        private set
+
     /** 最近一次显著运动触发时刻（纯诊断：它只说明「手机被拿起来了」）。 */
     var lastSignificantMotionAtMs: Long = 0L
         private set
@@ -172,6 +182,9 @@ class MotionGate(
     /** 本轮持续移动的起点（用于「移动 10 分钟 + 300m」判据）。 */
     private var movingSinceMs: Long = 0L
 
+    /** 睡着时连续步态的起点（0 = 当前不在连续步态；无硬件步数计时设备靠它唤醒）。 */
+    private var gaitSinceMs: Long = 0L
+
     /** 探测位移锚点：第一次探测到的点，降级时清掉。 */
     private var probeAnchor: LocationSample? = null
 
@@ -180,6 +193,12 @@ class MotionGate(
     private var hardwareStepsAvailable = false
     private var hardwareBaselineSet = false
     private var lastHardwareTotal = 0L
+
+    /** 最近一次步数增量的时刻（0 = 还没有），用于「连续走」窗口。 */
+    private var lastHardwareStepAtMs = 0L
+
+    /** 当前窗口内攒下的步数（睡着时判唤醒来源；断档超过窗口就清零）。 */
+    private var wakeStepWindowSteps = 0L
 
     // ===== 软件步数（无硬件步数计时的退化路径）=====
 
@@ -212,18 +231,17 @@ class MotionGate(
     }
 
     /**
-     * 硬件运动检测（`TYPE_MOTION_DETECT`，一次性触发）：设备开始移动。
+     * 硬件运动检测（`TYPE_MOTION_DETECT`，一次性触发）：设备不再静止。
      *
-     * 为什么用它替代定时轮询：成熟方案（AOSP 对 `SIGNIFICANT_MOTION` 的定义、iOS 的
-     * significant location change）都是「静止时让定位睡眠，靠硬件事件唤醒」。真机 11-12 的
-     * 8 小时数据里 network 1095 次 / gps 645 次，几乎全是「定时探测」在没人移动时白烧射频。
-     * 这个传感器跑在 sensor hub 上，功耗≈0，只在**状态变化**时触发一次。
+     * **只开观察窗，不改门禁态**：它与显著运动同源（判据是「设备不再静止」），拿起手机、
+     * 放进口袋、桌面被碰都会触发（真机 22:17–22:46 触发 9 次，同期人没离开座位）。
+     * 旧实现把它当证据直接拉 PROBING，于是「只是拿手机出来玩一玩」就开始 180 秒一轮探测。
+     * 它仍然是**唤醒时机**的来源：事件驱动替代了定时轮询（真机 8 小时里 network 1095 次 /
+     * gps 645 次几乎全是「没人动也按 180 秒探」），但「是否远行」只由步数与位移说了算。
      */
     fun onMotionDetect(nowMs: Long): State {
-        // 硬件判定的「真的动了」：算活动证据（比加速度计抖动可信），探测间隔回 180 秒
-        noteActivity(nowMs)
-        quietProbeCount = 0
-        if (state == State.SLEEPING) transition(State.PROBING, "硬件运动检测")
+        lastMotionDetectAtMs = nowMs
+        observationHintAtMs = nowMs
         return evaluate(nowMs)
     }
 
@@ -247,13 +265,28 @@ class MotionGate(
     fun onMotionState(motionState: MotionDetector.State, tsMs: Long): State {
         when (motionState) {
             MotionDetector.State.GAIT -> {
-                noteActivity(tsMs)
-                // 步态是「真的在走」的证据：探测间隔立刻回 180 秒，不能因为前面几次没位移就迟钝
                 quietProbeCount = 0
-                if (state == State.SLEEPING) transition(State.PROBING, "检出稳定步频")
+                if (state == State.SLEEPING) {
+                    // 无硬件步数计时（或没给运动权限）时的唤醒路径：要求**连续**走够
+                    // [WAKE_GAIT_MS] 才算远行开始。判据与步数门槛同义 —— 30 秒步行约 55 步 ≈ 40m，
+                    // 而「走去倒水」通常 10 秒就走到了（那种只该开观察窗，不该点亮探测）。
+                    if (gaitSinceMs == 0L) gaitSinceMs = tsMs
+                    if (tsMs - gaitSinceMs < WAKE_GAIT_MS) return evaluate(tsMs)
+                    gaitSinceMs = 0L
+                    clearTripAnchors()
+                    noteActivity(tsMs)
+                    transition(State.PROBING, "连续步态 " + (WAKE_GAIT_MS / 1_000L) + " 秒")
+                } else {
+                    // 已经在跟行程：步态就是「真的在走」的证据，探测间隔立刻回 180 秒
+                    gaitSinceMs = 0L
+                    noteActivity(tsMs)
+                }
             }
             MotionDetector.State.STILL -> if (stillSinceMs == 0L) stillSinceMs = tsMs
-            MotionDetector.State.HANDHELD -> Unit
+            MotionDetector.State.HANDHELD -> {
+                // 步态被随机抖动打断：连续走的计时重来（判据是「连续」，不是「累计」）
+                gaitSinceMs = 0L
+            }
         }
         return evaluate(tsMs)
     }
@@ -294,12 +327,8 @@ class MotionGate(
             val magnitude = sqrt(x * x + y * y + z * z)
             val motionState = motion.onAccelerometer(x, y, z, tsMs)
             if (detectSoftwareStep(magnitude, tsMs, motionState)) {
-                stepsSinceAnchor += 1L
-                noteActivity(tsMs)
-                quietProbeCount = 0
-                // 退化模式（无显著运动传感器）里加速度计是常开的：软件步数本身就能唤醒门禁，
-                // 不能只等兜底探点，否则一路走完也停在 SLEEPING
-                if (state == State.SLEEPING) transition(State.PROBING, "软件步数增量")
+                // 与硬件步数走同一条路径：睡着时有同样的唤醒门槛（见 onSteps）
+                onSteps(1L, tsMs)
             }
         }
         return evaluate(tsMs)
@@ -320,14 +349,50 @@ class MotionGate(
         }
         val delta = (totalSteps - lastHardwareTotal).coerceAtLeast(0L)
         lastHardwareTotal = max(lastHardwareTotal, totalSteps)
-        if (delta > 0L) {
-            stepsSinceAnchor += delta
-            noteActivity(nowMs)
-            // 步数增量是最硬的运动证据：探测间隔立刻回 180 秒
-            quietProbeCount = 0
-            if (state == State.SLEEPING) transition(State.PROBING, "步数增量 " + delta)
-        }
+        onSteps(delta, nowMs)
         return evaluate(nowMs)
+    }
+
+    /**
+     * 步数证据的统一入口（硬件步数计与软件峰值计数都走这里）。
+     *
+     * **睡着（SLEEPING）时的唤醒门槛**：必须在一个短窗口里连续走出 [WAKE_STEP_DISTANCE_M] 才进
+     * PROBING。为什么不是「有一步就算」：工位起身、走去倒水、接个电话都会产生十几步，旧口径把这些
+     * 全当成「远行已开始」，于是人根本没离开这一片，180 秒一轮的探测就先跑起来了（用户原话：
+     * 只是拿手机出来玩一玩，定位就开始了）。为什么也不是「整段累计」：坐一天断续起身攒出的步数
+     * 同样能过门槛，那等于把「一整天没出门」判成远行。窗口断档超过 [WAKE_STEP_WINDOW_MS] 就清零重来。
+     *
+     * 唤醒那一刻要**先作废睡着期间攒下的行程证据**（探测锚点、位移、活动时间），只把这次连续走的
+     * 步数带进新行程：不清的话，一天里断续攒的 500m 会在唤醒瞬间直接把门禁顶到 MOVING；
+     * 连带全清也不行 —— 这几十步本来就是证据（离升级线还差得远）。
+     */
+    private fun onSteps(delta: Long, nowMs: Long) {
+        if (delta <= 0L) return
+        if (state == State.SLEEPING) {
+            if (lastHardwareStepAtMs > 0L && nowMs - lastHardwareStepAtMs > WAKE_STEP_WINDOW_MS) {
+                wakeStepWindowSteps = 0L
+            }
+            lastHardwareStepAtMs = nowMs
+            wakeStepWindowSteps += delta
+            if (wakeStepWindowSteps * stepLengthM < WAKE_STEP_DISTANCE_M) return
+            val walkedM = wakeStepWindowSteps * stepLengthM
+            val walkedSteps = wakeStepWindowSteps
+            wakeStepWindowSteps = 0L
+            clearTripAnchors()
+            stepsSinceAnchor = walkedSteps
+            noteActivity(nowMs)
+            quietProbeCount = 0
+            transition(
+                State.PROBING,
+                "连续走了 " + metersText(walkedM) + " ≥ " + metersText(WAKE_STEP_DISTANCE_M),
+            )
+            return
+        }
+        // PROBING / MOVING：已经在跟行程，步数增量直接累加（不设门槛）
+        stepsSinceAnchor += delta
+        noteActivity(nowMs)
+        // 步数增量是最硬的运动证据：探测间隔立刻回 180 秒
+        quietProbeCount = 0
     }
 
     /**
@@ -410,16 +475,20 @@ class MotionGate(
         stillSinceMs = 0L
         shakeSinceSampleMs = 0L
         movingSinceMs = 0L
+        gaitSinceMs = 0L
         lastFarMoveAtMs = 0L
         lastFarMoveDistanceM = 0.0
         lastActivityAtMs = 0L
         lastSignificantMotionAtMs = 0L
+        lastMotionDetectAtMs = 0L
         lastShakeAtMs = 0L
         observationHintAtMs = 0L
         lastEvaluatedAtMs = 0L
         quietProbeCount = 0
         hardwareBaselineSet = false
         lastHardwareTotal = 0L
+        lastHardwareStepAtMs = 0L
+        wakeStepWindowSteps = 0L
         hardwareStepsAvailable = false
         previousCentered = 0.0
         lastPeakAtMs = 0L
@@ -561,6 +630,33 @@ class MotionGate(
 
         /** 降级：连续无活动（静止，或无步数无位移）5 分钟。 */
         const val SLEEP_DOWN_MS = 5 * 60_000L
+
+        /**
+         * 唤醒门槛：睡着时累计步数折算距离 ≥ 40m（约 57 步）才进 PROBING。
+         *
+         * 依据是用户的诉求：**确认真的走出了距离才开始监听**。零步数（拿手机、擦桌子、口袋晃动）
+         * 不产生步数增量，本来就不会唤醒；门槛挡的是「起身走两步又坐下」这类室内挪动 ——
+         * 它在旧口径里等于「远行已开始」，会白白点亮 180 秒一轮的探测。
+         * 40m 的选取：走去倒水 / 上厕所来回约 30~60 步，正常出门至少几百步，
+         * 门槛落在这两件事之间。设太大（如 100m）会让「出门走到公交站」的起点晚 1 分钟。
+         */
+        const val WAKE_STEP_DISTANCE_M = 40.0
+
+        /**
+         * 唤醒窗口：连续走这么久才算「一次出门」，断档超过它就把窗口步数清零。
+         *
+         * 与 [WAKE_STEP_DISTANCE_M] 配对：57 步约 30 秒步行（110 步/分）。窗口取 2 分钟留出一倍余量，
+         * 既容得下路口等一次红灯，又挡得住「坐一天、时不时起身」的累计作弊。
+         */
+        const val WAKE_STEP_WINDOW_MS = 2 * 60_000L
+
+        /**
+         * 无硬件步数时的唤醒门槛：连续步态 [WAKE_GAIT_MS]。
+         *
+         * 30 秒步行 ≈ 55 步 ≈ 40m，与 [WAKE_STEP_DISTANCE_M] 同义（两套传感器走同一口径）。
+         * 取「连续」而不是「累计」：见 [onSteps] 的 KDoc，累计口径会把「坐一天、时时起身」判成远行。
+         */
+        const val WAKE_GAIT_MS = 30_000L
 
         /** 升级：步数折算距离 500m。 */
         const val UPGRADE_STEP_DISTANCE_M = 500.0

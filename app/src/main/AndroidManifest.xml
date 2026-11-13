@@ -40,6 +40,16 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!--
+        运动识别（Feature.LOCATION 的事件唤醒源）：step_counter / step_detector 两个硬件传感器由
+        系统守护，没这个权限时 SensorService 直接拒绝注册（真机日志：Tried enabling a sensor
+        (step_counter) without holding android.permission.ACTIVITY_RECOGNITION）。
+        为什么需要它：计步器是唯一「只在你真的走路才动」的低功耗证据 —— 拿手机、晃手机、
+        坐在车里都不产生步数；没有它就只能退化成加速度峰值软件计步，判不出「拿起手机」与
+        「真的走远」的差别。授权失败不阻断定位（走退化路径），见 LocationForegroundService。
+    -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!--
         enableOnBackInvokedCallback：显式打开预测式返回体系（targetSdk 33+ 默认已进入，这里写死口径便于审阅）。
         Compose 的 BackHandler 在该体系下自动经 OnBackInvokedDispatcher 分发（后注册者优先），
         现有各屏 BackHandler 的触发条件与顺序不变；整屏覆盖层的转场与返回键统一收口在
