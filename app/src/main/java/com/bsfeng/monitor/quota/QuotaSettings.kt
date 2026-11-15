@@ -21,18 +21,21 @@ class QuotaSettings(context: Context) {
         set(value) = prefs.edit { putInt(KEY_REFRESH_HOURS, value.coerceIn(0, 24)) }
 
     /**
-     * 单个 provider 的前台刷新间隔（分钟），默认走 [defaultMinutesFor]。
+     * 单个**账号实例**的前台刷新间隔（分钟），未设置时退回该类型的默认值。
      *
-     * 每个 provider 的限流口径不同（Ollama 10 次/分钟/用户且跨设备共享，DeepSeek 只算并发，
-     * opencode-go 官方没公布限流），所以不做全局一刀切；调大这个值就能让某个 provider 少打接口。
+     * 键用实例键（[instanceId]），第一个实例的 id 恒等于类型 id，所以老用户的
+     * `refresh_minutes:ollama` 天然命中，无需迁移；同类型第二个账号按 ``+`#2`` 单独一个键。
+     *
+     * 默认值仍按**类型**算：限流口径是 provider 决定的（Ollama 10 次/分钟/用户且跨设备共享，
+     * opencode-go 官方没公布限流），同类型的两个账号共用同一套限流事实。
      */
-    fun refreshIntervalMinutes(providerId: String): Int {
-        val value = prefs.getInt(KEY_REFRESH_MINUTES + providerId, defaultMinutesFor(providerId))
+    fun refreshIntervalMinutes(instanceId: String, providerTypeId: String = instanceId): Int {
+        val value = prefs.getInt(KEY_REFRESH_MINUTES + instanceId, defaultMinutesFor(providerTypeId))
         return value.coerceIn(1, 60)
     }
 
-    fun setRefreshIntervalMinutes(providerId: String, minutes: Int) {
-        prefs.edit { putInt(KEY_REFRESH_MINUTES + providerId, minutes.coerceIn(1, 60)) }
+    fun setRefreshIntervalMinutes(instanceId: String, minutes: Int) {
+        prefs.edit { putInt(KEY_REFRESH_MINUTES + instanceId, minutes.coerceIn(1, 60)) }
     }
 
     /** 额度预警总开关（只影响通知，不影响刷新）。 */

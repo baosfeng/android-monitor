@@ -76,13 +76,21 @@ fun QuotaSettingsScreen(
     val refreshHours by viewModel.refreshHours.collectAsStateWithLifecycle()
     val plan by viewModel.ollamaPlan.collectAsStateWithLifecycle()
     var expandedId by remember { mutableStateOf<String?>(null) }
-    // 每个 provider 的刷新间隔（分钟）：进入页面读一次，改动就地更新并落盘
+    // 每个账号的刷新间隔（分钟）：进入页面读一次，改动就地更新并落盘。
+    // 键是实例键（第一实例 == 类型 id），所以老用户的 refresh_minutes 偏好天然命中。
     var intervals by remember {
-        mutableStateOf(providers.associate { it.id to viewModel.refreshMinutesFor(it.id) })
+        mutableStateOf(providers.associate { it.instanceId to viewModel.refreshMinutesFor(it.instanceId) })
     }
-    fun intervalOf(id: String): Int = intervals[id] ?: QuotaSettings.defaultMinutesFor(id)
-    fun setInterval(id: String, minutes: Int) {
-        intervals = intervals + (id to minutes)
+    // 新增账号时补一条默认值：不补的话 intervalOf 会退回类型默认值（行为相同，但选中态会闪一次）
+    LaunchedEffect(providers) {
+        val missing = providers.filter { it.instanceId !in intervals }
+        if (missing.isNotEmpty()) {
+            intervals = intervals + missing.associate { it.instanceId to viewModel.refreshMinutesFor(it.instanceId) }
+        }
+    }
+    fun intervalOf(instanceId: String): Int = intervals[instanceId] ?: viewModel.refreshMinutesFor(instanceId)
+    fun setInterval(instanceId: String, minutes: Int) {
+        intervals = intervals + (instanceId to minutes)
     }
     var thresholdOpen by remember { mutableStateOf(false) }
     // 弹窗关闭后焦点回「低余额提醒」行（口径「弹窗关闭后焦点回本行」）
@@ -170,45 +178,55 @@ fun QuotaSettingsScreen(
                     color = t.muted,
                     modifier = Modifier.padding(horizontal = t.space4, vertical = t.space3),
                 )
-                SettingsGroup(title = "Provider", modifier = Modifier.testTag("s19-providers")) {
-                    providers.forEachIndexed { index, info ->
-                        if (index > 0) IOSDivider()
-                        // 行本体在 QuotaProviderRows.kt（s18 路写区）：锚点只能由本屏包一层承载，
-                        // 逐字沿用锚点，行内点击/展开行为仍由行本体负责。
-                        Box(Modifier.fillMaxWidth().then(Modifier.providerRowTagOf(info.id))) {
-                            ProviderSettingsRow(
-                                info = info,
-                                expanded = expandedId == info.id,
-                                onToggle = {
-                                    expandedId = if (expandedId == info.id) null else info.id
-                                },
-                                onSave = { balance, usage ->
-                                    // 不在这里立即收行：等保存 + 查询有结果再决定（失败要留展开就地提示）
-                                    pendingCollapseId = info.id
-                                    viewModel.onSaveCredentialsFor(info.id, balance, usage)
-                                },
-                                onClear = {
-                                    pendingClearId = info.id
-                                    viewModel.onClearCredentialsFor(info.id)
-                                },
-                                saving = savingProviderId == info.id,
-                                saveError = saveErrors[info.id],
-                                intervalMinutes = intervalOf(info.id),
-                                onIntervalChange = { minutes ->
-                                    setInterval(info.id, minutes)
-                                    viewModel.onRefreshIntervalChange(info.id, minutes)
-                                },
-                            )
+                AccountGroups(
+                    providers = providers,
+                    expandedId = expandedId,
+                    savingProviderId = savingProviderId,
+                    saveErrors = saveErrors,
+                    intervalOf = ::intervalOf,
+                    onToggle = { instanceId ->
+                        expandedId = if (expandedId == instanceId) null else instanceId
+                    },
+                    onAdd = { providerTypeId ->
+                        val created = viewModel.onAddAccount(providerTypeId)
+                        if (created != null) {
+                            // 新账号默认展开：加完账号的下一步一定是填凭据
+                            expandedId = created
+                            toast.show("已添加账号 · 填写凭据后开始查询")
+                        } else {
+                            toast.show("添加失败 · 该 provider 未接入或账号已达上限")
                         }
-                    }
-                }
+                    },
+                    onSave = { instanceId, balance, usage ->
+                        // 不在这里立即收行：等保存 + 查询有结果再决定（失败要留展开就地提示）
+                        pendingCollapseId = instanceId
+                        viewModel.onSaveCredentialsFor(instanceId, balance, usage)
+                    },
+                    onClear = { instanceId ->
+                        pendingClearId = instanceId
+                        viewModel.onClearCredentialsFor(instanceId)
+                    },
+                    onRename = { instanceId, label ->
+                        viewModel.onRenameAccount(instanceId, label)
+                        toast.show(if (label.isBlank()) "已恢复默认名称" else "已改名为「$label」")
+                    },
+                    onDelete = { instanceId ->
+                        viewModel.onDeleteAccount(instanceId) { removed ->
+                            toast.show(if (removed) "账号已删除" else "至少要保留一个账号")
+                        }
+                    },
+                    onIntervalChange = { instanceId, minutes ->
+                        setInterval(instanceId, minutes)
+                        viewModel.onRefreshIntervalChange(instanceId, minutes)
+                    },
+                )
                 Text(
                     "API Key 与平台令牌都加密后只存本机，不写日志、不导出；卸载 App 即随之删除。",
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                     modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                 )
-                SettingsGroup(title = "预警", modifier = Modifier.testTag("s19-alerts")) {
+                TitledSettingsGroup(title = "预警", modifier = Modifier.testTag("s19-alerts")) {
                     AlertSwitchRow(
                         enabled = alertEnabled,
                         onChange = { enabled ->
@@ -252,7 +270,7 @@ fun QuotaSettingsScreen(
                     color = t.muted,
                     modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                 )
-                SettingsGroup(title = "刷新", modifier = Modifier.testTag("s19-refresh")) {
+                TitledSettingsGroup(title = "刷新", modifier = Modifier.testTag("s19-refresh")) {
                     RefreshRow(
                         selectedHours = refreshHours,
                         onSelect = { hours ->
@@ -267,7 +285,7 @@ fun QuotaSettingsScreen(
                     color = t.muted,
                     modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                 )
-                SettingsGroup(title = "Ollama 计费模式") {
+                TitledSettingsGroup(title = "Ollama 计费模式") {
                     PlanModeRow(selected = plan, onSelect = viewModel::onOllamaPlanChange)
                 }
                 Text(
@@ -312,23 +330,13 @@ fun QuotaSettingsScreen(
 
 /** 分组容器：分组小标题 + 卡片底 + 行间分割线（与设置页 iOS 分组一致）。 */
 @Composable
-private fun SettingsGroup(
+private fun TitledSettingsGroup(
     title: String,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val t = LocalDesignTokens.current
     SectionHeader(title = title)
-    Column(
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = t.space4)
-            .clip(RoundedCornerShape(t.radiusLg))
-            .background(t.surface)
-            .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg)),
-    ) {
-        content()
-    }
+    SettingsGroup(modifier = modifier, content = content)
 }
 
 /** 后台刷新频率（chip 组；0 = 关闭）。选中态互斥由数据层保证，这里只负责把选择交出去。 */

@@ -8,6 +8,7 @@ import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.domain.model.RecordType
 import com.bsfeng.monitor.domain.quota.ProviderAggregateInput
 import com.bsfeng.monitor.domain.quota.QuotaAggregator
+import com.bsfeng.monitor.domain.quota.QuotaInstances
 import com.bsfeng.monitor.quota.QuotaSnapshotStore
 import com.bsfeng.monitor.record.RecordStore
 import com.bsfeng.monitor.service.HeartbeatWatchdog
@@ -35,6 +36,7 @@ object WidgetDataProvider {
 
     private const val TAG = "WidgetDataProvider"
     private const val DAY_MS = 86_400_000L
+
 
     /** 广告跳过事件的落库口径：`type=SCREEN, action=AD_SKIPPED`（见 RecordCollector）。 */
     private const val AD_SKIPPED_ACTION = "AD_SKIPPED"
@@ -126,15 +128,21 @@ object WidgetDataProvider {
         runCatching {
             val container = context.serviceContainer
             val snapshots = QuotaSnapshotStore(context)
-            val inputs = container.quotaRegistry.all().map { provider ->
-                val snapshot = runCatching { snapshots.load(provider.id) }.getOrNull()
+            val registry = container.quotaRegistry
+            val instances = runCatching { container.quotaInstances.instances() }.getOrDefault(emptyList())
+            val inputs = instances.mapNotNull { instance ->
+                // 类型实现没装配（被 R8 裁掉 / 未来新增）时跳过这一行，不让整块白屏
+                val provider = registry.byId(instance.providerTypeId) ?: return@mapNotNull null
+                val snapshot = runCatching { snapshots.load(instance.instanceId) }.getOrNull()
+                val multi = instances.count { it.providerTypeId == instance.providerTypeId } > 1
                 ProviderAggregateInput(
-                    providerId = provider.id,
-                    displayName = provider.displayName,
+                    instanceId = instance.instanceId,
+                    providerTypeId = instance.providerTypeId,
+                    displayName = QuotaInstances.displayName(instance, provider.displayName, multi),
                     items = snapshot?.items.orEmpty(),
                     // 凭据是判断「用户到底配了没有」的唯一依据：残留的旧快照不代表还在用
                     balanceConfigured = runCatching {
-                        container.quotaCredentials.has(provider.id, provider.balanceCredentialKind)
+                        container.quotaCredentials.has(instance.instanceId, provider.balanceCredentialKind)
                     }.getOrDefault(false),
                     stale = snapshot?.stale ?: false,
                     fetchedAtEpochSecond = snapshot?.fetchedAtEpochSecond ?: 0L,
@@ -143,9 +151,10 @@ object WidgetDataProvider {
             val latestFetchedAt = inputs.maxOfOrNull { it.fetchedAtEpochSecond } ?: 0L
             QuotaWidgetData(
                 configured = inputs.any { it.balanceConfigured },
+                // 同类型多账号时行数会变多：组件已有 rowCount 上限截断（见 QuotaWidget），这里不再二次截
                 rows = QuotaAggregator.aggregate(inputs).map { row ->
                     QuotaRow(
-                        providerId = row.providerId,
+                        providerId = row.instanceId,
                         label = row.displayName,
                         remainingPercent = percent(row.primaryFraction),
                     )

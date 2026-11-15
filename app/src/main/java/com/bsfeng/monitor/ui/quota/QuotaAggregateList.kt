@@ -210,7 +210,7 @@ private fun AggregateRankList(
             }
             AggregateRankRow(
                 row = row,
-                onClick = { onOpenProvider(row.providerId) },
+                onClick = { onOpenProvider(row.instanceId) },
                 // 行内不再各自播入场：外层整块已经按 stagger 步骤一次起，逐行再 delay 会拖到 600ms+
                 modifier = Modifier.staggerEnterAt(-1).then(Modifier.rankedRowTagOf(index)),
             )

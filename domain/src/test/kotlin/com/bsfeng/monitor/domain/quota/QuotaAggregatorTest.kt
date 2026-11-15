@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 额度聚合榜单的口径：只收能算百分比的行、按剩余升序、同值按 providerId 稳定兜底。 */
+/** 额度聚合榜单的口径：只收能算百分比的行、按剩余升序、同值按**实例键**稳定兜底。 */
 class QuotaAggregatorTest {
 
     private fun percentItem(
@@ -36,6 +36,12 @@ class QuotaAggregatorTest {
         unit = QuotaUnit.USD,
     )
 
+    /**
+     * 一个账号实例的聚合输入。
+     *
+     * @param id 实例键（第一实例 == provider 类型 id，见 QuotaInstances.defaultInstance）
+     * @param typeId provider 类型 id；默认与实例键相同
+     */
     private fun provider(
         id: String,
         items: List<QuotaItem>,
@@ -43,8 +49,10 @@ class QuotaAggregatorTest {
         error: String? = null,
         stale: Boolean = false,
         fetchedAt: Long = 1_000L,
+        typeId: String = id,
     ) = ProviderAggregateInput(
-        providerId = id,
+        instanceId = id,
+        providerTypeId = typeId,
         displayName = id.uppercase(),
         items = items,
         balanceConfigured = configured,
@@ -66,13 +74,13 @@ class QuotaAggregatorTest {
         )
         assertEquals(
             listOf("opencode-go", "open-design", "ollama"),
-            rows.map { it.providerId },
+            rows.map { it.instanceId },
         )
         assertEquals(listOf(1, 2, 3), rows.map { it.rank })
     }
 
     @Test
-    fun `剩余比例相同按 providerId 字典序稳定`() {
+    fun `剩余比例相同按实例键字典序稳定`() {
         // 输入顺序故意与字典序相反：没有兜底时结果会随输入顺序抖动
         val rows = QuotaAggregator.aggregate(
             listOf(
@@ -83,13 +91,13 @@ class QuotaAggregatorTest {
         )
         assertEquals(
             listOf("deepseek", "ollama", "open-design"),
-            rows.map { it.providerId },
+            rows.map { it.instanceId },
         )
     }
 
     @Test
     fun `同输入重复聚合结果一致`() {
-        // 先与已知真值比对（比例相同按 providerId 字典序 → deepseek 在前、位次 1/2），
+        // 先与已知真值比对（比例相同按实例键字典序 → deepseek 在前、位次 1/2），
         // 再验两次独立调用的结果相等。以前断言的是 aggregate(input) == aggregate(input)，
         // 同一表达式恒真，改成空实现也照样绿（基建审计 I13）。
         val input = listOf(
@@ -97,10 +105,10 @@ class QuotaAggregatorTest {
             provider("deepseek", listOf(percentItem(remaining = 20.0))),
         )
         val first = QuotaAggregator.aggregate(input)
-        assertEquals(listOf("deepseek", "ollama"), first.map { it.providerId })
+        assertEquals(listOf("deepseek", "ollama"), first.map { it.instanceId })
         assertEquals(listOf(1, 2), first.map { it.rank })
         val second = QuotaAggregator.aggregate(input)
-        assertEquals(first.map { it.providerId to it.rank }, second.map { it.providerId to it.rank })
+        assertEquals(first.map { it.instanceId to it.rank }, second.map { it.instanceId to it.rank })
         assertEquals(first, second)
     }
 
@@ -114,7 +122,7 @@ class QuotaAggregatorTest {
                 provider("ollama", listOf(percentItem(remaining = 30.0))),
             ),
         )
-        assertEquals(listOf("ollama"), rows.map { it.providerId })
+        assertEquals(listOf("ollama"), rows.map { it.instanceId })
     }
 
     @Test
@@ -125,7 +133,7 @@ class QuotaAggregatorTest {
                 provider("open-design", listOf(percentItem(remaining = 60.0))),
             ),
         )
-        assertEquals(listOf("open-design"), rows.map { it.providerId })
+        assertEquals(listOf("open-design"), rows.map { it.instanceId })
     }
 
     @Test
@@ -136,7 +144,7 @@ class QuotaAggregatorTest {
                 provider("open-design", listOf(percentItem(remaining = 60.0))),
             ),
         )
-        assertEquals(listOf("open-design"), rows.map { it.providerId })
+        assertEquals(listOf("open-design"), rows.map { it.instanceId })
     }
 
     @Test
@@ -273,5 +281,37 @@ class QuotaAggregatorTest {
         val row = rows.single()
         assertEquals("a", row.primaryItem.id)
         assertEquals(listOf("c", "b"), row.otherItems.map { it.id })
+    }
+
+    // ───────────────────── 同类型多账号 ─────────────────────
+
+    @Test
+    fun `同类型两个账号比例相同时按实例键兜底不抖动`() {
+        // ollama 的两个账号剩余完全相同：没有实例键兜底时行序取决于输入顺序，
+        // 每次刷新都可能互换 —— 用户会以为数据在跳。
+        val inputs = listOf(
+            provider("ollama", listOf(percentItem(remaining = 20.0)), typeId = "ollama"),
+            provider("ollama#2", listOf(percentItem(remaining = 20.0)), typeId = "ollama"),
+        )
+        val forward = QuotaAggregator.aggregate(inputs)
+        val reversed = QuotaAggregator.aggregate(inputs.reversed())
+
+        assertEquals(listOf("ollama", "ollama#2"), forward.map { it.instanceId })
+        assertEquals(forward.map { it.instanceId }, reversed.map { it.instanceId })
+        assertEquals(listOf(1, 2), forward.map { it.rank })
+        // 两行都保留自己的类型 id：卡片排版 / 限流口径仍按类型走
+        assertEquals(listOf("ollama", "ollama"), forward.map { it.providerTypeId })
+    }
+
+    @Test
+    fun `同类型两个账号各自出自己的一行`() {
+        val rows = QuotaAggregator.aggregate(
+            listOf(
+                provider("ollama", listOf(percentItem(remaining = 55.0))),
+                provider("ollama#2", listOf(percentItem(remaining = 8.0))),
+                provider("deepseek", listOf(percentItem(remaining = 30.0))),
+            ),
+        )
+        assertEquals(listOf("ollama#2", "deepseek", "ollama"), rows.map { it.instanceId })
     }
 }

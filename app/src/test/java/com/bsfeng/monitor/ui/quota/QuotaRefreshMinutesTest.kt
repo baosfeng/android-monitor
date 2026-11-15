@@ -14,16 +14,16 @@ class QuotaRefreshMinutesTest {
 
     @Test
     fun `改当前选中家的间隔才同步定时器`() {
-        assertTrue(shouldSyncRefreshMinutes(changedProviderId = "ollama", selectedProviderId = "ollama"))
+        assertTrue(shouldSyncRefreshMinutes(changedInstanceId = "ollama", selectedInstanceId = "ollama"))
     }
 
     @Test
     fun `改别家的间隔不动当前家的定时器`() {
-        assertFalse(shouldSyncRefreshMinutes(changedProviderId = "deepseek", selectedProviderId = "ollama"))
+        assertFalse(shouldSyncRefreshMinutes(changedInstanceId = "deepseek", selectedInstanceId = "ollama"))
     }
 
     @Test
     fun `聚合视图下选中家为空时不误同步`() {
-        assertFalse(shouldSyncRefreshMinutes(changedProviderId = "ollama", selectedProviderId = ""))
+        assertFalse(shouldSyncRefreshMinutes(changedInstanceId = "ollama", selectedInstanceId = ""))
     }
 }

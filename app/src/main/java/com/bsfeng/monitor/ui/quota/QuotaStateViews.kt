@@ -168,7 +168,7 @@ fun QuotaConfigCard(
             onClick = { onSave(balance.trim(), if (needsUsageRow) usage.trim() else "") },
         )
         // 只有 ollama 有公开的 Key 管理页；别家没有对应落地页，不摆死链
-        if (info.id == OLLAMA_ID) {
+        if (info.providerTypeId == OLLAMA_ID) {
             Spacer(Modifier.height(t.space1))
             QuotaKeyLink()
         }

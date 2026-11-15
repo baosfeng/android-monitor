@@ -69,7 +69,7 @@ class QuotaAlertEvaluatorTest {
     fun `一次跨多档只提醒最低档`() {
         // 6% 直接掉到 3%：命中 4 档（不是 5/4 各报一次）
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0)),
             state = emptyMap(),
         )
@@ -81,12 +81,12 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `同一周期同一档不重复提醒`() {
         val first = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0)),
             state = emptyMap(),
         )
         val second = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.5)),
             state = first.state,
         )
@@ -96,12 +96,12 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `跌破更低档时再提醒一次`() {
         val first = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0)),
             state = emptyMap(),
         )
         val second = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 1.5)),
             state = first.state,
         )
@@ -112,12 +112,12 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `余额回升到五以上后清空记录`() {
         val first = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0)),
             state = emptyMap(),
         )
         val recovered = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 40.0)),
             state = first.state,
         )
@@ -128,12 +128,12 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `周期变化后重新计数`() {
         val first = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0, resetAt = 1_000L)),
             state = emptyMap(),
         )
         val nextCycle = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(percentItem(remaining = 3.0, resetAt = 2_000L)),
             state = first.state,
         )
@@ -146,7 +146,7 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `余额低于阈值提醒一次`() {
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "42.00")),
             state = emptyMap(),
             lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
@@ -160,7 +160,7 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `余额充足不提醒`() {
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "120.00")),
             state = emptyMap(),
             lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
@@ -171,13 +171,13 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `余额充值回升后重置提醒标记`() {
         val first = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "42.00")),
             state = emptyMap(),
             lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
         )
         val topUp = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "200.00")),
             state = first.state,
             lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
@@ -189,7 +189,7 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `币种没有配置阈值时不提醒`() {
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "3.00", unit = QuotaUnit.USD)),
             state = emptyMap(),
             lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
@@ -210,7 +210,7 @@ class QuotaAlertEvaluatorTest {
             unit = QuotaUnit.USD,
         )
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "ollama",
+            instanceId = "ollama",
             items = listOf(item),
             state = emptyMap(),
         )
@@ -221,11 +221,58 @@ class QuotaAlertEvaluatorTest {
     @Test
     fun `没有总额的金额型不会被当成百分比`() {
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = "deepseek",
+            instanceId = "deepseek",
             items = listOf(balanceItem(remaining = "0.50")),
             state = emptyMap(),
             lowBalanceThresholds = emptyMap(),
         )
         assertTrue(result.alerts.isEmpty())
+    }
+
+    // ───────────────────── 同类型多账号：状态键隔离 ─────────────────────
+
+    @Test
+    fun `同类型两个账号的预警状态互不覆盖`() {
+        // 两个账号各有一条 session 额度，剩余都掉到 3%：状态键若按类型 id 拼，
+        // 第二个账号会把第一个的「已提醒档位」当成自己的，于是只提醒一次。
+        val first = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 3.0)),
+            state = emptyMap(),
+        )
+        val second = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama#2",
+            items = listOf(percentItem(remaining = 3.0)),
+            state = first.state,
+        )
+
+        assertEquals("第一个账号必须提醒", 1, first.alerts.size)
+        assertEquals("第二个账号也必须提醒", 1, second.alerts.size)
+        assertEquals("ollama", first.alerts.first().instanceId)
+        assertEquals("ollama#2", second.alerts.first().instanceId)
+        // 状态键按实例隔离：两份都要在，且键不同
+        assertTrue("ollama.session" in second.state)
+        assertTrue("ollama#2.session" in second.state)
+        assertEquals(setOf("ollama.session", "ollama#2.session"), second.state.keys)
+    }
+
+    @Test
+    fun `预警状态键按实例与额度项拼接`() {
+        assertEquals("ollama#2.session", alertStateKey("ollama#2", "session"))
+    }
+
+    @Test
+    fun `同一账号重复评估仍然不重复提醒（实例键不破坏去重）`() {
+        val first = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama#2",
+            items = listOf(percentItem(remaining = 3.0)),
+            state = emptyMap(),
+        )
+        val second = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama#2",
+            items = listOf(percentItem(remaining = 3.2)),
+            state = first.state,
+        )
+        assertTrue(second.alerts.isEmpty())
     }
 }

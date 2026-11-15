@@ -66,6 +66,41 @@ internal const val CLEAR_CREDENTIALS_LABEL: String = "清除凭据"
 /** 清除成功后的一次性提示（toast 文案，与触觉同一次操作只发一份）。 */
 internal const val CLEAR_CREDENTIALS_DONE: String = "凭据已清除 · 重新填写后才能查询"
 
+/** 删账号的二次确认标题。 */
+internal const val DELETE_ACCOUNT_TITLE: String = "删除这个账号？"
+
+/**
+ * 删账号的二次确认正文：写清「删的是这个账号的全部本机数据」。
+ *
+ * 与「清除凭据」的差别在于**把这一行整个从额度页拿掉**（榜单 / chip 都不再出现），
+ * 所以必须点名是哪个账号 —— 同类型两个账号时，用户很容易在展开状态下删错。
+ */
+internal fun deleteAccountMessage(accountName: String): String =
+    "将从额度页移除「" + accountName + "」，并删除它本机保存的 Key / 令牌与该账号最近一次的额度数据；" +
+        "同一 provider 的其他账号不受影响。此操作没有撤销路径，需要重新添加并填写凭据才能恢复。"
+
+/**
+ * 删账号的二次确认（破坏性语义，与断开凭据同一个 [ConfirmDialog] 载体）。
+ */
+@Composable
+internal fun DeleteAccountConfirmDialog(
+    visible: Boolean,
+    accountName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    ConfirmDialog(
+        visible = visible,
+        title = DELETE_ACCOUNT_TITLE,
+        message = deleteAccountMessage(accountName),
+        confirmLabel = "删除账号",
+        dismissLabel = "取消",
+        destructive = true,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
 /**
  * 「清除凭据」次级操作：文字按钮、danger 语义、默认不抢主按钮的注意力。
  *

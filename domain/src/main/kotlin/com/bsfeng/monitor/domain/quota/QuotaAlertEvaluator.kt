@@ -3,12 +3,21 @@ package com.bsfeng.monitor.domain.quota
 import java.math.BigDecimal
 
 /**
+ * 预警状态键：`instanceId.itemId`。
+ *
+ * 用实例键而不是类型 id：同一 provider 挂两个账号时，两条同 id 的额度项若共用一个状态键，
+ * 后评估的账号会把前一个的「已提醒档位」写掉，表现是「另一个账号永远不提醒」。
+ */
+fun alertStateKey(instanceId: String, itemId: String): String = "$instanceId.$itemId"
+
+/**
  * 额度阈值提醒 —— 纯逻辑，可在 JVM 单测里直接断言。
  *
  * 规则：
  * - 百分比类额度（含「金额 + 总额」）按剩余比例走 5 / 4 / 3 / 2 / 1 五档，一次跨多档只命中最低档；
  * - 账户余额类（金额且无总额，如 DeepSeek）没有比例可言，走「低于设定金额提醒一次」；
  * - 同一额度同一周期同一档只提醒一次；周期变化或余额回升后清零，下次下降可再次提醒。
+ * - 状态键按**实例**隔离，同类型多账号各记各的。
  */
 object QuotaAlertEvaluator {
 
@@ -39,9 +48,10 @@ object QuotaAlertEvaluator {
 
     /** 一条待发送的提醒。 */
     data class Alert(
-        /** 状态键：`providerId.itemId`。 */
+        /** 状态键：`instanceId.itemId`（实例键，同类型多账号互不覆盖）。 */
         val key: String,
-        val providerId: String,
+        /** 实例键；通知 ID 由它稳定派生，标题用它对应的账号名。 */
+        val instanceId: String,
         val itemTitle: String,
         /** 命中的百分比阈值（5..1）；余额型低余额提醒为 [LOW_BALANCE_THRESHOLD]。 */
         val threshold: Int,
@@ -89,7 +99,7 @@ object QuotaAlertEvaluator {
      * @param lowBalanceThresholds 各币种的低余额阈值（只对「金额且无总额」的额度生效）
      */
     fun evaluate(
-        providerId: String,
+        instanceId: String,
         items: List<QuotaItem>,
         state: Map<String, AlertState>,
         lowBalanceThresholds: Map<QuotaUnit, BigDecimal> = emptyMap(),
@@ -98,7 +108,7 @@ object QuotaAlertEvaluator {
         val updated = state.toMutableMap()
 
         for (item in items) {
-            val key = "$providerId.${item.id}"
+            val key = alertStateKey(instanceId, item.id)
             val previous = state[key]
             val cycleId = item.resetsAtEpochSecond ?: item.period?.endEpochSecond
             var current = AlertState(cycleId = cycleId)
@@ -122,7 +132,7 @@ object QuotaAlertEvaluator {
                 if (!current.lowBalanceNotified) {
                     alerts += Alert(
                         key = key,
-                        providerId = providerId,
+                        instanceId = instanceId,
                         itemTitle = item.title,
                         threshold = LOW_BALANCE_THRESHOLD,
                         remainingPercent = 0,
@@ -146,7 +156,7 @@ object QuotaAlertEvaluator {
             if (current.notifiedThreshold == 0 || threshold < current.notifiedThreshold) {
                 alerts += Alert(
                     key = key,
-                    providerId = providerId,
+                    instanceId = instanceId,
                     itemTitle = item.title,
                     threshold = threshold,
                     remainingPercent = (fraction * 100f).toInt(),

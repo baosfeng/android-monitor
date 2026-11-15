@@ -26,11 +26,12 @@ import org.json.JSONObject
  * 只存**成功**的结果（失败时保留旧快照，不覆盖），并且只存最近一次，不做历史。
  */
 interface QuotaSnapshotCache {
-    fun load(providerId: String): QuotaSnapshot?
+    /** @param instanceId 账号实例键（不是 provider 类型 id）：同类型多账号各存各的 */
+    fun load(instanceId: String): QuotaSnapshot?
     fun save(snapshot: QuotaSnapshot)
 
-    /** 清掉某个 provider 的快照：用户断开凭据后不能继续回显旧数字。 */
-    fun clear(providerId: String)
+    /** 清掉某个账号的快照：用户断开凭据 / 删账号后不能继续回显旧数字。 */
+    fun clear(instanceId: String)
 
     fun clear()
 }
@@ -91,6 +92,7 @@ object QuotaSnapshotJson {
 
     fun encode(snapshot: QuotaSnapshot): String = JSONObject().apply {
         put("providerId", snapshot.providerId)
+        put("providerTypeId", snapshot.providerTypeId)
         put("fetchedAt", snapshot.fetchedAtEpochSecond)
         put("items", JSONArray().apply {
             snapshot.items.forEach { put(itemToJson(it)) }
@@ -109,6 +111,8 @@ object QuotaSnapshotJson {
         val usage = root.optJSONObject("usage")?.let(::usageFromJson)
         QuotaSnapshot(
             providerId = providerId,
+            // 老快照没有这个字段：按零迁移口径退回实例键（第一实例两者相同）
+            providerTypeId = root.optString("providerTypeId").takeIf { it.isNotEmpty() } ?: providerId,
             items = items,
             usage = usage,
             fetchedAtEpochSecond = root.optLong("fetchedAt", 0L),

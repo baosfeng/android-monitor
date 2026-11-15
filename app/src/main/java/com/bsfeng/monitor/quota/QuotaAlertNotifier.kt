@@ -14,6 +14,7 @@ import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import org.json.JSONObject
 import java.math.BigDecimal
+import kotlin.math.absoluteValue
 
 /**
  * 额度阈值提醒 —— 把「评估结果」发成系统通知，并把已提醒状态持久化。
@@ -44,9 +45,14 @@ class QuotaAlertNotifier(
         else -> null
     }
 
-    /** 评估一次快照并发送命中的提醒；返回本次发出的条数（供日志与测试断言）。 */
+    /**
+     * 评估一次快照并发送命中的提醒；返回本次发出的条数（供日志与测试断言）。
+     *
+     * @param instanceId 实例键：状态键与通知 ID 都由它稳定派生，同类型两个账号各占一个槽位
+     * @param providerName 通知标题里的账号名（多账号时已带账号名，见 [QuotaInstances.displayName]）
+     */
     fun handle(
-        providerId: String,
+        instanceId: String,
         providerName: String,
         items: List<QuotaItem>,
     ): Int {
@@ -56,7 +62,7 @@ class QuotaAlertNotifier(
             .mapNotNull { unit -> lowBalanceThreshold(unit)?.let { unit to it } }
             .toMap()
         val result = QuotaAlertEvaluator.evaluate(
-            providerId = providerId,
+            instanceId = instanceId,
             items = items,
             state = state,
             lowBalanceThresholds = thresholds,
@@ -75,7 +81,7 @@ class QuotaAlertNotifier(
         val body = result.alerts.joinToString("；") { alert ->
             alert.bodyText(unitOf[alert.key.substringAfterLast('.')] ?: QuotaUnit.PERCENT)
         }
-        post(title, body)
+        post(notificationIdOf(instanceId), title, body)
         return result.alerts.size
     }
 
@@ -101,7 +107,7 @@ class QuotaAlertNotifier(
         runCatching { manager.deleteNotificationChannel(LEGACY_CHANNEL_ID) }
     }
 
-    private fun post(title: String, body: String) {
+    private fun post(notificationId: Int, title: String, body: String) {
         ensureChannel()
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, CHANNEL_ID)
@@ -126,7 +132,7 @@ class QuotaAlertNotifier(
             builder.setContentIntent(pending)
         }
         runCatching {
-            manager.notify(NOTIFICATION_ID, builder.build())
+            manager.notify(notificationId, builder.build())
         }.onFailure { Log.w(TAG, "额度提醒发送失败：${it.javaClass.simpleName}") }
     }
 
@@ -181,6 +187,22 @@ class QuotaAlertNotifier(
 
         /** 旧渠道（无 lockscreenVisibility）：建新渠道时一并删除，避免设置页出现两个同名项。 */
         const val LEGACY_CHANNEL_ID = "quota_alert"
+
+        /** 第一实例的通知 ID，沿用历史固定值 7301（老用户已有的那条通知不被另起一条）。 */
         const val NOTIFICATION_ID = 7301
+
+        /** 通知 ID 槽位区间大小：7301 起往后 900 个槽位，够所有账号互不覆盖。 */
+        private const val NOTIFICATION_SPAN = 900
+
+        /**
+         * 通知 ID 由实例键稳定派生。
+         *
+         * 固定 7301 会让第二个账号的提醒**覆盖**第一条（同一 id 系统只留最新一条），
+         * 用户只看到「某个账号低了」，另一个账号的提醒等于没发。
+         * 用 instanceId 的稳定散列：同一账号每次落在同一槽位（同账号多档提醒仍合并成一条），
+         * 不同账号几乎不会撞；真撞了也只是并入同一条，不会崩。
+         */
+        fun notificationIdOf(instanceId: String): Int =
+            NOTIFICATION_ID + instanceId.hashCode().absoluteValue % NOTIFICATION_SPAN
     }
 }

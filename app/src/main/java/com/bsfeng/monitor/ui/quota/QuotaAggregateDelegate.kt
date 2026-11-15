@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -23,15 +23,21 @@ internal class QuotaAggregateDelegate(
     /**
      * 一屏所需的聚合数据。
      *
-     * 只订阅 `states`：provider 注册表是启动时装配好的静态集合，真正会变的是各家状态，
-     * 所以每次重算时现读 `providers()` 即可，不需要再订阅一遍注册表。
+     * 订阅 `states` + `instances`：账号清单会随「添加 / 删除账号」变化，
+     * provider 注册表是启动时装配好的静态集合，现读 `providers()` 即可。
      */
     val snapshot: StateFlow<QuotaAggregateSnapshot> = repository.states
-        .map { states -> buildAggregateSnapshot(repository.providers(), states) }
+        .combine(repository.instances) { states, instances ->
+            buildAggregateSnapshot(instances, repository.providers(), states)
+        }
         .stateIn(
             scope,
             SharingStarted.Eagerly,
-            buildAggregateSnapshot(repository.providers(), repository.states.value),
+            buildAggregateSnapshot(
+                repository.instances.value,
+                repository.providers(),
+                repository.states.value,
+            ),
         )
 
     /**

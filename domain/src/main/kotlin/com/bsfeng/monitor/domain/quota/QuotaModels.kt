@@ -141,9 +141,15 @@ data class QuotaUsage(
     val costUnit: QuotaUnit? = null,
 )
 
-/** 一次拉取的完整快照；[stale] = 本次刷新失败、沿用上次成功数据。 */
+/**
+ * 一次拉取的完整快照；[stale] = 本次刷新失败、沿用上次成功数据。
+ *
+ * [providerId] 是**实例键**（同一 provider 类型可挂多个账号，见 [QuotaInstance.instanceId]）；
+ * 类型的 id 单独由 [providerTypeId] 带，供卡片排版与限流口径分流。
+ */
 data class QuotaSnapshot(
     val providerId: String,
+    val providerTypeId: String = providerId,
     val items: List<QuotaItem> = emptyList(),
     val usage: QuotaUsage? = null,
     val fetchedAtEpochSecond: Long = 0L,

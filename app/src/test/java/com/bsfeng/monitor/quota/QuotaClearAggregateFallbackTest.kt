@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.quota
 
+import com.bsfeng.monitor.domain.quota.QuotaInstance
 import com.bsfeng.monitor.domain.quota.QuotaKind
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.ui.quota.QuotaAggregateStatus
@@ -20,8 +21,8 @@ import org.junit.Test
 class QuotaClearAggregateFallbackTest {
 
     /** 清除后的状态：凭据没了、数据也清了（与 [QuotaRepository.clearCredentials] 一致）。 */
-    private fun clearedState(providerId: String) = QuotaRepository.ProviderState(
-        providerId = providerId,
+    private fun clearedState(instanceId: String) = QuotaRepository.ProviderState(
+        instanceId = instanceId,
         items = emptyList(),
         usage = null,
         fetchedAtEpochSecond = 0L,
@@ -34,6 +35,7 @@ class QuotaClearAggregateFallbackTest {
     fun `断开后该家从榜单消失且不占灰行`() {
         val percentProvider = FakeQuotaProvider(id = "opencode-go", displayName = "OpenCode Go")
         val snapshot = buildAggregateSnapshot(
+            instances = instancesOf(percentProvider),
             providers = listOf(percentProvider),
             states = mapOf(percentProvider.id to clearedState(percentProvider.id)),
         )
@@ -53,12 +55,13 @@ class QuotaClearAggregateFallbackTest {
         val cleared = FakeQuotaProvider(id = "ollama", displayName = "Ollama")
         val alive = FakeQuotaProvider(id = "opencode-go", displayName = "OpenCode Go")
         val aliveState = QuotaRepository.ProviderState(
-            providerId = alive.id,
+            instanceId = alive.id,
             items = listOf(sampleItem(remaining = "12")),
             balanceConfigured = true,
             fetchedAtEpochSecond = 1_700_000_000L,
         )
         val snapshot = buildAggregateSnapshot(
+            instances = instancesOf(cleared, alive),
             providers = listOf(cleared, alive),
             states = mapOf(
                 cleared.id to clearedState(cleared.id),
@@ -67,7 +70,7 @@ class QuotaClearAggregateFallbackTest {
         )
 
         assertEquals("只剩还连着的那家", 1, snapshot.rows.size)
-        assertEquals(alive.id, snapshot.rows.first().providerId)
+        assertEquals(alive.id, snapshot.rows.first().instanceId)
         assertEquals("只剩一家时位次仍是 1", 1, snapshot.rows.first().rank)
         assertEquals(1, snapshot.configuredCount)
     }
@@ -90,6 +93,7 @@ class QuotaClearAggregateFallbackTest {
             ),
         )
         val snapshot = buildAggregateSnapshot(
+            instances = instancesOf(moneyOnly),
             providers = listOf(moneyOnly),
             states = mapOf(moneyOnly.id to clearedState(moneyOnly.id)),
         )
@@ -98,4 +102,8 @@ class QuotaClearAggregateFallbackTest {
         assertTrue("断开后不该还显示「余额型 · 无总量」的灰行", snapshot.excluded.isEmpty())
         assertFalse("不该有失败提示：断开不是查询失败", snapshot.failureMessage != null)
     }
+
+    /** 每个 provider 一个默认实例（instanceId == 类型 id，零迁移口径）。 */
+    private fun instancesOf(vararg providers: FakeQuotaProvider): List<QuotaInstance> =
+        providers.map { QuotaInstance(it.id, it.id) }
 }

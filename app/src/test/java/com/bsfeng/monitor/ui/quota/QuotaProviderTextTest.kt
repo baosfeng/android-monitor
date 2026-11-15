@@ -20,7 +20,9 @@ class QuotaProviderTextTest {
         balanceConfigured: Boolean = false,
         usageConfigured: Boolean = false,
     ) = QuotaProviderInfo(
-        id = id,
+        // 单账号用例：实例键 == 类型 id（零迁移口径）
+        instanceId = id,
+        providerTypeId = id,
         displayName = id,
         connected = connected,
         balanceConfigured = balanceConfigured,

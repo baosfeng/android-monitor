@@ -100,7 +100,7 @@ fun QuotaScreen(
     val snapshot by viewModel.aggregateSnapshot.collectAsStateWithLifecycle()
     val toast = rememberToastHostState()
     val listState = rememberLazyListState()
-    val info = providers.firstOrNull { it.id == selectedId }
+    val info = providers.firstOrNull { it.instanceId == selectedId }
     // 两个回焦点（锚点 s18-retry 移除后 / s18-settings 键盘）：页头是这两条回位信号的终点
     val refreshFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
@@ -190,9 +190,9 @@ fun QuotaScreen(
                         QuotaAggregateBody(
                             snapshot = snapshot,
                             // 下钻 = 切单家并选中该家；toast 报「已切到单家 · X」
-                            onOpenProvider = { providerId ->
-                                viewModel.onOpenProviderFromAggregate(providerId)
-                                val name = providers.firstOrNull { it.id == providerId }?.displayName ?: providerId
+                            onOpenProvider = { instanceId ->
+                                viewModel.onOpenProviderFromAggregate(instanceId)
+                                val name = providers.firstOrNull { it.instanceId == instanceId }?.displayName ?: instanceId
                                 toast.show("已切到单家 · " + name)
                             },
                             onConfigure = onOpenSettings,
@@ -206,14 +206,16 @@ fun QuotaScreen(
                         QuotaProviderChips(
                             providers = providers,
                             selectedId = selectedId,
-                            onSelect = { providerId ->
-                                val name = providers.firstOrNull { it.id == providerId }?.displayName ?: providerId
-                                viewModel.onSelectProvider(providerId)
-                                toast.show(if (providerId == OPEN_DESIGN_ID) name + " · 需浏览器会话令牌" else name + " · 已切换")
+                            onSelect = { instanceId ->
+                                val picked = providers.firstOrNull { it.instanceId == instanceId }
+                                val name = picked?.displayName ?: instanceId
+                                viewModel.onSelectProvider(instanceId)
+                                val needsToken = picked?.providerTypeId == OPEN_DESIGN_ID
+                                toast.show(if (needsToken) name + " · 需浏览器会话令牌" else name + " · 已切换")
                             },
                         )
                     }
-                    if (selectedId == OLLAMA_ID) {
+                    if (info?.providerTypeId == OLLAMA_ID) {
                         item {
                             QuotaPlanBar(
                                 plan = plan,
@@ -434,10 +436,10 @@ private fun QuotaBody(
     val now = System.currentTimeMillis() / 1000L
     // 凭据输入提到卡片外面：保存失败后配置卡随状态一起卸载，再回来时已输入的 Key 不能丢
     // （锚点 s18-save 边界「Key 无效时已输入的 Key 不清空」）。
-    var balanceInput by remember(info?.id) { mutableStateOf("") }
-    var usageInput by remember(info?.id) { mutableStateOf("") }
+    var balanceInput by remember(info?.instanceId) { mutableStateOf("") }
+    var usageInput by remember(info?.instanceId) { mutableStateOf("") }
     // 错误态里点过「修改 Key」：只回配置卡（保留输入 + 就地提示），不与错误块并列成两个入口
-    var editingKey by remember(info?.id) { mutableStateOf(false) }
+    var editingKey by remember(info?.instanceId) { mutableStateOf(false) }
     LaunchedEffect(hasData) { if (hasData) editingKey = false }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = t.space4),
@@ -516,11 +518,11 @@ private fun QuotaDataBody(
     val t = LocalDesignTokens.current
     // 面板 / 用量卡跟着「实际渲染的那一版额度卡」走：计费模式撑得起时就是所选口径，
     // 否则回落实际结构 —— 与 QuotaCard 的分流同源，避免面板锚点与卡片各说各的（P1-2）。
-    val hasPercent = quotaCardLayout(info.id, plan, state.items) == QuotaCardLayout.PERCENT
+    val hasPercent = quotaCardLayout(info.providerTypeId, plan, state.items) == QuotaCardLayout.PERCENT
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(Modifier.panelTagOf(info.id, hasPercent)),
+            .then(Modifier.panelTagOf(info.providerTypeId, hasPercent)),
         verticalArrangement = Arrangement.spacedBy(t.space3),
     ) {
         if (error != null) {
@@ -539,7 +541,7 @@ private fun QuotaDataBody(
                 if (state.items.isNotEmpty()) {
                     Box(Modifier.fillMaxWidth().testTag("s18-stale")) {
                         QuotaCard(
-                            providerId = info.id,
+                            providerTypeId = info.providerTypeId,
                             state = state,
                             plan = plan,
                             nowEpochSecond = nowEpochSecond,
@@ -550,7 +552,7 @@ private fun QuotaDataBody(
         }
         if (error == null && state.items.isNotEmpty()) {
             QuotaCard(
-                providerId = info.id,
+                providerTypeId = info.providerTypeId,
                 state = state,
                 plan = plan,
                 nowEpochSecond = nowEpochSecond,
@@ -570,7 +572,7 @@ private fun QuotaDataBody(
                 usage = checkNotNull(state.usage),
                 range = state.range,
                 costUnit = costUnitOf(state),
-                variant = usageVariantOf(info.id, hasPercent),
+                variant = usageVariantOf(info.providerTypeId, hasPercent),
                 onRangeChange = onRangeChange,
                 modifier = Modifier.staggerEnterAt(1),
             )
@@ -677,7 +679,7 @@ private fun QuotaErrorBlock(
  *
  * 分支里写字面量 testTag：锚点对账是 grep 源码的，拼字符串扫不到。
  */
-private fun Modifier.panelTagOf(providerId: String, hasPercent: Boolean): Modifier = when (providerId) {
+private fun Modifier.panelTagOf(providerTypeId: String, hasPercent: Boolean): Modifier = when (providerTypeId) {
     OLLAMA_ID -> if (hasPercent) testTag("s18-panel-ollama-legacy") else testTag("s18-panel-ollama-usd")
     "deepseek" -> testTag("s18-panel-deepseek")
     "opencode-go" -> testTag("s18-panel-opencode")
@@ -686,10 +688,10 @@ private fun Modifier.panelTagOf(providerId: String, hasPercent: Boolean): Modifi
 }
 
 /** 用量卡用哪一套锚点（三家的卡面不同，口径各给一组锚点）。 */
-private fun usageVariantOf(providerId: String, hasPercent: Boolean): UsageCardVariant = when {
-    providerId == "deepseek" -> UsageCardVariant.DEEPSEEK
+private fun usageVariantOf(providerTypeId: String, hasPercent: Boolean): UsageCardVariant = when {
+    providerTypeId == "deepseek" -> UsageCardVariant.DEEPSEEK
     // Ollama 旧版计划只返回百分比限额，用量侧也只有请求次数
-    providerId == OLLAMA_ID && hasPercent -> UsageCardVariant.OLLAMA_LEGACY
+    providerTypeId == OLLAMA_ID && hasPercent -> UsageCardVariant.OLLAMA_LEGACY
     else -> UsageCardVariant.OLLAMA_USD
 }
 

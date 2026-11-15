@@ -3,6 +3,8 @@ package com.bsfeng.monitor.core.di
 import android.app.Application
 import com.bsfeng.monitor.domain.quota.QuotaProviderRegistry
 import com.bsfeng.monitor.quota.QuotaAlertNotifier
+import com.bsfeng.monitor.quota.QuotaInstanceCatalog
+import com.bsfeng.monitor.quota.QuotaInstanceStore
 import com.bsfeng.monitor.quota.QuotaCredentialStore
 import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.quota.QuotaSnapshotStore
@@ -93,6 +95,11 @@ class ServiceContainer(private val app: Application) {
         QuotaAlertNotifier(app) { MainActivity.quotaTabIntent(app) }
     }
 
+    /** 账号实例清单（同一 provider 可挂多个账号）；空清单时按 registry 合成默认单实例。 */
+    val quotaInstances: QuotaInstanceCatalog by lazy {
+        QuotaInstanceStore(app, quotaRegistry.all().map { it.id })
+    }
+
     /** 额度状态单一数据源：拉取 / 节流 / 退避 / 预警。 */
     val quotaRepository: QuotaRepository by lazy {
         QuotaRepository(
@@ -102,6 +109,7 @@ class ServiceContainer(private val app: Application) {
             // 失败原因写 logcat（tag=Quota），排查「查询失败」时 adb logcat -s Quota 就能看到
             logger = { message -> android.util.Log.w("Quota", message) },
             cache = QuotaSnapshotStore(app),
+            catalog = quotaInstances,
         )
     }
 
