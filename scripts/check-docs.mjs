@@ -55,11 +55,10 @@ const LINE_BASELINE = {
   'docs/踩坑/进程被系统冻结导致无障碍全部失效.md': 112,
   'docs/踩坑/MIUI-force-stop导致无障碍服务被自动移除.md': 99,
   'docs/小组件/调研.md': 91,
-  'docs/交互设计/s12a-组件级锚点登记.md': 89,
+  'docs/交互设计/s12a-组件级锚点登记.md': 88,
   'docs/开发指南/Android适配指南.md': 88,
   'docs/更新检测/概述.md': 88,
   'docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md': 84,
-  'docs/额度监控/设计.md': 83,
 };
 
 const args = new Set(process.argv.slice(2));
