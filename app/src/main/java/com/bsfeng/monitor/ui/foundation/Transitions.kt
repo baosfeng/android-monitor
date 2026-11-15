@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.bsfeng.monitor.ui.components.rememberMotionTier
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 /**
@@ -92,6 +94,14 @@ data class TransitionSpec(
 
 /** 弹窗入场缩放的起点（原型 .dialog 的 pop 观感：0.94 → 1）。 */
 const val DIALOG_SCALE_FROM: Float = 0.94f
+
+/**
+ * 覆盖层返回栈 key 的自增源。
+ *
+ * 每个 [AnimatedScreenOverlay] 在一次组合生命周期里拿一个固定 key：同一层不会因为重组
+ * 重复登记，不同层也不会互相覆盖 —— 否则同时打开两个覆盖层时返回键只认得后注册的那个。
+ */
+private val OVERLAY_KEY_SEQ = AtomicInteger(0)
 
 /**
  * 纯函数：按角色 + 动效开关 + 主题 token 生成转场规格。
@@ -269,10 +279,22 @@ fun AnimatedScreenOverlay(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     backEnabled: Boolean = true,
+    /** 在返回栈里的层级；设置页子页传 [BackLayer.PAGE_SUB]，其余整屏覆盖默认 [BackLayer.OVERLAY]。 */
+    backLayer: BackLayer = BackLayer.OVERLAY,
     content: @Composable () -> Unit,
 ) {
+    // 装配了 [BackRouter] 时由它统一分发（按层级与打开顺序排序，一次只退一层）；
+    // 未装配（预览 / 单测）时退回本组件自带的 BackHandler，行为与改造前一致。
+    val router = LocalBackRouter.current
+    val backKey = remember { "overlay-" + OVERLAY_KEY_SEQ.incrementAndGet() }
+    BackLayerRegistration(
+        key = backKey,
+        layer = backLayer,
+        enabled = backEnabled && visible,
+        onBack = onBack,
+    )
     // BackHandler 放在 AnimatedVisibility 外层：退出动画期间（visible 已为 false、内容仍在组合中）不再拦截返回键
-    BackHandler(enabled = backEnabled && visible) { onBack() }
+    BackHandler(enabled = router == null && backEnabled && visible) { onBack() }
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,

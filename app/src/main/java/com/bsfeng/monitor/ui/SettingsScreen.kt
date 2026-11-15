@@ -51,6 +51,7 @@ import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
+import com.bsfeng.monitor.ui.foundation.BackLayer
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import com.bsfeng.monitor.ui.foundation.pressFeedback
@@ -191,7 +192,13 @@ fun SettingsScreen(
             if (parent != null) onOpenSubPage(parent) else onCloseSubPage()
         }
         // 二级页覆盖层：一级页不卸载，返回时滚动位置保留
-        AnimatedScreenOverlay(visible = subPage != null, onBack = backFromPage) {
+        AnimatedScreenOverlay(
+            visible = subPage != null,
+            onBack = backFromPage,
+            // 设置子页属于「页面级」，比整屏覆盖层（规则 / 额度 / 行程）低一层：
+            // 从设置子页点进规则管理时，返回键先退规则页，再退设置子页（一次一层）。
+            backLayer = BackLayer.PAGE_SUB,
+        ) {
             openPage?.let {
                 SettingsSubPageScreen(
                     page = it,

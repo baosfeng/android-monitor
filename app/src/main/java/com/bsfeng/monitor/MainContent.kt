@@ -57,6 +57,8 @@ import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.finance.ui.AddTransactionScreen
 import com.bsfeng.monitor.finance.ui.BudgetScreen
+import com.bsfeng.monitor.finance.ui.FINANCE_SUBTAB_DETAIL
+import com.bsfeng.monitor.finance.ui.FINANCE_SUBTAB_STATS
 import com.bsfeng.monitor.finance.ui.FinanceMainScreen
 import com.bsfeng.monitor.finance.ui.FinanceStatsScreen
 import com.bsfeng.monitor.finance.ui.FinanceViewModel as FinanceViewModel
@@ -81,7 +83,11 @@ import com.bsfeng.monitor.ui.components.ComponentGalleryScreen
 import com.bsfeng.monitor.ui.components.MotionToken
 import com.bsfeng.monitor.ui.components.springOf
 import com.bsfeng.monitor.ui.foundation.AnimatedScreenOverlay
+import com.bsfeng.monitor.ui.foundation.BackLayer
+import com.bsfeng.monitor.ui.foundation.BackLayerRegistration
+import com.bsfeng.monitor.ui.foundation.BackRouter
 import com.bsfeng.monitor.ui.foundation.JankMonitor
+import com.bsfeng.monitor.ui.foundation.LocalBackRouter
 import com.bsfeng.monitor.ui.foundation.MonitorEdgeToEdge
 import com.bsfeng.monitor.ui.foundation.MotionConfig
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
@@ -250,9 +256,37 @@ internal fun MainContent(
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
             }
+            // 返回键统一分发：所有「可返回的一层」都登记进 [backRouter]，由它按层级 + 打开顺序
+            // 决定退哪一层（见 BackRouter.kt）。此前各处各自注册 BackHandler，谁先收到返回取决于
+            // **组合顺序**而不是打开顺序——取景于「规则管理页在最上层，返回键却关掉了它下面的
+            // 设置子页，得再按一次才退规则页」。
+            val backRouter = remember { BackRouter() }
+            // 分发器注入整棵界面树：每个整屏覆盖层 / 页面路由把自己登记进来，
+            // 根 BackHandler 只调 backRouter.pop()，一次返回退一层。
+            // 注入点必须在全部登记点之前，否则登记读到的仍是默认 null（等于没注册）。
+            CompositionLocalProvider(LocalBackRouter provides backRouter) {
+            // 根分发器必须最先注册（组合顺序最靠前），让更靠上的页面级 BackHandler 仍能先拿到返回
+            BackHandler(enabled = backRouter.canGoBack) { backRouter.pop() }
+
             // 记账子页面（统计/预算/编辑/导入）下按系统返回键回到**来源页**（表单来自统计空态时回统计页）
-            BackHandler(enabled = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main) {
-                backToFinanceSource()
+            BackLayerRegistration(
+                key = "finance-route",
+                layer = BackLayer.PAGE_ROUTE,
+                enabled = selectedTab == AppTab.FINANCE && financeRoute != FinanceRoute.Main,
+                onBack = ::backToFinanceSource,
+            )
+            // 记账「统计汇总」子 Tab 也占一层：返回键 / 左滑先回「交易明细」，
+            // 而不是把整张记账页退到桌面（子 Tab 不是页面路由，此前没人接管返回）。
+            if (financeViewModel != null) {
+                val financeSubTab by financeViewModel.subTab.collectAsState()
+                BackLayerRegistration(
+                    key = "finance-subtab",
+                    layer = BackLayer.PAGE_TAB,
+                    enabled = selectedTab == AppTab.FINANCE &&
+                        financeRoute == FinanceRoute.Main &&
+                        financeSubTab == FINANCE_SUBTAB_STATS,
+                    onBack = { financeViewModel.selectSubTab(FINANCE_SUBTAB_DETAIL) },
+                )
             }
 
             // 通知点击「直达传送页」：目标功能已关闭时回退概览（不崩溃、不留空 Tab）
@@ -392,6 +426,7 @@ internal fun MainContent(
                 },
                 onSplashFinished = { showSplash = false },
             )
+            }
             }
     }
 }
