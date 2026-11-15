@@ -236,6 +236,37 @@ class CoverageTimelineTest {
     }
 
     @Test
+    fun `真机兜底被doze推迟到60到71分钟时仍算待机`() {
+        // 真机 11-14/15 两天实测的成功落点间隔：60 / 62 / 63 / 68 / 69 / 70 / 71 分钟。
+        // doze 会挂起 ticker，把「60 分钟兜底」那一拍推迟几分钟到十几分钟 ——
+        // 旧口径（65 分钟上限）把这些正常待机全画成断档（昨夜 6 段断档里 5 段是这么来的）。
+        val gaps = listOf(60L, 62L, 63L, 68L, 69L, 70L, 71L)
+        var cursor = dayStart + 3 * minute
+        val stamps = mutableListOf(cursor)
+        for (gap in gaps) {
+            cursor += gap * minute
+            stamps += cursor
+        }
+        val window = CoverageTimeline.build(stamps, dayStart, cursor, still)
+
+        assertEquals("doze 推迟的兜底间隔全是待机，不能报断档：${window.breakCount} 段", 0, window.breakCount)
+        assertEquals("兜底静默计入覆盖率", 100, window.coveragePct)
+    }
+
+    @Test
+    fun `兜底失败后5分钟重试的间隔仍算有采样`() {
+        // 失败重试窗口（5 分钟）比待机上限短得多：重试成功的点不会落进待机档，更不会成断档
+        val stamps = listOf(dayStart, dayStart + 60 * minute, dayStart + 65 * minute, dayStart + 70 * minute)
+        val window = CoverageTimeline.build(stamps, dayStart, dayStart + 70 * minute, still)
+
+        assertEquals(0, window.breakCount)
+        assertTrue(
+            "5 分钟的重试间隔落在「有采样」档（2 × 3 分钟容忍之外，但远小于待机上限）",
+            window.segments.any { it.kind == CoverageKind.DORMANT },
+        )
+    }
+
+    @Test
     fun `兜底连一个周期都没跑才是深断档`() {
         val gap = CoverageTimeline.DEEP_GAP_MS
         val stamps = listOf(dayStart, dayStart + 3 * minute) +
