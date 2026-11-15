@@ -215,4 +215,90 @@ class LocationTickerPolicyTest {
             assertEquals("兜底间隔必须正好 30 分钟", LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS, gap)
         }
     }
+
+    // ===== 兜底失败重试（真机 11-15 04:11→06:55 空 163 分钟）=====
+
+    @Test
+    fun `兜底成功后窗口就是基础间隔`() {
+        val origin = now
+        assertEquals(
+            LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            LocationTickerPolicy.effectiveFallbackIntervalMs(
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+                lastFallbackFailed = false,
+            ),
+        )
+        // 起点记下之后，60 分钟没到不该到期
+        assertTrue(
+            !LocationTickerPolicy.sleepingFallbackDue(
+                origin + 59 * 60_000L,
+                origin,
+                lastFallbackFailed = false,
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `兜底失败后 5 分钟就重试而不是再等一小时`() {
+        val origin = now
+        assertEquals(
+            "失败必须收紧到重试窗口",
+            LocationTickerPolicy.SLEEPING_FALLBACK_RETRY_MS,
+            LocationTickerPolicy.effectiveFallbackIntervalMs(
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+                lastFallbackFailed = true,
+            ),
+        )
+        assertTrue(
+            "失败后 5 分钟必须到期（旧口径要再等 60 分钟，真机就是这么空了 163 分钟）",
+            LocationTickerPolicy.sleepingFallbackDue(
+                origin + 5 * 60_000L,
+                origin,
+                lastFallbackFailed = true,
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            ),
+        )
+        assertTrue(
+            "失败后 4 分钟还不到点，别把重试变成每拍一采",
+            !LocationTickerPolicy.sleepingFallbackDue(
+                origin + 4 * 60_000L,
+                origin,
+                lastFallbackFailed = true,
+                LocationTickerPolicy.SLEEPING_STILL_FALLBACK_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `兜底时刻未初始化时不算到期`() {
+        // 服务刚起：先记一次起点，不在启动瞬间采点（与旧行为一致）
+        assertTrue(
+            !LocationTickerPolicy.sleepingFallbackDue(
+                now,
+                0L,
+                lastFallbackFailed = false,
+                LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `重试窗口等于拍子上界 到期那一拍就能排上`() {
+        // 失败窗口 5 分钟 == SLEEPING 拍子上界：重排之后下一拍就能准点补采，不必等慢拍子。
+        // 两个常量必须同值 —— 否则「按 5 分钟该重试」的那一下会被 5 分钟拍子推到 10 分钟。
+        assertEquals(LocationTickerPolicy.SLEEPING_MAX_TICK_MS, LocationTickerPolicy.SLEEPING_FALLBACK_RETRY_MS)
+        val origin = now
+        // 起点后 1 分钟重排：下一拍必须正好在「起点 + 5 分钟」到期那一刻
+        assertEquals(
+            "距到期剩余就是这一拍的延迟",
+            LocationTickerPolicy.SLEEPING_FALLBACK_RETRY_MS - 60_000L,
+            LocationTickerPolicy.nextDelayMs(
+                MotionGate.State.SLEEPING,
+                origin + 60_000L,
+                origin,
+                LocationTickerPolicy.SLEEPING_FALLBACK_RETRY_MS,
+            ),
+        )
+    }
 }

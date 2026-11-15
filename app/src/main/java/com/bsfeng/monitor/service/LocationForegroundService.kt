@@ -207,8 +207,13 @@ class LocationForegroundService : Service() {
     /** 已经处理过的提示型唤醒时刻（显著运动 / 抖动）：同一次提示不重复延长观察窗。 */
     private var appliedHintAtMs = 0L
 
-    /** 最近一次 SLEEPING 兜底探测的时刻。 */
-    private var lastFallbackAtMs = 0L
+    /**
+     * 最近一次 SLEEPING 兜底探测的时刻（读写 [LocationGateState.lastFallbackAtMs]）。
+     *
+     * 不放在服务里自己存一份：doze 会挂起 ticker，那时兜底只能由心跳接手，
+     * 两边各记一份必然是「心跳补完一拍，服务下一拍又按旧时刻再补一次」。
+     */
+    private val lastFallbackAtMs: Long get() = LocationGateState.lastFallbackAtMs
 
     /** 最近一次 PROBING 单点探测的时刻。 */
     private var lastProbeAtMs = 0L
@@ -318,6 +323,9 @@ class LocationForegroundService : Service() {
     private val ticker = object : Runnable {
         override fun run() {
             val versionAtTickStart = tickerScheduler.version
+            // 拍子戳：心跳据此区分「服务在跑且健康」与「服务在跑但 doze 把定时回调挂起了」，
+            // 后一种情况兜底只能由心跳接手（见 LocationGateState.heartbeatShouldCoverSleepingFallback）
+            LocationGateState.onTickerTick(System.currentTimeMillis())
             runCatching { maybeSampleLocation() }
                 .onFailure { Log.w(TAG, "定位补采异常", it) }
             // 本拍期间门禁若迁移过，业务里已经重排过一拍（代次变了），这里不能重复排，
@@ -351,13 +359,7 @@ class LocationForegroundService : Service() {
         stateOf = { appliedGateState },
         lastFallbackAtMsOf = { lastFallbackAtMs },
         // 兜底间隔与「这一拍要不要补点」同源：两处各读一份，迟早出现「按 60 分钟排拍子、按 30 分钟采点」
-        fallbackIntervalMsOf = {
-            LocationTickerPolicy.sleepingFallbackIntervalMs(
-                networkStillness.stillSinceMs,
-                System.currentTimeMillis(),
-                isCharging,
-            )
-        },
+        fallbackIntervalMsOf = { currentFallbackIntervalMs(System.currentTimeMillis()) },
         log = { message -> Log.d(TAG, message) },
     )
 
@@ -970,28 +972,22 @@ class LocationForegroundService : Service() {
                 // 一整天零点。放在这一拍的末尾而不是只靠回调 —— Doze 下网络回调可能被压住，
                 // 每拍（最长 5 分钟）自己读一次，兜底间隔才不会停在过期的判断上。
                 applyNetworkFingerprint(fingerprintOf(null))
-                val fallbackIntervalMs = LocationTickerPolicy.sleepingFallbackIntervalMs(
-                    networkStillness.stillSinceMs,
-                    now,
-                    isCharging,
+                // 调试自检：这一拍用的是 30 / 60 分钟哪一档（不参与控制流）；
+                // 同时把**基础**窗口同步给心跳 —— 重试收紧由 sleepingFallbackDue 统一算，
+                // 两边都只存基础值，才不会「服务存 5 分钟、心跳再按失败收紧一次」。
+                lastFallbackIntervalMs = currentFallbackIntervalMs(now)
+                LocationGateState.onFallbackWindow(
+                    LocationTickerPolicy.sleepingFallbackIntervalMs(
+                        networkStillness.stillSinceMs,
+                        now,
+                        isCharging,
+                    ),
                 )
-                // 调试自检：这一拍用的是 30 / 60 分钟哪一档（不参与控制流）
-                lastFallbackIntervalMs = fallbackIntervalMs
                 // 启动后先等满一个窗口，不在 SLEEPING 立刻采点
-                if (lastFallbackAtMs == 0L) {
-                    lastFallbackAtMs = now
-                } else if (now - lastFallbackAtMs >= fallbackIntervalMs) {
-                    lastFallbackAtMs = now
-                    // 被动通道最近还在投点（别的 App 在定位）→ 这一轮兜底完全没必要发请求：
-                    // 别人的点已经证明「还在这一片」，我们主动探测只是白烧射频。
-                    val passiveFresh = now - LocationCollector.get(this).lastPassiveSampleAtMs() <
-                        fallbackIntervalMs
-                    if (passiveFresh) {
-                        Log.i(TAG, "兜底跳过：被动通道最近仍在投点（零射频）")
-                    } else {
-                        // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每轮白烧 20 秒射频）
-                        probeOnce(FixBudget.PROBE)
-                    }
+                if (LocationGateState.lastFallbackAtMs == 0L) {
+                    LocationGateState.onFallbackAttempt(now)
+                } else if (sleepingFallbackDue(now)) {
+                    runSleepingFallback(now)
                 }
             }
             MotionGate.State.PROBING -> {
@@ -1031,16 +1027,69 @@ class LocationForegroundService : Service() {
      * @param budget 预算档位：PROBING 探测与 SLEEPING 兜底传 [FixBudget.PROBE]（4s + 8s）；
      *   MOVING 的静默补采与升级瞬间补点保持满预算（5s + 15s）—— 那条路径必须真的拿到点。
      */
-    private fun probeOnce(budget: FixBudget = FixBudget.FULL) {
+    private fun probeOnce(budget: FixBudget = FixBudget.FULL, onResult: ((Boolean) -> Unit)? = null) {
         runCatching {
             LocationCollector.get(this).collectThrottledAsync(force = true, budget = budget) { sample ->
+                onResult?.invoke(sample != null)
                 if (sample == null) return@collectThrottledAsync
                 ioWork.scope.launch {
                     runCatching { serviceContainer.recordCollector.onLocation(sample) }
                         .onFailure { Log.w(TAG, "探测点位落库失败", it) }
                 }
             }
-        }.onFailure { Log.w(TAG, "门禁探测采样失败", it) }
+        }.onFailure {
+            Log.w(TAG, "门禁探测采样失败", it)
+            // 异常也要交回结果：兜底窗口靠它决定「等 60 分钟」还是「5 分钟后重试」
+            onResult?.invoke(false)
+        }
+    }
+
+    // ===== SLEEPING 兜底（服务 ticker 与心跳共用）=====
+
+    /** 本轮实际生效的兜底窗口：上一次兜底失败就收紧到重试窗口（见 [LocationTickerPolicy]）。 */
+    private fun currentFallbackIntervalMs(nowMs: Long): Long =
+        LocationTickerPolicy.effectiveFallbackIntervalMs(
+            LocationTickerPolicy.sleepingFallbackIntervalMs(networkStillness.stillSinceMs, nowMs, isCharging),
+            LocationGateState.lastFallbackFailed,
+        )
+
+    private fun sleepingFallbackDue(nowMs: Long): Boolean = LocationTickerPolicy.sleepingFallbackDue(
+        nowMs,
+        LocationGateState.lastFallbackAtMs,
+        LocationGateState.lastFallbackFailed,
+        LocationTickerPolicy.sleepingFallbackIntervalMs(networkStillness.stillSinceMs, nowMs, isCharging),
+    )
+
+    /**
+     * 发起一次 SLEEPING 兜底。
+     *
+     * 两件事必须按结果分开：**发起时刻**先记（同一拍不会重复发），**成功与否**等回调再记。
+     * 旧实现把「发起」当「完成」，真机 05:40 那次兜底请求挂 31 秒后失败，代价是整段 163 分钟的空档。
+     */
+    private fun runSleepingFallback(nowMs: Long) {
+        LocationGateState.onFallbackAttempt(nowMs)
+        // 被动通道最近还在投点（别的 App 在定位）→ 这一轮兜底完全没必要发请求：
+        // 别人的点已经证明「还在这一片」，我们主动探测只是白烧射频。
+        val passiveFresh = nowMs - LocationCollector.get(this).lastPassiveSampleAtMs() <
+            currentFallbackIntervalMs(nowMs)
+        if (passiveFresh) {
+            Log.i(TAG, "兜底跳过：被动通道最近仍在投点（零射频）")
+            LocationGateState.onFallbackResult(success = true)
+            return
+        }
+        // 兜底探测只求「大致还在原地」，覆盖级预算够用（满预算等于每轮白烧 20 秒射频）
+        probeOnce(FixBudget.PROBE) { ok ->
+            if (!ok) {
+                Log.i(
+                    TAG,
+                    "兜底没拿到点：窗口收紧到 " +
+                        (LocationTickerPolicy.SLEEPING_FALLBACK_RETRY_MS / 60_000L) + " 分钟重试",
+                )
+            }
+            LocationGateState.onFallbackResult(ok)
+            // 窗口变了要重排下一拍（失败从 60 分钟缩到 5 分钟，不重排就得再等一拍慢拍子）
+            tickerScheduler.onStateChanged()
+        }
     }
 
     /**

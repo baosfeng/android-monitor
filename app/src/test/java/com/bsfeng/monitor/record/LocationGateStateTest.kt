@@ -20,7 +20,7 @@ class LocationGateStateTest {
     /** 快照是进程内全局状态：每个用例后复位，避免污染同一 JVM 里的其它用例。 */
     @After
     fun resetSnapshot() {
-        LocationGateState.update(null)
+        LocationGateState.resetForTest()
     }
 
     @Test
@@ -83,6 +83,101 @@ class LocationGateStateTest {
         } finally {
             LocationGateState.registerLocationListener(null)
         }
+    }
+
+    // ===== ticker 停摆时心跳接手 SLEEPING 兜底（真机 04:11→06:55 空 163 分钟）=====
+
+    @Test
+    fun `ticker 健康时心跳绝不接手兜底`() {
+        // 服务在跑、拍子正常：心跳补位会绕过服务的探测阶梯（真机 22:17:05 那个问题的回归）
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        val now = 1_700_000_000_000L
+        LocationGateState.onTickerTick(now - 60_000L)
+        LocationGateState.onFallbackAttempt(now - 90 * 60_000L)
+        assertFalse(LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `ticker 停摆且兜底到期时心跳接手`() {
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        val now = 1_700_000_000_000L
+        // doze 把 ticker 挂起：最后一次拍子在 30 分钟前
+        LocationGateState.onTickerTick(now - 30 * 60_000L)
+        // 兜底起点在 61 分钟前（基础窗口 60 分钟）→ 已到期
+        LocationGateState.onFallbackAttempt(now - 61 * 60_000L)
+        LocationGateState.onFallbackWindow(60 * 60_000L)
+        assertTrue(LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `ticker 停摆但兜底没到期 心跳只管看不动手`() {
+        // 心跳是 1 分钟一次：不看到期就补位等于在 doze 里每分钟发一次定位请求
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        val now = 1_700_000_000_000L
+        LocationGateState.onTickerTick(now - 30 * 60_000L)
+        LocationGateState.onFallbackAttempt(now - 10 * 60_000L)
+        LocationGateState.onFallbackWindow(60 * 60_000L)
+        assertFalse(LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `只有 SLEEPING 交给心跳补位`() {
+        val now = 1_700_000_000_000L
+        LocationGateState.onTickerTick(now - 30 * 60_000L)
+        LocationGateState.onFallbackAttempt(now - 61 * 60_000L)
+        LocationGateState.onFallbackWindow(60 * 60_000L)
+        LocationGateState.update(MotionGate.State.PROBING)
+        assertFalse("PROBING 有自己的探测阶梯，心跳补位只会抢 provider", LocationGateState.heartbeatShouldRunSleepingFallback(now))
+        LocationGateState.update(MotionGate.State.MOVING)
+        assertFalse(LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `服务没跑时不算 ticker 停摆`() {
+        // 门禁未知由 allowsHeartbeatSample 那条口径负责，不要两条口径同时放行
+        val now = 1_700_000_000_000L
+        LocationGateState.update(null)
+        LocationGateState.onFallbackAttempt(now - 61 * 60_000L)
+        assertFalse(LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `从未拍过不算停摆`() {
+        // 服务刚起：拍子还在排队，此时让心跳抢跑会与服务首拍重复采点
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        val now = 1_700_000_000_000L
+        LocationGateState.onFallbackAttempt(now - 61 * 60_000L)
+        assertFalse(LocationGateState.tickerStalled(now))
+    }
+
+    @Test
+    fun `兜底失败把窗口收紧到 5 分钟`() {
+        val now = 1_700_000_000_000L
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        LocationGateState.onTickerTick(now - 30 * 60_000L)
+        LocationGateState.onFallbackWindow(60 * 60_000L)
+        LocationGateState.onFallbackAttempt(now - 6 * 60_000L)
+        LocationGateState.onFallbackResult(success = false)
+        assertTrue(
+            "一次失败不该白等一整个 60 分钟窗口（真机 05:40 那次失败空了 163 分钟）",
+            LocationGateState.heartbeatShouldRunSleepingFallback(now),
+        )
+        LocationGateState.onFallbackResult(success = true)
+        assertFalse("成功后恢复 60 分钟窗口", LocationGateState.heartbeatShouldRunSleepingFallback(now))
+    }
+
+    @Test
+    fun `服务没同步窗口时按 30 分钟保守算`() {
+        LocationGateState.update(MotionGate.State.SLEEPING)
+        val now = 1_700_000_000_000L
+        LocationGateState.onTickerTick(now - 30 * 60_000L)
+        LocationGateState.onFallbackAttempt(now - 31 * 60_000L)
+        assertEquals(
+            "同步缺失时不能猜 60 分钟",
+            LocationTickerPolicy.SLEEPING_FALLBACK_INTERVAL_MS,
+            LocationGateState.heartbeatFallbackWindowMs(),
+        )
+        assertTrue(LocationGateState.heartbeatShouldRunSleepingFallback(now))
     }
 
     @Test

@@ -18,6 +18,7 @@ import com.bsfeng.monitor.feature.FeatureFlags
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationProbePolicy
+import com.bsfeng.monitor.record.LocationSample
 import com.bsfeng.monitor.util.AccessibilityStatus
 import com.bsfeng.monitor.widget.WidgetRefresher
 import kotlinx.coroutines.launch
@@ -123,7 +124,16 @@ class AlarmReceiver : BroadcastReceiver() {
         // 只有服务没跑（门禁 null）时心跳才兜底采点，那是它唯一的价值。
         // 其余心跳职责（上报 / 保活 / 唤醒 / 小组件）不受影响，照旧执行。
         if (!LocationGateState.allowsHeartbeatSample()) {
-            Log.d(TAG, "前台服务在跑：心跳跳过定位采样（由服务 ticker 驱动）")
+            // 服务在跑：正常情况下它自己的 ticker 是唯一驱动源。但 doze 会把 Handler 的定时回调
+            // 挂起（真机 11-15 凌晨 04:11→06:55 空了 163 分钟），这时心跳是唯一还活着的唤醒源，
+            // 只有「ticker 停摆 + 兜底到期」两件事同时成立才补位，见 LocationGateState。
+            val now = System.currentTimeMillis()
+            if (!LocationGateState.heartbeatShouldRunSleepingFallback(now)) {
+                Log.d(TAG, "前台服务在跑：心跳跳过定位采样（由服务 ticker 驱动）")
+                return
+            }
+            Log.i(TAG, "服务 ticker 停摆且兜底到期：" + "心跳接手一次 SLEEPING 兜底")
+            runFallbackFromHeartbeat(context, now)
             return
         }
 
@@ -136,6 +146,30 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         sampleLocationOnce(context) { finishOnce() }
+    }
+
+    /**
+     * 心跳替服务补一次 SLEEPING 兜底。
+     *
+     * 与服务的兜底走同一条采点路径（[sampleLocationOnce]）与同一个结果出口
+     * （[LocationGateState.onFallbackResult]），只是发令方不同 —— 这样「失败就 5 分钟后重试」
+     * 在 ticker 恢复后依然成立，两套驱动不会各记一份账。
+     */
+    private fun runFallbackFromHeartbeat(context: Context, nowMs: Long) {
+        LocationGateState.onFallbackAttempt(nowMs)
+        val pendingResult = goAsync()
+        val finished = AtomicBoolean(false)
+        sampleLocationOnce(context, force = true) { sample ->
+            runCatching {
+                LocationGateState.onFallbackResult(success = sample != null)
+                if (sample == null) {
+                    Log.i(TAG, "心跳兜底没拿到点：5 分钟后重试")
+                }
+            }
+            if (finished.compareAndSet(false, true)) {
+                runCatching { pendingResult.finish() }
+            }
+        }
     }
 
     /**
@@ -168,17 +202,24 @@ class AlarmReceiver : BroadcastReceiver() {
  * （广播要 finish PendingResult，服务侧传空实现）。
  *
  * 任何异常都不上抛：定位失败不能影响上报、保活与无障碍主链路。
+ *
+ * @param force 跳过节流（门禁探测 / doze 补位）：兜底到期的语义就是「现在该采」，被 180 秒的
+ *   静默窗口挡住会让心跳每分钟空转一次、还把失败记进退避 —— 那正是把「没到期」读成「失败了」。
  */
-internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
+internal fun sampleLocationOnce(
+    context: Context,
+    force: Boolean = false,
+    onFinished: (LocationSample?) -> Unit,
+) {
     // 预算档位跟着门禁走：PROBING（玩手机 / 室内走动）用覆盖级，MOVING 与「门禁未知」用满预算。
     // 心跳与前台服务的探测抢同一个发令闸，只在服务里改档的话，落在 PROBING 的心跳
     // 仍会发起一轮 5s + 15s 的满预算请求，「单次探测射频上限」就被这条后门打破了。
     val budget = LocationProbePolicy.heartbeatBudget(LocationGateState.state)
     try {
-        LocationCollector.get(context).collectThrottledAsync(budget = budget) { sample ->
+        LocationCollector.get(context).collectThrottledAsync(force = force, budget = budget) { sample ->
             if (sample == null) {
                 Log.w("LocationSample", "定位采样无可用点（节流中 / 未授权 / 缓存不新鲜且主动定位失败）")
-                onFinished()
+                onFinished(null)
                 return@collectThrottledAsync
             }
             // 落库放 IO：SQLite 单条 insert 毫秒级，但别占着广播/主线程回调。
@@ -195,14 +236,14 @@ internal fun sampleLocationOnce(context: Context, onFinished: () -> Unit) {
                 } catch (e: Exception) {
                     Log.w("LocationSample", "定位落库失败", e)
                 } finally {
-                    onFinished()
+                    onFinished(sample)
                     work.cancel()
                 }
             }
         }
     } catch (e: Exception) {
         Log.w("LocationSample", "定位采样异常", e)
-        onFinished()
+        onFinished(null)
     }
 }
 

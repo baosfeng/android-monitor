@@ -314,6 +314,17 @@ class DebugCommandReceiver : BroadcastReceiver() {
         return detail.filterValues { it.isNotEmpty() }
     }
 
+    /**
+     * ticker 已经多少秒没拍过（0 = 从没拍过 / 服务没跑）。
+     *
+     * doze 把 Handler 的定时回调挂起时，这个数会一路涨到十几分钟 —— 那正是心跳接手兜底的判据，
+     * 没有它就无法在真机上区分「兜底没到期」与「兜底根本没人排」。
+     */
+    private fun tickerIdleSec(nowMs: Long): Long {
+        val lastTick = LocationGateState.lastTickAtMs
+        return if (lastTick <= 0L || nowMs < lastTick) 0L else (nowMs - lastTick) / 1000
+    }
+
     // ────────────────────────────── state ──────────────────────────────
 
     private fun emitState(context: Context, token: String?) {
@@ -340,6 +351,10 @@ class DebugCommandReceiver : BroadcastReceiver() {
             .put("featureEnabled", flags.isEnabled(Feature.LOCATION))
             .put("gate", LocationGateState.state?.name ?: "UNKNOWN")
             .put("fallbackMin", LocationForegroundService.lastFallbackIntervalMs / 60_000L)
+            // doze 补位的可观测面：ticker 多久没拍（秒）、上一轮兜底是否失败、心跳用的窗口
+            .put("tickerIdleSec", tickerIdleSec(now))
+            .put("fallbackFailed", LocationGateState.lastFallbackFailed)
+            .put("heartbeatWindowMin", LocationGateState.heartbeatFallbackWindowMs() / 60_000L)
             .put("passive", collector.isPassiveTapActive())
             .put("subscription", health.subscriptionActive)
             .put("mode", health.mode.name)

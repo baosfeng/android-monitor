@@ -53,6 +53,42 @@ object LocationTickerPolicy {
     const val SLEEPING_STILL_FALLBACK_INTERVAL_MS = 60 * 60_000L
 
     /**
+     * SLEEPING 兜底**失败**后的重试间隔：5 分钟。
+     *
+     * 真机实测（11-15 凌晨）：04:11 兜底成功 → 05:40 兜底请求发出但信号差没拿到点（请求挂了 31 秒
+     * 才被摘，只有失败没有落库）→ 06:55 才再采，中间空了 163 分钟。旧实现的「兜底时刻」在发请求
+     * **之前**就推进，一次失败等于白等一整个 60 分钟窗口 —— Doze 里网络/providers 本来就更容易超时，
+     * 一个失败会被放大成两小时的空白。
+     *
+     * 取 5 分钟：与 SLEEPING 的 ticker 拍子上界同值，重试这一拍就能准点到，不新增唤醒源。
+     */
+    const val SLEEPING_FALLBACK_RETRY_MS = 5 * 60_000L
+
+    /**
+     * 本轮**实际生效**的兜底窗口（毫秒）：上一次兜底失败 → [SLEEPING_FALLBACK_RETRY_MS]；否则 [baseIntervalMs]。
+     *
+     * 兜底时刻与 ticker 拍子必须读**同一个**值（服务里 fallbackIntervalMsOf 与到期判定同源），
+     * 否则会出现「按 60 分钟排拍子、按 5 分钟该重试」——重试那一下永远不会被排到。
+     */
+    fun effectiveFallbackIntervalMs(baseIntervalMs: Long, lastFallbackFailed: Boolean): Long =
+        if (lastFallbackFailed) SLEEPING_FALLBACK_RETRY_MS else baseIntervalMs
+
+    /**
+     * 兜底是否到期（服务 ticker 与心跳共用这一条判定，别各写一份）。
+     *
+     * [lastFallbackAtMs] 为 0 表示还没初始化：服务刚起，先让它自己记一次起点、不在启动瞬间采点。
+     */
+    fun sleepingFallbackDue(
+        nowMs: Long,
+        lastFallbackAtMs: Long,
+        lastFallbackFailed: Boolean,
+        baseIntervalMs: Long,
+    ): Boolean {
+        if (lastFallbackAtMs <= 0L) return false
+        return nowMs - lastFallbackAtMs >= effectiveFallbackIntervalMs(baseIntervalMs, lastFallbackFailed)
+    }
+
+    /**
      * SLEEPING 兜底间隔（毫秒）：静止证据熬过一轮 30 分钟兜底 → 60 分钟；否则 30 分钟。
      *
      * 为什么要熬一轮：指纹「这一秒没变」不足以放宽，先按旧节奏验一个完整窗口，
