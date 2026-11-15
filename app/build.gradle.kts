@@ -339,7 +339,7 @@ dependencies {
     // 验证器二维码解码（纯 Java、无 native、Apache 2.0，jar 约 607KB）。
     // 默认依赖红线是「零第三方业务依赖」，zxing core 是**算法库白名单**里唯一获批项，
     // 且只在 totp/TotpQrDecoder.kt 一个文件里被 import，便于审计。
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
 
     // Test
     testImplementation("junit:junit:4.13.2")
