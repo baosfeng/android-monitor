@@ -218,10 +218,19 @@ internal fun periodExpenseText(allStats: List<PeriodStats>, period: FinancePerio
     return yen(stats.totalExpense, 0)
 }
 /**
- * 统计汇总 pane 的列表项（LazyListScope 扩展）：查询卡、多周期总花费、本月 KPI、双入口、三图卡。
+ * 统计汇总 pane 的段落顺序（原型 s04:177-289 的 DOM 顺序）。
+ *
+ * 顺序是原型口径的一部分：查询卡 → 本月 KPI（含预算环 + 今日摘要）→ 多周期总花费 → 双入口 → 三图卡。
+ * 收成常量后 [statsPane] 按它逐段派发，顺序只有一处定义，也才能被单测钉住。
+ */
+internal val FINANCE_STATS_PANE_SECTIONS: List<String> =
+    listOf("periodcard", "statskpis", "multiperiod", "entries", "charts")
+
+/**
+ * 统计汇总 pane 的列表项（LazyListScope 扩展），按 [FINANCE_STATS_PANE_SECTIONS] 的顺序逐段派发。
  *
  * 抽成扩展而不是继续堆在 [FinanceMainScreen] 里：明细 pane 与统计 pane 共用同一个 LazyColumn，
- * 「统计 pane 有哪些项」集中在一处，改动时不会漏掉项下标（删除后焦点复位依赖头部项数）。
+ * 「统计 pane 有哪些项、以什么顺序出现」集中在一处，改动时不会漏掉项下标。
  */
 internal fun LazyListScope.statsPane(
     viewModel: FinanceViewModel,
@@ -240,53 +249,54 @@ internal fun LazyListScope.statsPane(
     currentMonth: String = "",
     transactionCount: Int = 0,
 ) {
-    item(key = "periodcard") {
-        // 统计汇总 pane 的容器锚点（s04-pane-stats）
-        FinancePeriodQueryCard(
-            stats = activePeriodStats,
-            selected = selectedPeriod,
-            onSelect = onPeriodSelect,
-            modifier = Modifier.testTag("s04-pane-stats"),
-            periodBarEnabled = periodBarEnabled,
-        )
-    }
-    // 多周期总花费卡是 unitbar 的同一件事（一次把五档支出全列出来）：开关关掉后连这张卡一起收起，
-    // 否则会出现「档位切不了、但五个档的金额照常列着」的半开半关状态。
-    if (periodBarEnabled) {
-        item(key = "multiperiod") {
-            FinanceMultiPeriodCard(allStats = allPeriodStats)
+    FINANCE_STATS_PANE_SECTIONS.forEach { section ->
+        when (section) {
+            "periodcard" -> item(key = "periodcard") {
+                // 统计汇总 pane 的容器锚点（s04-pane-stats）
+                FinancePeriodQueryCard(
+                    stats = activePeriodStats,
+                    selected = selectedPeriod,
+                    onSelect = onPeriodSelect,
+                    modifier = Modifier.testTag("s04-pane-stats"),
+                    periodBarEnabled = periodBarEnabled,
+                )
+            }
+
+            // KPI 三值卡在原型里紧跟查询卡（s04:227-240），多周期总花费排在它之后（241-256）。
+            "statskpis" -> item(key = "statskpis") {
+                FinanceMainKpiSection(
+                    stats = stats,
+                    today = kpiToday,
+                    currentMonth = currentMonth,
+                    transactionCount = transactionCount,
+                    budgetEnabled = budgetEnabled,
+                )
+            }
+
+            // 多周期总花费卡是 unitbar 的同一件事（一次把五档支出全列出来）：开关关掉后连这张卡一起收起，
+            // 否则会出现「档位切不了、但五个档的金额照常列着」的半开半关状态。
+            "multiperiod" -> if (periodBarEnabled) {
+                item(key = "multiperiod") {
+                    FinanceMultiPeriodCard(allStats = allPeriodStats)
+                }
+            }
+
+            "entries" -> item(key = "entries") {
+                FinanceMainEntrySection(
+                    overallBudget = overallBudget,
+                    onStatsClick = onStatsClick,
+                    onBudgetClick = onBudgetClick,
+                )
+            }
+
+            "charts" -> item(key = "charts") {
+                FinanceStatsChartsSection(
+                    weekStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.WEEK),
+                    yearStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.YEAR),
+                    stats = stats,
+                    categoryBreakdown = categoryBreakdown,
+                )
+            }
         }
-    }
-    // 审计 P2-3：原型 s04-kpis（本月支出 / 收入 / 结余 + 预算环，s04:227-240）落在 stats pane 区间内
-    // （177–289），实现原本只在交易明细 pane 渲染 —— 切到「统计汇总」就看不到本月三值。
-    // 这里补一份，位置与原型一致：多周期总花费之后、双入口之前。
-    //
-    // ⚠️ anchorTagged = false：FinanceMainKpiSection 内部自带 s04-kpis / s04-ring，锚点账本已冻结，
-    // 同名 testTag 在两个 pane 同时渲染会重复；KPI 卡的元素都不可点（纯文本展示），
-    // 按无障碍基线「纯文本展示不写 testTag」的口径，这一份不挂锚点也能被读屏读全。
-    item(key = "statskpis") {
-        FinanceMainKpiSection(
-            stats = stats,
-            today = kpiToday,
-            currentMonth = currentMonth,
-            transactionCount = transactionCount,
-            budgetEnabled = budgetEnabled,
-            anchorTagged = false,
-        )
-    }
-    item(key = "entries") {
-        FinanceMainEntrySection(
-            overallBudget = overallBudget,
-            onStatsClick = onStatsClick,
-            onBudgetClick = onBudgetClick,
-        )
-    }
-    item(key = "charts") {
-        FinanceStatsChartsSection(
-            weekStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.WEEK),
-            yearStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.YEAR),
-            stats = stats,
-            categoryBreakdown = categoryBreakdown,
-        )
     }
 }

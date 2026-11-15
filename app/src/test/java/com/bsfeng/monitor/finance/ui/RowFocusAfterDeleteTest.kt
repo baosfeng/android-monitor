@@ -50,10 +50,10 @@ class RowFocusAfterDeleteTest {
             "2026-10-03" to listOf(tx(1L, "2026-10-03"), tx(2L, "2026-10-03")),
             "2026-10-02" to listOf(tx(3L, "2026-10-02")),
         )
-        // 页头 5 项 → [5]=日期头, [6]=tx-1, [7]=tx-2, [8]=日期头, [9]=tx-3
-        assertEquals(6, financeMainItemIndexOf(grouped, 1L))
-        assertEquals(7, financeMainItemIndexOf(grouped, 2L))
-        assertEquals(9, financeMainItemIndexOf(grouped, 3L))
+        // 页头 3 项 → [3]=日期头, [4]=tx-1, [5]=tx-2, [6]=日期头, [7]=tx-3
+        assertEquals(4, financeMainItemIndexOf(grouped, 1L))
+        assertEquals(5, financeMainItemIndexOf(grouped, 2L))
+        assertEquals(7, financeMainItemIndexOf(grouped, 3L))
     }
 
     @Test
@@ -63,8 +63,10 @@ class RowFocusAfterDeleteTest {
     }
 
     @Test
-    fun `页头 item 数量是明细下标口径的常量`() {
-        // 明细前固定 5 项（head / month / kpis / entries / listhead）：改这里必须同步 FinanceMainScreen
-        assertEquals(5, FINANCE_MAIN_HEADER_ITEMS)
+    fun `页头 item 数量跟随明细 pane 的页头清单`() {
+        // 明细 pane 只有 head / month / listhead 三项（原型 s04:115-175 是纯列表，
+        // KPI 卡与双入口卡只属于统计 pane）；下标口径由这份清单直接派生，改动时不会各说各话。
+        assertEquals(listOf("head", "month", "listhead"), FINANCE_DETAIL_PANE_ITEMS)
+        assertEquals(FINANCE_DETAIL_PANE_ITEMS.size, FINANCE_MAIN_HEADER_ITEMS)
     }
 }

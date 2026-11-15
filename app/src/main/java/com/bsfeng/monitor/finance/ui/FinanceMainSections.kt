@@ -198,9 +198,6 @@ private fun S04MonthArrow(
  * @param budgetEnabled 「预算与预警」开关（[com.bsfeng.monitor.ui.foundation.FinanceUiToggle.BUDGET]）：
  *   默认关。关掉时 s04-ring（预算环 + 环心「预算」字样）整个不渲染，KPI 三行独占整卡宽度；
  *   卡片底部的「预算使用 X%」也随之换成笔数口径，不留半句预算文案。
- * @param anchorTagged 是否挂 s04-kpis / s04-ring 锚点。统计汇总 pane（审计 P2-3）也渲染同一张三值卡，
- *   而锚点账本已冻结、同名 testTag 不宜在第二处复用；那份传 false，卡片内容与交互不变，
- *   只少一个定位锚点（卡上没有任何可点元素，读屏直接读文本，不违反无障碍基线）。
  */
 @Composable
 internal fun FinanceMainKpiSection(
@@ -209,13 +206,10 @@ internal fun FinanceMainKpiSection(
     currentMonth: String,
     transactionCount: Int,
     budgetEnabled: Boolean,
-    anchorTagged: Boolean = true,
 ) {
     val t = LocalDesignTokens.current
     Column(Modifier.padding(horizontal = t.space4, vertical = t.space2)) {
-        GlassCard(
-            modifier = if (anchorTagged) Modifier.testTag("s04-kpis") else Modifier,
-        ) {
+        GlassCard(modifier = Modifier.testTag("s04-kpis")) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -241,7 +235,7 @@ internal fun FinanceMainKpiSection(
                 // 开关关掉时连 Spacer 一起不渲染：否则三行 KPI 右侧会留一段没有内容的空隙
                 if (budgetEnabled) {
                     Spacer(Modifier.width(t.space3))
-                    Box(if (anchorTagged) Modifier.testTag("s04-ring") else Modifier) {
+                    Box(Modifier.testTag("s04-ring")) {
                         FinanceRingGauge(
                             // 口径：无预算 0% / 超 100% 环描满一圈、环心仍显示真实值
                             fraction = stats.budgetProgress,
@@ -419,7 +413,9 @@ internal fun FinanceMainListHead(
             } else {
                 "共 " + transactionCount + " 笔"
             },
-            style = MaterialTheme.typography.labelSmall,
+            // 原型 .meta --text-sm 14px（20-base.html:177；s04:117 的 s04-listmeta 正是 .meta）：
+            // 原先用 labelSmall 12sp，比原型小一档，也与同屏其它 meta 不一致。
+            style = MaterialTheme.typography.bodySmall,
             color = t.meta,
         )
     }

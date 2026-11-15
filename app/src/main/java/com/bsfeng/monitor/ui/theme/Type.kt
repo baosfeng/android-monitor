@@ -129,6 +129,17 @@ val monitorMonoKpi: TextStyle = monoBase.copy(
     letterSpacing = -0.25.sp,
 )
 
+/**
+ * .s04-kv / .s06-kv --text-base 17px/600 等宽（记账 KPI 行数值、预算页数值行）。
+ *
+ * 与 [monitorMonoKpi] 的区别在层级：21sp 是瓦片 / 环心大字，17sp 是「标签 + 数值」行里的数值。
+ */
+val monitorMonoValue: TextStyle = monoBase.copy(
+    fontSize = 17.sp,
+    fontWeight = FontWeight.SemiBold,
+    lineHeight = 22.sp,
+)
+
 /** .badge --text-xs 等宽 11sp/600（角标）。 */
 val monitorMonoBadge: TextStyle = monoBase.copy(
     fontSize = 11.sp,

@@ -93,7 +93,8 @@ fun FinanceMainScreen(
     val actionNotice by viewModel.actionNotice.collectAsState()
 
     // 记账界面「按需开启」开关的两个消费点（设置页随时可改，改完本屏立即重组）：
-    // 多周期查询入口（默认开）→ 统计汇总 pane 的 unitbar；预算与预警（默认关）→ 明细 pane 的 s04-ring。
+    // 多周期查询入口（默认开）→ 统计汇总 pane 的 unitbar 与多周期总花费卡；
+    // 预算与预警（默认关）→ 统计汇总 pane 的 KPI 卡右侧 s04-ring（预算环）。
     // 订阅只读这一层（[FinanceUiPrefs.values]），attach 由概览页 / 设置页负责，本屏不自建持久化。
     val financeUi by FinanceUiPrefs.values.collectAsState()
     val periodBarEnabled = financeUi[FinanceUiToggle.PERIOD_BAR] ?: FinanceUiToggle.PERIOD_BAR.defaultOn
@@ -251,6 +252,8 @@ fun FinanceMainScreen(
         // 底部避让：列表末端留出 FAB 盒（fab-size 56）+ FAB 外边距（16）+ 一段净空（48），
         // 滚到底时最后一张卡（统计汇总的分类占比）与右下角 FAB 之间仍有整段留白，
         // 金额读数不会被悬浮按钮压住（口径见 docs/踩坑/记账FAB被底部导航栏遮住导致无法新增交易.md）。
+        // 明细 pane 的页头项与 [FINANCE_DETAIL_PANE_ITEMS]（head / month / listhead）一一对应：
+        // 那份清单是 financeMainItemIndexOf 的下标口径来源，这里加 / 删 item 要同时改清单。
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -290,8 +293,7 @@ fun FinanceMainScreen(
                 }
             }
 
-            // 月份条与子 Tab 条放在同一个 item 里：头部 item 数保持 5，
-            // 既有「删除后焦点复位」的项下标口径（financeMainItemIndexOf）无需改动。
+            // 月份条与子 Tab 条放在同一个 item 里：前者自带 space-4 边距，后者与它同 item 也不用另占一项。
             item(key = "month") {
                 Column {
                     S04MonthBar(
@@ -299,9 +301,12 @@ fun FinanceMainScreen(
                         onPrevious = { viewModel.previousMonth() },
                         onNext = { viewModel.nextMonth() },
                     )
+                    // 原型 s04:108-113：子 Tab 条包在 .pad 里（.pad{padding-inline:var(--space-4)}），
+                    // 左右各 16dp 才能与上面月份条、下面「交易明细」标题左边缘对齐。
                     FinanceSubTabBar(
                         selected = subTab,
                         onSelect = { viewModel.selectSubTab(it) },
+                        modifier = Modifier.padding(horizontal = t.space4),
                     )
                 }
             }
@@ -319,73 +324,57 @@ fun FinanceMainScreen(
                     onStatsClick = onStatsClick,
                     onBudgetClick = onBudgetClick,
                     periodBarEnabled = periodBarEnabled,
-                    // 审计 P2-3：统计 pane 也显示本月三值，数据与明细 pane 的 KPI 卡同源
-                    // （同一个 stats / today / transactions.size），两处数字必然一致。
                     budgetEnabled = budgetEnabled,
                     kpiToday = today,
                     currentMonth = currentMonth,
                     transactionCount = transactions.size,
                 )
             } else {
-            item(key = "kpis") {
-                // 交易明细 pane 的容器锚点（s04-pane-tx）：与统计 pane 的 s04-pane-stats 同位置换名
-                Box(Modifier.fillMaxWidth().testTag("s04-pane-tx")) {
-                    FinanceMainKpiSection(
-                        stats = stats,
-                        today = today,
-                        currentMonth = currentMonth,
-                        transactionCount = transactions.size,
-                        budgetEnabled = budgetEnabled,
-                    )
-                }
-            }
-
-            item(key = "entries") {
-                FinanceMainEntrySection(
-                    overallBudget = overallBudget,
-                    onStatsClick = onStatsClick,
-                    onBudgetClick = onBudgetClick,
-                )
-            }
-
-            item(key = "listhead") {
-                FinanceMainListHead(
-                    currentMonth = currentMonth,
-                    groupedIsEmpty = grouped.isEmpty(),
-                    recentCount = recentCount,
-                    transactionCount = transactions.size,
-                    modifier = Modifier
-                        .focusRequester(listHeadFocus)
-                        .focusable()
-                        .keyboardFocusRing(RoundedCornerShape(t.radiusMd)),
-                )
-            }
-
-            financeMainItems(
-                state = state,
-                grouped = grouped,
-                highlightId = highlightId,
-                tokens = t,
-                focusRowId = focusRowAfterDelete?.targetId,
-                focusRequester = rowFocus,
-                onRowClick = {
-                    haptic(HapticTone.LIGHT)
-                    onEditClick(it)
-                },
-                onAddClick = onAddClick,
-                onRetry = {
-                    // 锚点 s04-retry：立即重查，**按真实结果**决定走向 ——
-                    // 成功才清演示态 + toast「已重新加载」+ 焦点/滚动回明细区标题；
-                    // 再次失败时 loadFailed 保持置位（错态卡原地保留），不弹第二个 toast、不伪装成功。
-                    viewModel.loadCurrentMonth { result ->
-                        if (result.isSuccess) {
-                            control.select(null)
-                            toast.show("已重新加载")
-                            retryTick++
-                        }
+                // 原型 s04:115-175：交易明细 pane 是**纯列表** —— 页头 → 月份条 → 子 Tab 条 →
+                // 「交易明细」标题 → 日期分组行。KPI 三值卡（227-240）、多周期总花费（241-256）、
+                // 双入口卡（259-272）与三张图表卡（274-288）全部落在 s04-pane-stats 区间（177-289），
+                // 所以这里只有 listhead + 明细列表，容器锚点挂在 listhead 上（与统计 pane 同位置换名）。
+                item(key = "listhead") {
+                    // 交易明细 pane 的容器锚点（s04-pane-tx）：与统计 pane 的 s04-pane-stats 同位置换名
+                    Box(Modifier.fillMaxWidth().testTag("s04-pane-tx")) {
+                        FinanceMainListHead(
+                            currentMonth = currentMonth,
+                            groupedIsEmpty = grouped.isEmpty(),
+                            recentCount = recentCount,
+                            transactionCount = transactions.size,
+                            modifier = Modifier
+                                .focusRequester(listHeadFocus)
+                                .focusable()
+                                .keyboardFocusRing(RoundedCornerShape(t.radiusMd)),
+                        )
                     }
-                },
-            )
+                }
+
+                financeMainItems(
+                    state = state,
+                    grouped = grouped,
+                    highlightId = highlightId,
+                    tokens = t,
+                    focusRowId = focusRowAfterDelete?.targetId,
+                    focusRequester = rowFocus,
+                    onRowClick = {
+                        haptic(HapticTone.LIGHT)
+                        onEditClick(it)
+                    },
+                    onAddClick = onAddClick,
+                    onRetry = {
+                        // 锚点 s04-retry：立即重查，**按真实结果**决定走向 ——
+                        // 成功才清演示态 + toast「已重新加载」+ 焦点/滚动回明细区标题；
+                        // 再次失败时 loadFailed 保持置位（错态卡原地保留），不弹第二个 toast、不伪装成功。
+                        viewModel.loadCurrentMonth { result ->
+                            if (result.isSuccess) {
+                                control.select(null)
+                                toast.show("已重新加载")
+                                retryTick++
+                            }
+                        }
+                    },
+                )
             }
         }
 

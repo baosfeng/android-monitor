@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
@@ -67,6 +69,20 @@ import com.bsfeng.monitor.ui.theme.fgFade
 
 /** 交互口径在明细里定义了 8 个行锚点（s04-tx-1..8）；第 9 行起不再带锚点。 */
 private const val TX_ANCHOR_COUNT = 8
+
+/**
+ * 明细行高下限 48dp（原型 .list-row{min-height:48px}，20-base.html:224）。
+ *
+ * --row-min-h 是 52px 的通用行高，全站十几处列表共用（设置行 / 事件流 / 白名单…），
+ * 而原型给紧凑列表 .list-row 单独压到 48px。所以不动 token，只在本页记账行收高。
+ */
+internal val TX_ROW_MIN_H = 48.dp
+
+/** 「自动」徽标高度 18dp（原型 .tx-auto{height:18px}，s04-记账.html:42）。 */
+internal val TX_AUTO_BADGE_H = 18.dp
+
+/** 「自动」徽标左右内边距 6px（同 .tx-auto{padding:0 6px}）。 */
+internal val TX_AUTO_BADGE_PAD_X = 6.dp
 
 /**
  * 行按下背景（口径：背景转 fg 5%）。
@@ -147,6 +163,37 @@ internal fun DayGroupRow(
     )
 }
 
+/**
+ * 「自动」来源徽标（原型 .tx-auto，s04-记账.html:42）。
+ *
+ * 与公共 [Badge] 的差异是原型这两处本来就不同：.badge 是 20px 高、底 fg 9%、等宽 11sp；
+ * .tx-auto 是 18px 高、底 fg 6%、色 fg-2（中性）、12px。公共组件的最小高 20dp 写在内层，
+ * 调用点传 Modifier.height(18.dp) 会被 heightIn(min = 20) 顶回去，所以这里就地组合出本页这一版。
+ */
+@Composable
+private fun TxAutoBadge(text: String) {
+    val t = LocalDesignTokens.current
+    Box(
+        modifier = Modifier
+            .height(TX_AUTO_BADGE_H)
+            .clip(RoundedCornerShape(t.radiusPill))
+            .background(t.fgFade(6))
+            .padding(horizontal = TX_AUTO_BADGE_PAD_X),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            // 原型 .tx-auto font-size: var(--text-xs) 12px；letter-spacing .02em
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Normal,
+                letterSpacing = 0.24.sp,
+            ),
+            color = t.fg2,
+            maxLines = 1,
+        )
+    }
+}
+
 /** 单笔交易行（分类图标 + 标题/副标题 + 金额）。 */
 @Composable
 internal fun TransactionRow(
@@ -191,8 +238,10 @@ internal fun TransactionRow(
             .clip(rowShape)
             .background(rowBackground)
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { onClick() }
-            // 行高下限 tap-row 口径（row-min-h 52dp，DesignTokenSpecs6:150-151）
-            .heightIn(min = t.rowMinH)
+            // 行高下限：原型 .list-row min-height 48px（20-base.html:224）。
+            // 不用 t.rowMinH（52dp 的通用行高，全站设置行 / 事件流 / 白名单共用），
+            // 只把记账明细行收到 48dp，与原型紧凑列表一致。
+            .heightIn(min = TX_ROW_MIN_H)
             .padding(horizontal = t.space3, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -212,9 +261,9 @@ internal fun TransactionRow(
                     modifier = Modifier.weight(1f, fill = false).testTag("row.tx"),
                 )
                 if (isAutoBooked) {
-                    // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、token 着色）
+                    // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、中性色）
                     Spacer(Modifier.width(t.space1))
-                    Badge(TransactionSourceBadge.AUTO_LABEL, tone = BadgeTone.Accent)
+                    TxAutoBadge(TransactionSourceBadge.AUTO_LABEL)
                 }
             }
             // 副标题：优先用户手写的「说明」，为空时回退自动采集的商户 · 付款方式
@@ -293,7 +342,7 @@ private fun S04EdgeRow(
             .background(rowBackground)
             .testTag("row.edge")
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { }
-            .heightIn(min = t.rowMinH)
+            .heightIn(min = TX_ROW_MIN_H)
             .padding(horizontal = t.space3, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -357,7 +406,7 @@ internal fun S04EmptyBlock(onAdd: () -> Unit) {
     )
 }
 
-/** 错态（锚点 s04-error / s04-retry）：只替换明细区，页头 / 月份条 / KPI / 双入口仍在。 */
+/** 错态（锚点 s04-error / s04-retry）：只替换明细区，页头 / 月份条 / 子 Tab 条仍在。 */
 @Composable
 internal fun S04ErrorBlock(onRetry: () -> Unit) {
     val t = LocalDesignTokens.current
@@ -536,13 +585,21 @@ internal fun LazyListScope.financeMainItems(
 }
 
 /**
- * 明细区之前固定有 5 个页头 item（head / month / kpis / entries / listhead）。
+ * 交易明细 pane 在明细列表之前的固定 item（顺序即渲染顺序）。
  *
- * s04 的子 Tab 条（交易明细 / 统计汇总）与月份条共用 month 这一项、统计 pane 的容器锚点
- * 挂在已有 item 上，都不额外占位 —— 所以项数仍是 5。加了新 item 必须同步这里，
- * 否则删除后的焦点复位会差一行。
+ * 原型 s04:115-175：明细 pane 是**纯列表** —— 页头 → 月份条（含子 Tab 条）→「交易明细」标题 → 日期分组行。
+ * KPI 三值卡（227-240）与双入口卡（259-272）只属于统计汇总 pane（177-289）。
+ * 子 Tab 条与月份条共用 month 这一项、容器锚点 s04-pane-tx 挂在 listhead 上，都不额外占位。
  */
-internal const val FINANCE_MAIN_HEADER_ITEMS = 5
+internal val FINANCE_DETAIL_PANE_ITEMS: List<String> = listOf("head", "month", "listhead")
+
+/**
+ * 明细区之前的页头 item 数（懒列表下标口径，见 [financeMainItemIndexOf]）。
+ *
+ * 由 [FINANCE_DETAIL_PANE_ITEMS] 直接派生：加 / 删页头项时只改那份清单，
+ * 删除后的焦点复位下标不会悄悄差一行。
+ */
+internal val FINANCE_MAIN_HEADER_ITEMS: Int = FINANCE_DETAIL_PANE_ITEMS.size
 
 /**
  * 删除后返回列表的一次性焦点复位请求（锚点 s05-del-confirm · 移除后）。

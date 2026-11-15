@@ -11,11 +11,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.RingProgress
 import com.bsfeng.monitor.ui.components.rememberMotionEnabled
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 
 /** 记账环直径：原型 s04:71-73 / s06:62-64 / s07:57-59 为 104px（小于全局 --ring-size = 128px）。 */
 private val FINANCE_RING_DIAMETER = 104.dp
@@ -39,11 +39,17 @@ internal fun FinanceRingGauge(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 big,
-                style = MaterialTheme.typography.titleMedium,
+                // 原型 .s04-ring-txt b = --font-mono --text-lg 21px/700 letter-spacing -.02em
+                // （s04-记账.html:27）：21sp 等宽正好是 monitorMonoKpi，不用另造字号。
+                style = monitorMonoKpi,
                 color = t.fg,
-                fontWeight = FontWeight.Bold,
             )
-            Text(small, style = MaterialTheme.typography.labelSmall, color = t.muted)
+            Text(
+                small,
+                // 原型 .s04-ring-txt span = --text-sm 14px + --muted（s04-记账.html:28）
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+            )
         }
     }
 }
