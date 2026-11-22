@@ -4,10 +4,8 @@ package com.bsfeng.monitor.totp.ui
 // 表单值、错误文案都由上层持有；本屏只负责渲染与把编辑上抛。
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.Base32
@@ -106,7 +106,13 @@ fun TotpManualEntryScreen(
             mono = true,
             invalid = error != null,
         )
-        TotpFine("真实密钥请从网站的「无法扫码」入口复制；不要贴到聊天记录或截图里。")
+        // 原型 .s25-hint 是密钥字段组内的说明行（组内 gap = space-1），TotpFine 的上下内边距不适用。
+        Text(
+            "真实密钥请从网站的「无法扫码」入口复制；不要贴到聊天记录或截图里。",
+            style = MaterialTheme.typography.bodySmall,
+            color = t.muted,
+            modifier = Modifier.fillMaxWidth().padding(top = t.space1),
+        )
 
         if (error != null) {
             Row(
@@ -207,8 +213,10 @@ private fun ManualPreview(form: TotpManualForm, nowMillis: Long) {
 /**
  * 高级参数折叠（原型 .s25-adv / details）：类型 / 算法 / 位数 / 周期。
  *
- * 折叠头本身就是可点区域，触达高度取 tap-min（44dp）；锚点打在折叠头上，
- * 保证「高级参数里有什么」在自动化里点得开（此前这里只有 clickable、没有 testTag）。
+ * 几何按原型 .s25-adv 的口径对齐：margin-top(8) 在锚点盒**外**（用前置 Spacer 占位），
+ * 锚点盒 = border-top(1) + padding-top(8) + summary(44，tap-min) = 53dp。
+ * 折叠头保持可点（点得开「高级参数里有什么」），展开态由 stateDescription 播报，
+ * 不再额外画「展开/收起」两个字——原型 summary 里只有标题 + 旋转的箭头。
  */
 @Composable
 private fun AdvancedParams(
@@ -218,53 +226,51 @@ private fun AdvancedParams(
     onFormChange: (TotpManualForm) -> Unit,
 ) {
     val t = LocalDesignTokens.current
+    // 原型 .s25-adv 的 margin-top 是 --space-2(8)：页壳列间距已给 8，差的那份由这里补齐。
+    // 剩余 y 差（约 6dp）来自 preview 卡高度（实现 53.7 vs 原型 75.4，见交接文档），不是这里的间距。
+    Spacer(Modifier.height(t.space2))
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = t.space2)
-            .border(width = 0.dp, color = t.borderSoft)
-            .padding(top = t.space2),
+            .testTag(TOTP_TAG_MANUAL_ADV),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = t.tapMin)
-                .clickable { onToggle() }
-                .testTag(TOTP_TAG_MANUAL_ADV),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "高级参数",
-                style = MaterialTheme.typography.bodyLarge,
-                color = t.fg,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (open) "收起" else "展开",
-                style = MaterialTheme.typography.bodySmall,
-                color = t.muted,
-                modifier = Modifier.padding(end = t.space1),
-            )
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = t.muted,
-                modifier = Modifier.size(18.dp).rotate(if (open) 90f else 0f),
-            )
-        }
-        if (open) {
-            Spacer(Modifier.height(t.space2))
-            TotpParamEditor(
-                params = form.params,
-                counter = form.counter,
-                onParamsChange = { onFormChange(form.copy(params = it)) },
-                onCounterChange = { onFormChange(form.copy(counter = it)) },
-                digitsTag = "s25-digits",
-                periodTag = "s25-period",
-                typeTag = "s25-type",
-                counterTag = "s25-counter",
-            )
-            TotpFine("默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。")
+        TotpHairline()
+        Column(Modifier.padding(top = t.space2)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = t.tapMin)
+                    .clickable { onToggle() }
+                    .semantics { stateDescription = if (open) "已展开" else "已收起" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "高级参数",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = t.fg,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = t.muted,
+                    modifier = Modifier.size(18.dp).rotate(if (open) 90f else 0f),
+                )
+            }
+            if (open) {
+                Spacer(Modifier.height(t.space2))
+                TotpParamEditor(
+                    params = form.params,
+                    counter = form.counter,
+                    onParamsChange = { onFormChange(form.copy(params = it)) },
+                    onCounterChange = { onFormChange(form.copy(counter = it)) },
+                    digitsTag = "s25-digits",
+                    periodTag = "s25-period",
+                    typeTag = "s25-type",
+                    counterTag = "s25-counter",
+                )
+                TotpFine("默认 SHA1 / 6 位 / 30 秒，与绝大多数网站一致；改错会一直算出错的验证码，但不会损坏密钥。")
+            }
         }
     }
 }
