@@ -225,7 +225,12 @@ fun WhitelistScreen(
 
                         FiveState.POPULATED -> LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().testTag("s11-body"),
+                            // 原型 .content.pad 是「8 上部内边距 + 左右 16」的列，锚点 s11-body 量的是这一列
+                            // （x=16 / w=361）而不是滚动视口 —— 内边距必须落在锚点外侧，故写在 testTag 之前。
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = t.space4, end = t.space4, top = t.space2)
+                                .testTag("s11-body"),
                         ) {
                             // ── 搜索 + 快捷 chips + 扫描计数 ──
                             item(key = "search") {
@@ -272,7 +277,8 @@ fun WhitelistScreen(
                                             )
                                         }
                                     }
-                                    Spacer(Modifier.height(t.space1))
+                                    // 原型 .search-wrap 的 gap 统一是 space-2（8）：原先 4 会让搜索区整体矮 4dp
+                                    Spacer(Modifier.height(t.space2))
                                     Text(
                                         "已扫描 " + allApps.size + " 个已授权应用 · 搜索「抖音」可查看无结果空态",
                                         style = MaterialTheme.typography.bodySmall,
@@ -282,10 +288,12 @@ fun WhitelistScreen(
                             }
 
                             // ── 小节头（列表容器锚点 s11-list）──
+                            // 原型 .stack 的块间距是 12（space-3）；小节头之上是 gap 12，原先搜索区自带
+                            // 的 bottom 12 + SecHead 的 padding 叠成 24，把列表整体推下（锚点 s11-list 的 y 判据）。
                             item(key = "apps-head") {
                                 SecHead(
                                     "应用列表",
-                                    Modifier.testTag("s11-list").padding(bottom = t.space3),
+                                    Modifier.testTag("s11-list").padding(top = t.space3, bottom = t.space3),
                                     right = "匹配 " + filteredApps.size + " 个",
                                 )
                             }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -112,6 +113,23 @@ private const val RETRY_SKELETON_MS = 800L
  * 变化（主题把间距调大也不该把时间列挤回两行）。
  */
 private val TIME_COLUMN_W = 68.dp
+
+/**
+ * 页头大标题的布局行盒。
+ *
+ * 原型 .h1 = --text-xl 28px × --leading-tight 1.05 ≈ 29.4；Compose 的中文自然行盒是 41.3，
+ * 直接用会让页头比原型高 12dp。固定盒 + wrapContentHeight(unbounded) 绘制（台账「行盒」解法）。
+ */
+private val HEAD_TITLE_LINE = 30.dp
+
+/** 记录行标题行盒：原型 .tl-title 17px × 1.3 = 22.1。 */
+private val ROW_TITLE_LINE = 22.1.dp
+
+/** 记录行副标题行盒：原型 .tl-sub 14px × 1.3 = 18.2。 */
+private val ROW_SUB_LINE = 18.2.dp
+
+/** 原型 .tl-body 的 gap（标题与副标题之间 2px）。 */
+private val ROW_TEXT_GAP = 2.dp
 
 /**
  * s03 广告跳过记录。
@@ -371,7 +389,7 @@ fun AdScreen(
 
 /** 页头：副标题（今日条数 · 最近时间）+ 大标题 + 刷新按钮；固定不随内容滚动。 */
 @Composable
-private fun AdScreenHead(
+internal fun AdScreenHead(
     todayCount: Int,
     lastSkipAt: Long,
     rotationZ: () -> Float,
@@ -382,8 +400,10 @@ private fun AdScreenHead(
         Modifier
             .fillMaxWidth()
             .testTag("s03-head")
-            .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space3),
-        verticalAlignment = Alignment.CenterVertically,
+            // 原型 .screen-head：padding 8 16 12，align-items:flex-start；锚点 s03-head 的 y=8、盒高 78。
+            // 顶部不是 space-4（那会让页头 106 高、刷新按钮 y 偏 21）。
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
+        verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
             MetaText(
@@ -391,11 +411,16 @@ private fun AdScreenHead(
                     (if (lastSkipAt > 0L) formatClockSec(lastSkipAt) else PLACEHOLDER),
             )
             Spacer(Modifier.height(t.space2))
-            Text(
-                text = "广告跳过记录",
-                style = MaterialTheme.typography.headlineMedium,
-                color = t.fg,
-            )
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；CJK 自然行盒 41.3，
+            // 固定 30dp 让行盒按原型取值，文字用 unbounded 正常绘制（同 OverviewHead，台账解法）。
+            Box(Modifier.height(HEAD_TITLE_LINE)) {
+                Text(
+                    text = "广告跳过记录",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
         }
         Spacer(Modifier.width(t.space3))
         AdRefreshButton(rotationProvider = rotationZ, onClick = onRefresh)
@@ -442,7 +467,7 @@ private fun AdRefreshButton(
  * 下移到列表之后。原型口径见 .open-design/src/screens/s03-广告跳过记录.html。
  */
 @Composable
-private fun AdRecordList(
+internal fun AdRecordList(
     visible: List<SkipRecord>,
     methodIndex: Int,
     chipItems: List<String>,
@@ -462,55 +487,70 @@ private fun AdRecordList(
     val t = LocalDesignTokens.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        // 底部留出「趋势卡整卡进可视区」的余量：最后一项滚到底时其下沿不被底栏吃掉。
+        // 横向内边距改到逐项上（原型是 .pad 包一层、锚点落在 .pad 上，x=0 / w=393）：
+        // 容器锚点 s03-stat / s03-records / s03-bars 必须取满宽外层，内层再吃 16。
         contentPadding = PaddingValues(
-            start = t.space4,
-            end = t.space4,
             // 尾部余量 = 一屏高的一小段（对应原型列表到底后趋势卡完整露出的观感）
             bottom = t.space12 + t.space6,
         ),
-        verticalArrangement = Arrangement.spacedBy(t.space3),
+        // 原型 .pad.stack 的 gap 只出现在「区块之间」；记录行是同一张卡里的连续 .tl-item（行间 0）。
+        // 原先整列 spacedBy(space3) 会给记录行也加 12dp 缝，列表越长趋势卡下移越多。
+        verticalArrangement = Arrangement.Top,
     ) {
         item(key = "stat") {
-            AdSummaryStrip(
-                totalCount = totalCount,
-                replayTick = replayTick,
-                onReplay = onReplay,
-                onOpenRules = onOpenRules,
-                modifier = Modifier
-                    .testTag("s03-stat")
-                    .staggerEnterAt(0),
-            )
-        }
-
-        item(key = "records-head") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .testTag("s03-records")
-                    .padding(top = t.space1),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "跳过记录",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = t.fg,
-                    modifier = Modifier.weight(1f),
-                )
-                MetaText("最近 " + visible.size + " 次 · 倒序")
+            // 原型锚点挂在 .pad 外层（x=0 / w=393 / h=52），卡片本身在内层吃 16 内边距。
+            Box(Modifier.fillMaxWidth().testTag("s03-stat").staggerEnterAt(0)) {
+                Box(Modifier.padding(horizontal = t.space4)) {
+                    AdSummaryStrip(
+                        totalCount = totalCount,
+                        replayTick = replayTick,
+                        onReplay = onReplay,
+                        onOpenRules = onOpenRules,
+                    )
+                }
             }
         }
 
-        item(key = "chips") {
-            // 四个带计数的选项在 390dp 下必然超宽：用 FlowRow 自适应折行，
-            // 能一行就一行、放不下换行，绝不裁切或要求横滑才发现。
-            AdMethodChips(
-                items = chipItems,
-                selectedIndex = methodIndex,
-                onSelect = onSelectMethod,
-                modifier = Modifier.testTag("s03-chips"),
-            )
+        item(key = "gap-before-records") { Spacer(Modifier.height(t.space3)) }
+
+        // 原型 .pad.stack 同时包住「小节头 + chip 组 + 记录卡」三段，锚点 s03-records 落在它上面。
+        // 记录行本体是 LazyColumn 的 items（无法被同一 item 包住，同 s10-rules / s11-list 处置），
+        // 所以这里包住前两段：x/w 与原型一致，h 只含小节头 + chip（原型含整张记录卡）。
+        item(key = "records-head") {
+            Column(Modifier.fillMaxWidth().testTag("s03-records")) {
+                Column(Modifier.padding(horizontal = t.space4)) {
+                    // 原型 .sec-head 没有上内边距（h3 行盒紧贴 .pad.stack 的起点），原先的 space1 会让 chip 组下移。
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "跳过记录",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = t.fg,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MetaText("最近 " + visible.size + " 次 · 倒序")
+                    }
+                    // 原型 .sec-head 自带 margin-bottom 12，又处在 gap 12 的 .stack 里 → 与 chip 组相隔 24
+                    // （实测原型 chips 的 y=198.5；只留 12 会把它上移 7dp）。
+                    Spacer(Modifier.height(t.space4 + t.space2))
+                    // 四个带计数的选项在 390dp 下必然超宽：用 FlowRow 自适应折行，
+                    // 能一行就一行、放不下换行，绝不裁切或要求横滑才发现。
+                    AdMethodChips(
+                        items = chipItems,
+                        selectedIndex = methodIndex,
+                        onSelect = onSelectMethod,
+                        modifier = Modifier.testTag("s03-chips"),
+                    )
+                }
+            }
         }
+
+        // 原型记录行在 .card 内（上下各 16 内边距）；实现的行是 LazyColumn 的 items（无法被一张卡包住），
+        // 用首尾留白等价表达 —— 缺这段会让趋势卡整体上移 32dp（锚点 s03-bars 的 y 判据）。
+        // 原型三段的间距：chips → 12（.stack gap）→ 记录卡 padding 16 → 首行。缺 12 会让整段上移。
+        item(key = "records-card-top") { Spacer(Modifier.height(t.space3 + t.space4)) }
 
         if (visible.isEmpty()) {
             item(key = "records-empty") {
@@ -547,17 +587,23 @@ private fun AdRecordList(
             }
         }
 
+        item(key = "records-card-bottom") { Spacer(Modifier.height(t.space4)) }
+
+        item(key = "gap-before-trend") { Spacer(Modifier.height(t.space3)) }
+
         item(key = "trend") {
-            AdTrendBlock(
-                dailyCounts7 = dailyCounts7,
-                labels = labels,
-                rangeLabel = rangeLabel,
-                // 回顾性补充数据：任一项缺失即整项不出现，三项全空则整行不渲染。
-                extras = reviewExtras(confirmedCount, avgCost, savedTotal),
-                modifier = Modifier
-                    .testTag("s03-bars")
-                    .staggerEnterAt(1),
-            )
+            // 原型锚点 s03-bars 挂在 .pad 外层（x=0 / w=393），趋势卡在内层吃 16 内边距。
+            Box(Modifier.fillMaxWidth().testTag("s03-bars").staggerEnterAt(1)) {
+                Box(Modifier.padding(horizontal = t.space4)) {
+                    AdTrendBlock(
+                        dailyCounts7 = dailyCounts7,
+                        labels = labels,
+                        rangeLabel = rangeLabel,
+                        // 回顾性补充数据：任一项缺失即整项不出现，三项全空则整行不渲染。
+                        extras = reviewExtras(confirmedCount, avgCost, savedTotal),
+                    )
+                }
+            }
         }
     }
 }
@@ -583,7 +629,9 @@ private fun AdRecordRow(
                 onClick()
             }
             .padding(horizontal = t.space4, vertical = t.space2),
-        verticalAlignment = Alignment.CenterVertically,
+        // 原型 .tl-item.has-icon 是 align-items:start（时间列与图标顶部对齐，图标 30dp 高于两行文本）；
+        // 居中会让时间列相对原型下移约 4dp。
+        verticalAlignment = Alignment.Top,
     ) {
         // 时间列：本页精确到秒（8 位 HH:mm:ss），等宽字体 + tabular-nums 保证不抖动。
         // 宽度按内容给足 68dp —— 14sp 等宽字 8 位约 67dp，原先复用 space12(48dp) 会折成
@@ -604,20 +652,30 @@ private fun AdRecordRow(
         )
         Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f)) {
-            Text(
-                text = record.displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = t.fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = methodSubtitle(record.method, record.costMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = t.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // 原型 .tl-title 17px × line-height 1.3 = 22.1、.tl-sub 14px × 1.3 = 18.2、两者 gap 2：
+            // 合计 42.3 + 上下 padding 8×2 = 58.3（原型行高）。CJK 自然行盒比这高 2~4dp，
+            // 10 行累积会把趋势卡顶掉近 20dp —— 按台账解法用固定盒 + unbounded 绘制。
+            Box(Modifier.height(ROW_TITLE_LINE)) {
+                Text(
+                    text = record.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = t.fg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+            Spacer(Modifier.height(ROW_TEXT_GAP))
+            Box(Modifier.height(ROW_SUB_LINE)) {
+                Text(
+                    text = methodSubtitle(record.method, record.costMs),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
         }
     }
 }

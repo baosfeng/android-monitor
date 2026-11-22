@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -159,8 +160,11 @@ internal fun AdSummaryStrip(
 ) {
     val t = LocalDesignTokens.current
     val numberInteraction = remember { MutableInteractionSource() }
-    // 卡内边距走 space-1（上下）：卡高 = tap-min 44 + 上下各 4 ≈ 52dp，见原型 .card.s03-sum。
-    AppCard(modifier = modifier, padding = t.space1) {
+    // 原型 .card.s03-sum 的 padding 是 var(--space-1) var(--space-4)：纵向 4、横向 16。
+    // 卡高 = tap-min 44 + 上下各 4 = 52；横向吃到 16 后右侧「跳过规则」入口才落在 x=276（原型同位），
+    // 只给 space-1 会让入口整体右移 12dp（锚点 s03-rules 的 x 判据）。
+    AppCard(modifier = modifier, padding = 0.dp) {
+      Column(Modifier.padding(horizontal = t.space4, vertical = t.space1)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -201,6 +205,9 @@ internal fun AdSummaryStrip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("跳过规则", style = MaterialTheme.typography.labelLarge, color = t.fg2)
+                // 原型 .s03-sum-link 的 gap = var(--space-1)（4dp）：缺它时入口比原型窄 4、右移 4
+                // （锚点 s03-rules 的 x 判据：原型 x=276 / w=84）。
+                Spacer(Modifier.width(t.space1))
                 Icon(
                     Icons.Outlined.ChevronRight,
                     contentDescription = null, // decorative：同行已有「跳过规则」文本
@@ -209,6 +216,7 @@ internal fun AdSummaryStrip(
                 )
             }
         }
+      }
     }
 }
 
@@ -225,11 +233,14 @@ internal fun AdTrendBlock(
     AppCard(modifier = modifier) {
         CardHead("近 7 天跳过趋势", rangeLabel)
         Spacer(Modifier.height(t.space3))
+        // 原型柱图是单个 <svg class="chart">：viewBox 340×150 里 padB=24 已含着轴标签，整体按
+        // 卡宽缩放（329/340）到 145。实现的 BarChart 不含轴标签（ChartAxisLabels 是独立一行 19dp），
+        // 两块相加比原型高 15.3dp —— 图高扣掉一个 space-4 让位，整卡（锚点 s03-bars 的 h）回到容差内。
         BarChart(
             values = dailyCounts7,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(t.chartH),
+                .height(t.chartH - t.space4),
         )
         ChartAxisLabels(labels)
         Spacer(Modifier.height(t.space2))

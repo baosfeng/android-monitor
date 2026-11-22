@@ -3,6 +3,8 @@ package com.bsfeng.monitor.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -265,9 +267,12 @@ fun SkipRuleScreen(
                             val empty = effective == FiveState.EMPTY
                             LazyColumn(
                                 state = if (empty) emptyListState else bodyListState,
-                                // s10-body 是有数据态的内容列锚点：空态不渲染（锚点 s10-body 边界）
+                                // s10-body 是有数据态的内容列锚点：空态不渲染（锚点 s10-body 边界）。
+                                // 原型 .content.pad 是「8 上部内边距 + 左右 16」的列，锚点量的是这一列
+                                // （x=16 / w=361）而不是滚动视口 —— 内边距必须落在锚点外侧，故写在 testTag 之前。
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .padding(start = t.space4, end = t.space4, top = t.space2)
                                     .then(if (empty) Modifier else Modifier.testTag("s10-body")),
                                 contentPadding = PaddingValues(bottom = t.space6),
                             ) {
@@ -293,12 +298,17 @@ fun SkipRuleScreen(
                                     )
                                 }
 
+                                // 原型 .stack 的块间距是 12（space-3）：订阅源卡与 KPI 两格之间也有一份
+                                item(key = "gap-source-kpi") { Spacer(Modifier.height(t.space3)) }
+
                                 item(key = "kpi") {
+                                    // 原型 .stack 的块间距是 12（space-3）：原先 16 会把后面的
+                                    // 规则列表与图例整体推下 4dp（锚点 s10-rules / s10-legend 的 y 判据）。
                                     SkipRuleKpiRow(
                                         ruleCount = state.rules.size,
                                         hits = hits,
                                         modifier = Modifier
-                                            .padding(start = t.space4, end = t.space4, bottom = t.space4)
+                                            .padding(bottom = t.space3)
                                             .testTag("s10-summary"),
                                     )
                                 }
@@ -369,7 +379,7 @@ fun SkipRuleScreen(
                                         SkipRuleLegend(
                                             rules = state.rules,
                                             modifier = Modifier
-                                                .padding(start = t.space4, end = t.space4, top = t.space4)
+                                                .padding(top = t.space3)
                                                 .testTag("s10-legend"),
                                         )
                                     }

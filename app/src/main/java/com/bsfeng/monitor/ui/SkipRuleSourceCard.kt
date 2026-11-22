@@ -59,7 +59,10 @@ internal fun SkipRuleSourceCard(
     // 卡片容器锚点 s10-source：卡本身不可按压（原型 .src-card 无 :active），
     // 卡内「更新订阅 / 新增订阅 / 页面快照」三颗按钮共用本锚点（14 个锚点）。
     GlassCard(Modifier.testTag("s10-source")) {
+        // 原型 .src-card 是 display:flex + gap space-3（12）：标签与输入框之间也是 12。
+        // GroupLabel 自带 bottom space-2（8），这里补 4 才对齐（锚点 s10-url 的 y 判据）。
         GroupLabel("订阅源 URL", Modifier.padding(start = 0.dp))
+        Spacer(Modifier.height(t.space1))
         AppField(
             value = urlInput,
             onValueChange = onUrlChange,
@@ -132,7 +135,8 @@ internal fun SkipRuleSourceCard(
         // 快照是目标 App 的**屏幕原文**（聊天 / 支付页 / 通知文案），只滚动淘汰、没有撤销入口
         // 等于让用户在不知情的情况下长期留隐私副本。这里把份数摆在明面上，并给出清除入口。
         // 行本身不可点（onClick = null）：副作用只挂在右侧那颗按钮上，避免整行点击误清。
-        Spacer(Modifier.height(t.space2))
+        // 原型 .src-card 的 gap 统一是 space-3（12），这里同样取 12（原先 8）。
+        Spacer(Modifier.height(t.space3))
         SettingsRow(
             title = "页面快照",
             subtitle = snapshotSubtitle(snapshotCount, snapshotPath),
