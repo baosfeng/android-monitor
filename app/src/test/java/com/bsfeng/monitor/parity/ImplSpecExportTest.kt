@@ -26,7 +26,7 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 // 视口高度给到 4200dp：长页（s12 约 3900dp）一次组合完，避免 LazyColumn 回收导致导出不稳定。
 // 宽度仍是 390dp = 原型 canvas，几何可直接对照。
-@Config(sdk = [34], qualifiers = "w390dp-h6000dp-xxhdpi")
+@Config(sdk = [34], qualifiers = "w393dp-h6000dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ImplSpecExportTest {
 
