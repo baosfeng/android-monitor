@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -26,8 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -43,15 +42,21 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.BadgeTone
 import com.bsfeng.monitor.ui.components.CategoryIcon
@@ -66,6 +71,7 @@ import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
+import com.bsfeng.monitor.ui.theme.monitorMonoNumber
 
 /** 交互口径在明细里定义了 8 个行锚点（s04-tx-1..8）；第 9 行起不再带锚点。 */
 private const val TX_ANCHOR_COUNT = 8
@@ -377,17 +383,85 @@ private fun S04EdgeRow(
     }
 }
 
+/**
+ * 加载态骨架的分段结构（原型 s04:291-300）：标题条 + 第一张卡 + 第二张卡 + 三行列表。
+ *
+ * 元素是「每段的行数」，段宽仍由共享 [StateSkeleton] 的 .sk 比例决定。
+ * 单块 3 行会让骨架看起来像一张卡，数据到了却变成两卡一列表，首屏跳动明显 ——
+ * 这是审计 #11 的差异点；把段数写成数据，结构既可单测也自解释。
+ */
+internal val S04_SKELETON_SEGMENTS: List<Int> = listOf(1, 3, 2, 3)
+
+/** 骨架标题条宽度（原型 .sk.w-40 = 40%）。 */
+private const val S04_SKELETON_TITLE_FRACTION = 0.4f
+
 /** 加载态（锚点 s04-loading）：只有「加载中且无数据」才出骨架；骨架不接收点击、不参与位移。 */
 @Composable
 internal fun S04LoadingBlock() {
     val t = LocalDesignTokens.current
-    StateSkeleton(
+    val (titleRows, firstCardRows, secondCardRows, listRows) = S04_SKELETON_SEGMENTS
+    Column(
         modifier = Modifier
             .testTag("s04-loading")
             .padding(horizontal = t.space4, vertical = t.space2),
-        rows = 3,
-    )
+        verticalArrangement = Arrangement.spacedBy(t.space3),
+    ) {
+        // 段 1 明细区标题条（原型 .sk.w-40.tall）：只占 40% 宽，读起来是一行标题而不是整块占位
+        Box(Modifier.fillMaxWidth(S04_SKELETON_TITLE_FRACTION)) {
+            StateSkeleton(rows = titleRows)
+        }
+        // 段 2 / 段 3 两张卡（原型 .card 内 .sk 行，行数 3 / 2）
+        AppCard { StateSkeleton(rows = firstCardRows) }
+        AppCard { StateSkeleton(rows = secondCardRows) }
+        // 段 4 三行列表（原型 .group 内三个 .list-row，每行一条 .sk）
+        AppCard { StateSkeleton(rows = listRows) }
+    }
 }
+
+/** 空态线描图标线宽：原型 .st-icon svg 的 stroke-width 1.7（20-base.html:419），与分类图标同一线宽。 */
+internal const val S04_EMPTY_ICON_STROKE = 1.7f
+
+/**
+ * 空态图标：24×24 线描卡片（原型 s04:302-307 的 .st-icon svg）。
+ *
+ * 原型形态 = 卡片外框 + 一条横线 + 右下短横线，stroke 1.7 / fill none（20-base.html:419）。
+ * material-icons-extended 的 Outlined.CreditCard 虽然也是卡片，但外框与中带都更重（2px 框 + 4px 带），
+ * 22dp 下明显更黑一档；这里按原型路径自绘，保持与其它 .st-icon 同一线宽。
+ * 之前用的 Icons.Filled.Download 是「导入」箭头，语义和原型不是同一个东西。
+ */
+internal val S04_EMPTY_ICON: ImageVector = ImageVector.Builder(
+    name = "s04_empty_card",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    // 只描边不填充：Icon 的 tint 会作用到 stroke（StateColumn 里按 fg-2 着色）
+    path(
+        stroke = SolidColor(Color.Black),
+        strokeLineWidth = S04_EMPTY_ICON_STROKE,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round,
+    ) {
+        // 外框 3..21 × 6..19、圆角 2.5（原型 rect x=3 y=6 w=18 h=13 rx=2.5）
+        moveTo(5.5f, 6f)
+        lineTo(18.5f, 6f)
+        arcToRelative(2.5f, 2.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, dx1 = 2.5f, dy1 = 2.5f)
+        lineTo(21f, 16.5f)
+        arcToRelative(2.5f, 2.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, dx1 = -2.5f, dy1 = 2.5f)
+        lineTo(5.5f, 19f)
+        arcToRelative(2.5f, 2.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, dx1 = -2.5f, dy1 = -2.5f)
+        lineTo(3f, 8.5f)
+        arcToRelative(2.5f, 2.5f, 0f, isMoreThanHalf = false, isPositiveArc = true, dx1 = 2.5f, dy1 = -2.5f)
+        close()
+        // 横线（原型 path d="M3 11h18"）
+        moveTo(3f, 11f)
+        lineTo(21f, 11f)
+        // 右下短横线（原型 path d="M16.5 15h1.5"）
+        moveTo(16.5f, 15f)
+        lineTo(18f, 15f)
+    }
+}.build()
 
 /** 空态（锚点 s04-empty / s04-empty-add）：文案逐字照抄，CTA 未接线时不渲染。 */
 @Composable
@@ -399,7 +473,7 @@ internal fun S04EmptyBlock(onAdd: () -> Unit) {
             .testTag("s04-empty")
             .padding(horizontal = t.space4),
         title = "本月还没有交易",
-        icon = Icons.Filled.Download,
+        icon = S04_EMPTY_ICON,
         actionLabel = "新增一笔",
         onAction = onAdd,
         actionModifier = Modifier.testTag("s04-empty-add"),
@@ -447,9 +521,10 @@ internal fun S04EdgeBlock() {
             Spacer(Modifier.height(t.space2))
             Text(
                 "¥12,345,678.90",
-                style = MaterialTheme.typography.titleMedium,
+                // 原型 .s04-edge-amt = --text-xl 28px / 700 / 等宽 .num（s04:43,319）：
+                // 17sp 的 titleMedium 只是正文档，极限金额要比页头 h1 同等醒目
+                style = monitorMonoNumber,
                 color = t.fg,
-                fontWeight = FontWeight.SemiBold,
                 // 口径：超过 13 位省略号截断、不换行不撑破卡片
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

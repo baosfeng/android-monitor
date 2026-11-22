@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +37,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -45,6 +50,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.CategoryAmount
 import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.FinanceStats
@@ -304,9 +310,9 @@ fun FinanceStatsScreen(
                         }
                         if (showEmptyCard) item(key = "empty") {
                             EmptyState(
-                                text = "记一笔账或导入支付宝 / 微信账单后，这里会生成分类占比与趋势",
+                                text = S07_EMPTY_DESC,
                                 title = "本月还没有可统计的支出",
-                                icon = Icons.Filled.BarChart,
+                                icon = S07_EMPTY_ICON,
                                 actionLabel = if (onAddClick != null) "新增一笔" else null,
                                 onAction = onAddClick,
                                 // 锚点 s07-empty：空态标题获得初始焦点；标题块兼作键盘焦点停位（2dp 环）
@@ -505,6 +511,51 @@ private fun FinanceStatsEdgeSection(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * s07 空态描述（原型 s07:198 逐字）。
+ *
+ * 原型写「从熊猫记账导入历史数据」，而本仓库确有这条通道：finance/PandaImporter +
+ * FinanceViewModel.importFromPanda，导入页 ImportStepsCard 也写明支持熊猫记账 .db。
+ * 实现事实与原型一致，所以不泛化成「导入历史账单」。
+ */
+internal const val S07_EMPTY_DESC = "记一笔账或从熊猫记账导入历史数据后，这里会生成分类占比与趋势"
+
+/** 空态线描柱图线宽：原型 .st-icon svg 的 stroke-width 1.7（20-base.html:419），与 s04 空态图标同口径。 */
+internal const val S07_EMPTY_ICON_STROKE = 1.7f
+
+/**
+ * s07 空态图标：24×24 线描柱图（原型 s07:196 的 .st-icon svg）。
+ *
+ * 原型 = 一条基线 + 三根高度不同的竖柱（x=7.5 / 12 / 16.5），stroke 1.7 / fill none（20-base.html:419）。
+ * material-icons-extended 的 BarChart 是实心柱 + 轴框，比原型重一档；与 s04 的 S04_EMPTY_ICON 同一做法自绘。
+ */
+internal val S07_EMPTY_ICON: ImageVector = ImageVector.Builder(
+    name = "s07_empty_bars",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    // 只描边不填充：Icon 的 tint 会作用到 stroke（StateColumn 里按 fg-2 着色）
+    path(
+        stroke = SolidColor(Color.Black),
+        strokeLineWidth = S07_EMPTY_ICON_STROKE,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round,
+    ) {
+        // 基线（原型 path d="M4 19.5h16"）
+        moveTo(4f, 19.5f)
+        lineTo(20f, 19.5f)
+        // 三根竖柱，底端都在 y=16（M7.5 16V9.5 / M12 16V4.5 / M16.5 16V12）
+        moveTo(7.5f, 16f)
+        lineTo(7.5f, 9.5f)
+        moveTo(12f, 16f)
+        lineTo(12f, 4.5f)
+        moveTo(16.5f, 16f)
+        lineTo(16.5f, 12f)
+    }
+}.build()
 
 /** 边界态占位数据（锚点 s07-edge 写死；不读库，避免真实账目进代码）。 */
 internal const val EDGE_CATEGORY_NAME = "人情往来 · 红白喜事与节日红包"

@@ -4,6 +4,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.monitorMonoKpi
+import com.bsfeng.monitor.ui.theme.monitorMonoNumber
 import com.bsfeng.monitor.ui.theme.monitorMonoValue
 import com.bsfeng.monitor.ui.theme.monitorTypography
 import org.junit.Assert.assertEquals
@@ -109,5 +110,31 @@ class FinanceS04LayoutTest {
         // 「最近 3 天 · N 笔」这行改走 bodySmall（14sp），本类只钉住档位，屏内调用点见 FinanceMainListHead。
         assertEquals(14f, monitorTypography.bodySmall.fontSize.value, 0.01f)
         assertEquals(12f, monitorTypography.labelSmall.fontSize.value, 0.01f)
+    }
+
+    @Test
+    fun `加载骨架按原型拼成四段`() {
+        // 原型 s04:291-300：标题条 + 第一张卡（3 行）+ 第二张卡（2 行）+ 第一组列表（3 行）
+        // 单块骨架在数据到达时会整块换成两卡一列表，首屏跳动明显
+        assertEquals(4, S04_SKELETON_SEGMENTS.size)
+        assertEquals(listOf(1, 3, 2, 3), S04_SKELETON_SEGMENTS)
+    }
+
+    @Test
+    fun `空态图标按原型自绘为线描卡片`() {
+        // 原型 s04:302-307 的 .st-icon svg：24 视口、卡片外框 + 横线 + 右下短横线，stroke 1.7 / fill none（20-base.html:419）
+        // VectorGroup.children 是私有实现细节，没法在单测里摸；这里钉住「24 视口 + 1.7 线宽」这两个对外的形态口径，
+        // 自绘代码必须用 S04_EMPTY_ICON_STROKE，改线宽就绕不过这条断言。
+        assertEquals(24f, S04_EMPTY_ICON.defaultWidth.value, 0.01f)
+        assertEquals(24f, S04_EMPTY_ICON.viewportWidth, 0.01f)
+        assertEquals(1.7f, S04_EMPTY_ICON_STROKE, 0.01f)
+    }
+
+    @Test
+    fun `边界态极限金额走等宽族二十八像素粗体`() {
+        // 原型 .s04-edge-amt = --text-xl 28px / 700 / 等宽 .num（s04:43,319）；屏内调用点见 S04EdgeBlock
+        assertEquals(FontFamily.Monospace, monitorMonoNumber.fontFamily)
+        assertEquals(28f, monitorMonoNumber.fontSize.value, 0.01f)
+        assertEquals(FontWeight.Bold, monitorMonoNumber.fontWeight)
     }
 }
