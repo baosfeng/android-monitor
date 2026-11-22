@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -265,14 +266,18 @@ fun AddTransactionScreen(
                 // 原型 s05:454 的保存条 data-state-hide 含 edge，所以这里同样不渲染表单与保存条。
                 state == FiveState.EDGE -> AddTransactionEdgeBlock(Modifier.weight(1f))
                 else -> Box(Modifier.weight(1f).fillMaxSize()) {
+                    // 原型 .content{padding:8px 0 24px}：**没有**左右内边距 —— 左右 16 由每个 .pad 块自带。
+                    // 这里同样不给：卡片级锚点 s14a-amount / -fields / -receipt 挂在 .pad 上（x=0、w=393），
+                    // 给在容器上会把三个锚点整体缩进 16、宽少 32。
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(horizontal = t.space4)
                             .testTag("s14a-content"),
                     ) {
                         if (state == FiveState.EMPTY) {
+                            // 空态卡自带左右 16（原型 .st-empty 的 padding:space-8 space-4），
+                            // 容器既然不再统一给左右内边距，这里就不再加一层，否则内缩变 32。
                             EmptyState(
                                 text = "分类数据为空，先到「设置 → 记账」里创建分类，或导入账单补齐",
                                 modifier = Modifier.testTag("s05-empty"),
@@ -285,7 +290,8 @@ fun AddTransactionScreen(
                             )
                             Spacer(Modifier.height(t.space3))
                         } else {
-                            Spacer(Modifier.height(t.space2))
+                            // 原型 .content 的 padding-top 8（--space-2）+ 首块 .pad 的 mt-3 12 = 20
+                            Spacer(Modifier.height(t.space2 + t.space3))
                         }
 
                         // ① 类型 + 金额（s14a-amount / s14a-kind / s14a-kind-expense|income|transfer）
@@ -299,8 +305,9 @@ fun AddTransactionScreen(
                             shakeOffset = amountShake.value,
                         )
 
-                        // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 说明 —— 四行同构，与原型一致
-                        Spacer(Modifier.height(t.space3))
+                        // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 说明 —— 四行同构，与原型一致。
+                        // 原型块间距 = .content 的 gap 12 + 每个 .pad 的 mt-3 12 = 24
+                        Spacer(Modifier.height(t.space3 + t.space3))
                         AddTransactionFieldCard(
                             txType = txType,
                             selectedCategory = selectedCategory,
@@ -316,6 +323,10 @@ fun AddTransactionScreen(
                         )
 
                         // ③ 单据卡：只有自动记账记下的交易才带单据，手动录入不摆空行
+                        // 卡片不渲染时不占位：ReceiptCard 内部提前 return，这里的间距由卡内高度 0 抵消
+                        if (RecordForm.hasReceipt(editing)) {
+                            Spacer(Modifier.height(t.space3 + t.space3))
+                        }
                         AddTransactionReceiptCard(
                             editing = editing,
                             onOpenSheet = { openSheet = it },

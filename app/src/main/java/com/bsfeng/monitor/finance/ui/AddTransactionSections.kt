@@ -1,8 +1,9 @@
 package com.bsfeng.monitor.finance.ui
 
 // 来源：原 finance/ui/AddTransactionScreen.kt 的三张卡；职责：类型+金额卡、字段卡（分类/账户/时间/说明）、单据卡、边界演示态。
-// 锚点（s14a）：s14a-amount / s14a-kind（含三段 s14a-kind-*）/ s14a-fields / s14a-cat-row /
-// s14a-acct-row / s14a-time-row / s14a-note-row / s14a-receipt / s14a-receipt-row；
+// 锚点（s14a）：卡片级 s14a-amount / s14a-fields / s14a-receipt 打在外层 [AddTransactionFormSection]
+// （原型这三处都是 .pad：含左右 16 的整块，卡片在其内），行级 s14a-kind（含三段 s14a-kind-*）/
+// s14a-cat-row / s14a-acct-row / s14a-time-row / s14a-note-row / s14a-receipt-row；
 // 边界演示态 s05-edge / s05-edge-cat 也在本文件。
 
 import androidx.compose.animation.animateColorAsState
@@ -15,6 +16,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,6 +89,42 @@ private fun Modifier.kindAnchor(index: Int): Modifier = when (index) {
 private val KIND_SEG_PAD = 4.dp
 
 /**
+ * 金额行行盒高：原型 .s14a-amt 量得 79（padding-block 4×2 + input 71）。
+ *
+ * 为什么不交给字体自动撑：原型 input 的 line-height 是 normal（56px 字 → 71 行盒），
+ * Compose 侧 .s14a-input 用的是 headlineLarge 的行高（41sp），单行 BasicTextField 量出来只有
+ * 63.7 —— 整张金额卡因此比原型矮 5.3dp，并把它下面三个锚点全部上移。这里按原型钉死行盒，
+ * 字形照常绘制（Text / BasicTextField 不裁剪溢出）。
+ */
+private val AMOUNT_ROW_H = 79.dp
+
+/**
+ * 卡片 1px 描边补偿。
+ *
+ * 原型 .card 是 border-box（1px 描边占位），Compose 的 border **绘制不占位** —— 直接照抄
+ * padding 12/16 会让卡内每一行比原型左移 / 上移 1dp、宽 2dp。补偿按台账「自绘卡补 1dp」的口径
+ * 加在内容内边距上（同 FinanceStatsDailyAvgCard）。
+ */
+private val CARD_BORDER = 1.dp
+
+/**
+ * 卡片级锚点（s14a-amount / s14a-fields / s14a-receipt）的落点。
+ *
+ * 原型这三处挂在 `.pad` 上 —— 即「含左右 16 内边距的整块」，宽 393、x=0，卡片本身缩进 16；
+ * 锚点落在卡片上会差 x 16 / w 32。
+ */
+@Composable
+private fun AddTransactionFormSection(
+    anchor: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    Box(Modifier.fillMaxWidth().testTag(anchor)) {
+        Column(Modifier.padding(horizontal = t.space4), content = content)
+    }
+}
+
+/**
  * 类型 + 金额卡（原型 s14a-amount）。
  *
  * @param shakeOffset 金额校验失败时的横向位移（px）：由屏幕层 [rememberAmountShake] 驱动，
@@ -102,86 +140,89 @@ internal fun AddTransactionAmountCard(
     shakeOffset: Float = 0f,
 ) {
     val t = LocalDesignTokens.current
-    // 原型 .s14-card{padding:12px 16px} —— GlassCard 默认四边 16，这里按原型给 12/16
-    GlassCard(
-        padding = 0.dp,
-        modifier = Modifier
-            .graphicsLayer { translationX = shakeOffset }
-            .testTag("s14a-amount"),
-    ) {
-        Column(
-            Modifier.padding(
-                start = t.space4,
-                end = t.space4,
-                top = t.space3,
-                bottom = t.space3,
-            ),
+    // 原型 .s14-card{padding:12px 16px} —— GlassCard 默认四边 16，这里按原型给 12/16（+1px 描边补偿）
+    AddTransactionFormSection("s14a-amount") {
+        GlassCard(
+            padding = 0.dp,
+            modifier = Modifier.graphicsLayer { translationX = shakeOffset },
         ) {
-            KindSegment(
-                txType = txType,
-                onTypeChange = onTypeChange,
-                modifier = Modifier.testTag("s14a-kind"),
-            )
-            Spacer(Modifier.height(t.space2))
-            // 原型 .s14a-amt 是 baseline 对齐 + 上下 padding 4px：
-            // ¥ 用 --text-xl(28px)/600，金额用 --text-3xl(56px)/700
-            Row(
-                modifier = Modifier.padding(vertical = t.space1),
-                verticalAlignment = Alignment.Bottom,
+            Column(
+                Modifier.padding(
+                    start = t.space4 + CARD_BORDER,
+                    end = t.space4 + CARD_BORDER,
+                    top = t.space3 + CARD_BORDER,
+                    bottom = t.space3 + CARD_BORDER,
+                ),
             ) {
-                Text(
-                    "¥",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = t.textXl),
-                    color = t.muted,
-                    fontWeight = FontWeight.SemiBold,
+                KindSegment(
+                    txType = txType,
+                    onTypeChange = onTypeChange,
+                    modifier = Modifier.testTag("s14a-kind"),
                 )
-                Spacer(Modifier.width(t.space2))
-                BasicTextField(
-                    value = amountText,
-                    onValueChange = { input ->
-                        onAmountChange(input.filter { c -> c.isDigit() || c == '.' })
-                    },
-                    textStyle = MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = t.text3xl,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = AMOUNT_LETTER_SPACING,
-                        // 原型 .s14a-input 用 --fg：金额本身不染色，
-                        // 方向由上面那排类型段（支出/收入/转账）表达
-                        color = t.fg,
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    cursorBrush = SolidColor(t.accent),
-                    modifier = Modifier.weight(1f),
-                    decorationBox = { inner ->
-                        Box {
-                            if (amountText.isEmpty()) {
-                                Text(
-                                    "0.00",
-                                    style = MaterialTheme.typography.headlineLarge.copy(
-                                        fontSize = t.text3xl,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = AMOUNT_LETTER_SPACING,
-                                    ),
-                                    color = t.muted,
-                                )
+                Spacer(Modifier.height(t.space2))
+                // 原型 .s14a-amt 是 baseline 对齐 + 上下 padding 4px，行盒 79（见 AMOUNT_ROW_H）：
+                // ¥ 用 --text-xl(28px)/600，金额用 --text-3xl(56px)/700
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(AMOUNT_ROW_H)
+                        .padding(vertical = t.space1),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Text(
+                        "¥",
+                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = t.textXl),
+                        color = t.muted,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.width(t.space2))
+                    BasicTextField(
+                        value = amountText,
+                        onValueChange = { input ->
+                            onAmountChange(input.filter { c -> c.isDigit() || c == '.' })
+                        },
+                        textStyle = MaterialTheme.typography.headlineLarge.copy(
+                            fontSize = t.text3xl,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = AMOUNT_LETTER_SPACING,
+                            // 原型 .s14a-input 用 --fg：金额本身不染色，
+                            // 方向由上面那排类型段（支出/收入/转账）表达
+                            color = t.fg,
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        cursorBrush = SolidColor(t.accent),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            Box {
+                                if (amountText.isEmpty()) {
+                                    Text(
+                                        "0.00",
+                                        style = MaterialTheme.typography.headlineLarge.copy(
+                                            fontSize = t.text3xl,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = AMOUNT_LETTER_SPACING,
+                                        ),
+                                        color = t.muted,
+                                    )
+                                }
+                                inner()
                             }
-                            inner()
-                        }
-                    },
-                )
+                        },
+                    )
+                }
+                if (isRefundEntry) {
+                    Spacer(Modifier.height(t.space2))
+                    Text(
+                        "退款交易：保存后按负金额存储，用于抵扣当月支出",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = t.muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
-    }
-    if (isRefundEntry) {
-        Spacer(Modifier.height(t.space2))
-        Text(
-            "退款交易：保存后按负金额存储，用于抵扣当月支出",
-            style = MaterialTheme.typography.labelSmall,
-            color = t.muted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -220,10 +261,12 @@ private fun KindSegment(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tapMin + KIND_SEG_PAD * 2)
+            // 原型 .segmented：44(tap-min) + 上下各 4 padding + 上下各 1 描边 = 54；
+            // Compose 的 border 绘制不占位，所以描边 2dp 要显式算进高度
+            .height(t.tapMin + (KIND_SEG_PAD + CARD_BORDER) * 2)
             .clip(shape)
             .background(t.fgFade(5))
-            .border(1.dp, t.borderSoft, shape)
+            .border(CARD_BORDER, t.borderSoft, shape)
             .padding(KIND_SEG_PAD)
             .focusGroup()
             .onPreviewKeyEvent { event ->
@@ -308,56 +351,63 @@ internal fun AddTransactionFieldCard(
     timeFocus: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
-    AppCard(padding = 0.dp, modifier = Modifier.testTag("s14a-fields")) {
-        // 原型 .s14-card 的 padding 是 12/16；行分隔线（.s14-toggle 的 border-top）
-        // 就在这层内边距之内 —— 内边距必须给在**行外面**，不能塞进行里
-        Column(
-            Modifier.padding(horizontal = t.space4, vertical = t.space3),
-        ) {
-            if (!isTransferType(txType)) {
+    AddTransactionFormSection("s14a-fields") {
+        AppCard(padding = 0.dp) {
+            // 原型 .s14-card 的 padding 是 12/16（+1px 描边补偿）；行分隔线（.s14-toggle 的 border-top）
+            // 就在这层内边距之内 —— 内边距必须给在**行外面**，不能塞进行里
+            // 横向 +1px：原型 .card 的描边占位，行左边界 = 16(pad) + 1(border) + 16(卡内边距)。
+            // 纵向不加：行分隔线在实现里是独立 1dp 元素，已经吃掉原型 border-top 的那 1px。
+            Column(
+                Modifier.padding(
+                    horizontal = t.space4 + CARD_BORDER,
+                    vertical = t.space3,
+                ),
+            ) {
+                if (!isTransferType(txType)) {
+                    FieldRow(
+                        label = "分类",
+                        value = selectedCategory,
+                        placeholder = "选择分类",
+                        onClick = { onOpenSheet(RecordSheet.CATEGORY) },
+                        modifier = Modifier.testTag("s14a-cat-row"),
+                        focusRequester = catFocus,
+                    )
+                    FieldDivider()
+                }
                 FieldRow(
-                    label = "分类",
-                    value = selectedCategory,
-                    placeholder = "选择分类",
-                    onClick = { onOpenSheet(RecordSheet.CATEGORY) },
-                    modifier = Modifier.testTag("s14a-cat-row"),
-                    focusRequester = catFocus,
+                    label = if (isTransferType(txType)) "转出" else "账户",
+                    value = accountName,
+                    placeholder = "选择账户",
+                    onClick = { onOpenSheet(RecordSheet.ACCOUNT) },
+                    modifier = Modifier.testTag("s14a-acct-row"),
+                    focusRequester = acctFocus,
+                )
+                if (isTransferType(txType)) {
+                    FieldDivider()
+                    // 转账的「转入」行沿用「账户」行语义，但不另贴锚点：一个节点只能有一个 testTag，
+                    // 锚点 s14a-acct-row 的「转账态本行标签变「转出」并另出一行「转入」」由本行承接交互
+                    FieldRow(
+                        label = "转入",
+                        value = toAccountName,
+                        placeholder = "选择转入账户",
+                        onClick = { onOpenSheet(RecordSheet.TO_ACCOUNT) },
+                    )
+                }
+                FieldDivider()
+                FieldRow(
+                    label = "时间",
+                    value = timeText,
+                    onClick = { onOpenSheet(RecordSheet.TIME) },
+                    modifier = Modifier.testTag("s14a-time-row"),
+                    focusRequester = timeFocus,
                 )
                 FieldDivider()
-            }
-            FieldRow(
-                label = if (isTransferType(txType)) "转出" else "账户",
-                value = accountName,
-                placeholder = "选择账户",
-                onClick = { onOpenSheet(RecordSheet.ACCOUNT) },
-                modifier = Modifier.testTag("s14a-acct-row"),
-                focusRequester = acctFocus,
-            )
-            if (isTransferType(txType)) {
-                FieldDivider()
-                // 转账的「转入」行沿用「账户」行语义，但不另贴锚点：一个节点只能有一个 testTag，
-                // 锚点 s14a-acct-row 的「转账态本行标签变「转出」并另出一行「转入」」由本行承接交互
-                FieldRow(
-                    label = "转入",
-                    value = toAccountName,
-                    placeholder = "选择转入账户",
-                    onClick = { onOpenSheet(RecordSheet.TO_ACCOUNT) },
+                NoteRow(
+                    value = remark,
+                    onValueChange = { onRemarkChange(it.take(REMARK_MAX_LEN)) },
+                    modifier = Modifier.testTag("s14a-note-row"),
                 )
             }
-            FieldDivider()
-            FieldRow(
-                label = "时间",
-                value = timeText,
-                onClick = { onOpenSheet(RecordSheet.TIME) },
-                modifier = Modifier.testTag("s14a-time-row"),
-                focusRequester = timeFocus,
-            )
-            FieldDivider()
-            NoteRow(
-                value = remark,
-                onValueChange = { onRemarkChange(it.take(REMARK_MAX_LEN)) },
-                modifier = Modifier.testTag("s14a-note-row"),
-            )
         }
     }
 }
@@ -371,18 +421,23 @@ internal fun AddTransactionReceiptCard(
 ) {
     if (!RecordForm.hasReceipt(editing)) return
     val t = LocalDesignTokens.current
-    Spacer(Modifier.height(t.space3))
-    AppCard(padding = 0.dp, modifier = Modifier.testTag("s14a-receipt")) {
-        Column(
-            Modifier.padding(horizontal = t.space4, vertical = t.space3),
-        ) {
-            FieldRow(
-                label = "单据",
-                value = RecordForm.receiptSummary(editing),
-                onClick = { onOpenSheet(RecordSheet.RECEIPT) },
-                modifier = Modifier.testTag("s14a-receipt-row"),
-                focusRequester = receiptFocus,
-            )
+    // 块间距由调用方给（与金额卡 / 字段卡一致）：原型三块之间的间距 = .content 的 gap 12 + .pad 的 mt-3 12
+    AddTransactionFormSection("s14a-receipt") {
+        AppCard(padding = 0.dp) {
+            Column(
+                Modifier.padding(
+                    horizontal = t.space4 + CARD_BORDER,
+                    vertical = t.space3 + CARD_BORDER,
+                ),
+            ) {
+                FieldRow(
+                    label = "单据",
+                    value = RecordForm.receiptSummary(editing),
+                    onClick = { onOpenSheet(RecordSheet.RECEIPT) },
+                    modifier = Modifier.testTag("s14a-receipt-row"),
+                    focusRequester = receiptFocus,
+                )
+            }
         }
     }
 }
