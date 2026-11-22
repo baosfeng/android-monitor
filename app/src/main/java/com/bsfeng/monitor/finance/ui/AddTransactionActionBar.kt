@@ -19,10 +19,14 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
  * 吸底保存条（原型 .s14a-actions）：表单怎么滚，它都在。
  *
  * 背景是从透明到 surface 的竖向渐变，让滚动内容自然淡出到按钮下方。
+ *
+ * @param canSave 按钮可用态：**结构性**缺失（分类未选 / 转账账户不合法）或提交中才置灰。
+ *   金额为空 / 为 0 不在这里 —— 那是可当场纠正的输入错误，按钮保持可点，由屏幕层在 [onSave]
+ *   里抖金额卡 + toast「请输入大于 0 的金额」（原型 s04-记账.html:735-749）。取舍理由：禁用态
+ *   收不到点击，既没有反馈、读屏也问不出「还差什么」，只适合表达用户改不了的结构性缺失。
  */
 @Composable
 internal fun AddTransactionActionBar(
-    isEditing: Boolean,
     canSave: Boolean,
     showDelete: Boolean,
     onSave: () -> Unit,
@@ -48,7 +52,8 @@ internal fun AddTransactionActionBar(
             ),
     ) {
         PrimaryButton(
-            text = if (isEditing) "保存修改" else "保存",
+            // 原型 s14a:147 / s05:455 都是「保存」：编辑态不再另起「保存修改」（审计 #62）
+            text = "保存",
             enabled = canSave,
             onClick = { if (canSave) onSave() },
         )

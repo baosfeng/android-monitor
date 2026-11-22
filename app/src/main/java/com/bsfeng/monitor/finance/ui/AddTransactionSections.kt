@@ -1,10 +1,12 @@
 package com.bsfeng.monitor.finance.ui
 
-// 来源：原 finance/ui/AddTransactionScreen.kt 的三张卡；职责：类型+金额卡、字段卡（分类/账户/时间/说明）、单据卡。
+// 来源：原 finance/ui/AddTransactionScreen.kt 的三张卡；职责：类型+金额卡、字段卡（分类/账户/时间/说明）、单据卡、边界演示态。
 // 锚点（s14a）：s14a-amount / s14a-kind（含三段 s14a-kind-*）/ s14a-fields / s14a-cat-row /
-// s14a-acct-row / s14a-time-row / s14a-note-row / s14a-receipt / s14a-receipt-row 都落在本文件。
+// s14a-acct-row / s14a-time-row / s14a-note-row / s14a-receipt / s14a-receipt-row；
+// 边界演示态 s05-edge / s05-edge-cat 也在本文件。
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,13 +17,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +47,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -46,11 +56,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.Transaction
 import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.CategoryIcon
+import com.bsfeng.monitor.ui.components.EdgeState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
+import com.bsfeng.monitor.ui.components.rememberMotionEnabled
 import com.bsfeng.monitor.ui.components.segmentNavTarget
 import com.bsfeng.monitor.ui.components.tokenShadow
 import com.bsfeng.monitor.ui.foundation.HapticTone
@@ -72,7 +86,12 @@ private fun Modifier.kindAnchor(index: Int): Modifier = when (index) {
 /** 分段容器内边距（与共享 SegmentedControl 同口径：.segmented padding 4px） */
 private val KIND_SEG_PAD = 4.dp
 
-/** 类型 + 金额卡（原型 s14a-amount）。 */
+/**
+ * 类型 + 金额卡（原型 s14a-amount）。
+ *
+ * @param shakeOffset 金额校验失败时的横向位移（px）：由屏幕层 [rememberAmountShake] 驱动，
+ *   0 表示不动。位移只作用在本卡，不牵动下面的字段卡（原型抖 .s05-input 单条输入）。
+ */
 @Composable
 internal fun AddTransactionAmountCard(
     txType: Int,
@@ -80,10 +99,16 @@ internal fun AddTransactionAmountCard(
     onTypeChange: (Int) -> Unit,
     onAmountChange: (String) -> Unit,
     isRefundEntry: Boolean,
+    shakeOffset: Float = 0f,
 ) {
     val t = LocalDesignTokens.current
     // 原型 .s14-card{padding:12px 16px} —— GlassCard 默认四边 16，这里按原型给 12/16
-    GlassCard(padding = 0.dp, modifier = Modifier.testTag("s14a-amount")) {
+    GlassCard(
+        padding = 0.dp,
+        modifier = Modifier
+            .graphicsLayer { translationX = shakeOffset }
+            .testTag("s14a-amount"),
+    ) {
         Column(
             Modifier.padding(
                 start = t.space4,
@@ -361,3 +386,202 @@ internal fun AddTransactionReceiptCard(
         }
     }
 }
+
+// ===== 保存校验的金额抖动（原型 s04-记账.html:738-741 的 is-bad） =====
+
+/** 金额校验的提示文案（原型 s04-记账.html:740 逐字）。 */
+internal const val SAVE_AMOUNT_HINT = "请输入大于 0 的金额"
+
+/** 抖动位移（px）：±4 × 3，与 transfer/ui/TransferTaskCardHelpers 的失败抖动同口径。 */
+private const val AMOUNT_SHAKE_PX = 4f
+
+/**
+ * 金额校验抖动：±4px × 3，时长取 dur-page / 6、曲线 ease-in（与 transfer 的 rememberFailureShake 同参数）。
+ *
+ * 仓库里现成的抖动件只有 transfer/ui/TransferTaskCardHelpers.rememberFailureShake，那边绑的是
+ * 「传输失败」语义；ui/components 层还没有通用 shake，finance 直接引用 transfer 会造出一条
+ * finance → transfer 的模块依赖（两个屏互不相干）。所以这里按**同一 token 口径**本地实现，
+ * 不新增视觉口径、也不引第三方；等 shake 抽到 ui/components 后本函数删除。
+ *
+ * @param signal 每次 +1 播一轮（初始 0 = 不动）；动效档为「精简」/系统关闭动画时直接归零。
+ */
+@Composable
+internal fun rememberAmountShake(signal: Int): Animatable<Float, *> {
+    val t = LocalDesignTokens.current
+    val motion = rememberMotionEnabled()
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(signal, motion) {
+        if (signal == 0 || !motion) {
+            anim.snapTo(0f)
+            return@LaunchedEffect
+        }
+        val step = (t.durPage / 6).coerceAtLeast(1)
+        repeat(3) {
+            anim.animateTo(AMOUNT_SHAKE_PX, tween(step, easing = t.easeIn))
+            anim.animateTo(-AMOUNT_SHAKE_PX, tween(step, easing = t.easeIn))
+        }
+        anim.animateTo(0f, tween(step, easing = t.easeIn))
+    }
+    return anim
+}
+
+// ===== 边界演示态（原型 s05:482-499；锚点 s05-edge / s05-edge-cat） =====
+
+/** 边界的超长金额：纯演示样本，不入库、不参与任何计算。 */
+internal const val EDGE_AMOUNT_SAMPLE = "-¥1,234,567.89"
+
+/** 边界的超长分类名（原型 s05:488 的 .cat-name.is-long，换行不裁切）。 */
+internal const val EDGE_LONG_CATEGORY = "人情往来·红白喜事礼金"
+
+/** 边界演示态的其余两个分类（原型 s05:489-490：交通 / 购物）。 */
+private val EDGE_CATEGORIES = listOf(EDGE_LONG_CATEGORY, "交通", "购物")
+
+/**
+ * 边界演示态的备注样例：正好 [REMARK_MAX_LEN] 字（原型 s05:495「备注（200 字上限）」）。
+ *
+ * 单测锁住长度 == [REMARK_MAX_LEN]：演示的就是「顶满 200 字上限」这条边界，
+ * 少一个字就不再是边界样例了。
+ */
+internal val EDGE_REMARK_SAMPLE: String =
+    "同事婚礼礼金，与另外两位同事合并随礼，事后按人均结算并记入本月人情往来预算，剩余额度将在下月重置。" +
+        "备注用于验证超长文本在行内折行与不裁切：写明聚餐人数、结算方式与后续分摊安排，避免月底对账时找不到出处；" +
+        "如预算紧张，剩余额度会在下月重置。同行的两位同事分别用不同的方式付款，事后按人均分摊核对账目，" +
+        "确认无遗漏后再记一笔。本月剩余额度如不足，系统会在下月重置后重新统计，届时再仔细核对一遍每项明细与分摊。"
+
+/**
+ * 保存口径说明行。
+ *
+ * 原型写的是「金额与备注均为空时，保存按钮不可用。」（s05:498），实现按 #63 改了反馈方式：
+ * 金额为空 / 为 0 时按钮**仍可点**，点了抖动金额卡 + toast「请输入大于 0 的金额」
+ * （原型 s04-记账.html:735-749 的 data-save 分支）；只有分类未选 / 转账账户不合法才禁用。
+ * 演示态照实现写，避免演示态说一套、真机另一套。
+ */
+internal const val EDGE_SAVE_HINT =
+    "金额为空或为 0 时点保存会抖动金额卡并提示「请输入大于 0 的金额」；分类未选时保存按钮不可用。"
+
+/**
+ * 记一笔的边界演示态（锚点 s05-edge）。
+ *
+ * 只在 DEBUG 五态条切「边界」时出现：[addTransactionState] 不产 EDGE，自动态永远走不到这里。
+ * 纯展示、没有写入路径 —— 保存条不渲染（原型 s05:454 的 data-state-hide 含 edge）。
+ */
+@Composable
+internal fun AddTransactionEdgeBlock(modifier: Modifier = Modifier) {
+    val t = LocalDesignTokens.current
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = t.space4)
+            .testTag("s05-edge"),
+    ) {
+        Spacer(Modifier.height(t.space3))
+        EdgeState(text = "边界演示态：超长金额 / 超长分类名 / 200 字备注")
+        Spacer(Modifier.height(t.space3))
+        // 超长金额：原型 s05:483-486 的玻璃卡 + kpi-label
+        GlassCard(padding = t.space4) {
+            Text(
+                "超长金额",
+                style = MaterialTheme.typography.labelSmall,
+                color = t.muted,
+            )
+            Spacer(Modifier.height(t.space1))
+            Text(
+                EDGE_AMOUNT_SAMPLE,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = t.textXl,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = t.expenseText,
+            )
+        }
+        Spacer(Modifier.height(t.space3))
+        // 三个分类芯片：第一格是超长名（锚点 s05-edge-cat），两行换行而不是省略
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(t.space1),
+        ) {
+            EDGE_CATEGORIES.forEachIndexed { index, name ->
+                EdgeCategoryChip(
+                    name = name,
+                    selected = index == 0,
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(if (index == 0) Modifier.testTag("s05-edge-cat") else Modifier),
+                )
+            }
+        }
+        Spacer(Modifier.height(t.space3))
+        // 备注行：原型 s05:492-497 的 group > row（标题 + 200 字正文）
+        AppCard(padding = 0.dp) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = t.space4, vertical = t.space3),
+                horizontalArrangement = Arrangement.spacedBy(t.space3),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    Icons.Filled.Description,
+                    contentDescription = null,
+                    tint = t.muted,
+                    modifier = Modifier.size(t.iconSize),
+                ) // decorative：旁边就是「备注（200 字上限）」，图标不承载额外信息
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "备注（200 字上限）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                    )
+                    Spacer(Modifier.height(t.space1))
+                    Text(
+                        EDGE_REMARK_SAMPLE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.fg2,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(t.space3))
+        Text(
+            EDGE_SAVE_HINT,
+            style = MaterialTheme.typography.labelSmall,
+            color = t.meta,
+        )
+        // 给底部五态条让位
+        Spacer(Modifier.height(t.space12))
+    }
+}
+
+/**
+ * 边界态的分类芯片：与 CategoryPickerTopLevel.TopLevelCell 同一视觉
+ * （选中 = 2dp accent 描边 + 12% accent 淡底），只是不可点 —— 演示态无交互。
+ */
+@Composable
+private fun EdgeCategoryChip(name: String, selected: Boolean, modifier: Modifier = Modifier) {
+    val t = LocalDesignTokens.current
+    val shape = RoundedCornerShape(t.radiusMd)
+    Column(
+        modifier
+            .clip(shape)
+            .background(if (selected) t.accent.copy(alpha = EDGE_SELECTED_BG_ALPHA) else Color.Transparent)
+            .border(2.dp, if (selected) t.accent else Color.Transparent, shape)
+            .padding(horizontal = t.space1, vertical = t.space1),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CategoryIcon(name = name, color = categoryColorOf(name), size = t.iconSize)
+        Spacer(Modifier.height(t.space1))
+        Text(
+            displayName(name),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) t.accentText else t.fg2,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** 选中态淡底透明度：与 TopLevelCell 的 SELECTED_BG_ALPHA 同值（12%）。 */
+private const val EDGE_SELECTED_BG_ALPHA = 0.12f

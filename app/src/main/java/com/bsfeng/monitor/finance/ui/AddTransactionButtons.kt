@@ -65,6 +65,11 @@ internal fun acceptSubmitClick(
  * 锚点 s14a-save：按下缩到 0.97（120ms，SUCCESS 触感）；禁用时点击无反应、不弹错误、不抖动。
  * 提交中由调用方把 [enabled] 置 false（见 AddTransactionScreen 的 submitting）；[acceptSubmitClick]
  * 再兜一道「状态还没重组完」的补点，两层合起来保证 300ms 内连点 N 次只写 1 笔。
+ *
+ * [enabled] 只表达「用户改不了的缺失」（分类未选 / 转账账户不合法）与「提交中」；
+ * 金额为空 / 为 0 这类可当场纠正的错误故意**不**置灰 —— 按钮保持可点，由 onClick 侧抖金额卡 +
+ * toast「请输入大于 0 的金额」（原型 s04-记账.html:735-749）。禁用态收不到点击，边灰边解释只能
+ * 再套一层点击区，读屏会念「不可用」却又能点，语义更乱。
  */
 @Composable
 internal fun PrimaryButton(text: String, enabled: Boolean, onClick: () -> Unit) {

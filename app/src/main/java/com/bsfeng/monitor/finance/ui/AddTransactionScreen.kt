@@ -37,10 +37,12 @@ import com.bsfeng.monitor.finance.CategoryTree
 import com.bsfeng.monitor.finance.model.Account
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
 import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.StateSkeleton
+import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import java.time.LocalDate
 import java.util.Locale
@@ -192,9 +194,21 @@ fun AddTransactionScreen(
         }
     }
 
-    val canSave = RecordForm.canSave(txType, amountText, selectedCategory, accountName, toAccountName)
-    // 保存按钮的可用态 = 表单条件 && 未提交：提交中按钮置灰（PrimaryButton 在禁用态不震、不响应）
-    val canSubmit = canSave && !submitting
+    // 保存校验拆成两档（判定口径在 RecordForm.saveCheck，本屏只决定「怎么反馈」）：
+    // - 金额为空 / 为 0 → 可当场纠正的输入错误：按钮**保持可点**，点了抖金额卡 + toast，
+    //   而不是把按钮变灰却不说原因（禁用态既点不动、读屏也问不出「还差什么」）。
+    //   原型 s04-记账.html:735-749 就是这么做的（抖动 .is-bad + toast「请输入大于 0 的金额」）。
+    // - 分类未选 / 转账账户不合法 → 结构性缺失：沿用禁用态（现状不变，原型也不允许存未分类）。
+    // - 提交中 → 一律禁用（连点闸门，锚点 s14a-save）。
+    // 「禁用态」与「点击反馈」不能共存：clickable(enabled=false) 不再收事件，想要「禁用还解释原因」
+    // 只能再套一层点击区，读屏会念「不可用」却又能点，语义更乱 —— 所以按错误能否当场纠正来分流。
+    val saveBlock = RecordForm.saveCheck(txType, amountText, selectedCategory, accountName, toAccountName)
+    val canSave = saveBlock == null
+    val canSubmit = RecordForm.saveButtonEnabled(saveBlock, submitting)
+    // 金额校验反馈：每次失败 signal +1 → 金额卡抖一轮 + 一条 toast（原型 s04:738-741）
+    var amountShakeSignal by remember { mutableStateOf(0) }
+    val amountShake = rememberAmountShake(amountShakeSignal)
+    val toast = rememberToastHostState()
 
     fun buildTransaction(): Transaction = AddTransactionDraft(
         txType = txType,
@@ -246,6 +260,10 @@ fun AddTransactionScreen(
                         }
                     }
                 }, modifier = Modifier.weight(1f))
+                // 边界演示态（锚点 s05-edge）：只在 DEBUG 五态条切「边界」时出现 ——
+                // 自动态的 addTransactionState 不产 EDGE，真实数据路径永远走不到这里。
+                // 原型 s05:454 的保存条 data-state-hide 含 edge，所以这里同样不渲染表单与保存条。
+                state == FiveState.EDGE -> AddTransactionEdgeBlock(Modifier.weight(1f))
                 else -> Box(Modifier.weight(1f).fillMaxSize()) {
                     Column(
                         modifier = Modifier
@@ -277,6 +295,8 @@ fun AddTransactionScreen(
                             onTypeChange = { txType = it },
                             onAmountChange = { amountText = it },
                             isRefundEntry = isRefundEntry,
+                            // 金额校验失败时本卡抖一轮（原型 .s05-input.is-bad）
+                            shakeOffset = amountShake.value,
                         )
 
                         // ② 字段卡：分类 / 账户（转账为转出+转入）/ 时间 / 说明 —— 四行同构，与原型一致
@@ -307,16 +327,21 @@ fun AddTransactionScreen(
 
                     // ④ 保存吸底（s14a-actions；主按钮 = s14a-save）：表单怎么滚，它都在
                     AddTransactionActionBar(
-                        isEditing = isEditing,
-                        // 提交中并入禁用态：按钮置灰（PrimaryButton 禁用时既不震触感也不响应点击）
+                        // 可用态 = 结构性条件 && 未提交：金额无效时按钮仍可点，点了给抖动 + 提示
                         canSave = canSubmit,
                         showDelete = isEditing && onDelete != null,
-                        // 保存闸门：只在条件满足且未提交时放行，并当场置 submitting ——
-                        // 260ms 返回窗口内的补点（含状态还没重组完的那次）一律挡掉
+                        // 保存闸门：金额无效 → 抖动 + toast 停在本页；条件满足且未提交才放行，
+                        // 并当场置 submitting —— 260ms 返回窗口内的补点（含状态还没重组完的那次）一律挡掉
                         onSave = {
-                            if (acceptSubmit(canSave, submitting)) {
-                                submitting = true
-                                onSave(buildTransaction())
+                            when (saveBlock) {
+                                SaveBlock.AMOUNT -> {
+                                    amountShakeSignal++
+                                    toast.show(SAVE_AMOUNT_HINT)
+                                }
+                                else -> if (acceptSubmit(canSave, submitting)) {
+                                    submitting = true
+                                    onSave(buildTransaction())
+                                }
                             }
                         },
                         onDeleteClick = { if (!submitting) showDeleteConfirm = true },
@@ -386,6 +411,18 @@ fun AddTransactionScreen(
                 showDeleteConfirm = false
                 restoreDeleteFocus = true
             },
+        )
+
+        // 校验反馈的 toast 宿主：贴底部浮起，但要抬到吸底保存条之上（锚点 toast-host 由 AppToast 自带）。
+        // 保存条高 ≈ 内容 44(tapMin) + 上下 padding（space3 / space5），所以落点取 space12 + tapMin；
+        // 只给 space12 时提示会压在「保存」按钮上，正好挡住用户要点的那个东西。
+        // 本页不是 WindowOverlay 弹窗，页面级宿主就能看见；抽屉打开时不会有校验提示（按钮在抽屉下）。
+        AppToast(
+            message = toast.message,
+            onDismiss = { toast.clear() },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = t.space12 + t.tapMin),
         )
     }
 }

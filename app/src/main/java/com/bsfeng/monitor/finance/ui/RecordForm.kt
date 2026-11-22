@@ -6,6 +6,24 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
+ * 保存前的阻塞原因（对应原型 s04-记账.html:738-741 的 data-save 分支）。
+ *
+ * 拆成三条而不是「能 / 不能」两态：金额是可当场纠正的输入错误（原型给抖动 + toast），
+ * 分类、转账账户是结构性问题（沿用禁用态即可）。反馈方式不同，但判定口径只有一处 ——
+ * [RecordForm.canSave] 恒等于 `saveCheck(...) == null`。
+ */
+internal enum class SaveBlock {
+    /** 金额为空 / 为 0 / 非数字（[RecordForm.amountOf] 已把非法输入归 0） */
+    AMOUNT,
+
+    /** 支出 / 收入没选分类 */
+    CATEGORY,
+
+    /** 转账的转出、转入缺失或相同 */
+    TRANSFER_ACCOUNTS,
+}
+
+/**
  * 「记一笔」表单的纯逻辑（无 Compose 依赖，便于单测）。
  *
  * 对应定版原型 `26-a-quan-chouti.html` 的 s14a 屏：一屏放得下的表单 + 四个抽屉。
@@ -24,9 +42,6 @@ internal object RecordForm {
 
     /** 类型分段控件的选项顺序（原型 s14a-kind：支出 / 收入 / 转账） */
     val TYPE_OPTIONS = listOf("支出", "收入", "转账")
-
-    /** 分类抽屉的列数（原型 .s14a-grid：repeat(4, minmax(0,1fr))） */
-    const val CATEGORY_GRID_COLUMNS = 4
 
     /** 时间行落在「日期 + 时刻」上；秒不单独选，默认沿用当前秒 / 原记录秒 */
     data class TimeParts(val date: String, val hour: Int, val minute: Int, val second: Int)
@@ -113,7 +128,30 @@ internal object RecordForm {
     fun amountOf(amountText: String): Double = amountText.toDoubleOrNull() ?: 0.0
 
     /**
-     * 能否保存。
+     * 保存校验：通过返回 null，否则给出第一条阻塞原因。
+     *
+     * 顺序固定「金额 → 结构」：原型点保存先拦金额（抖动 + toast「请输入大于 0 的金额」，
+     * s04-记账.html:738-741），金额合法后才轮到分类 / 转账账户。
+     */
+    fun saveCheck(
+        type: Int,
+        amountText: String,
+        categoryName: String,
+        accountName: String,
+        toAccountName: String,
+    ): SaveBlock? {
+        if (amountOf(amountText) <= 0.0) return SaveBlock.AMOUNT
+        if (type == TYPE_TRANSFER) {
+            val accountsOk = accountName.isNotBlank() &&
+                toAccountName.isNotBlank() &&
+                accountName != toAccountName
+            return if (accountsOk) null else SaveBlock.TRANSFER_ACCOUNTS
+        }
+        return if (categoryName.isNotBlank()) null else SaveBlock.CATEGORY
+    }
+
+    /**
+     * 能否保存（= [saveCheck] 通过）。
      *
      * - 支出 / 收入：金额 > 0 且选中了**当前类型**下的分类（切类型后残留的旧分类不算）
      * - 转账：金额 > 0 且转出、转入账户都选了、且不是同一个账户
@@ -124,13 +162,18 @@ internal object RecordForm {
         categoryName: String,
         accountName: String,
         toAccountName: String,
-    ): Boolean {
-        if (amountOf(amountText) <= 0.0) return false
-        if (type == TYPE_TRANSFER) {
-            return accountName.isNotBlank() && toAccountName.isNotBlank() && accountName != toAccountName
-        }
-        return categoryName.isNotBlank()
-    }
+    ): Boolean = saveCheck(type, amountText, categoryName, accountName, toAccountName) == null
+
+    /**
+     * 保存按钮能否点（= UI 的 enabled）—— 与 [canSave] 不是同一件事。
+     *
+     * - 金额无效（[SaveBlock.AMOUNT]）：**可点**。按钮保持可点，点下去抖金额卡 + toast，
+     *   否则用户只看到一个点不动的灰按钮，既没反馈也问不出还差什么（原型 s04:735-749）。
+     * - 分类未选 / 转账账户不合法：禁用。用户改得动，但这是结构性缺失，与 s14a「必须选分类」口径一致。
+     * - 提交中：一律禁用（连点闸门，锚点 s14a-save）。
+     */
+    fun saveButtonEnabled(block: SaveBlock?, submitting: Boolean): Boolean =
+        !submitting && (block == null || block == SaveBlock.AMOUNT)
 
     /**
      * 切换类型后校正分类：只在当前类型的分类里找，找不到就退回第一个。
