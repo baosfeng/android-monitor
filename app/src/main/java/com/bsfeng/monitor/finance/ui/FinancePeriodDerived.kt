@@ -9,6 +9,7 @@ import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.ui.components.CHART_X_TICKS_MAX
 import com.bsfeng.monitor.ui.components.ChartFrameKind
+import com.bsfeng.monitor.ui.components.ChartValueLabels
 
 /** unitbar 的固定顺序（原型 s04-unitbar：今日 / 本周 / 本月 / 本年 / 全部），与 [FinancePeriod] 声明顺序一致。 */
 internal val FINANCE_PERIOD_ORDER: List<FinancePeriod> = listOf(
@@ -86,7 +87,13 @@ internal fun periodChartValues(period: FinancePeriod, stats: PeriodStats?): List
 /** 空态时占位桶数（热力条 24 格、柱最少 7 根，取 24 让两种形状都不至于空掉）。 */
 internal const val PERIOD_CHART_MIN_BUCKETS: Int = 24
 
-/** day 档热力条的 X 轴刻度：0/6/12/18/24 五点（24 格均分成四段，刻度落在每段起点）。 */
+/**
+ * day 档热力条的 X 轴刻度文案：0/6/12/18/24 五点。
+ *
+ * 这五个值在原型里是**格边界**而不是格序号：位置 = i2·(cw+gap)，首贴左端、末贴右端
+ * （99-app.js:822-833）。落到 24 个桶上的边界序号由外壳的 heatXTicks 换算（0/6/12/18/24），
+ * 不能用「第 0..4 个桶」定位 —— 那会把整排刻度压到左 1/6 区内（审计「日档热力 X 轴错位」）。
+ */
 internal val PERIOD_HEAT_X_LABELS: List<String> = listOf("0", "6", "12", "18", "24")
 
 /**
@@ -101,6 +108,32 @@ internal const val PERIOD_ALL_X_LABEL_MAX: Int = 9
  */
 internal fun periodXLabelMax(period: FinancePeriod): Int =
     if (period == FinancePeriod.ALL) PERIOD_ALL_X_LABEL_MAX else CHART_X_TICKS_MAX
+
+/**
+ * 档位 → X 轴抽稀步长（原型两处 data-chart-tick / 面积图跳奇数的等价写法）。
+ *
+ * - 年档 12 个月：原型面积图「labels.length > 7 时跳过奇数索引」→ 1/3/5/7/9/11（99-app.js:661-670）；
+ * - 月档 30 天：原型柱图 data-chart-tick='5' → 1/6/11/16/21/26/30（s04-记账.html:208 + 99-app.js:750-751）；
+ * - 周档 7 根、全部档 9 个年份都不抽稀（7 个标签 ≤ 原型阈值 7；年份标签短，走 [periodXLabelMax] 全标）。
+ */
+internal fun periodXTickStep(period: FinancePeriod): Int? = when (period) {
+    FinancePeriod.YEAR -> 2
+    FinancePeriod.MONTH -> 5
+    else -> null
+}
+
+/**
+ * 档位 → 数值直标口径（原型 data-chart-vlabels）。
+ *
+ * 三张柱图原型都写 vlabels='peak'：周 7 根（s04:201）、月 30 根（s04:208）、近 7 天
+ * （s04:276）—— 只标最大那根，其余柱高靠 Y 轴与网格读。
+ * 热力是色阶不是柱（99-app.js:816-821 不写任何 text），所以 day 档不直标。
+ * 面积档虽然只标峰值，但那是 area 引擎的 peak 恒开（99-app.js:674），与 vlabels 无关。
+ */
+internal fun periodValueLabels(period: FinancePeriod): ChartValueLabels = when (period) {
+    FinancePeriod.DAY -> ChartValueLabels.None
+    else -> ChartValueLabels.Peak
+}
 
 /**
  * 档位的 X 轴刻度。
@@ -151,21 +184,29 @@ internal fun periodChartTag(period: FinancePeriod): Modifier = when (period) {
 /** 周期 KPI 文案：今日支出 / 本周支出 …（档位标签前缀 + 支出 / 收入）。 */
 internal fun periodKpiLabel(period: FinancePeriod, kind: String): String = period.label + kind
 
-/** 柱数超过这个值就不再逐柱直标（30 根柱的柱顶数字会互相压住，读不出也看不清）。 */
-internal const val PERIOD_VALUES_MAX_BARS: Int = 10
+/**
+ * 该档是否补一行图注（峰值 / 口径说明）。
+ *
+ * 原型只有 day 档有可见图注（s04-记账.html:194 解释热力口径）；周档 7 根柱顶直标峰值、
+ * 一屏读得完，图注是重复信息（s04:201 无说明）。月 / 年 / 全部桶多，柱顶只剩一个峰值数字，
+ * 用图注把「峰值是哪天、多少钱；高度按本档最大值归一」补全。
+ */
+internal fun periodShowsValueNote(period: FinancePeriod): Boolean = period != FinancePeriod.WEEK
 
-/** 是否逐柱直标：柱少直标（week 7 根），柱多降级只在图注标峰值。 */
-internal fun periodShowsAllValues(period: FinancePeriod, stats: PeriodStats?): Boolean {
-    if (period == FinancePeriod.DAY) return false
-    val values = stats?.expenseValues?.takeIf { it.isNotEmpty() } ?: return false
-    return values.size <= PERIOD_VALUES_MAX_BARS
-}
+/**
+ * 图注里「高度如何归一」的措辞：柱档说柱高、面积档说曲线。
+ *
+ * 年 / 全部档是面积图（[periodChartKind]），图上一个柱子都没有；沿用柱档的「柱高…」会让
+ * 读者在曲线图上找柱（模拟器验收原话：「峰值 11 月 ¥293 · 柱高按本档最大值归一」，但这是面积图）。
+ */
+internal fun periodValueNoteScale(period: FinancePeriod): String =
+    if (periodChartKind(period) == ChartFrameKind.Area) "曲线按本档最大值归一" else "柱高按本档最大值归一"
 
 /**
  * 不逐柱直标时的图注：把峰值写出来，柱太密也能读到关键信息。
  *
  * 单位按档位取：day 的桶标签是「小时」（19 时），其余是「日 / 月」，
- * 写成统一的「日」会把 19 点读成 19 号。
+ * 写成统一的「日」会把 19 点读成 19 号。归一措辞按图形分（见 [periodValueNoteScale]）。
  */
 internal fun periodValueNote(period: FinancePeriod, stats: PeriodStats?): String {
     // day 档口径是金额（色阶 = 该小时支出金额）：图注必须写合计与峰值金额。
@@ -180,14 +221,15 @@ internal fun periodValueNote(period: FinancePeriod, stats: PeriodStats?): String
             base
         }
     }
+    val scaleNote = periodValueNoteScale(period)
     val buckets = stats?.buckets
-    if (buckets == null || buckets.isEmpty()) return "柱高按本档最大值归一"
-    val peak = buckets.maxByOrNull { it.expense } ?: return "柱高按本档最大值归一"
+    if (buckets == null || buckets.isEmpty()) return scaleNote
+    val peak = buckets.maxByOrNull { it.expense } ?: return scaleNote
     val unit = when (period) {
         FinancePeriod.YEAR -> " 月"
         // all 档的分桶是年份（原型 s04:222 的横轴 2018..2026），写成「月」会把年份读成月份
         FinancePeriod.ALL -> " 年"
         else -> " 日"
     }
-    return "峰值 " + peak.label + unit + " " + yen(peak.expense, 0) + " · 柱高按本档最大值归一"
+    return "峰值 " + peak.label + unit + " " + yen(peak.expense, 0) + " · " + scaleNote
 }

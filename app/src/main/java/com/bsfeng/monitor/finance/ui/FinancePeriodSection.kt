@@ -27,9 +27,11 @@ import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.ui.components.ChartFrame
 import com.bsfeng.monitor.ui.components.ChartFrameKind
+import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.GlassCard
 import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+import com.bsfeng.monitor.ui.theme.monitorMonoValue
 
 /**
  * 五档时间单位切换条（原型 s04-unitbar）。
@@ -100,17 +102,23 @@ internal fun FinancePeriodQueryCard(
             modifier = Modifier.fillMaxWidth().then(periodKpiTag(selected)),
             horizontalArrangement = Arrangement.spacedBy(t.space3),
         ) {
+            // 档位两格走 .s04-amt 口径：标签 14px（.kpi-label，20-base:275）、数值 17px 等宽
+            // （--text-base，10-tokens:105；审计 #18）。s07 三格不传，仍是 21sp 的 .s07-kv。
             KpiTile(
                 label = periodKpiLabel(selected, "支出"),
                 value = if (stats == null) PLACEHOLDER_AMOUNT else yen(stats.totalExpense, 0),
                 color = t.expenseText,
                 modifier = Modifier.weight(1f),
+                labelStyle = MaterialTheme.typography.bodySmall,
+                valueStyle = monitorMonoValue,
             )
             KpiTile(
                 label = periodKpiLabel(selected, "收入"),
                 value = if (stats == null) PLACEHOLDER_AMOUNT else yen(stats.totalIncome, 0),
                 color = t.incomeText,
                 modifier = Modifier.weight(1f),
+                labelStyle = MaterialTheme.typography.bodySmall,
+                valueStyle = monitorMonoValue,
             )
         }
         Spacer(Modifier.height(t.space3))
@@ -121,16 +129,18 @@ internal fun FinancePeriodQueryCard(
             kind = periodChartKind(selected),
             title = periodChartTitle(selected),
             unit = periodChartUnit(selected),
-            // 柱太多（月度 30 桶）时柱顶数字会叠在一起：降级为只标峰值，并把峰值写进图注。
-            showValueLabels = periodShowsAllValues(selected, stats),
+            // 直标口径按原型 data-chart-vlabels：热力不标、其余只标峰值（柱图只标最大那根）
+            valueLabels = periodValueLabels(selected),
+            // X 轴抽稀按原型：年档跳奇数（1/3/5/7/9/11）、月档每 5 根（1/6/11/16/21/26/30）
+            xTickStep = periodXTickStep(selected),
             // 全部档是 4 位年份（2018..2026），标签短 → 放宽刻度数，避免忽 1 忽 2 的抽稀
             xLabelMax = periodXLabelMax(selected),
             modifier = periodChartTag(selected),
         )
         }
-        // day 档的图注在「不逐柱直标」分支里统一给足（口径说明 + 合计 + 峰值），
-        // 不再另起一行「1 格 = 1 小时」：两句话说的是同一件事，分两行反而要多读一遍。
-        if (!periodShowsAllValues(selected, stats)) {
+        // day 档的图注口径说明（含合计与峰值）+ 月 / 年 / 全部档的峰值补注：只在读不全时补，
+        // 周档 7 根柱顶已直标峰值，再来一行图注是重复信息（原型 s04:201 也没有这行）。
+        if (periodShowsValueNote(selected)) {
             Spacer(Modifier.height(t.space1))
             Text(
                 periodValueNote(selected, stats),
@@ -185,6 +195,8 @@ internal fun FinanceMultiPeriodCard(
                     value = periodExpenseText(allStats, period),
                     color = t.expenseText,
                     modifier = Modifier.weight(1f),
+                    labelStyle = MaterialTheme.typography.bodySmall,
+                    valueStyle = monitorMonoValue,
                 )
             }
         }
@@ -199,6 +211,8 @@ internal fun FinanceMultiPeriodCard(
                     value = periodExpenseText(allStats, period),
                     color = t.expenseText,
                     modifier = Modifier.weight(1f),
+                    labelStyle = MaterialTheme.typography.bodySmall,
+                    valueStyle = monitorMonoValue,
                 )
             }
         }
@@ -229,10 +243,26 @@ internal val FINANCE_STATS_PANE_SECTIONS: List<String> =
     listOf("periodcard", "statskpis", "multiperiod", "entries", "charts")
 
 /**
+ * 统计 pane 里受五态门控的三块：KPI 三值卡（s04:227）、多周期总花费（s04:242）、双入口（s04:259）
+ * 原型都带 data-state-hide="loading empty error edge" —— 只在「有数据」态渲染。
+ *
+ * 查询卡（s04:177）与三图卡（s04:274-288）原型没有 state-hide，任何态都照常出现：
+ * 空态下它们给的是「本档全是 0」的真实信息，收起来反而像整块功能坏了。
+ */
+internal val FINANCE_STATS_PANE_STATE_GATED: Set<String> = setOf("statskpis", "multiperiod", "entries")
+
+/** 该段在给定五态下是否渲染（纯函数，可 JVM 单测）。 */
+internal fun financeStatsSectionVisible(section: String, state: FiveState): Boolean =
+    section !in FINANCE_STATS_PANE_STATE_GATED || state == FiveState.POPULATED
+
+/**
  * 统计汇总 pane 的列表项（LazyListScope 扩展），按 [FINANCE_STATS_PANE_SECTIONS] 的顺序逐段派发。
  *
  * 抽成扩展而不是继续堆在 [FinanceMainScreen] 里：明细 pane 与统计 pane 共用同一个 LazyColumn，
  * 「统计 pane 有哪些项、以什么顺序出现」集中在一处，改动时不会漏掉项下标。
+ *
+ * 五态联动（原型 s04:227/242/259 的 data-state-hide）：[state] 不是 POPULATED 时
+ * statskpis / multiperiod / entries 三块整段不产生 item，顺序常量与其余段落保持原样。
  */
 internal fun LazyListScope.statsPane(
     viewModel: FinanceViewModel,
@@ -246,6 +276,8 @@ internal fun LazyListScope.statsPane(
     onPeriodSelect: (FinancePeriod) -> Unit,
     onStatsClick: () -> Unit,
     onBudgetClick: () -> Unit,
+    /** 当前五态：KPI / 多周期 / 双入口三块只在 [FiveState.POPULATED] 渲染（原型 data-state-hide）。 */
+    state: FiveState,
     periodBarEnabled: Boolean = true,
     budgetEnabled: Boolean = true,
     kpiToday: Pair<Double, Double> = 0.0 to 0.0,
@@ -253,6 +285,8 @@ internal fun LazyListScope.statsPane(
     transactionCount: Int = 0,
 ) {
     FINANCE_STATS_PANE_SECTIONS.forEach { section ->
+        // 五态门控先于 when 分派：被隐藏的段连 item key 都不产生，列表下标与顺序仍然稳定
+        if (!financeStatsSectionVisible(section, state)) return@forEach
         when (section) {
             "periodcard" -> item(key = "periodcard") {
                 // 统计汇总 pane 的容器锚点（s04-pane-stats）

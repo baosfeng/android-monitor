@@ -275,6 +275,14 @@ internal fun FinanceStatsTopCategoriesCard(
                     }
                 }
             }
+            Spacer(Modifier.height(t.space3))
+            // 原型 s07:112 的卡底注：分类行在下钻版本里可点，当前只做展示（原型示意）。
+            // 空数据也照样给：说明的是「这一块能做什么」，与有没有分类无关。
+            Text(
+                "点击分类可下钻到交易明细（原型示意）。",
+                style = MaterialTheme.typography.labelSmall,
+                color = t.meta,
+            )
         }
     }
 }

@@ -30,6 +30,7 @@ import com.bsfeng.monitor.ui.components.LegendItem
 import com.bsfeng.monitor.ui.components.PieChart
 import com.bsfeng.monitor.ui.components.ChartFrame
 import com.bsfeng.monitor.ui.components.ChartFrameKind
+import com.bsfeng.monitor.ui.components.ChartValueLabels
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.MetaText
@@ -118,8 +119,8 @@ internal fun OverviewFinanceCard(
             }
             // 趋势图带坐标轴（用户反馈「图表光秃秃、没有横纵坐标和文字」的原诉求）：
             // 2026-10 那轮只画了无轴 sparkline，读的人看不出纵轴量级、也认不出这 7 根是哪几天。
-            // 走 ui/components/ChartFrame 的 Area 分支：Y 轴 5 档刻度 + X 轴日期标签 + 峰值标注，
-            // 尺寸压到两行高（图表卡里不抢环图的位置）。
+            // 走 ui/components/ChartFrame 的 Area 分支：Y 轴 3 个刻度（0 / ½ / 上限，压 3 条网格线）
+            // + X 轴日期标签 + 峰值标注，尺寸压到两行高（图表卡里不抢环图的位置）。
             if (state.dailyExpense7.any { it > 0f }) {
                 ChartFrame(
                     values = state.dailyExpense7,
@@ -128,7 +129,9 @@ internal fun OverviewFinanceCard(
                     kind = ChartFrameKind.Area,
                     title = "近 7 天支出",
                     unit = "单位：元",
-                    showValueLabels = true,
+                    // 面积图只标峰值（与 s04 年度面积同一口径）：7 个柱顶数字在 76dp 高的小图里会互相压住
+                    valueLabels = ChartValueLabels.Peak,
+                    // 76dp 矮图只留 3 条网格（rows=2）：5 条网格在 52dp 绘图区里间距 13dp，读数会被网格压住
                     yTicks = TREND_Y_TICKS,
                     height = TREND_CHART_H,
                 )

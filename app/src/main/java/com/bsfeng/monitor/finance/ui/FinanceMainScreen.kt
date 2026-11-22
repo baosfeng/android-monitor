@@ -326,6 +326,8 @@ fun FinanceMainScreen(
                     onPeriodSelect = { viewModel.selectPeriod(it) },
                     onStatsClick = onStatsClick,
                     onBudgetClick = onBudgetClick,
+                    // 五态联动：KPI / 多周期 / 双入口只在有数据态出现（原型 s04:227/242/259）
+                    state = state,
                     periodBarEnabled = periodBarEnabled,
                     budgetEnabled = budgetEnabled,
                     kpiToday = today,

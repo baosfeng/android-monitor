@@ -43,6 +43,8 @@ fun LineChart(
     showGrid: Boolean = true,
     /** 曲线高度基准；含义同 [AreaChart] 的 maxValue（外壳带 Y 轴刻度时必须传）。 */
     maxValue: Float? = null,
+    /** 网格行数：与 Y 轴网格同源（外壳按原型 4 行 → 5 条；独立使用时仍是默认 4）。 */
+    gridRows: Int = 4,
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
@@ -66,7 +68,7 @@ fun LineChart(
                 }
             }
             onDrawBehind {
-                if (showGrid) gridLines(border, 4)
+                if (showGrid) gridLines(border, gridRows)
                 if (path == null) return@onDrawBehind
                 drawPath(path, line, style = Stroke(width = stroke, cap = StrokeCap.Round))
                 val last = pts.last()
@@ -100,6 +102,8 @@ fun AreaChart(
      * 与刻度数值同口径；否则刻度标着 0..上限、曲线却从 min-max 拉伸出来，读数对不上。
      */
     maxValue: Float? = null,
+    /** 网格行数：与 Y 轴网格同源（原型面积图 4 行 → 5 条网格，99-app.js:653-659）。 */
+    gridRows: Int = 4,
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
@@ -160,7 +164,7 @@ fun AreaChart(
             }
             onDrawBehind {
                 // 网格线画在曲线区（padT..height）：与峰值点 + Y 轴刻度共线（审计 s04 #27）
-                gridLines(border, 4, padT)
+                gridLines(border, gridRows, padT)
                 if (areaPath == null || linePath == null) return@onDrawBehind
                 val p = anim.value
                 drawPath(areaPath, areaBrush, alpha = p)

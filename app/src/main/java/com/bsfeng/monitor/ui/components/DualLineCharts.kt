@@ -62,7 +62,9 @@ private val DUAL_LINE_PAD_TOP = AREA_PAD_TOP
  * @param primaryColor 主序列线色；null 取语义色 expense-text
  * @param secondaryColor 次序列线色；null 取语义色 income-text
  * @param contentDescription 读屏名（图表本身是纯绘制，没有它读屏只会说「图片」）
- * @param yTicks Y 轴刻度行数；两条序列全为 0 时不画刻度列（假刻度会让空图看着「有量但很小」）
+ * @param yTicks Y 轴网格行数，默认 2 → 3 条网格线、3 个刻度（0 / ½上限 / 上限），与原型
+ *   s07-统计分析.html:79-94 的 y=132/84/36 三条网格 + 0/1200/2400 三个刻度同口径；
+ *   两条序列全为 0 时不画刻度列（假刻度会让空图看着「有量但很小」）
  */
 @Composable
 fun DualLineChartFrame(
@@ -75,7 +77,7 @@ fun DualLineChartFrame(
     secondaryColor: Color? = null,
     title: String = "",
     unit: String = "",
-    yTicks: Int = CHART_Y_TICKS,
+    yTicks: Int = CHART_Y_LABEL_ROWS,
     animated: Boolean = rememberMotionEnabled(),
     height: Dp? = null,
     contentDescription: String? = null,
@@ -113,7 +115,7 @@ fun DualLineChartFrame(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (yRows > 0) {
                 // 与折线区的顶部留白同源：首刻度落在最高点那一行，不是画布顶（审计 s04 #27 同一口径）
-                ChartYAxis(axisMax, yRows, plotHeight, DUAL_LINE_PAD_TOP)
+                ChartYAxis(axisMax, yRows, plotHeight, DUAL_LINE_PAD_TOP, labelRows = yRows)
                 Spacer(Modifier.width(t.space1))
             }
             Box(Modifier.weight(1f)) {
@@ -125,6 +127,7 @@ fun DualLineChartFrame(
                     axisMax = axisMax,
                     animated = animated,
                     height = plotHeight,
+                    gridRows = yRows.coerceAtLeast(1),
                     a11yLabel = contentDescription,
                 )
             }
@@ -153,6 +156,8 @@ private fun DualLinePlot(
     axisMax: Float,
     animated: Boolean,
     height: Dp,
+    /** 网格行数：与 Y 轴刻度同源（2 → 3 条，原型 s07:79-94）。 */
+    gridRows: Int,
     a11yLabel: String?,
 ) {
     val t = LocalDesignTokens.current
@@ -192,7 +197,7 @@ private fun DualLinePlot(
                 val showPrimary = primary.any { it > 0f }
                 val showSecondary = secondary.any { it > 0f }
                 onDrawBehind {
-                    gridLines(border, CHART_Y_TICKS, padT)
+                    gridLines(border, gridRows, padT)
                     val progress = anim.value
                     fun drawSeries(key: String, points: List<Offset>, color: Color, present: Boolean) {
                         if (!present || points.size < 2) return

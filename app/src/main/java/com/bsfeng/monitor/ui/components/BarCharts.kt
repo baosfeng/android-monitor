@@ -47,6 +47,11 @@ fun BarChart(
     /** 柱顶直标数值（原型 d.vlabels !== false）。 */
     showValues: Boolean = true,
     /**
+     * 只标峰值（原型 data-chart-vlabels='peak'，99-app.js:745-747,763-766）：只给最大那根柱直标，
+     * 0 值仍不标（一排 0 压在 X 轴日期上是噪点）。周 / 月 / 近 7 天柱图都走这一档。
+     */
+    peakOnly: Boolean = false,
+    /**
      * 柱高缩放基准（默认取 values 的最大值）。
      *
      * 带 Y 轴刻度的外壳（[ChartFrame]）必须传同一个值，否则柱高与刻度各按一种口径：
@@ -76,13 +81,17 @@ fun BarChart(
             val valueGap = BAR_VALUE_OFFSET.toPx()
             // 数值文本的测量与落点在 build 块内一次算好，绘制期只 drawText（T3 性能要求）
             // 0 值柱不直标：一排「0」压在 X 轴日期上方，读起来像一串噪点而不是数据（真机实测）
+            // peakOnly 取第一个最大值（与原型 99-app.js:748-749 的 `v[p] > v[pi]` 同一口径）
+            val peakIndex = if (peakOnly) values.indices.maxByOrNull { values[it] } else null
             val labels = if (!showValues) {
                 emptyList()
             } else {
                 pts.mapIndexedNotNull { i, v ->
-                    if (!shouldLabelBarValue(values.getOrElse(i) { 0f })) return@mapIndexedNotNull null
+                    val value = values.getOrElse(i) { 0f }
+                    if (!shouldLabelBarValue(value)) return@mapIndexedNotNull null
+                    if (peakIndex != null && i != peakIndex) return@mapIndexedNotNull null
                     val layout = measurer.measure(
-                        text = chartValueLabel(values.getOrElse(i) { 0f }),
+                        text = chartValueLabel(value),
                         style = valueStyle,
                     )
                     val top = size.height - plot * v - valueGap - layout.size.height

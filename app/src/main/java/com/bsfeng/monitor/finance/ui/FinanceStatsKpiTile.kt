@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
@@ -34,6 +35,10 @@ internal fun KpiTile(
     value: String,
     color: Color,
     modifier: Modifier = Modifier,
+    /** 标签字号：默认 12sp（.kpi-label 在 s04 档位卡是 14px，那两处调用点传 bodySmall）。 */
+    labelStyle: TextStyle = MaterialTheme.typography.labelSmall,
+    /** 数值字号：默认 21sp（.s07-kv，s07 三格）；s04 的 .s04-amt 是 17px，传 [monitorMonoValue]。 */
+    valueStyle: TextStyle = monitorMonoKpi,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
@@ -44,12 +49,11 @@ internal fun KpiTile(
             .border(1.dp, t.borderSoft, shape)
             .padding(t.space3),
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = t.meta)
+        Text(label, style = labelStyle, color = t.meta)
         Spacer(Modifier.height(KPI_LABEL_GAP))
         Text(
             value,
-            // 原型 .s07-kv（s07-stats.html:9）：--text-lg 等宽 700，逐位对齐
-            style = monitorMonoKpi,
+            style = valueStyle,
             color = color,
             maxLines = 1,
         )

@@ -25,6 +25,7 @@ import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.ChartFrame
 import com.bsfeng.monitor.ui.components.ChartFrameKind
+import com.bsfeng.monitor.ui.components.ChartValueLabels
 import com.bsfeng.monitor.ui.components.RingChart
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
@@ -36,6 +37,15 @@ internal val FINANCE_STATS_RING_STROKE = STATS_RING_STROKE
 
 /** 环内最多展示的分类数（与 s07 的 CATEGORY_LIMIT 同口径）。 */
 internal const val FINANCE_RING_CATEGORY_LIMIT = CATEGORY_LIMIT
+
+/**
+ * 「年度趋势」卡（锚点 s04-chart-year12）的 X 轴抽稀步长：12 个月跳奇数 → 1/3/5/7/9/11。
+ *
+ * 与五档年档同一口径（[periodXTickStep]）。这张卡是统计 pane 里唯一的 12 桶面积图，
+ * 不显式传步长就会落到通用等距抽稀：12 桶取 7 个得 1/3/5/7/8/10/12，7 与 8 相邻
+ * （模拟器实测）；原型 99-app.js:661-670 对 >7 个标签一律跳过奇数索引。
+ */
+internal const val S04_YEAR12_X_TICK_STEP: Int = 2
 
 /**
  * 统计汇总 pane 的三张图表卡（近 7 天 / 年度趋势 / 分类占比）。
@@ -72,6 +82,8 @@ internal fun FinanceStatsChartsSection(
                     kind = ChartFrameKind.Bars,
                     title = "近 7 天每日支出",
                     unit = "单位：元",
+                    // 原型 s04:276 这张卡也写 vlabels='peak'：只标最大那根
+                    valueLabels = ChartValueLabels.Peak,
                     modifier = Modifier.testTag("s04-chart-week7"),
                 )
             }
@@ -89,6 +101,11 @@ internal fun FinanceStatsChartsSection(
                     kind = ChartFrameKind.Area,
                     title = "年度支出走势",
                     unit = "单位：元",
+                    // 原型 s04:281 面积图不带 vlabels，而 area 引擎的 peak 恒开（99-app.js:674）
+                    valueLabels = ChartValueLabels.Peak,
+                    // 12 个月跳奇数 → 1/3/5/7/9/11（99-app.js:661-670）；不传会退回等距抽稀得到
+                    // 1/3/5/7/8/10/12，7 与 8 两段文字贴在一起（模拟器实测）
+                    xTickStep = S04_YEAR12_X_TICK_STEP,
                     modifier = Modifier.testTag("s04-chart-year12"),
                 )
             }
