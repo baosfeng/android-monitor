@@ -102,12 +102,19 @@ internal fun chartRowFraction(i: Int, rows: Int, topInsetRatio: Float = 0f): Flo
  * 网格虚线：[rows] + 1 条，从 [topInset] 到绘图区底边均分（与 [chartRowFraction] 同源）。
  *
  * @param topInset 顶部留白（像素）：柱 / 面积图传各自的 padT，折线与默认 0 从画布顶起
+ * @param bottomInset 底部留白（像素）：面积图把 X 轴标签画在画布内时需要让出轴区（原型 padB = 24）
  */
-internal fun DrawScope.gridLines(color: Color, rows: Int, topInset: Float = 0f) {
+internal fun DrawScope.gridLines(
+    color: Color,
+    rows: Int,
+    topInset: Float = 0f,
+    bottomInset: Float = 0f,
+) {
     if (rows <= 0) return
-    val topRatio = if (size.height > 0f) (topInset / size.height).coerceIn(0f, 1f) else 0f
+    val usable = (size.height - bottomInset).coerceAtLeast(topInset + 1f)
+    val span = (usable - topInset).coerceAtLeast(1f)
     for (i in 0..rows) {
-        val y = size.height * chartRowFraction(i, rows, topRatio)
+        val y = topInset + span * i / rows
         drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f, pathEffect = GRID_DASH)
     }
 }
@@ -119,6 +126,9 @@ internal val BAR_PAD_TOP = 22.dp
 
 /** 面积图顶部留白：原型 area 的 padT 由 14 加到 24，给峰值标注让位。 */
 internal val AREA_PAD_TOP = 24.dp
+
+/** 面积图底部 X 轴区（原型 area 的 padB = 24，99-app.js:639）。 */
+internal val AREA_AXIS_BAND = 24.dp
 
 /** 面积 Path 在 [rememberDrawCache] 里的 key（同图例只持有一个实例）。 */
 internal const val AREA_PATH_KEY = "area"

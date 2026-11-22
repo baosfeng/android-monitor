@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,6 +59,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -225,7 +227,9 @@ internal fun RangeSegment(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tapMin + segmentPad * 2)
+            // 原型 .segmented 是 52 内容 + 1px 上下边框 = 54（20-base.html:254-258）；
+            // Compose 的 border 画在内侧不占布局，所以要显式把这 2dp 补回来
+            .height(t.tapMin + segmentPad * 2 + 2.dp)
             .clip(shape)
             .background(t.fgFade(5))
             .border(1.dp, t.borderSoft, shape)
@@ -387,6 +391,8 @@ internal fun OverviewKpiCard(
                 replay++
             }
             .padding(t.space3),
+        // 原型 .kpi 的 flex gap 是 2px；三块之间没有额外 Spacer
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
             label,
@@ -395,15 +401,19 @@ internal fun OverviewKpiCard(
             color = t.meta,
             modifier = Modifier.testTag("kpi.card"),
         )
-        // 原型 .kpi 的 column-gap 是 2px（--space 档位没有 2，按布局语义留字面量）
-        Spacer(Modifier.height(2.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
+        // 原型 .kpi-value 的盒高就是 30.8（line-height 1.1）；不钉住的话 CJK 字体的自然行盒
+        // 会把它撑到 33，两张卡叠起来整块高 4.5dp
+        Row(
+            modifier = Modifier.height(KpiValueLineHeight.value.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
             value(replay)
             if (unit != null) {
                 Spacer(Modifier.width(t.space1))
                 Text(unit, style = MaterialTheme.typography.labelMedium, color = t.muted)
             }
         }
+        // 原型 .s01-foot 自带 margin-top:4px（kpi 内的 gap 之外再加 4）
         Spacer(Modifier.height(t.space1))
         Row(verticalAlignment = Alignment.Bottom) {
             if (delta != null) {
@@ -415,7 +425,8 @@ internal fun OverviewKpiCard(
                 Spacer(Modifier.width(t.space2))
                 com.bsfeng.monitor.ui.components.Sparkline(
                     values = spark,
-                    modifier = Modifier.width(t.space12 + t.space6).height(t.sparkHeight),
+                    // 原型 KPI 卡的 .s01-foot 行高 24px（spark 被压在 foot 行内），不是 spark 的 28 档
+                    modifier = Modifier.width(t.space12 + t.space6).height(t.space6),
                 )
             }
         }
@@ -446,7 +457,10 @@ internal fun StaticKpiCard(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 value,
-                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = KpiValueLineHeight,
+                ),
                 color = t.fg,
             )
             if (unit != null) {
@@ -459,10 +473,16 @@ internal fun StaticKpiCard(
     }
 }
 
+/** 原型 .kpi-value 的 line-height 是 1.1（28px → 30.8），Material 的 headlineMedium 是 32。 */
+private val KpiValueLineHeight = 30.8.sp
+
 /** 整数滚动 + 千分位；replay 变化即从 0 重播（600ms 取组件内 t.durChart）。 */
 @Composable
 internal fun RollingInt(value: Int, replay: Int, t0Fg: Color) {
-    val style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace)
+    val style = MaterialTheme.typography.headlineMedium.copy(
+        fontFamily = FontFamily.Monospace,
+        lineHeight = KpiValueLineHeight,
+    )
     key(replay) {
         val shown = com.bsfeng.monitor.ui.components.animatedCount(value)
         Text(thousands(shown), style = style, color = t0Fg)
@@ -473,7 +493,10 @@ internal fun RollingInt(value: Int, replay: Int, t0Fg: Color) {
 @Composable
 internal fun RollingActive(minutes: Long, replay: Int) {
     val t = LocalDesignTokens.current
-    val style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace)
+    val style = MaterialTheme.typography.headlineMedium.copy(
+        fontFamily = FontFamily.Monospace,
+        lineHeight = KpiValueLineHeight,
+    )
     Row(verticalAlignment = Alignment.Bottom) {
         key(replay) {
             Text(
@@ -499,7 +522,10 @@ internal fun RollingActive(minutes: Long, replay: Int) {
 @Composable
 internal fun RollingMoney(value: Double, replay: Int) {
     val t = LocalDesignTokens.current
-    val style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace)
+    val style = MaterialTheme.typography.headlineMedium.copy(
+        fontFamily = FontFamily.Monospace,
+        lineHeight = KpiValueLineHeight,
+    )
     key(replay) {
         val shown = com.bsfeng.monitor.ui.components.animatedAmount(value.toFloat())
         Text("¥" + money(shown.toDouble()), style = style, color = t.fg)
@@ -547,7 +573,8 @@ internal fun PrimaryTextButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tapMin)
+            // 原型 .btn 是 min-height:48px（20-base.html:285 → --btn-h），不是 44 的 tap-min
+            .heightIn(min = t.btnH)
             .clip(shape)
             .background(t.accent)
             .pressFeedback(interaction)
@@ -577,7 +604,7 @@ internal fun GhostTextButton(text: String, onClick: () -> Unit, modifier: Modifi
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tapMin)
+            .heightIn(min = t.btnH)
             .clip(shape)
             .background(if (pressed) t.fgFade(10) else t.fgFade(5))
             .border(1.dp, t.borderSoft, shape)
@@ -630,7 +657,7 @@ internal fun TripCardS01(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "今日行程",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = t.fg,
                 modifier = Modifier.weight(1f),
             )
@@ -649,7 +676,8 @@ internal fun TripCardS01(
             Spacer(Modifier.height(t.space1))
             MetaText("停留与移动由设备活动推算；采集中断的时间标成「未记录」，不做推断。")
         } else {
-            Column(Modifier.testTag("trip-band")) {
+            // 原型 .s01-trip-btn 的 padding 是 8px 0 0：时间带上沿与卡头间距 12+8
+            Column(Modifier.testTag("trip-band").padding(top = t.space2)) {
                 TripBand(segments = timeline.segments, dayStart = dayStart, dayEnd = dayEnd)
                 Spacer(Modifier.height(t.space1))
                 TripBandAxis()

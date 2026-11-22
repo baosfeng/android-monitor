@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
+/** 原型 .legend li 的实测行高（s01-ring 7 行 = 206px → 每行 22.58）。 */
+private val LEGEND_ROW_H = 22.5.dp
+
 /** 图例数据：标签 + 右侧数值 + 色块。 */
 data class LegendItem(val label: String, val value: String, val color: Color)
 
@@ -35,7 +39,12 @@ fun Legend(items: List<LegendItem>, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(t.space2)) {
         items.forEach { item ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 原型 .legend li 的实测行高是 22.58（等宽金额行的字体行盒撑出来的）；
+            // Compose 里显式钉住，不然 7 行图例会逐行少 1.9dp，整块差 13dp
+            Row(
+                modifier = Modifier.heightIn(min = LEGEND_ROW_H),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(
                     Modifier
                         .size(10.dp)

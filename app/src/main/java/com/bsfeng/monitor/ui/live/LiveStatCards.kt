@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,9 +48,11 @@ fun HeatStrip(values: List<Float>, modifier: Modifier = Modifier) {
     if (values.any { it > 0f }) {
         HeatBar(
             values = values,
+            // 原型 heat 是 340×44 的等比 SVG（99-app.js heat 的默认 w/h）：327 宽卡里量到 42.3，
+            // 固定 44 会每屏多 1.7dp。等比后与原型同口径，窄屏也不变形。
             modifier = modifier
                 .fillMaxWidth()
-                .height(t.heatHeight),
+                .aspectRatio(340f / 44f),
         )
     } else {
         Box(
@@ -152,11 +155,16 @@ fun LiveKpiCard(
 fun CardHead(title: String, meta: String, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = modifier.fillMaxWidth(),
+        // 原型 .h3 的盒高是 22.6（17px × 1.3）；不钉住时 CJK 自然行盒把它撑到 25，
+        // 长页上每张卡多 2.4dp 会一路累积成十几 dp 的错位
+        modifier = modifier
+            .fillMaxWidth()
+            .height(MaterialTheme.typography.titleMedium.lineHeight.value.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = t.fg)
+        // 原型 .h3 是 17px/600（titleMedium），不是 17/500 的 titleSmall —— 字重与行高都差一档
+        Text(title, style = MaterialTheme.typography.titleMedium, color = t.fg)
         MetaText(meta)
     }
 }

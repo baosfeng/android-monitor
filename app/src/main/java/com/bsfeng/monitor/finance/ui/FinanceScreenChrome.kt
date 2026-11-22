@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -55,6 +56,9 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.withTimeout
 
+/** 原型 .h1 的布局行盒：28px × leading-tight 1.05（10-tokens.html:117）。 */
+private val HEAD_TITLE_LINE = 29.4.dp
+
 /**
  * 屏幕大标题（左对齐 h1 + 副标题 meta + 右侧动作）。
  *
@@ -79,7 +83,8 @@ internal fun FinanceScreenHead(
         modifier = modifier
             .fillMaxWidth()
             .then(if (consumeTopInset) Modifier.statusBarsPadding() else Modifier)
-            .padding(horizontal = t.space4, vertical = t.space2),
+            // 原型 .screen-head 的 padding 是 8 / 16 / 12（20-base.html:170-173）
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -95,10 +100,17 @@ internal fun FinanceScreenHead(
                     },
                 ),
         ) {
-            // 原型 .screen-head .h1 = 28px/700/-0.42px → headlineMedium（设计规范 §3.1 映射表）
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；Compose 的 CJK 自然行盒是 41.3，
+            // 固定 29.4dp + unbounded 绘制让行盒按原型取值、字形又不被裁（同 s01 OverviewHead）。
+            Box(Modifier.height(HEAD_TITLE_LINE)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
             if (subtitle != null) {
-                Spacer(Modifier.height(t.space1))
                 // 原型 .meta = --text-sm 14px（20-base.html:177）：labelSmall 12sp 比它小一档，
                 // 与同屏「最近 3 天 · N 笔」（FinanceMainSections 的 s04-listmeta）也不一致。
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.meta)

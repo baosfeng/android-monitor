@@ -207,7 +207,9 @@ fun SegmentedControl(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tapMin + SEG_PAD * 2)
+            // 原型 .segmented 是 52 内容 + 1px 上下边框 = 54（20-base.html:254）；
+            // Compose 的 border 画在内侧不占布局，显式补 2dp 才与原型同高
+            .height(t.tapMin + SEG_PAD * 2 + 2.dp)
             .clip(shape)
             .background(t.fgFade(5))
             .border(1.dp, t.borderSoft, shape)

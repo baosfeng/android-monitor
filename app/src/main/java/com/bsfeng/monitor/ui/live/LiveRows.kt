@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.model.Record
@@ -48,6 +49,14 @@ import com.bsfeng.monitor.ui.theme.monitorMonoMeta
 // （同 ui/LiveEventTimeline.kt 的处理）。正常字号下文本自然宽 < 46dp，列宽仍是 46dp，与原设计一致。
 private val TL_TIME_COL_W = 46.dp
 
+// s01 概览的「最近事件」行是**单行**（原型 s01-今日概览:317 的 .s01-ev：时间 + 图标 + 一行
+// 「微信 · 前台 12 分钟」+ 箭头，行高 52、左右无内边距）。时间列原型自然宽 42px，箭头 18px。
+private val S01_TIME_COL_W = 42.dp
+private val S01_CHEV_SIZE = 18.dp
+
+// 类型图标底座：原型 .row-icon 是 36×36（20-base.html:230），不是 space-8 档位。
+private val TYPE_DOT_SIZE = 36.dp
+
 /** 类型图标底座（替代原型 .row-icon）。 */
 @Composable
 fun TypeIconDot(type: RecordType, modifier: Modifier = Modifier) {
@@ -55,7 +64,7 @@ fun TypeIconDot(type: RecordType, modifier: Modifier = Modifier) {
     val c = t.eventColor(type)
     Box(
         modifier = modifier
-            .size(t.space8)
+            .size(TYPE_DOT_SIZE)
             .clip(RoundedCornerShape(t.radiusSm))
             .background(c.copy(alpha = 0.14f)),
         contentAlignment = Alignment.Center,
@@ -121,18 +130,17 @@ fun LiveEventRow(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = t.rowMinH)
+            // 整行是一个按钮：把时间、图标、标题合并成一条可读语义（原型 s01:317 就是 <button>）
+            .semantics(mergeDescendants = true) {}
             .rowPressFeedback(interaction)
             // 键盘 / 遥控器聚焦时出 2dp 焦点环（触屏点按不出，见 FocusRing.kt）：此前只有 ripple 状态层
             .keyboardFocusRing(shape)
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { onClick() }
-            .padding(horizontal = t.space4, vertical = t.space2),
+            .padding(vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // ≥46dp：原型 .tl-item 时间列（00-shell.html:379 grid-template-columns:46px）；
-        // .tl-time = --font-mono --text-sm → monitorMonoMeta。宽度不足时不得换行
-        // （48dp + 14sp 下 "20:16:12" 会折成两行，见 14-after/s02-live.png）。
-        // 用 widthIn 下限而非固定宽度：字体放大时列按需变宽，后两列（space1 + weight(1f)）让位；
-        // 兜底省略号而非 Clip——真放不下时看见「01:5…」就知道被截了，不会把截断值当真时间读。
+        // s01 行没有横向内边距（原型 .s01-ev 的 padding 是 8px 0）：缩进由外层卡片的 --space-4 提供。
+        // 时间列原型自然宽 42px；宽度不足时不换行，兜底省略号，避免把截断的时间当真实值读。
         Text(
             text = if (showSeconds) formatClockSec(record.timestamp) else formatClock(record.timestamp),
             style = monitorMonoMeta,
@@ -140,9 +148,9 @@ fun LiveEventRow(
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(min = TL_TIME_COL_W).testTag("row.event"),
+            modifier = Modifier.widthIn(min = S01_TIME_COL_W).testTag("row.event"),
         )
-        Spacer(Modifier.width(t.space1))
+        Spacer(Modifier.width(t.space3))
         // 凡是 detail 里带 package_name 的记录都显示应用图标（APP_USAGE / PAGE 页面轨迹 /
         // SCREEN.AD_SKIPPED 跳过广告 / PACKAGE 安装卸载）；系统事件（屏幕 / WiFi / 电量 / 充电 /
         // 音频）的 detail 没有包名，继续走类型图标，这是数据本身的边界而不是漏做。
@@ -154,28 +162,21 @@ fun LiveEventRow(
             TypeIconDot(record.type)
         }
         Spacer(Modifier.width(t.space3))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = record.label.ifBlank { PLACEHOLDER },
-                style = MaterialTheme.typography.bodyMedium,
-                color = t.fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = recordSubtitle(record),
-                style = MaterialTheme.typography.labelSmall,
-                color = t.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(t.space2))
+        // 单行标题（原型 s01:320「微信 · 前台 12 分钟」）；副行信息只在 s02 的完整行里出现
+        Text(
+            text = recordTitle(record),
+            style = MaterialTheme.typography.bodyMedium,
+            color = t.fg,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(t.space3))
         Icon(
             Icons.Outlined.NavigateNext,
             contentDescription = null,
             tint = t.meta,
-            modifier = Modifier.size(t.space5),
+            modifier = Modifier.size(S01_CHEV_SIZE),
         )
     }
 }

@@ -54,6 +54,36 @@ fun recordSourceLabel(type: RecordType): String = when (type) {
 }
 
 fun recordSubtitle(record: Record): String =
-    record.type.let { recordTypeLabel(it) } + "事件 · " + recordSourceLabel(record.type)
+    // 原型副行（s02:209「前台使用 · 无障碍服务」/ :221「屏幕事件 · 广播接收」）：
+    // APP_USAGE 的类型名本身已是「前台使用」，不再拼「事件」。
+    when (record.type) {
+        RecordType.APP_USAGE -> recordTypeLabel(record.type)
+        else -> recordTypeLabel(record.type) + "事件"
+    } + " · " + recordSourceLabel(record.type)
+
+/**
+ * 行标题：原型口径是「事件名 · 细节」（s02:209「微信 · 前台 12 分钟」、:227「Wi-Fi 连接 · Home-5G」）。
+ *
+ * 细节只取记录里真实存在的字段，取不到就只显示事件名 —— 不编造「前台 0 分钟」这类读数。
+ */
+fun recordTitle(record: Record): String {
+    val base = record.label.ifBlank { "未知事件" }
+    val detail = record.detail.orEmpty()
+    val suffix = when {
+        record.type == RecordType.APP_USAGE -> record.duration?.let { " · 前台 " + minutesCn(it) }
+        record.type == RecordType.WIFI -> detail["ssid"]?.takeIf { it.isNotBlank() }?.let { " · " + it }
+        else -> null
+    }
+    return if (suffix == null) base else base + suffix
+}
+
+/** 时长中文：<1 分钟写「不足 1 分钟」，整分钟写「12 分钟」，否则「12 分 04 秒」。 */
+private fun minutesCn(ms: Long): String {
+    val totalSec = (ms / 1000).toInt()
+    if (totalSec < 60) return "不足 1 分钟"
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return if (sec == 0) min.toString() + " 分钟" else min.toString() + " 分 " + String.format(java.util.Locale.US, "%02d", sec) + " 秒"
+}
 
 // ───────────────────────── 页头 / 图标按钮 ─────────────────────────

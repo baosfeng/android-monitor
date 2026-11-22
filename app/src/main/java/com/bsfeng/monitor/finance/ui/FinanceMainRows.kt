@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DividerDefaults
@@ -84,6 +85,12 @@ private const val TX_ANCHOR_COUNT = 8
  */
 internal val TX_ROW_MIN_H = 48.dp
 
+/** 原型 .group-row 的实测行高（s04:115-175 量得 57.4～58.4，取中值）。 */
+private val TX_ROW_H = 57.5.dp
+
+/** 原型日期分组头的行盒：14 × 1.3 ≈ 18.2。 */
+private val TX_DATE_LINE = 18.2.dp
+
 /** 「自动」徽标高度 18dp（原型 .tx-auto{height:18px}，s04-记账.html:42）。 */
 internal val TX_AUTO_BADGE_H = 18.dp
 
@@ -123,6 +130,10 @@ private fun Modifier.txRowAnchor(index: Int): Modifier = when (index) {
  * 其余行是直角，描边只画外缘（内侧边由行间的 HorizontalDivider 承担，等价原型
  * `.group-row:first-child{border-top:0}` + 行间 border-top，00-shell.html:262-268）。
  */
+/** 原型 .row-title / .row-sub 的布局行盒（20-base.html:226-227）。 */
+private val TX_TITLE_LINE = 21.3.dp
+private val TX_SUB_LINE = 18.2.dp
+
 @Composable
 internal fun DayGroupRow(
     first: Boolean,
@@ -164,7 +175,9 @@ internal fun DayGroupRow(
                     }
                 }
             }
-            .padding(t.space1),
+            // 原型 .group 的卡内 padding 是 0 16（00-shell.html:255），行盒 = 卡内容区 327；
+            // 上下的 4 会变成行间缝隙（原型行是紧贴的）
+            .padding(horizontal = t.space4),
         content = content,
     )
 }
@@ -246,9 +259,10 @@ internal fun TransactionRow(
             .clickable(interactionSource = interaction, indication = LocalIndication.current) { onClick() }
             // 行高下限：原型 .list-row min-height 48px（20-base.html:224）。
             // 不用 t.rowMinH（52dp 的通用行高，全站设置行 / 事件流 / 白名单共用），
-            // 只把记账明细行收到 48dp，与原型紧凑列表一致。
-            .heightIn(min = TX_ROW_MIN_H)
-            .padding(horizontal = t.space3, vertical = t.space2),
+            // 只把记账明细行收到 48dp，与原型紧凑列表一致；实测行高 57.4～58.4，取 57.5 兜底。
+            .heightIn(min = TX_ROW_H)
+            // 原型 .group-row 的 padding 是 8 0（00-shell.html:262）：水平缩进由外层卡提供
+            .padding(vertical = t.space2), // 行高由 TX_ROW_H 兜底
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 列表行展示分类线描图标（与分类选择格同一套配色），不再只用色点
@@ -256,34 +270,44 @@ internal fun TransactionRow(
         Spacer(Modifier.width(t.space3))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    // 转账没有分类：标题显示「转出账户 → 转入账户」，否则这一行会是空的
-                    if (isTransfer) RecordForm.transferTitle(transaction) else transaction.categoryName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = t.fg,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false).testTag("row.tx"),
-                )
-                if (isAutoBooked) {
-                    // 原型 s04：标题右侧、金额左边的小号「自动」徽标（浅底圆角、中性色）
-                    Spacer(Modifier.width(t.space1))
-                    TxAutoBadge(TransactionSourceBadge.AUTO_LABEL)
+                // 原型 .row-title 行盒 = 17 × 1.25 = 21.25（20-base.html:226）；
+                // Compose 的 CJK 自然行盒 25，用固定盒 + unbounded 绘制保持字形完整
+                Box(Modifier.weight(1f, fill = false).height(TX_TITLE_LINE)) {
+                    Text(
+                        // 转账没有分类：标题显示「转出账户 → 转入账户」，否则这一行会是空的
+                        if (isTransfer) RecordForm.transferTitle(transaction) else transaction.categoryName,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = t.fg,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .wrapContentHeight(Alignment.Top, unbounded = true)
+                            .testTag("row.tx"),
+                    )
                 }
             }
             // 副标题：优先用户手写的「说明」，为空时回退自动采集的商户 · 付款方式
             // （再退回商品说明），见 RecordForm.subtitle
             val sub = RecordForm.subtitle(transaction)
             if (sub.isNotEmpty()) {
-                Text(
-                    sub,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // 原型 .row-sub 行盒 = 14 × 1.3 = 18.2（20-base.html:227）
+                Box(Modifier.height(TX_SUB_LINE)) {
+                    Text(
+                        sub,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                    )
+                }
             }
+        }
+        // 原型 s04：小号「自动」徽标在副标题右侧、金额左边（行内垂直居中），不在标题行
+        if (isAutoBooked) {
+            Spacer(Modifier.width(t.space1))
+            TxAutoBadge(TransactionSourceBadge.AUTO_LABEL)
         }
         Spacer(Modifier.width(t.space2))
         Text(
@@ -597,20 +621,29 @@ internal fun LazyListScope.financeMainItems(
     when (state) {
         FiveState.POPULATED -> {
             var rowIndex = 0
-            grouped.forEach { (date, txs) ->
+            grouped.entries.forEachIndexed { groupIndex, (date, txs) ->
                 item(key = "day-" + date) {
                     // 日期解析 + LocalDate.now() 只在挂载时算一次；
                     // 「今天/昨天」跨零点不会自动刷新 —— 本屏每次进入 Tab / 回前台都会重新 loadMonth 并重组，
                     // 可接受；若要求跨零点实时，应换成「每天变一次」的日期状态源。
                     val label = remember(date) { groupLabel(date) }
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = tokens.muted,
-                        modifier = Modifier
+                    // 原型日期头是纯文本行（无上边距），行盒 14 × 1.3 ≈ 18.2；
+                    // 用固定盒 + unbounded 绘制，8 行明细的起点才不会一路下移
+                    Box(
+                        Modifier
+                            // 原型：首组 .group-label 无上边距，后续组带 .mt-3（s04:155 / :164）
+                            .padding(top = if (groupIndex == 0) 0.dp else tokens.space3)
                             .padding(horizontal = tokens.space4)
-                            .padding(top = tokens.space2, start = tokens.space2),
-                    )
+                            .padding(start = tokens.space2)
+                            .height(TX_DATE_LINE),
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = tokens.muted,
+                            modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                        )
+                    }
                 }
                 txs.forEachIndexed { index, tx ->
                     // 锚点序号在构建期递增（不在 item 内容里自增），保证与可见顺序一致

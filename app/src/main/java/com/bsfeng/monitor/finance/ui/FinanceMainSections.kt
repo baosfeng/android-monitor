@@ -121,7 +121,8 @@ internal fun S04MonthBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space4, vertical = t.space2)
+            // 原型 .pad 只给水平 16（s04-记账.html:96），月份条紧贴页头；上下 8 会让子 Tab 条整体下移
+            .padding(horizontal = t.space4)
             .testTag("s04-monthbar")
             .clip(shape)
             .background(t.fgFade(4))

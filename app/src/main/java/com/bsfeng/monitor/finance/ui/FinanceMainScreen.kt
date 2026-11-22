@@ -341,7 +341,8 @@ fun FinanceMainScreen(
                 // 所以这里只有 listhead + 明细列表，容器锚点挂在 listhead 上（与统计 pane 同位置换名）。
                 item(key = "listhead") {
                     // 交易明细 pane 的容器锚点（s04-pane-tx）：与统计 pane 的 s04-pane-stats 同位置换名
-                    Box(Modifier.fillMaxWidth().testTag("s04-pane-tx")) {
+                    // 原型 tabbar 底 184 → 明细标题 200：中间有 16（s04:115 的 .pad 上边距）
+                    Box(Modifier.fillMaxWidth().padding(top = t.space4).testTag("s04-pane-tx")) {
                         FinanceMainListHead(
                             currentMonth = currentMonth,
                             groupedIsEmpty = grouped.isEmpty(),

@@ -4,6 +4,7 @@ package com.bsfeng.monitor.ui.components
 
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -104,12 +105,19 @@ fun AreaChart(
     maxValue: Float? = null,
     /** 网格行数：与 Y 轴网格同源（原型面积图 4 行 → 5 条网格，99-app.js:653-659）。 */
     gridRows: Int = 4,
+    /**
+     * X 轴逐点标签：非空时在画布内留 24dp 轴区并画出标签（原型 area 的 padB = 24，
+     * 99-app.js:639）。传了就不要再在外部叠 ChartAxisLabels——那会把块高撑高一行。
+     */
+    xLabels: List<String> = emptyList(),
 ) {
     val t = LocalDesignTokens.current
     // 序列色（--chart-seq）：跟随主题强调色（交接文档 §2.1）
     val line = color ?: t.chartSeq
     val border = t.border
     val peakStyle = monitorMonoBadge.copy(color = t.muted)
+    // 轴标签走 11px token（原型 --chart-axis-fs），与 ChartAxisLabels 同口径
+    val axisStyle = MaterialTheme.typography.labelSmall.copy(fontSize = t.chartAxisFs, color = t.muted)
     val measurer = rememberTextMeasurer()
     val anim = chartAnim(values, animated, t.durChart)
     // 面积 Path / 渐变 Brush 跨帧复用：尺寸不变时只重写坐标，不再每帧 new。
@@ -121,7 +129,9 @@ fun AreaChart(
             val pts = if (ceiling == null) normalize(values) else
                 values.map { (it / ceiling).coerceIn(0f, 1f) }
             val padT = AREA_PAD_TOP.toPx()
-            val plot = (size.height - padT).coerceAtLeast(1f)
+            // 原型 area 的 padB 固定 24（轴标签画在画布底部 h-7）；没有轴标签时不留白
+            val padB = if (xLabels.isEmpty()) 0f else AREA_AXIS_BAND.toPx()
+            val plot = (size.height - padT - padB).coerceAtLeast(1f)
             val stroke = 2.dp.toPx()
             val dot = 4.dp.toPx()
             val areaTop = line.copy(alpha = 0.34f)
@@ -137,8 +147,8 @@ fun AreaChart(
             }
             val areaPath = if (linePath == null) null else cache.path(AREA_PATH_KEY) {
                 addPath(linePath)
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
+                lineTo(size.width, size.height - padB)
+                lineTo(0f, size.height - padB)
                 close()
             }
             // 渐变只建一次：进度动画交给 drawPath 的 alpha 参数，不再每帧重建 Brush + listOf。
@@ -162,15 +172,29 @@ fun AreaChart(
             } else {
                 null
             }
+            // X 轴标签：与原型 99-app.js:660-670 同规则（>7 个时跳奇数位，首末端点对齐）
+            val axisTexts = xLabels.mapIndexedNotNull { i, label ->
+                if (xLabels.size > 7 && i % 2 != 0) return@mapIndexedNotNull null
+                val layout = measurer.measure(label, style = axisStyle)
+                val f = if (xLabels.size > 1) i.toFloat() / xLabels.lastIndex else 0.5f
+                val left = when {
+                    i == 0 -> 0f
+                    i == xLabels.lastIndex -> size.width - layout.size.width
+                    else -> (size.width * f - layout.size.width / 2f)
+                        .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+                }
+                MeasuredText(layout, Offset(left, size.height - layout.size.height - 2.dp.toPx()))
+            }
             onDrawBehind {
-                // 网格线画在曲线区（padT..height）：与峰值点 + Y 轴刻度共线（审计 s04 #27）
-                gridLines(border, gridRows, padT)
+                // 网格线画在曲线区（padT..height-padB）：与峰值点 + Y 轴刻度共线（审计 s04 #27）
+                gridLines(border, gridRows, padT, padB)
                 if (areaPath == null || linePath == null) return@onDrawBehind
                 val p = anim.value
                 drawPath(areaPath, areaBrush, alpha = p)
                 drawPath(linePath, line, style = Stroke(width = stroke, cap = StrokeCap.Round))
                 drawCircle(line, radius = dot, center = Offset(size.width, yOf(pts.last())))
                 if (peak != null) drawText(peak.layout, topLeft = peak.offset)
+                axisTexts.forEach { drawText(it.layout, topLeft = it.offset) }
             }
         },
     )

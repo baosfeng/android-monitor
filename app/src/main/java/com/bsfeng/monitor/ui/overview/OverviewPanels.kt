@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -201,15 +202,25 @@ internal fun LazyListScope.todayPanelS01(
         val peak = peakOf(intensity)
         val axis = remember(state.lastUpdatedAt) { rollingHourAxisLabels(state.lastUpdatedAt) }
         AppCard(modifier = Modifier.testTag("s01-chart24h").staggerEnterAt(4)) {
-            CardHead("最近 24 小时活跃", "合计 " + state.last24hActiveMinutes + " 分钟")
+            // 卡内子块也挂锚点：屏级对照报「h 差 N」时能直接定位到是标题、绘图区还是热力条
+            CardHead(
+                "最近 24 小时活跃",
+                "合计 " + state.last24hActiveMinutes + " 分钟",
+                Modifier.testTag("s01-chart24h-head"),
+            )
             Spacer(Modifier.height(t.space3))
+            // 原型 area 是 340×148 的等比 SVG（99-app.js:639），在 327 宽的卡里高 142.3；
+            // 轴标签画在图内底部（xLabels），不再另起一行 —— 否则整卡比原型高一行。
             AreaChart(
                 values = intensity,
-                modifier = Modifier.fillMaxWidth().height(t.chartH),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(340f / 148f)
+                    .testTag("s01-chart24h-area"),
+                xLabels = axis,
             )
-            ChartAxisLabels(axis)
             Spacer(Modifier.height(t.space3))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().testTag("s01-chart24h-meta"), horizontalArrangement = Arrangement.SpaceBetween) {
                 MetaText("逐时活跃强度")
                 // 0 条时峰值文案写「暂无数据」
                 MetaText(
@@ -222,7 +233,7 @@ internal fun LazyListScope.todayPanelS01(
                 )
             }
             Spacer(Modifier.height(t.space2))
-            HeatStrip(values = intensity)
+            HeatStrip(values = intensity, modifier = Modifier.testTag("s01-chart24h-heat"))
         }
     }
 
@@ -260,6 +271,9 @@ internal fun LazyListScope.todayPanelS01(
             Modifier
                 .fillMaxWidth()
                 .testTag("s01-recent")
+                // 原型 .card 的 1px 边框占布局（box-sizing: border-box + border 在内容盒外），
+                // Compose 的 border 画在内侧不占位：补 1dp 让卡片外沿高宽与原型一致
+                .padding(1.dp)
                 .clip(RoundedCornerShape(t.radiusLg))
                 .background(t.surface)
                 .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg))
@@ -269,7 +283,7 @@ internal fun LazyListScope.todayPanelS01(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "最近事件",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     color = t.fg,
                     modifier = Modifier.weight(1f),
                 )
@@ -280,7 +294,8 @@ internal fun LazyListScope.todayPanelS01(
                     onClick = { onHaptic(HapticTone.LIGHT); onOpenLive() },
                 )
             }
-            Spacer(Modifier.height(t.space1))
+            // 原型 .sec-head 的 margin-bottom 是 12（--space-3），不是 2
+            Spacer(Modifier.height(t.space3))
             if (state.recentEvents.isEmpty()) {
                 MetaText("今天还没有事件")
             } else {
@@ -300,19 +315,6 @@ internal fun LazyListScope.todayPanelS01(
         }
     }
 
-    // s01-finance：记账图表卡（原型 s01-finance 区块）。卡片只在「首页记账卡」开关开着时出现：
-    // state.financeCard 为 null（开关关 / 本轮未取数）时整块不打节点，语义树里连容器都没有。
-    state.financeCard?.let { card ->
-        item(key = "card-finance") {
-            OverviewFinanceCard(
-                state = card,
-                onOpenFinance = onOpenFinance,
-                onHaptic = onHaptic,
-                modifier = Modifier.staggerEnterAt(8),
-            )
-        }
-    }
-
     item(key = "quick") {
         val t = LocalDesignTokens.current
         Column(
@@ -328,9 +330,24 @@ internal fun LazyListScope.todayPanelS01(
                 onClick = onOpenLive,
             )
             GhostTextButton(
-                text = "去记账 · 今日支出 ¥" + money(state.todayExpense),
+                // 原型 s01:344 的口径是「本月支出 + 结余」，不是今日支出
+                text = "记账 · 本月支出 ¥" + money(state.monthExpense) +
+                    " · 结余 ¥" + money(state.monthIncome - state.monthExpense),
                 modifier = Modifier.testTag("s01-quick-finance"),
                 onClick = { onHaptic(HapticTone.LIGHT); onOpenFinance() },
+            )
+        }
+    }
+
+    // s01-finance：记账图表卡（原型 s01-今日概览:349 —— 位置在「去实时事件流 / 去记账」之后）。
+    // 卡片只在「首页记账卡」开关开着时出现：state.financeCard 为 null 时整块不打节点。
+    state.financeCard?.let { card ->
+        item(key = "card-finance") {
+            OverviewFinanceCard(
+                state = card,
+                onOpenFinance = onOpenFinance,
+                onHaptic = onHaptic,
+                modifier = Modifier.staggerEnterAt(8),
             )
         }
     }

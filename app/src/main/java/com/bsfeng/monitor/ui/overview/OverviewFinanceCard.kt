@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -22,15 +23,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.Legend
 import com.bsfeng.monitor.ui.components.LegendItem
 import com.bsfeng.monitor.ui.components.PieChart
-import com.bsfeng.monitor.ui.components.ChartFrame
-import com.bsfeng.monitor.ui.components.ChartFrameKind
-import com.bsfeng.monitor.ui.components.ChartValueLabels
+import com.bsfeng.monitor.ui.components.Sparkline
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.MetaText
@@ -64,17 +62,8 @@ data class FinanceCardState(
         get() = monthExpense > 0.0 || monthIncome > 0.0 || categorySlices.isNotEmpty()
 }
 
-/**
- * 趋势图绘图区高度：76dp。下限由「Y 轴刻度读得全」倒推——面积图顶部留白 24dp 之后
- * 剩 52dp 要放 3 个刻度值（每个约 15dp）；再压到 56dp 时最高一档刻度会被裁掉。
- */
-private val TREND_CHART_H: Dp = 76.dp
-
-/** 趋势图 Y 轴刻度行数：2 行 = 3 个刻度值（0 / 半量 / 上限），在 76dp 内不重叠。 */
-private const val TREND_Y_TICKS = 2
-
-/** 图例最多直接列几行（原型 s01-finance-legend 的 6 行在 390 宽卡片里会把卡撑高，取前 3 + 「其他 N 类」）。 */
-private const val LEGEND_ROWS = 3
+/** 图例逐行列出几类（原型 s01:361 的 6 类）；超出部分并成「其他 N 类」，不静默截断。 */
+private const val LEGEND_ROWS = 6
 
 /**
  * 记账图表卡：卡头（本月） + 左扇形右三值/走势 + 图例 + 进记账页入口。
@@ -97,46 +86,50 @@ internal fun OverviewFinanceCard(
             MetaText("本月还没有记账，去记账页记一笔就能看到分类占比")
         } else {
             val colors = state.categorySlices.indices.map { t.categoryDot(it) }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(t.ringSize)
-                        .testTag("s01-finance-pie"),
-                ) {
-                    PieChart(
-                        segments = state.categorySlices.map { it.amount.toFloat() },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = colors,
-                        size = t.ringSize,
-                    )
+            // 原型 s01:352 的 grid-2：左 128 环图，右列三值 + 底部一条迷你走势（:358）。
+            // 右列的走势是 72×24 的无轴 sparkline（不是带坐标轴的趋势图）——s04 年度图才用 ChartFrame。
+            Row(
+                // 原型格高 118（右列 3×20.6 + spark 24 撑出），不是环图的 128 ——
+                // 环图在原型里就是溢出 10 压到图例上边距，这里用 requiredSize 保真
+                Modifier.fillMaxWidth().height(118.dp),
+                horizontalArrangement = Arrangement.spacedBy(t.space2),
+                // 原型 .grid-2 默认 stretch：右列三值从格子上沿开始排，不居中
+                verticalAlignment = Alignment.Top,
+            ) {
+                // 左列与右列等宽（原型 .grid-2 的 1fr 1fr + gap 8）：右列起点 x=200.5 由这个比例决定
+                Box(Modifier.weight(1f)) {
+                    Box(
+                        Modifier
+                            .requiredSize(t.ringSize)
+                            .testTag("s01-finance-pie"),
+                    ) {
+                        PieChart(
+                            segments = state.categorySlices.map { it.amount.toFloat() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = colors,
+                            size = t.ringSize,
+                        )
+                    }
                 }
-                Spacer(Modifier.width(t.space4))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(t.space1)) {
+                // 原型 .s01-kcol 的三行紧贴（各 20.6），行间无 gap
+                Column(Modifier.weight(1f)) {
                     FinanceAmountRow("收入", state.monthIncome, t.successText)
                     FinanceAmountRow("支出", state.monthExpense, t.dangerText)
                     FinanceAmountRow("结余", state.monthBalance, t.fg)
+                    if (state.dailyExpense7.any { it > 0f }) {
+                        // 原型 spark 紧跟第三行（.kpi-spark 的 mt 被列高 118 吃掉），无额外间距
+                        Sparkline(
+                            values = state.dailyExpense7,
+                            modifier = Modifier
+                                .width(t.space12 + t.space6)
+                                .height(t.space6)
+                                .testTag("s01-finance-spark"),
+                        )
+                    }
                 }
             }
-            // 趋势图带坐标轴（用户反馈「图表光秃秃、没有横纵坐标和文字」的原诉求）：
-            // 2026-10 那轮只画了无轴 sparkline，读的人看不出纵轴量级、也认不出这 7 根是哪几天。
-            // 走 ui/components/ChartFrame 的 Area 分支：Y 轴 3 个刻度（0 / ½ / 上限，压 3 条网格线）
-            // + X 轴日期标签 + 峰值标注，尺寸压到两行高（图表卡里不抢环图的位置）。
-            if (state.dailyExpense7.any { it > 0f }) {
-                ChartFrame(
-                    values = state.dailyExpense7,
-                    modifier = Modifier.fillMaxWidth().testTag("s01-finance-spark"),
-                    xLabels = state.dailyLabels7,
-                    kind = ChartFrameKind.Area,
-                    title = "近 7 天支出",
-                    unit = "单位：元",
-                    // 面积图只标峰值（与 s04 年度面积同一口径）：7 个柱顶数字在 76dp 高的小图里会互相压住
-                    valueLabels = ChartValueLabels.Peak,
-                    // 76dp 矮图只留 3 条网格（rows=2）：5 条网格在 52dp 绘图区里间距 13dp，读数会被网格压住
-                    yTicks = TREND_Y_TICKS,
-                    height = TREND_CHART_H,
-                )
-            }
-            Spacer(Modifier.height(t.space3))
+            // 原型格高 118、环图 128 会溢出 10，图例的 .mt-3(12) 实际只剩 2 的视觉间距
+            Spacer(Modifier.height(2.dp))
             Legend(
                 items = legendItems(state.categorySlices, colors, t.muted),
                 modifier = Modifier.testTag("s01-finance-legend"),
@@ -155,7 +148,11 @@ internal fun OverviewFinanceCard(
 @Composable
 private fun FinanceAmountRow(label: String, amount: Double, color: Color) {
     val t = LocalDesignTokens.current
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    // 原型 .s01-krow 高 20.6（三行 + spark 24 = 118 的格子高）
+    Row(
+        Modifier.fillMaxWidth().height(20.6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
