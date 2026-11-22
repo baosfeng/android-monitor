@@ -36,9 +36,13 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 @Composable
 internal fun DemoSection(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val t = LocalDesignTokens.current
-    Column(modifier.fillMaxWidth()) {
-        GroupLabel(label)
-        Box(Modifier.padding(horizontal = t.space4)) { content() }
+    // 原型 s12 的每块都在 .pad 内（x=16 / w=361）：把锚点包进 16 的 pad，
+    // 锚点盒才与原型同口径；标题与卡片一起缩进，不再内外各一层
+    Box(Modifier.padding(horizontal = t.space4)) {
+        Column(modifier.fillMaxWidth()) {
+            GroupLabel(label)
+            content()
+        }
     }
 }
 

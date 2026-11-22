@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -34,6 +36,9 @@ import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
+
+/** 原型 .h2 的布局行盒：21px × leading-tight 1.05。 */
+private val HEAD_H2_LINE = 22.dp
 
 /** 屏头：可选返回按钮 + 标题 + 副标题 + 右侧徽标。
  *
@@ -58,6 +63,7 @@ internal fun ScreenHead(
             .then(if (consumeTopInset) Modifier.statusBarsPadding() else Modifier)
             .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
     ) {
+        Row(verticalAlignment = Alignment.Top) {
         if (onBack != null) {
             Box(
                 Modifier
@@ -82,13 +88,24 @@ internal fun ScreenHead(
                     modifier = Modifier.size(t.space5),
                 )
             }
-            Spacer(Modifier.height(t.space2))
+            Spacer(Modifier.width(t.space2))
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.headlineSmall, color = t.fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f)) {
+                // 原型 .h2 行盒 = 21 × leading-tight 1.05 ≈ 22.05；CJK 自然行盒 30.9，
+                // 用固定盒 + unbounded 绘制保持字形完整（同页头 h1 的做法）
+                Box(Modifier.height(HEAD_H2_LINE)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = t.fg,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                    )
+                }
                 if (meta != null) {
-                    Spacer(Modifier.height(t.space1))
+                    // 原型 .meta 的 mt-2 = 8
+                    Spacer(Modifier.height(t.space2))
                     Text(meta, style = MaterialTheme.typography.bodySmall, color = t.muted)
                 }
             }
