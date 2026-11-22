@@ -75,7 +75,9 @@ class S01OverviewParityTest {
         dailyActiveMinutes7 = listOf(7f, 11f, 9f, 14f, 12f, 10f, 16f),
         // 行程 / 最近事件 / 记账卡：原型这些区块都有锚点，缺数据会让对照报「缺块」——
         // 这不是实现缺陷，是测试数据没铺满，所以按原型同口径补齐。
+        // 行程卡的时间窗是 [tripDayStart, lastUpdatedAt]，后者为 0 时窗口为空、band/source 不渲染
         tripDayStart = 0L,
+        lastUpdatedAt = 4_200_000L,
         trip = DayTimeline(
             dayStart = 0L,
             segments = listOf(
@@ -142,7 +144,8 @@ class S01OverviewParityTest {
             }
         }
         compose.waitForIdle()
-        val items = collectTaggedNodes(compose.onRoot().fetchSemanticsNode(), compose.density)
+        // 必须用 unmerged tree：整卡可点（s01-trip 带 clickable）时，子锚点会被合并进父节点
+        val items = collectTaggedNodes(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode(), compose.density)
         writeScreens(mapOf("s01" to items), File("build/parity/impl-s01.json"))
         println("PARITY(s01) tags=" + items.size)
     }
