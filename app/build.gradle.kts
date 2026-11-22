@@ -354,6 +354,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     testImplementation("org.robolectric:robolectric:4.17")
+    // Compose 界面在 JVM 单元测试（Robolectric）里渲染并读取 testTag 几何：ui-test-junit4 提供
+    // createComposeRule / onNodeWithTag / boundsInRoot。版本随 compose BOM，避免与实现侧错配。
+    testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
 }
 
 // =============================================

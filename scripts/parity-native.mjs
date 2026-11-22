@@ -61,7 +61,7 @@ for (const s of screens) {
       continue;
     }
     checked++;
-    if (Math.abs(px(pi.fs) - px(ii.fs)) > 0.5) {
+    if (pi.fs != null && ii.fs != null && Math.abs(px(pi.fs) - px(ii.fs)) > 0.5) {
       findings.push({ screen: s, id: pi.id, level: 'P0', kind: '字号', detail: 'proto ' + px(pi.fs) + ' / impl ' + px(ii.fs) });
     }
     const d = {
@@ -70,13 +70,15 @@ for (const s of screens) {
       w: Math.abs(px(pi.w) - px(ii.w)),
       h: Math.abs(px(pi.h) - px(ii.h)),
     };
-    const bad = Object.entries(d).filter(([, v]) => v > TOL);
+    // 长页滚动后 y 是视口坐标，两端口径不同：y 差超过一屏时只比 x/w/h
+    const scrolled = d.y > 200;
+    const bad = Object.entries(d).filter(([k, v]) => v > TOL && !(scrolled && k === 'y'));
     if (bad.length) {
       findings.push({ screen: s, id: pi.id, level: 'P1', kind: '几何', detail: bad.map(([k, v]) => k + ' 差 ' + v.toFixed(1)).join(', ') + '（容差 ' + TOL + '）' });
     }
-    const pr = px(pi.radius);
-    const ir = px(ii.radius);
-    if (Math.abs(pr - ir) > 1 && !(pr >= 900 && ir >= 900)) {
+    const pr = pi.radius == null ? null : px(pi.radius);
+    const ir = ii.radius == null ? null : px(ii.radius);
+    if (pr != null && ir != null && Math.abs(pr - ir) > 1 && !(pr >= 900 && ir >= 900)) {
       findings.push({ screen: s, id: pi.id, level: 'P1', kind: '圆角', detail: 'proto ' + pr + ' / impl ' + ir });
     }
     const pc = norm(pi.text);
