@@ -129,3 +129,32 @@ fun writeScreens(screens: Map<String, List<TaggedNode>>, outFile: File) {
 
 private fun esc(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
 private fun fmt(v: Float): String = "%.1f".format(v)
+
+/**
+ * 从 merged 语义树取每个 testTag 的合并文案。
+ *
+ * 为什么需要：整行可点（clickable + mergeDescendants）时，锚点节点的子文本被合并进父节点，
+ * unmerged 树里该锚点的 Text 属性为空 —— 文案判据会静默跳过，看起来「全一致」。
+ * 用 merged 树补齐后，锚点文案才参与比较。
+ */
+fun collectMergedTexts(rule: androidx.compose.ui.test.junit4.ComposeContentTestRule): Map<String, String> {
+    val out = LinkedHashMap<String, String>()
+    fun walk(node: SemanticsNode) {
+        val tag = node.config.getOrNull(SemanticsProperties.TestTag)
+        if (tag != null && !out.containsKey(tag)) {
+            val text = node.config.getOrNull(SemanticsProperties.Text)
+                ?.joinToString("") { it.text }
+                .orEmpty()
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            if (text.isNotEmpty()) out[tag] = text.take(200)
+        }
+        node.children.forEach { walk(it) }
+    }
+    walk(rule.onRoot().fetchSemanticsNode())
+    return out
+}
+
+/** 把 merged 树里的合并文案补回 unmerged 结果（只补空文案，不覆盖已有）。 */
+fun withMergedTexts(nodes: List<TaggedNode>, merged: Map<String, String>): List<TaggedNode> =
+    nodes.map { if (it.text.isBlank()) merged[it.id]?.let { t -> it.copy(text = t) } ?: it else it }
