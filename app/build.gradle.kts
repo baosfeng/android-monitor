@@ -174,7 +174,16 @@ tasks.withType<Test> {
 
     // 测试并行执行以加快反馈（质量基线要求）。
     // 每个 fork 是独立 JVM：Robolectric 沙箱缓存、被 resetForTesting 清理的静态单例互不干扰。
-    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+    //
+    // 并行度默认 CPU/4（≥2）：10 核机器上 CPU/2 = 5 fork 时，transfer 的时间敏感用例
+    // （TransferTickerLifecycleTest / TransferEnginePersistenceTest）会稳定假红 —— ticker 协程
+    // 在 CPU 饱和下拿不到调度，15s 等待窗口也等不到一拍；同一批用例单跑与 2 fork 全量必绿
+    // （2026-11 实测：5 fork 连续两轮各 6 个失败、串行与 2 fork 均 exit 0）。
+    // 可用 -PtestForkCount=N 覆盖：排查并发假红时降到 1 串行复现。
+    maxParallelForks = (
+        (project.findProperty("testForkCount") as String?)?.toIntOrNull()
+            ?: (Runtime.getRuntime().availableProcessors() / 4).coerceAtLeast(2)
+        ).coerceAtLeast(1)
 
     testLogging {
         events("failed")

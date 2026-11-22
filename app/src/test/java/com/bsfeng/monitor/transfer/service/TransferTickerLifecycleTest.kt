@@ -57,8 +57,9 @@ class TransferTickerLifecycleTest {
     private fun newEngine(): TransferEngine =
         TransferEngine.createForTesting(context = context, tickMs = 40L).also { engine = it }
 
-    // 5s：全量并行跑时 IO 调度可能被拖慢，判活不能用固定小窗口（曾出现增量为 0 的假红）
-    private fun await(timeoutMs: Long = 5_000L, condition: () -> Boolean): Boolean {
+    // 15s：全量跑时 5 个 fork 并行 + Robolectric 沙箱各自加载，CPU 饱和下 ticker 协程可能几秒
+    // 才拿到第一个调度；5s 窗口实测会稳定假红（同一用例单跑必过），判活不能用小窗口。
+    private fun await(timeoutMs: Long = 15_000L, condition: () -> Boolean): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (condition()) return true

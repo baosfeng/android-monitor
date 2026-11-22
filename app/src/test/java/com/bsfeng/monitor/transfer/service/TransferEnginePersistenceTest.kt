@@ -77,7 +77,9 @@ class TransferEnginePersistenceTest {
         )
     }
 
-    private fun await(timeoutMs: Long = 3_000L, condition: () -> Boolean): Boolean {
+    // 15s：全量 5 fork 并行时落库协程与超时调度会被 CPU 饱和拖慢，3s 窗口实测稳定假红
+    // （同一批用例单跑必过）；失败场景仍由 deadline 兜底，不会把真正的回归等成绿。
+    private fun await(timeoutMs: Long = 15_000L, condition: () -> Boolean): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (condition()) return true
