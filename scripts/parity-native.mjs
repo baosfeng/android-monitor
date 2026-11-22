@@ -45,6 +45,19 @@ if (fs.existsSync(KNOWN_FILE)) {
 }
 const knownSkipped = [];
 
+// 已登记「不实现」的锚点（scripts/anchor-retired.tsv）：作废 / 原型外壳 / 待实现。
+// 这三类在实现侧本来就不该有 testTag，判 P0 会让整屏永远红；直接读同一份清单，
+// 避免在 parity-known-diffs.tsv 里重复登记、两处漂移。命中时照旧打印来源与理由。
+const RETIRED_FILE = 'scripts/anchor-retired.tsv';
+const retired = new Map();
+if (fs.existsSync(RETIRED_FILE)) {
+  for (const line of fs.readFileSync(RETIRED_FILE, 'utf8').split('\n')) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const [id, , status, reason] = line.split('	');
+    if (id && status) retired.set(id, status + '：' + (reason || ''));
+  }
+}
+
 const load = (p) => {
   const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
   return raw.screens || raw;
@@ -71,24 +84,39 @@ for (const s of screens) {
   for (const pi of p.items || []) {
     if (!pi.visible) continue;
     const ii = byId.get(pi.id);
-    if (!ii || !ii.visible) {
-      findings.push({ screen: s, id: pi.id, level: 'P0', kind: '缺块', detail: ii ? '实现侧不可见' : '实现侧无此锚点' });
-      continue;
-    }
-    checked++;
     const record = (kind, level, detail) => {
       const key = s + '\t' + pi.id + '\t' + kind;
       if (known.has(key)) { knownSkipped.push({ screen: s, id: pi.id, kind, reason: known.get(key) }); return; }
       findings.push({ screen: s, id: pi.id, level, kind, detail });
     };
+    if (!ii || !ii.visible) {
+      // 缺块先看「不实现」清单，再走已知口径差白名单；两者都没登记才是真 P0。
+      const why = retired.get(pi.id);
+      if (why) {
+        knownSkipped.push({ screen: s, id: pi.id, kind: '缺块', reason: why });
+      } else {
+        record('缺块', 'P0', ii ? '实现侧不可见' : '实现侧无此锚点');
+      }
+      continue;
+    }
+    checked++;
     if (pi.fs != null && ii.fs != null && Math.abs(px(pi.fs) - px(ii.fs)) > 0.5) {
       record('字号', 'P0', 'proto ' + px(pi.fs) + ' / impl ' + px(ii.fs));
     }
-    // 滚动容器（-content）的高度由视口决定，长页导出必然不一致，只比存在性
-    const skipGeom = /-content$/.test(pi.id);
+    // 滚动容器（-content / -body / -timeline）的高度由视口决定，长页导出必然不一致，只比存在性
+    const skipGeom = /-(content|body|timeline)$/.test(pi.id);
     // 面板容器（-pane-* / s04-list）：原型锚点挂在整个 pane（含明细列表）上，实现挂在
-    // pane 的标题行上 —— 高度必然差一个列表的高度，只跳过 h，位置仍然要比
-    const skipHeight = /-pane-/.test(pi.id) || pi.id === 's04-list';
+    // pane 的标题行上 —— 高度必然差一个列表的高度。
+    // 列表容器同理（-records / -rules / -list）：原型挂的是「整块列表滚动容器」，
+    // 实现挂的是小节头或列表本体，高度差等于列表长度差，不是排版缺陷。
+    // 以上两类只跳过 h，位置仍然要比。
+    // 小时组卡（sNN-g09 这类）：原型是一整块「组头 + 行 + 卡底」，实现里组头是 LazyColumn 的
+    // stickyHeader、行是同级 item，整组不是单个节点 —— 高度无从对齐，只比组内锚点。
+    const skipHeight =
+      /-pane-/.test(pi.id) ||
+      /-(records|rules|list|summary|legend)$/.test(pi.id) ||
+      /^s\d\d[ab]?-g\d\d$/.test(pi.id) ||
+      pi.id === 's04-list';
     const d = {
       x: Math.abs(px(pi.x) - px(ii.x)),
       y: Math.abs(px(pi.y) - px(ii.y)),
