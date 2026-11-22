@@ -9,7 +9,6 @@ import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.ui.components.CHART_X_TICKS_MAX
 import com.bsfeng.monitor.ui.components.ChartFrameKind
-import com.bsfeng.monitor.ui.components.chartXLabelsOf
 
 /** unitbar 的固定顺序（原型 s04-unitbar：今日 / 本周 / 本月 / 本年 / 全部），与 [FinancePeriod] 声明顺序一致。 */
 internal val FINANCE_PERIOD_ORDER: List<FinancePeriod> = listOf(
@@ -91,123 +90,30 @@ internal const val PERIOD_CHART_MIN_BUCKETS: Int = 24
 internal val PERIOD_HEAT_X_LABELS: List<String> = listOf("0", "6", "12", "18", "24")
 
 /**
- * all 档 X 轴最多直接标出的刻度数：首末必选 + 中间挑间隔最宽的一组。
- *
- * 口径来自审计 P2-7：12 个月的抽稀位置是 0/2/4/6/7/9/11，其中 6 与 7 只隔一桶
- * （约 23dp），「26-06」「26-07」两段文字直接边界相接。外壳的抽稀上限
- * （[CHART_X_TICKS_MAX] = 7）在调用侧再降一档即可，无需改外壳。
- *
- * 降一档到 5 仍然贴边：候选池被外壳锁死在 7 个等距位置上，池内挑 5 个时最小间隔只能
- * 2 池位 = 120px，减去 85px 标签宽只剩 35px 空隙（实测 25-12 与 26-02 之间），
- * 视觉上仍是「两段挤在一起」。降到 4 个后最小间隔 3 池位 = 180px、空隙 95px，
- * 大于半字宽（42px），才是真正分开。
+ * all 档 X 轴最多标出的刻度数：4 位年份的标签宽约 26dp，340dp 宽的绘图区并排 9 个仍有
+ * 9dp 间隙（原型 s04:222 给的正是 2018..2026 这 9 个）。沿用外壳默认的 7 个会把年份砍成
+ * 「2018/2019/2021/…」这种忽 1 忽 2 的间隔，看起来像少了两年数据。
  */
-internal const val PERIOD_ALL_X_LABEL_MAX: Int = 4
+internal const val PERIOD_ALL_X_LABEL_MAX: Int = 9
+
+/**
+ * 档位 → X 轴最多标出的刻度数（短标签放宽，见 [PERIOD_ALL_X_LABEL_MAX]）。
+ */
+internal fun periodXLabelMax(period: FinancePeriod): Int =
+    if (period == FinancePeriod.ALL) PERIOD_ALL_X_LABEL_MAX else CHART_X_TICKS_MAX
 
 /**
  * 档位的 X 轴刻度。
  *
  * 热力用固定五档而不是 24 格标签：抽稀到 7 个会把 6/12/18 打散成 0/4/8/…，
  * 「几点在花钱」就一眼读不出来了。
+ *
+ * all 档直接给年份（2018 / 2019 …）：4 位数字的刻度宽约 26dp，调用点按 [periodXLabelMax]
+ * 放宽到 9 个就能全标（[PERIOD_ALL_X_LABEL_MAX]），不需要压短成 25-04 或二次稀疏。
  */
 internal fun periodXLabels(period: FinancePeriod, stats: PeriodStats?): List<String> = when (period) {
     FinancePeriod.DAY -> PERIOD_HEAT_X_LABELS
-    // all 档的桶标签是 yyyy-MM（5 个字的刻度在 12 个月宽度里会互相压住）：压短 + 降档稀疏
-    FinancePeriod.ALL -> sparseYearMonthLabels(stats?.labels.orEmpty())
     else -> stats?.labels.orEmpty()
-}
-
-/**
- * all 档的月份刻度压缩：2025-04 → 25-04。
- *
- * 7 个 yyyy-MM 刻度在 360dp 宽里必然重叠（实测「2025-0」互相覆盖）；
- * 保留「年-月」信息即可，完整年份由 KPI 区间（fromDate..toDate）负责。
- */
-internal fun shortYearMonthLabel(label: String): String {
-    val parts = label.split("-")
-    if (parts.size != 2 || parts[0].length != 4) return label
-    return parts[0].takeLast(2) + "-" + parts[1]
-}
-
-/**
- * all 档标签稀疏化：返回**与入参等长**的列表，未标位置填空串。
- *
- * 为什么填空串而不是缩短列表：ChartFrame 的 X 轴刻度用 xLabels.size 当桶总数来定位
- * （[com.bsfeng.monitor.ui.components.ChartXAxis]），列表变短会让刻度与图形整体错位；
- * 置空只影响文字可见性，桶序号与刻度位置都不动。
- *
- * 选取口径：**候选池就是外壳自己会取的位置**（[chartXLabelsOf] 的 7 点等距抽稀），
- * 再从池里挑出 [PERIOD_ALL_X_LABEL_MAX] 个「相邻间隔最宽且最均匀」的位置（首末固定）。
- *
- * 为什么不能自己另算一套等分位置：ChartFrame 对 > 7 桶的序列一律只标它自己那 7 个点，
- * 池外的位置即使有文字也画不出来 —— 实测按 5 点等分（0/3/6/8/11）只剩 3 个标签可见。
- *
- * 为什么还要挑：12 个月的池是 0/2/4/6/7/9/11，其中 6 与 7 只隔 1 桶；而末位标签会被
- * ChartXAxis 的右边界 clamp 向内推（实测吃掉约 1 桶），所以「9 与 11」这种 2 桶间隔
- * 实际只剩 35px，「26-09」「26-11」贴到一起。挑出 4 个时池内最宽的一组是 0/4/7/11，
- * 最小间隔 3 池位（约 180px）> 标签宽 85px，空隙 95px > 半字宽（42px）。
- *
- * 桶数 ≤ [CHART_X_TICKS_MAX] 时外壳本来就全标且单桶宽度足够，原样返回。
- */
-internal fun sparseYearMonthLabels(labels: List<String>): List<String> {
-    if (labels.isEmpty()) return emptyList()
-    val short = labels.map { shortYearMonthLabel(it) }
-    if (short.size <= CHART_X_TICKS_MAX) return short
-    val pool = chartXLabelsOf(short).map { it.first }
-    val kept = widestEvenPicks(pool, PERIOD_ALL_X_LABEL_MAX)
-    return short.mapIndexed { i, s -> if (i in kept) s else "" }
-}
-
-/** 末位标签被右边界 clamp 向内推，实测吃掉约 1 桶宽度：末位与前者比较时按此扣减。 */
-internal const val SPARSE_LAST_GAP_PENALTY: Int = 1
-
-/**
- * 从 [pool] 里挑 [take] 个位置（首末必选）：先让「最小相邻间隔」最大，同分取间隔更均匀的一组。
- *
- * 只在池内挑是硬约束（池外位置外壳不画），纯函数便于单测。
- */
-internal fun widestEvenPicks(pool: List<Int>, take: Int): List<Int> {
-    if (take >= pool.size) return pool
-    if (take <= 2) return listOf(pool.first(), pool.last())
-    var best: List<Int> = emptyList()
-    var bestMinGap = -1
-    var bestSpread = Int.MAX_VALUE
-    // 池最多 7 个、首末固定 → 中间 C(5,3)=10 种组合，直接枚举
-    val candidates = middleCombinations(pool, take)
-    for (combo in candidates) {
-        val picks = listOf(pool.first()) + combo + listOf(pool.last())
-        val gaps = picks.zipWithNext { a, b -> b - a }
-        // 末位那一跳先扣 clamp 损失再参与比较
-        val score = gaps.last() - SPARSE_LAST_GAP_PENALTY
-        val minGap = minOf(gaps.dropLast(1).minOrNull() ?: score, score)
-        val spread = gaps.sumOf { it * it }
-        if (minGap > bestMinGap || (minGap == bestMinGap && spread < bestSpread)) {
-            best = picks
-            bestMinGap = minGap
-            bestSpread = spread
-        }
-    }
-    return best.ifEmpty { pool }
-}
-
-/** 池内挑 [take] - 2 个（不含首末）的全部组合。 */
-private fun middleCombinations(pool: List<Int>, take: Int): List<List<Int>> {
-    val middle = pool.subList(1, pool.size - 1)
-    val need = take - 2
-    val out = mutableListOf<List<Int>>()
-    fun walk(start: Int, acc: MutableList<Int>) {
-        if (acc.size == need) {
-            out.add(acc.toList())
-            return
-        }
-        for (i in start until middle.size) {
-            acc.add(middle[i])
-            walk(i + 1, acc)
-            acc.removeAt(acc.size - 1)
-        }
-    }
-    walk(0, mutableListOf())
-    return out
 }
 
 /**
@@ -278,7 +184,9 @@ internal fun periodValueNote(period: FinancePeriod, stats: PeriodStats?): String
     if (buckets == null || buckets.isEmpty()) return "柱高按本档最大值归一"
     val peak = buckets.maxByOrNull { it.expense } ?: return "柱高按本档最大值归一"
     val unit = when (period) {
-        FinancePeriod.YEAR, FinancePeriod.ALL -> " 月"
+        FinancePeriod.YEAR -> " 月"
+        // all 档的分桶是年份（原型 s04:222 的横轴 2018..2026），写成「月」会把年份读成月份
+        FinancePeriod.ALL -> " 年"
         else -> " 日"
     }
     return "峰值 " + peak.label + unit + " " + yen(peak.expense, 0) + " · 柱高按本档最大值归一"

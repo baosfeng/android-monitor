@@ -123,6 +123,8 @@ internal fun FinancePeriodQueryCard(
             unit = periodChartUnit(selected),
             // 柱太多（月度 30 桶）时柱顶数字会叠在一起：降级为只标峰值，并把峰值写进图注。
             showValueLabels = periodShowsAllValues(selected, stats),
+            // 全部档是 4 位年份（2018..2026），标签短 → 放宽刻度数，避免忽 1 忽 2 的抽稀
+            xLabelMax = periodXLabelMax(selected),
             modifier = periodChartTag(selected),
         )
         }
@@ -236,6 +238,7 @@ internal fun LazyListScope.statsPane(
     viewModel: FinanceViewModel,
     allPeriodStats: List<PeriodStats>,
     activePeriodStats: PeriodStats?,
+    lastDaysStats: PeriodStats?,
     selectedPeriod: FinancePeriod,
     stats: FinanceStats,
     categoryBreakdown: Map<String, Double>,
@@ -291,7 +294,8 @@ internal fun LazyListScope.statsPane(
 
             "charts" -> item(key = "charts") {
                 FinanceStatsChartsSection(
-                    weekStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.WEEK),
+                    // 近 7 天卡用滚动 7 天（今天往前 6 天），不是五档里的「本周」（审计 s04 #32/#33）
+                    lastDaysStats = lastDaysStats,
                     yearStats = viewModel.periodStatsOf(allPeriodStats, FinancePeriod.YEAR),
                     stats = stats,
                     categoryBreakdown = categoryBreakdown,

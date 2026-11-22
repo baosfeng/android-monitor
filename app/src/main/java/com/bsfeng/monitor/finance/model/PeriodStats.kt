@@ -1,14 +1,14 @@
 package com.bsfeng.monitor.finance.model
 
 // 来源：记账「时间单位查询」需求（原型 s04）；职责：周期统计的只读模型 —— 五档三值（支出/收入/结余）+ 笔数 + 分桶序列。
-// 分桶序列与界面图表一一对应（day=24 小时、week=7 日、month=当月逐日、year=12 月、all=逐月），标签由 DAO 侧给出。
+// 分桶序列与界面图表一一对应（day=24 小时、week=7 日、month=当月逐日、year=12 月、all=逐年），标签由 DAO 侧给出。
 
 import java.util.Locale
 
 /**
  * 周期统计的单个分桶（图表里的一根柱 / 一格热力）。
  *
- * @param label x 轴刻度文案（"0".."23" / 周一..周日 / "1".."31" / "1".."12" / yyyy-MM）
+ * @param label x 轴刻度文案（"0".."23" / 周一..周日 / "1".."31" / "1".."12" / yyyy）
  * @param expense 该桶支出合计（数据库原值累加；退款负额已在内抵扣，与月度口径一致）
  * @param income 该桶收入合计
  * @param count 该桶**交易笔数**（热力图按笔数取色阶，与 [expense] 不同口径）
@@ -28,7 +28,7 @@ data class PeriodBucket(
  *
  * @param fromDate 统计区间起点（含），yyyy-MM-dd；[com.bsfeng.monitor.finance.FinancePeriod.ALL] 为最早一笔的日期
  * @param toDate 统计区间终点（含），yyyy-MM-dd
- * @param buckets 分桶序列，长度与档位绑定（day=24、week=7、month=当月天数、year=12、all=月数）
+ * @param buckets 分桶序列，长度与档位绑定（day=24、week=7、month=当月天数、year=12、all=年数）
  */
 data class PeriodStats(
     val unitKey: String = "day",

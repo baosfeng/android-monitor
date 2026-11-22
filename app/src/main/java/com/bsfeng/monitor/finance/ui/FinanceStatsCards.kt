@@ -362,16 +362,35 @@ internal fun FinanceStatsWeekCard(
                 ),
             )
             Spacer(Modifier.height(t.space3))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(t.space4)) {
-                LegendDot(t.danger)
-                Spacer(Modifier.width(t.space1))
-                Text("支出 7 天 " + yen(weekExpense, 0), style = MaterialTheme.typography.labelSmall, color = t.meta)
-                Spacer(Modifier.width(t.space2))
-                LegendDot(t.success)
-                Spacer(Modifier.width(t.space1))
-                Text("收入 7 天 " + yen(weekIncome, 0), style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
+            // 图例两行、金额右推（原型 s07:164-167 + 20-base.html:368-369 的 .legend-num）：
+            // 压成一行时两个金额跟在系列名后面，读者要停下来分辨「哪个数属于哪条」。
+            WeekLegendRow(color = t.danger, label = "支出", total = weekExpense)
+            WeekLegendRow(color = t.success, label = "收入", total = weekIncome)
         }
+    }
+}
+
+/** 近 7 天图例一行：色点 + 系列名（占满剩余宽）+ 右推的「7 天 ¥金额」（原型 .legend-num）。 */
+@Composable
+private fun WeekLegendRow(color: androidx.compose.ui.graphics.Color, label: String, total: Double) {
+    val t = LocalDesignTokens.current
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = t.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LegendDot(color)
+        Spacer(Modifier.width(t.space2))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = t.fg,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "7 天 " + yen(total, 0),
+            style = MaterialTheme.typography.bodySmall,
+            color = t.meta,
+        )
     }
 }
 
@@ -463,11 +482,17 @@ internal fun FinanceStatsHeatCard(
     }
 }
 
+/** 夜间时段（00..05 时）：整段无消费时补一句「夜间无消费」（原型 s07:182）。 */
+private const val NIGHT_QUIET_HOURS = 6
+
 /**
  * 热力说明行文案（锚点 s07-heatcard）。
  *
- * 选中某小时 → 「12:00 · 9 笔」；否则峰值文案「峰值出现在 12:00（9 笔）与 19:00（8 笔）；柱高按当月最大值归一。」；
+ * 选中某小时 → 「12:00 · 9 笔」；否则「峰值出现在 12:00（9 笔）与 19:00（8 笔），夜间无消费。」；
  * 当月无交易 → 「本月还没有交易记录，热力图为空。」。
+ *
+ * 热力是**色阶**不是柱，所以不写「柱高按本档最大值归一」——那是柱状图的说法，
+ * 原型这一行只讲峰值与夜间（s07:182）。
  */
 internal fun heatNoteText(hourly: List<Float>, peaks: List<Int>, selectedHour: Int?): String {
     if (selectedHour != null) {
@@ -476,7 +501,8 @@ internal fun heatNoteText(hourly: List<Float>, peaks: List<Int>, selectedHour: I
     }
     if (peaks.isEmpty() || hourly.all { it <= 0f }) return "本月还没有交易记录，热力图为空。"
     val parts = peaks.map { hourText(it) + "（" + (hourly.getOrNull(it)?.toInt() ?: 0) + " 笔）" }
-    return "峰值出现在 " + parts.joinToString(" 与 ") + "；柱高按当月最大值归一。"
+    val nightQuiet = (0 until NIGHT_QUIET_HOURS).all { (hourly.getOrNull(it) ?: 0f) <= 0f }
+    return "峰值出现在 " + parts.joinToString(" 与 ") + if (nightQuiet) "，夜间无消费。" else "。"
 }
 
 private fun hourText(hour: Int): String = (if (hour < 10) "0" else "") + hour + ":00"

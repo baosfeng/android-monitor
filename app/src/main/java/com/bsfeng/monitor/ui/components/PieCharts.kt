@@ -157,7 +157,12 @@ fun PieChart(
     )
 }
 
-/** 圆环进度（预算使用率）：单弧 + 轨道。 */
+/**
+ * 圆环进度（预算使用率）：单弧 + 轨道。
+ *
+ * @param strokeWidth 环宽；null 取 [RingChart] 默认 14dp。小直径仪表（记账预算环 104dp，
+ *   原型环宽 ≈8.7px）必须显式给小值，否则 14dp 会占掉近三成直径、孔径被压没。
+ */
 @Composable
 fun RingProgress(
     fraction: Float,
@@ -165,11 +170,13 @@ fun RingProgress(
     color: Color? = null,
     centerLabel: String? = null,
     animated: Boolean = rememberMotionEnabled(),
+    strokeWidth: Dp? = null,
 ) {
     RingChart(
         segments = listOf(fraction.coerceIn(0f, 1f), (1f - fraction).coerceIn(0f, 1f)),
         modifier = modifier,
         colors = listOf(color ?: LocalDesignTokens.current.accent, LocalDesignTokens.current.borderSoft),
+        strokeWidth = strokeWidth,
         centerLabel = centerLabel,
         animated = animated,
     )

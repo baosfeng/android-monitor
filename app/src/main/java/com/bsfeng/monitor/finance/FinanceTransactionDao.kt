@@ -256,6 +256,43 @@ internal class FinanceTransactionDao(private val dbHelper: FinanceDatabaseHelper
         return map
     }
 
+    /**
+     * 区间内（含两端）按分类名汇总的支出 / 收入分布。
+     *
+     * 与 [getMonthlyCategoryBreakdown] 同一条 SQL 口径（GROUP BY 分类名 + SUM 降序），只把
+     * 「整月」换成「任意区间」：s07 的「年度 Top 分类」要按年累计，月度接口给不了。
+     * 二级归一级由调用方（[FinanceStatsService.yearTopCategories] 走 [CategoryTree]）负责，
+     * 这里保持「数据库里存什么就返回什么」，不在 SQL 里猜父子关系。
+     *
+     * @param fromDate 起始日（含），yyyy-MM-dd；字符串比较即时间序
+     * @param toDate 截止日（含），yyyy-MM-dd
+     * @param type [FinanceManager.TYPE_EXPENSE] / [FinanceManager.TYPE_INCOME]
+     */
+    fun getCategoryBreakdownByDateRange(
+        fromDate: String,
+        toDate: String,
+        type: Int = 0,
+    ): Map<String, Double> {
+        if (fromDate > toDate) return emptyMap()
+        val db = dbHelper.readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT ${TransactionEntity.COL_CATEGORY_NAME}, COALESCE(SUM(${TransactionEntity.COL_AMOUNT}), 0) " +
+                "FROM ${TransactionEntity.TABLE_NAME} " +
+                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} <= ? " +
+                "AND ${TransactionEntity.COL_TYPE} = ? " +
+                "GROUP BY ${TransactionEntity.COL_CATEGORY_NAME} " +
+                "ORDER BY SUM(${TransactionEntity.COL_AMOUNT}) DESC",
+            arrayOf(fromDate, toDate, type.toString())
+        )
+        val map = mutableMapOf<String, Double>()
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                map[c.getString(0)] = c.getDouble(1)
+            }
+        }
+        return map
+    }
+
     /** 获取所有数据的月份列表（去重降序） */
     fun getAvailableMonths(): List<String> {
         val db = dbHelper.readableDatabase

@@ -132,19 +132,64 @@ class FinancePeriodStatsTest {
     }
 
     @Test
-    fun `all 档逐月分桶 覆盖库内最早月到今天`() {
+    fun `all 档按年份分桶 覆盖库内最早年到今天`() {
+        // 原型 s04:222 的 all 档横轴是 2018..2026（逐年），不是逐月 yyyy-MM（审计 s04 #25）
         manager.dao.insertTransaction(tx(amount = 10.0, date = "2025-11-08"))
         manager.dao.insertTransaction(tx(amount = 20.0, date = "2026-10-15"))
         manager.dao.insertTransaction(tx(type = 1, amount = 30.0, date = "2026-10-15", category = "薪资"))
 
         val stats = insert(FinancePeriod.ALL)
-        assertEquals("2025-11..2026-10 共 12 个月", 12, stats.buckets.size)
-        assertEquals("2025-11 是首桶", "2025-11", stats.labels.first())
-        assertEquals("2026-10 是末桶", "2026-10", stats.labels.last())
+        assertEquals("2025..2026 共 2 年", 2, stats.buckets.size)
+        assertEquals(listOf("2025", "2026"), stats.labels)
         assertEquals(10.0, stats.buckets[0].expense, 0.001)
-        assertEquals(20.0, stats.buckets.last().expense, 0.001)
+        assertEquals("同一年的多笔并入同一个年桶", 20.0, stats.buckets.last().expense, 0.001)
         assertEquals(30.0, stats.buckets.last().income, 0.001)
         assertEquals("2025-11-08", stats.fromDate)
+    }
+
+    @Test
+    fun `同一年的不同月份并入同一个年桶`() {
+        manager.dao.insertTransaction(tx(amount = 5.0, date = "2026-01-02"))
+        manager.dao.insertTransaction(tx(amount = 7.0, date = "2026-10-15"))
+
+        val stats = insert(FinancePeriod.ALL)
+        assertEquals(listOf("2026"), stats.labels)
+        assertEquals(12.0, stats.buckets.single().expense, 0.001)
+        assertEquals("两个月的笔数也并进同一桶", 2, stats.buckets.single().count)
+    }
+
+    @Test
+    fun `近 7 天滚动 含今天往前 6 天且跨月也对`() {
+        // 固定今天 2026-11-03 → 窗口 2026-10-28 .. 2026-11-03（跨月，不是「本周一..今天」）
+        manager.dao.insertTransaction(tx(amount = 10.0, date = "2026-10-28"))
+        manager.dao.insertTransaction(tx(amount = 20.0, date = "2026-11-03"))
+        manager.dao.insertTransaction(tx(type = 1, amount = 30.0, date = "2026-10-30", category = "薪资"))
+        // 窗口外：第 8 天前 / 明天
+        manager.dao.insertTransaction(tx(amount = 99.0, date = "2026-10-27"))
+        manager.dao.insertTransaction(tx(amount = 99.0, date = "2026-11-04"))
+
+        val stats = runBlocking { manager.getLastDaysStatsAt(LocalDate.parse("2026-11-03")) }
+        assertEquals("滚动 7 天固定 7 个桶", 7, stats.buckets.size)
+        assertEquals("窗口起点是今天往前 6 天", "2026-10-28", stats.fromDate)
+        assertEquals("2026-11-03", stats.toDate)
+        assertEquals(listOf("10-28", "10-29", "10-30", "10-31", "11-01", "11-02", "11-03"), stats.labels)
+        assertEquals(30.0, stats.totalExpense, 0.001)
+        assertEquals(30.0, stats.totalIncome, 0.001)
+        assertEquals("10-28 桶", 10.0, stats.buckets.first().expense, 0.001)
+        assertEquals("10-30 桶收入", 30.0, stats.buckets[2].income, 0.001)
+        assertEquals("今天桶", 20.0, stats.buckets.last().expense, 0.001)
+        assertEquals("窗口外两笔（第 8 天前 / 明天）不计入", 3, stats.transactionCount)
+    }
+
+    @Test
+    fun `滚动日期序列与标签 跨年也对`() {
+        val dates = FinancePeriodRange.lastDaysDates(LocalDate.parse("2027-01-02"))
+        assertEquals(
+            listOf("2026-12-27", "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"),
+            dates,
+        )
+        assertEquals("12-27", FinancePeriodRange.shortDateLabel(dates.first()))
+        assertEquals("01-02", FinancePeriodRange.shortDateLabel(dates.last()))
     }
 
     @Test
@@ -196,10 +241,70 @@ class FinancePeriodStatsTest {
     }
 
     @Test
+    fun `yearStats 按浏览年取区间 往年整年 今年到今天`() {
+        manager.dao.insertTransaction(tx(amount = 100.0, date = "2025-03-02"))
+        manager.dao.insertTransaction(tx(amount = 20.0, date = "2025-12-31"))
+        manager.dao.insertTransaction(tx(amount = 7.0, date = "2026-01-05"))
+        manager.dao.insertTransaction(tx(amount = 9.0, date = "2026-10-15"))
+
+        val lastYear = runBlocking { manager.getYearStatsAt(2025, today) }
+        assertEquals("2025-01-01", lastYear.fromDate)
+        assertEquals("往年取整年", "2025-12-31", lastYear.toDate)
+        assertEquals("整年累计", 120.0, lastYear.totalExpense, 0.001)
+        assertEquals("年度固定 12 桶", 12, lastYear.buckets.size)
+        assertEquals("3 月桶", 100.0, lastYear.buckets[2].expense, 0.001)
+        assertEquals("12 月桶", 20.0, lastYear.buckets[11].expense, 0.001)
+
+        val thisYear = runBlocking { manager.getYearStatsAt(2026, today) }
+        assertEquals("今年只算到今天", "2026-10-15", thisYear.toDate)
+        assertEquals(16.0, thisYear.totalExpense, 0.001)
+        assertEquals("1 月桶", 7.0, thisYear.buckets[0].expense, 0.001)
+        assertEquals("10 月桶", 9.0, thisYear.buckets[9].expense, 0.001)
+    }
+
+    @Test
+    fun `yearStats 未来年区间为空 12 桶仍齐`() {
+        manager.dao.insertTransaction(tx(amount = 100.0, date = "2026-10-15"))
+
+        val future = runBlocking { manager.getYearStatsAt(2027, today) }
+        assertEquals("2027-01-01", future.fromDate)
+        assertEquals("2027-01-01", future.toDate)
+        assertTrue("没有可统计的数据", !future.hasData)
+        assertEquals("12 个零桶（图表整块不消失）", 12, future.buckets.size)
+    }
+
+    @Test
+    fun `yearTopCategories 按区间聚合 降序并截断到五个`() {
+        // 库未种子化时分类树为空：CategoryTree 对未知名保留原名（不并到「其他」），
+        // 因此这里能独立验证「区间聚合 + 降序 + 截断」，不依赖 209 个分类的种子顺序。
+        listOf(
+            "餐饮" to 50.0,
+            "购物" to 300.0,
+            "交通" to 20.0,
+            "娱乐" to 10.0,
+            "居住" to 5.0,
+            "医疗" to 1.0,
+        ).forEach { (name, amount) ->
+            manager.dao.insertTransaction(tx(amount = amount, date = "2026-02-10", category = name))
+        }
+        manager.dao.insertTransaction(tx(amount = 999.0, date = "2025-02-10", category = "餐饮"))
+
+        val tops = runBlocking { manager.getYearTopCategories("2026-01-01", "2026-10-15") }
+        assertEquals("前 5 个一级分类", 5, tops.size)
+        assertEquals(listOf("购物", "餐饮", "交通", "娱乐", "居住"), tops.map { it.name })
+        assertEquals("区间外的 2025 年不计入", 300.0, tops.first().amount, 0.001)
+    }
+
+    @Test
     fun `分桶键与标签口径可单测校验`() {
         assertEquals(24, FinancePeriodRange.labelsOf(FinancePeriod.DAY, "2026-10-15", "2026-10-15").size)
         assertEquals(7, FinancePeriodRange.labelsOf(FinancePeriod.WEEK, "2026-10-12", "2026-10-15").size)
         assertEquals(12, FinancePeriodRange.labelsOf(FinancePeriod.YEAR, "2026-01-01", "2026-10-15").size)
+        assertEquals(
+            "all 档标签是逐年（不是 yyyy-MM）",
+            listOf("2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"),
+            FinancePeriodRange.labelsOf(FinancePeriod.ALL, "2018-03-02", "2026-10-15"),
+        )
         assertEquals("四", FinancePeriodRange.dateToWeekLabel("2026-10-15"))
         assertEquals("一", FinancePeriodRange.dateToWeekLabel("2026-10-12"))
     }

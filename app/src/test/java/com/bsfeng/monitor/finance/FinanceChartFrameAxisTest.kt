@@ -4,6 +4,7 @@ package com.bsfeng.monitor.finance
 // 因此把它的纯计算断言放在这里（无 Android 依赖，纯 JVM 即可跑）。
 
 import com.bsfeng.monitor.ui.components.CHART_X_TICKS_MAX
+import com.bsfeng.monitor.ui.components.chartRowFraction
 import com.bsfeng.monitor.ui.components.chartXLabelsOf
 import com.bsfeng.monitor.ui.components.chartYAxisMax
 import com.bsfeng.monitor.ui.components.chartYTickLabels
@@ -49,6 +50,33 @@ class FinanceChartFrameAxisTest {
         assertEquals("首刻度落在 0 号桶", 0, picks.first().first)
         assertEquals("末刻度落在 23 号桶", 23, picks.last().first)
         assertTrue("桶序号单调递增", picks.zipWithNext().all { (a, b) -> a.first < b.first })
+    }
+
+    @Test
+    fun `短标签放宽刻度数后九个年份全标`() {
+        val years = (2018..2026).map { it.toString() }
+        assertEquals("全部档逐年 9 个刻度全标", years, chartXLabelsOf(years, 9).map { it.second })
+        // 默认阈值不变：其它图表仍是 7 个上限（只放宽调用方显式要求的这一档）
+        assertEquals(CHART_X_TICKS_MAX, chartXLabelsOf(years).size)
+    }
+
+    @Test
+    fun `网格线与 Y 轴刻度共用同一区间`() {
+        // 无顶部留白（折线 / 热力外的默认）：首刻度在顶边、末刻度在底边，均分
+        assertEquals(0f, chartRowFraction(0, 4, 0f), 0.0001f)
+        assertEquals(0.25f, chartRowFraction(1, 4, 0f), 0.0001f)
+        assertEquals(0.5f, chartRowFraction(2, 4, 0f), 0.0001f)
+        assertEquals(1f, chartRowFraction(4, 4, 0f), 0.0001f)
+
+        // 柱 / 面积：顶部留白 22dp（148dp 高的绘图区）→ 首刻度落在柱顶，末刻度仍在底边
+        val ratio = 22f / 148f
+        assertEquals("首刻度 = 柱顶（不是画布顶）", ratio, chartRowFraction(0, 4, ratio), 0.0001f)
+        assertEquals(1f, chartRowFraction(4, 4, ratio), 0.0001f)
+        assertTrue("中间刻度随留白整体下移", chartRowFraction(1, 4, ratio) > ratio)
+
+        // 退化输入不炸：0 行、越界比例
+        assertEquals(0f, chartRowFraction(0, 0, 0f), 0.0001f)
+        assertEquals(1f, chartRowFraction(4, 4, 5f), 0.0001f)
     }
 
     @Test

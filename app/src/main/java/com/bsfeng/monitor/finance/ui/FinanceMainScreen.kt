@@ -183,6 +183,8 @@ fun FinanceMainScreen(
     val subTab by viewModel.subTab.collectAsState()
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
     val allPeriodStats by viewModel.allPeriodStats.collectAsState()
+    // 近 7 天收支卡的数据源：滚动 7 天（今天 + 往前 6 天），与月份条 / 五档相互独立
+    val lastDaysStats by viewModel.lastDaysStats.collectAsState()
     val activePeriodStats = remember(allPeriodStats, selectedPeriod) {
         viewModel.periodStatsOf(allPeriodStats, selectedPeriod)
     }
@@ -316,6 +318,7 @@ fun FinanceMainScreen(
                     viewModel = viewModel,
                     allPeriodStats = allPeriodStats,
                     activePeriodStats = activePeriodStats,
+                    lastDaysStats = lastDaysStats,
                     selectedPeriod = selectedPeriod,
                     stats = stats,
                     categoryBreakdown = categoryBreakdown,

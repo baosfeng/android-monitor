@@ -28,8 +28,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -43,8 +45,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import com.bsfeng.monitor.finance.CategoryAmount
+import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.FinanceStats
+import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.finance.yearAverageAnchor
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.EmptyState
@@ -58,6 +64,7 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import java.time.LocalDate
 
 /**
  * s07 统计分析（锚点账本，16 个锚点）。
@@ -94,6 +101,17 @@ fun FinanceStatsScreen(
     // 真实聚合查询失败（同 s04 口径）：此前 s07 的错态只能由 8s 超时或演示条触发
     val loadFailed = vm?.loadFailed?.collectAsState()?.value == true
     val monthNotice by (vm?.monthNotice ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
+    // 时间范围卡 / 年度趋势 / 年度 Top 分类的数据源（五档一次取齐 + 浏览月所属自然年的聚合）
+    val allPeriods by (vm?.allPeriodStats ?: remember { MutableStateFlow<List<PeriodStats>>(emptyList()) })
+        .collectAsState()
+    // 时间范围卡的档位是**本页局部状态**（原型 s07:66 默认「本月」，与 s04 的 unitbar 各自独立）：
+    // 共用 ViewModel.selectedPeriod 会让「进来先看本月」变成「把 s04 的档位悄悄改成月」，
+    // 用户返回 s04 时发现自己选的「今日」没了。rememberSaveable 保住旋转 / 进程重建后的档位。
+    var rangeIndex by rememberSaveable { mutableIntStateOf(financePeriodIndexOf(FinancePeriod.MONTH)) }
+    val rangePeriod = financePeriodAt(rangeIndex)
+    val yearStats by (vm?.yearStats ?: remember { MutableStateFlow<PeriodStats?>(null) }).collectAsState()
+    val yearTopCategories by (vm?.yearTopCategories ?: remember { MutableStateFlow<List<CategoryAmount>>(emptyList()) })
+        .collectAsState()
     val toast = rememberToastHostState()
 
     val control = rememberFinanceStateControl()
@@ -110,6 +128,14 @@ fun FinanceStatsScreen(
     val monthLabel = monthLabelOf(currentMonth)
     val sortedEntries = remember(categoryBreakdown) {
         categoryBreakdown.entries.sortedByDescending { it.value }.take(CATEGORY_LIMIT)
+    }
+    // 「年度」口径 = 浏览月所属自然年（跟月份条走，不写死今年），见 FinancePeriodRange.yearRangeOf。
+    // 周均锚点：今年取今天、往年取年末（往年整年已过完），见 FinanceYearStats.yearAverageAnchor。
+    val browsedYear = remember(currentMonth) { currentMonth.take(4).toIntOrNull() ?: LocalDate.now().year }
+    val averageAnchor = remember(browsedYear) { yearAverageAnchor(browsedYear, LocalDate.now()) }
+    // 时间范围卡第一格：跟着本页选中的档走（五档结果一次取齐，切档不再查库）
+    val selectedExpense = remember(allPeriods, rangePeriod) {
+        vm?.periodStatsOf(allPeriods, rangePeriod)?.totalExpense
     }
     val week = remember(transactions, currentMonth) { last7DayTotals(transactions, currentMonth) }
     val hourly = remember(transactions) { hourlyCounts(transactions) }
@@ -135,6 +161,13 @@ fun FinanceStatsScreen(
     val hasCache = categoryBreakdown.isNotEmpty() || transactions.isNotEmpty() ||
         stats.totalExpense > 0.0 || stats.totalIncome > 0.0
 
+    // 锚点 s07-range：进入本页 / 切月 / 数据刷新后重取「五档 + 年度聚合」。
+    // 月份条只触发 loadMonth()（它内部会顺带刷新年度聚合），而直接从其它路由进本页时
+    // 没有任何加载动作，首帧的年度趋势与 Top 分类会是空的 —— 所以这里补一次 loadPeriods()，
+    // 它成功后同样会刷新年度聚合（见 FinanceViewModel.loadPeriods）。
+    LaunchedEffect(currentMonth, transactions) {
+        vm?.loadPeriods()
+    }
     // 锚点 s07-loading：加载超过 8s 自动转错误态
     LaunchedEffect(loadingLike) {
         loadTimedOut = false
@@ -320,10 +353,12 @@ fun FinanceStatsScreen(
                                         .focusRequester(monthPrevFocus),
                                     nextModifier = Modifier.testTag("s07-next"),
                                 )
-                                // 副标题随月份同步刷新（锚点 s07-prev）
+                                // 副标题随月份同步刷新（锚点 s07-prev）；字号取原型 .meta 14px（bodySmall）。
+                                // 分类数用**当月真实分类数**：环与图例只画前 CATEGORY_LIMIT 个，
+                                // 拿展示条数当总数会把「共 6 个分类」说成事实（实际可能 12 个）。
                                 Text(
-                                    monthLabel + " · 共 " + sortedEntries.size + " 个分类",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    monthLabel + " · 共 " + categoryBreakdown.size + " 个分类",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = t.meta,
                                     modifier = Modifier.padding(horizontal = t.space4),
                                 )
@@ -344,6 +379,25 @@ fun FinanceStatsScreen(
                         item(key = "kpis") {
                             Spacer(Modifier.height(t.space2))
                             FinanceStatsKpiRow(stats)
+                        }
+
+                        // 原型 s07 的 DOM 顺序（62-132）：时间范围卡 → 年度趋势 → 年度 Top 分类 → 分类支出环
+                        item(key = "range") {
+                            FinanceStatsRangeCard(
+                                selected = rangePeriod,
+                                onSelect = { period -> rangeIndex = financePeriodIndexOf(period) },
+                                selectedExpense = selectedExpense,
+                                yearExpense = yearStats?.totalExpense,
+                                averageAnchor = averageAnchor,
+                            )
+                        }
+
+                        item(key = "yeartrend") {
+                            FinanceStatsYearTrendCard(yearStats = yearStats)
+                        }
+
+                        item(key = "topcats") {
+                            FinanceStatsTopCategoriesCard(categories = yearTopCategories)
                         }
 
                         item(key = "ring") {
@@ -444,7 +498,8 @@ private fun FinanceStatsEdgeSection(modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(t.space2))
         Text(
-            "边界态：分类 " + formatCount(EDGE_CATEGORY_COUNT) + " 个 / 环与图例只取金额最高的 8 个",
+            "边界态：分类 " + formatCount(EDGE_CATEGORY_COUNT) + " 个 / 环与图例只取金额最高的 " +
+                CATEGORY_LIMIT + " 个",
             style = MaterialTheme.typography.labelSmall,
             color = t.meta,
         )

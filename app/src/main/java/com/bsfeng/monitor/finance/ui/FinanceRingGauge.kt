@@ -20,6 +20,13 @@ import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 /** 记账环直径：原型 s04:71-73 / s06:62-64 / s07:57-59 为 104px（小于全局 --ring-size = 128px）。 */
 private val FINANCE_RING_DIAMETER = 104.dp
 
+/**
+ * 记账环描边宽度：原型 s04-ring .s04-ring-chart 的环宽 ≈8.7px（s04-记账.html:23-28，
+ * gauge 的 thickness 按 104 直径折算），取 9dp。此前走 RingChart 默认 14dp，
+ * 比原型粗 60%，孔径被压到看不出「还剩多少」。
+ */
+internal val FINANCE_RING_STROKE = 9.dp
+
 /** 圆环仪表（预算使用率）：RingProgress + 中心大字 + 小标签。 */
 @Composable
 internal fun FinanceRingGauge(
@@ -35,6 +42,7 @@ internal fun FinanceRingGauge(
             fraction = fraction.coerceIn(0f, 1f),
             color = color,
             animated = rememberMotionEnabled(),
+            strokeWidth = FINANCE_RING_STROKE,
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(

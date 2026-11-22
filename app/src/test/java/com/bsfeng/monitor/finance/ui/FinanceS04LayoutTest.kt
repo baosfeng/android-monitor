@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 /**
  * s04 记账首页「面板归属 / 段落顺序 / 行与徽标尺寸」的回归（纯函数 + 常量，无时间、无随机）。
@@ -82,6 +83,24 @@ class FinanceS04LayoutTest {
         assertEquals(FontFamily.Monospace, monitorMonoKpi.fontFamily)
         assertEquals(21f, monitorMonoKpi.fontSize.value, 0.01f)
         assertEquals(FontWeight.Bold, monitorMonoKpi.fontWeight)
+    }
+
+    @Test
+    fun `分组标题第三组起用星期而不是前天`() {
+        val today = LocalDate.now()
+        assertTrue("今天", groupLabel(today.toString()).endsWith(" · 今天"))
+        assertTrue("昨天", groupLabel(today.minusDays(1).toString()).endsWith(" · 昨天"))
+        // 原型 s04:119/155/164 的第三组是星期（今天 / 昨天 / 周一），不再写「前天」
+        val expectedWeekday = listOf("一", "二", "三", "四", "五", "六", "日")[today.minusDays(2).dayOfWeek.value - 1]
+        assertEquals(" · 周" + expectedWeekday, groupLabel(today.minusDays(2).toString()).substringAfter(" 日"))
+        assertFalse(groupLabel(today.minusDays(2).toString()).contains("前天"))
+    }
+
+    @Test
+    fun `预算环描边按原型收窄到九dp`() {
+        // 原型 s04 预算环宽 ≈8.7px（104 直径），RingChart 默认 14dp 会把孔径压没
+        assertEquals(9f, FINANCE_RING_STROKE.value, 0.01f)
+        assertTrue(FINANCE_RING_STROKE < 14.dp)
     }
 
     @Test

@@ -82,9 +82,32 @@ internal fun chartAnim(key: Any, animated: Boolean, durMs: Int): Animatable<Floa
 /** 网格虚线画笔：PathEffect 是常量对象，不再每帧新建（J4）。 */
 private val GRID_DASH = PathEffect.dashPathEffect(floatArrayOf(2f, 4f), 0f)
 
-internal fun DrawScope.gridLines(color: Color, rows: Int) {
+/**
+ * 第 [i] 条网格线 / 第 [i] 个 Y 轴刻度在绘图区里的纵向比例（0 = 顶、1 = 底）。
+ *
+ * 网格线（[gridLines]）与 Y 轴刻度列（ChartFrame 的 ChartYAxis）**必须共用这一个口径**：
+ * 各算一套就会出现「刻度比网格线高 5~22dp」（审计 s04 #27，顶部偏差最大）。
+ * 绘图区顶部留白（柱 22dp / 面积 24dp 给柱顶数值与峰值标注）也一起进这个区间，
+ * 于是最高刻度落在柱顶最高处、不是画布顶。
+ *
+ * @param topInsetRatio 顶部留白占绘图区高度的比例（调用方用 dp.toPx() / size.height 换算）
+ */
+internal fun chartRowFraction(i: Int, rows: Int, topInsetRatio: Float = 0f): Float {
+    if (rows <= 0) return 0f
+    val top = topInsetRatio.coerceIn(0f, 1f)
+    return top + (1f - top) * i.toFloat() / rows
+}
+
+/**
+ * 网格虚线：[rows] + 1 条，从 [topInset] 到绘图区底边均分（与 [chartRowFraction] 同源）。
+ *
+ * @param topInset 顶部留白（像素）：柱 / 面积图传各自的 padT，折线与默认 0 从画布顶起
+ */
+internal fun DrawScope.gridLines(color: Color, rows: Int, topInset: Float = 0f) {
+    if (rows <= 0) return
+    val topRatio = if (size.height > 0f) (topInset / size.height).coerceIn(0f, 1f) else 0f
     for (i in 0..rows) {
-        val y = size.height * i / rows
+        val y = size.height * chartRowFraction(i, rows, topRatio)
         drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f, pathEffect = GRID_DASH)
     }
 }

@@ -17,15 +17,22 @@ internal const val HIGHLIGHT_FADE_MS = 240
 /** 高亮底色不透明度（原 t.accent.copy(alpha = 0.12f)） */
 internal const val HIGHLIGHT_ALPHA = 0.12f
 
-/** 分组标题：10 月 14 日 · 今天 / 昨天 / 前天。 */
+/** 星期文案（周一对 1、周日对 7）：与 week 档单字标签同一套字（一..日）。 */
+private val WEEKDAY_LABELS: List<String> = listOf("一", "二", "三", "四", "五", "六", "日")
+
+/**
+ * 分组标题：10 月 14 日 · 今天 / 昨天 / 周一。
+ *
+ * 原型 s04:119/155/164 的第三组起是**星期**（今天 / 昨天 / 周一），实现此前写成「前天」并把
+ * 再早的分组留空 —— 同一屏里既有相对日又有星期，读者对不上是哪天。
+ */
 internal fun groupLabel(date: String): String {
     val parsed = runCatching { LocalDate.parse(date) }.getOrNull() ?: return date
     val today = LocalDate.now()
     val suffix = when (parsed) {
         today -> " · 今天"
         today.minusDays(1) -> " · 昨天"
-        today.minusDays(2) -> " · 前天"
-        else -> ""
+        else -> " · 周" + WEEKDAY_LABELS[parsed.dayOfWeek.value - 1]
     }
     return parsed.monthValue.toString() + " 月 " + parsed.dayOfMonth + " 日" + suffix
 }

@@ -4,7 +4,6 @@ package com.bsfeng.monitor.ui.components
 // Y 轴刻度值 + X 轴刻度文字 + 右上单位 + 左上标题，内部按 kind 复用手绘柱状 / 面积 / 折线 / 热力基元。
 // 只做外壳与刻度布局，不改变既有图表基元的视觉约束（柱状单色、面积峰值标注）。
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,14 +59,18 @@ internal fun chartYTickLabels(max: Float, rows: Int = CHART_Y_TICKS): List<Strin
     (rows downTo 0).map { i -> chartValueLabel(max * i / rows) }
 
 /**
- * X 轴刻度抽稀：桶数 ≤ [CHART_X_TICKS_MAX] 全标；再多时等距取 [CHART_X_TICKS_MAX] 个，
- * 末位保留（今天的点位必须可见）。返回值是「桶序号 to 文案」。
+ * X 轴刻度抽稀：桶数 ≤ [maxTicks] 全标；再多时等距取 [maxTicks] 个，末位保留（今天的点位必须可见）。
+ * 返回值是「桶序号 to 文案」。
+ *
+ * @param maxTicks 最多标出的刻度数；默认 [CHART_X_TICKS_MAX]。标签短（如 4 位年份）时调用方可放宽，
+ *   否则 9 个年份会被砍成 7 个且间隔忽 1 忽 2（2018/2019/2021/…），读起来像缺数据点。
  */
-internal fun chartXLabelsOf(labels: List<String>): List<Pair<Int, String>> {
+internal fun chartXLabelsOf(labels: List<String>, maxTicks: Int = CHART_X_TICKS_MAX): List<Pair<Int, String>> {
     if (labels.isEmpty()) return emptyList()
-    if (labels.size <= CHART_X_TICKS_MAX) return labels.mapIndexed { i, s -> i to s }
-    val step = (labels.size - 1).toFloat() / (CHART_X_TICKS_MAX - 1)
-    return (0 until CHART_X_TICKS_MAX).map { i ->
+    val ticks = maxTicks.coerceAtLeast(2)
+    if (labels.size <= ticks) return labels.mapIndexed { i, s -> i to s }
+    val step = (labels.size - 1).toFloat() / (ticks - 1)
+    return (0 until ticks).map { i ->
         val idx = (step * i).roundToInt().coerceIn(0, labels.size - 1)
         idx to labels[idx]
     }
@@ -77,13 +80,13 @@ internal fun chartXLabelsOf(labels: List<String>): List<Pair<Int, String>> {
  * 带坐标轴的图表外壳（记账五档周期卡、以及任何需要「能看懂纵轴」的图表直接复用）。
  *
  * @param values 序列值（支出 / 收入 / 笔数，按调用方口径）
- * @param xLabels 每桶的 x 轴文案，长度与 values 对齐；超出 [CHART_X_TICKS_MAX] 自动抽稀
+ * @param xLabels 每桶的 x 轴文案，长度与 values 对齐；超出 [xLabelMax] 自动抽稀
  * @param kind 图形类型：柱 / 面积 / 折线 / 热力
  * @param title 左上说明文案（空则不占行）
  * @param unit 右上单位标注，如「单位：元」（空则不占位）
  * @param yTicks Y 轴刻度行数（热力条恒为 0：色阶已编码强度，再标金额会误导）
  * @param showValueLabels 数值直标：柱状画柱顶、面积画峰值；折线与热力忽略
- * @param height 绘图区高度，默认 t.chartH
+ * @param height 绘图区高度；null 时按 kind 取默认值（热力 = t.heatH 的 44dp 细带，其余 = t.chartH）
  */
 @Composable
 fun ChartFrame(
@@ -97,9 +100,13 @@ fun ChartFrame(
     showValueLabels: Boolean = true,
     animated: Boolean = rememberMotionEnabled(),
     height: Dp? = null,
+    /** X 轴最多标出的刻度数：短标签（4 位年份）可放宽，默认 [CHART_X_TICKS_MAX]。 */
+    xLabelMax: Int = CHART_X_TICKS_MAX,
 ) {
     val t = LocalDesignTokens.current
-    val plotHeight = height ?: t.chartH
+    // 热力是「一条细带」（原型 s04:193 cellH 44、s07 热力卡同为 heatH）：按 chartH 铺 148dp
+    // 会把 24 格拉成 3.4 倍高的竖条，与原型完全不是一张图（审计 s04 #20）。
+    val plotHeight = height ?: if (kind == ChartFrameKind.Heat) t.heatH else t.chartH
     // 空数据（全 0 / 空列表）不画 Y 轴刻度：画 0..1 的假刻度会让空卡看起来「有量但很小」
     val hasValues = values.any { it > 0f }
     val yRows = if (kind == ChartFrameKind.Heat || !hasValues) 0 else yTicks.coerceAtLeast(0)
@@ -127,8 +134,8 @@ fun ChartFrame(
                 }
             }
         }
-        // Y 轴刻度要落在「柱顶最高处」而不是视图顶部：柱状 / 面积基元各有自己的顶部留白
-        // （BAR_PAD_TOP 22dp / AREA_PAD_TOP 24dp），刻度文字若从 0 起排，最大值会显示在柱顶上方一大截。
+        // 绘图区顶部留白（柱 22dp / 面积 24dp 给柱顶数值与峰值标注）：网格线、柱高、曲线与
+        // Y 轴刻度必须同用这一个区间，否则除 0 线外每个刻度都比网格线低 5~22dp（审计 s04 #27）。
         val plotTopInset = when (kind) {
             ChartFrameKind.Bars -> BAR_PAD_TOP
             ChartFrameKind.Area -> AREA_PAD_TOP
@@ -146,27 +153,47 @@ fun ChartFrame(
         if (xLabels.isNotEmpty()) {
             Row(modifier = Modifier.fillMaxWidth().padding(top = t.space1)) {
                 if (yRows > 0) Spacer(Modifier.width(CHART_Y_LABEL_WIDTH + t.space1))
-                ChartXAxis(chartXLabelsOf(xLabels), xLabels.size, kind)
+                ChartXAxis(chartXLabelsOf(xLabels, xLabelMax), xLabels.size, kind)
             }
         }
     }
 }
 
-/** Y 轴刻度列：值右对齐，与各基元自绘的四条网格线重叠。 */
+/**
+ * Y 轴刻度列：值右对齐，每个刻度文字**垂直居中压在对应网格线上**。
+ *
+ * 为什么不用 Column + SpaceBetween：SpaceBetween 只能把首末文字的边沿贴到容器上下边，
+ * 文字自身还有半个行高（≈7dp）的偏移，顶部再叠上 padT 就是 5~22dp 的错位（审计 s04 #27）。
+ * 这里按 [chartRowFraction] 与网格线算同一条 y，再减去半个文字高度居中。
+ *
+ * 顶格不越过标题行（y 夹到 0）；底部刻度允许贴边溢出 —— x 轴刻度行左端是刻度列留白，
+ * 那里没有文字，不会遮挡。
+ */
 @Composable
 internal fun ChartYAxis(max: Float, rows: Int, height: Dp, topInset: Dp = 0.dp) {
     val t = LocalDesignTokens.current
-    Column(
-        modifier = Modifier.width(CHART_Y_LABEL_WIDTH).height(height).padding(top = topInset),
-        verticalArrangement = Arrangement.SpaceBetween,
-        horizontalAlignment = Alignment.End,
-    ) {
-        chartYTickLabels(max, rows).forEach { label ->
-            Text(
-                label,
-                style = monitorMonoBadge.copy(color = t.muted),
-                maxLines = 1,
-            )
+    val style = monitorMonoBadge.copy(color = t.muted)
+    val labels = chartYTickLabels(max, rows)
+    Layout(
+        modifier = Modifier.width(CHART_Y_LABEL_WIDTH).height(height),
+        content = {
+            labels.forEach { label -> Text(label, style = style, maxLines = 1) }
+        },
+    ) { measurables, constraints ->
+        val measured = measurables.map { it.measure(Constraints()) }
+        val columnWidth = constraints.maxWidth
+        val columnHeight = constraints.maxHeight
+        layout(columnWidth, columnHeight) {
+            val topRatio = if (columnHeight > 0) {
+                (topInset.toPx() / columnHeight).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            measured.forEachIndexed { index, placeable ->
+                val centerY = columnHeight * chartRowFraction(index, rows, topRatio)
+                val y = (centerY - placeable.height / 2f).coerceAtLeast(0f).roundToInt()
+                placeable.place(columnWidth - placeable.width, y)
+            }
         }
     }
 }

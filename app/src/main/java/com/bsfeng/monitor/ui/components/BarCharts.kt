@@ -86,7 +86,8 @@ fun BarChart(
                 }
             }
             onDrawBehind {
-                gridLines(border, 4)
+                // 网格线画在柱区（padT..height）：与柱顶最高处 + Y 轴刻度共线（审计 s04 #27）
+                gridLines(border, 4, padT)
                 if (pts.isEmpty()) return@onDrawBehind
                 val p = anim.value
                 pts.forEachIndexed { i, v ->

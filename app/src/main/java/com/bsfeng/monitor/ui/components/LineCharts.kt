@@ -159,7 +159,8 @@ fun AreaChart(
                 null
             }
             onDrawBehind {
-                gridLines(border, 4)
+                // 网格线画在曲线区（padT..height）：与峰值点 + Y 轴刻度共线（审计 s04 #27）
+                gridLines(border, 4, padT)
                 if (areaPath == null || linePath == null) return@onDrawBehind
                 val p = anim.value
                 drawPath(areaPath, areaBrush, alpha = p)

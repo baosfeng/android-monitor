@@ -40,16 +40,16 @@ internal const val FINANCE_RING_CATEGORY_LIMIT = CATEGORY_LIMIT
 /**
  * 统计汇总 pane 的三张图表卡（近 7 天 / 年度趋势 / 分类占比）。
  *
- * 近 7 天与年度趋势直接吃五档结果里的 WEEK / YEAR（与上方 unitbar 同一份数据，口径不会互相打架）；
- * 分类占比沿用当月分类结果（环图编码的是「分类身份」，不是时间序列）。
+ * 近 7 天吃**滚动 7 天**的独立聚合（今天 + 往前 6 天，原型 s04:274-278），年度趋势吃五档里的
+ * YEAR；分类占比沿用当月分类结果（环图编码的是「分类身份」，不是时间序列）。
  *
- * @param weekStats 本周统计（null = 还没取到：卡片整张不出现，而不是画一张空图）
+ * @param lastDaysStats 近 7 天滚动统计（null = 还没取到：卡片整张不出现，而不是画一张空图）
  * @param yearStats 本年统计
  * @param categoryBreakdown 当月分类支出（按月口径，与分类环的图例同源）
  */
 @Composable
 internal fun FinanceStatsChartsSection(
-    weekStats: PeriodStats?,
+    lastDaysStats: PeriodStats?,
     yearStats: PeriodStats?,
     stats: FinanceStats,
     categoryBreakdown: Map<String, Double>,
@@ -58,18 +58,19 @@ internal fun FinanceStatsChartsSection(
     // 环图的分片与图例同源（categoryColorOf），排序在此处一次算定，不随重组重排
     val t = LocalDesignTokens.current
     Column(modifier.padding(vertical = t.space2)) {
-        if (weekStats != null) {
+        if (lastDaysStats != null) {
             FinanceChartCard(
                 title = "近 7 天收支",
                 // 审计 P2-6：原型三图卡 meta 带口径 + 合计金额，缺了它这张卡只有标题没有量。
-                meta = chartMetaOf("本周", weekStats.buckets.sumOf { it.expense }),
+                meta = chartMetaOf("近 7 天", lastDaysStats.buckets.sumOf { it.expense }),
                 modifier = Modifier.testTag("s04-card-week7"),
             ) {
                 ChartFrame(
-                    values = weekStats.expenseValues,
-                    xLabels = weekStats.labels,
+                    // x 轴是连续 7 个日期（MM-dd）：滚动窗口，周二看也有 7 根柱（原型 08..14）
+                    values = lastDaysStats.expenseValues,
+                    xLabels = lastDaysStats.labels,
                     kind = ChartFrameKind.Bars,
-                    title = "本周每日支出",
+                    title = "近 7 天每日支出",
                     unit = "单位：元",
                     modifier = Modifier.testTag("s04-chart-week7"),
                 )

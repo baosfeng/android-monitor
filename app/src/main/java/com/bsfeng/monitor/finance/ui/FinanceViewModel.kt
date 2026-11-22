@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bsfeng.monitor.finance.CategoryAmount
 import com.bsfeng.monitor.finance.FinanceInsertSignal
 import com.bsfeng.monitor.finance.FinanceManager
 import com.bsfeng.monitor.finance.FinancePeriod
@@ -134,6 +135,67 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val periodSequence = AtomicInteger(0)
     private var periodJob: Job? = null
 
+    // ========== 年度聚合（s07 年度趋势 / 年度 Top 分类 / 年累计 / 周均） ==========
+
+    /**
+     * 当前**浏览月所属自然年**的年度统计（12 个月分桶 + 支出 / 收入合计）。
+     *
+     * 口径跟月份条走而不是写死「今年」：统计页能翻到往年，翻到 2025 年时年度趋势与 Top 分类
+     * 必须跟着变成 2025 年（见 [FinancePeriodRange.yearRangeOf]）。null = 还没取到。
+     */
+    private val _yearStats = MutableStateFlow<PeriodStats?>(null)
+    val yearStats: StateFlow<PeriodStats?> = _yearStats.asStateFlow()
+
+    /** 年度 Top 一级分类（金额降序，最多 [YEAR_TOP_CATEGORY_LIMIT] 个）；与 [yearStats] 同一次刷新写入。 */
+    private val _yearTopCategories = MutableStateFlow<List<CategoryAmount>>(emptyList())
+
+    /**
+     * 可见性必须是 internal：[CategoryAmount] 是模块内类型，写成 public 会报
+     * 「public property exposes its internal type argument」（构建期硬错误）。
+     * 统计页与本 ViewModel 同模块，读它不受影响。
+     */
+    internal val yearTopCategories: StateFlow<List<CategoryAmount>> = _yearTopCategories.asStateFlow()
+
+    /** 年度聚合加载序号（切月 / 切页会连着触发，只让最新一次写状态）。 */
+    private val yearSequence = AtomicInteger(0)
+    private var yearJob: Job? = null
+
+    // ========== 近 7 天滚动统计（s04「近 7 天收支」卡） ==========
+
+    /**
+     * 近 7 天滚动统计（今天 + 往前 6 天，含今天）。
+     *
+     * 不并进 [allPeriodStats]：五档的 WEEK 是「本周一..今天」，而这张卡的原型口径是连续的
+     * 7 个日期（s04:274-278 的 08..14），周二看也要有 7 根柱。也不跟月份条走 —— 翻到往年
+     * 月份时它仍回答「最近 7 天」，与五档各自的区间口径互不影响。
+     */
+    private val _lastDaysStats = MutableStateFlow<PeriodStats?>(null)
+    val lastDaysStats: StateFlow<PeriodStats?> = _lastDaysStats.asStateFlow()
+
+    /** 近 7 天统计加载序号（同 [periodSequence] 的口径：只让最新一次写状态）。 */
+    private val lastDaysSequence = AtomicInteger(0)
+    private var lastDaysJob: Job? = null
+
+    /**
+     * 重新取「今天往前 7 天」的滚动统计。
+     *
+     * 失败不清空已有结果（与 [loadPeriods] 同一口径）：一次读库抖动不该把已画出来的柱变空。
+     */
+    fun loadLastDays() {
+        val token = lastDaysSequence.incrementAndGet()
+        lastDaysJob?.cancel()
+        lastDaysJob = viewModelScope.launch {
+            try {
+                val stats = manager.getLastDaysStats()
+                if (token == lastDaysSequence.get()) _lastDaysStats.value = stats
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("FinanceViewModel", "读取近 7 天统计失败", e)
+            }
+        }
+    }
+
     /** 选中某一档：只改选中态，数据已经一次取齐，不再发查询。 */
     fun selectPeriod(period: FinancePeriod) {
         _selectedPeriod.value = period
@@ -168,12 +230,44 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val all = manager.getPeriodStatsAll()
                 if (token != periodSequence.get()) return@launch
                 _allPeriodStats.value = all
+                // 五档取齐的同时把年度聚合（趋势 / Top 分类）与近 7 天滚动统计一起刷新：
+                // 统计页进入与写入后的重取都走这里，几块内容不会一新一旧。
+                loadYearSummary()
+                loadLastDays()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // 周期统计失败不清空已有结果：图表继续显示上一次算出的值，
                 // 免得出一次抖动就把整块统计变成空白（与列表页「有缓存不清」同一口径）。
                 Log.w("FinanceViewModel", "读取五档周期统计失败", e)
+            }
+        }
+    }
+
+    /**
+     * 重新取「浏览月所属自然年」的年度聚合：12 个月趋势 + 一级分类 Top5（s07 三块年度内容的数据源）。
+     *
+     * 与 [loadPeriods] 分开是因为它的口径跟**月份条**走（往年 / 今年末），而五档里的 YEAR 档恒为
+     * 「今天所在的年」。切月只触发 [loadMonth]，所以这里必须由 [loadMonth] 与统计页入口各自调一次，
+     * 否则翻到 2025 年看到的还是今年的趋势与 Top 分类。
+     *
+     * 失败不清空已有结果（与 [loadPeriods] 同一口径）：一次读库抖动不该把已经算出来的图表变空。
+     */
+    fun loadYearSummary(yearMonth: String = _currentMonth.value) {
+        val year = yearMonth.take(4).toIntOrNull() ?: return
+        val token = yearSequence.incrementAndGet()
+        yearJob?.cancel()
+        yearJob = viewModelScope.launch {
+            try {
+                val stats = manager.getYearStats(year)
+                val tops = manager.getYearTopCategories(stats.fromDate, stats.toDate)
+                if (token != yearSequence.get()) return@launch
+                _yearStats.value = stats
+                _yearTopCategories.value = tops
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("FinanceViewModel", "读取 " + year + " 年年度聚合失败", e)
             }
         }
     }
@@ -271,6 +365,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 _accounts.value = accounts
                 _availableMonths.value = months
                 _loadFailed.value = false
+                // 月份条翻页只走 loadMonth：年度区块（趋势 / Top 分类 / 年累计）必须跟着浏览月重取。
+                loadYearSummary(yearMonth)
+                // 近 7 天卡与浏览月无关，但写操作后可能有新的一笔落进这 7 天，所以一起重取。
+                loadLastDays()
                 onResult(Result.success(Unit))
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // 被新加载取代：这不是失败，不能把错态推给用户

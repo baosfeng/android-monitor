@@ -164,6 +164,45 @@ class FinanceManager internal constructor(context: Context) {
     internal suspend fun getPeriodStatsAt(period: FinancePeriod, today: java.time.LocalDate): PeriodStats =
         withContext(Dispatchers.IO) { periodService.periodStats(period, today) }
 
+    /**
+     * 近 7 天滚动统计（含今天往前 6 天）：s04「近 7 天收支」卡。
+     *
+     * 口径固定跟「今天」走、与月份条无关，见 [FinancePeriodService.lastDaysStats]。
+     */
+    suspend fun getLastDaysStats(): PeriodStats = withContext(Dispatchers.IO) {
+        periodService.lastDaysStats()
+    }
+
+    /** 单测注入固定「今天」的版本（跨月 / 跨年边界）。 */
+    internal suspend fun getLastDaysStatsAt(today: java.time.LocalDate): PeriodStats =
+        withContext(Dispatchers.IO) { periodService.lastDaysStats(today) }
+
+    /**
+     * 指定自然年的年度统计（s07 年度趋势 / 年累计 / 周均）；年份跟统计页月份条走。
+     *
+     * 与五档里的 YEAR 档同一套分桶与三值口径，只是年由调用方指定，见 [FinancePeriodService.yearStats]。
+     */
+    suspend fun getYearStats(year: Int): PeriodStats = withContext(Dispatchers.IO) {
+        periodService.yearStats(year)
+    }
+
+    /** 单测注入固定「今天」的版本（区间边界：往年整年、今年到今天、未来年为空）。 */
+    internal suspend fun getYearStatsAt(year: Int, today: java.time.LocalDate): PeriodStats =
+        withContext(Dispatchers.IO) { periodService.yearStats(year, today) }
+
+    /**
+     * 指定区间的年度 Top 一级分类（s07「年度 Top 分类」）。
+     *
+     * 区间来自 [getYearStats] 的 fromDate/toDate，两处同源 —— 趋势图与 Top 分类永远数的是同一段时间。
+     */
+    internal suspend fun getYearTopCategories(
+        fromDate: String,
+        toDate: String,
+        limit: Int = YEAR_TOP_CATEGORY_LIMIT,
+    ): List<CategoryAmount> = withContext(Dispatchers.IO) {
+        statsService.yearTopCategories(fromDate, toDate, limit)
+    }
+
     // ========== 分类 ==========
 
     suspend fun getAllCategories(): List<Category> = withContext(Dispatchers.IO) {

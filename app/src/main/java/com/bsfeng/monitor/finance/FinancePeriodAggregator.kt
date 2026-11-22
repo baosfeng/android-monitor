@@ -64,6 +64,46 @@ internal object FinancePeriodAggregator {
         return FinancePeriodRange.fill(labels, rows)
     }
 
+    /**
+     * 区间内（含两端）按**日期**分桶：返回「yyyy-MM-dd → 桶」，桶的 label 也写完整日期。
+     *
+     * 与 [bucketsByPeriod] 是同一条 SQL 口径（一次扫描同时得 count / 支出 / 收入三列），
+     * 只把分桶键换成日期列：滚动区间（s04「近 7 天收支」）没有固定档位，桶边界由调用方
+     * 按日期序列给出，再经 [FinancePeriodRange.fillDays] 铺满并改写成 MM-dd 标签。
+     */
+    fun dailyRows(
+        db: android.database.sqlite.SQLiteDatabase,
+        fromDate: String,
+        toDate: String,
+    ): Map<String, PeriodBucket> {
+        val cursor = db.rawQuery(
+            "SELECT ${TransactionEntity.COL_DATE} AS k, " +
+                "COUNT(*) AS cnt, " +
+                "COALESCE(SUM(CASE WHEN ${TransactionEntity.COL_TYPE} = 0 " +
+                "THEN ${TransactionEntity.COL_AMOUNT} ELSE 0 END), 0) AS exp, " +
+                "COALESCE(SUM(CASE WHEN ${TransactionEntity.COL_TYPE} = 1 " +
+                "THEN ${TransactionEntity.COL_AMOUNT} ELSE 0 END), 0) AS inc " +
+                "FROM ${TransactionEntity.TABLE_NAME} " +
+                "WHERE ${TransactionEntity.COL_DATE} >= ? AND ${TransactionEntity.COL_DATE} <= ? " +
+                "GROUP BY k",
+            arrayOf(fromDate, toDate)
+        )
+        val rows = mutableMapOf<String, PeriodBucket>()
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                val date = c.getString(0) ?: continue
+                if (date.isEmpty()) continue
+                rows[date] = PeriodBucket(
+                    label = date,
+                    expense = c.getDouble(2),
+                    income = c.getDouble(3),
+                    count = c.getInt(1),
+                )
+            }
+        }
+        return rows
+    }
+
     /** 库内最早一笔的交易日期（all 档区间起点）；空库返回 null。 */
     fun earliestDate(db: android.database.sqlite.SQLiteDatabase): String? {
         val cursor = db.rawQuery(

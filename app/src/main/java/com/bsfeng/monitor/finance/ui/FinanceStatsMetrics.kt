@@ -8,8 +8,13 @@ import java.time.LocalDate
 /** 24 小时 */
 internal const val HOURS = 24
 
-/** 环形图与图例最多展示的分类数 */
-internal const val CATEGORY_LIMIT = 8
+/**
+ * 环形图与图例最多展示的分类数。
+ *
+ * 原型 s07:123-130 的图例是 6 行（餐饮/交通/购物/娱乐/居住/医疗），原先取 8 会多出两行、
+ * 把下面的「近 7 天收支」推出首屏。分类更多时完整清单在分类页，这里只做概览。
+ */
+internal const val CATEGORY_LIMIT = 6
 
 /** 日期标签：2026-10-08 → 08。 */
 internal fun dayLabelOf(date: String): String = date.takeLast(2)

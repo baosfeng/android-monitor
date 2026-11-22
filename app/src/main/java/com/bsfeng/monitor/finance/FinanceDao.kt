@@ -103,6 +103,10 @@ class FinanceDao(internal val dbHelper: FinanceDatabaseHelper) {
     fun bucketsByPeriod(period: FinancePeriod, fromDate: String, toDate: String): List<PeriodBucket> =
         FinancePeriodAggregator.bucketsByPeriod(dbHelper.readableDatabase, period, fromDate, toDate)
 
+    /** 区间内（含两端）按日分桶（近 7 天滚动卡）：返回「yyyy-MM-dd → 桶」 */
+    fun dailyBuckets(fromDate: String, toDate: String): Map<String, PeriodBucket> =
+        FinancePeriodAggregator.dailyRows(dbHelper.readableDatabase, fromDate, toDate)
+
     /** 库内最早一笔交易日期（all 档区间起点）；空库返回 null */
     fun earliestTransactionDate(): String? =
         FinancePeriodAggregator.earliestDate(dbHelper.readableDatabase)
@@ -116,6 +120,19 @@ class FinanceDao(internal val dbHelper: FinanceDatabaseHelper) {
     /** 获取某月的分类支出统计 */
     fun getMonthlyCategoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> =
         transactionDao.getMonthlyCategoryBreakdown(yearMonth, type)
+
+    /**
+     * 区间内（含两端）的分类金额分布（s07 年度 Top 分类用）。
+     *
+     * 与 [getMonthlyCategoryBreakdown] 同一套 GROUP BY 口径，只把「整月」放宽成任意区间；
+     * 二级归一级由 [FinanceStatsService] 侧走 [CategoryTree] 完成，DAO 只如实返回库里的分类名。
+     */
+    fun getCategoryBreakdownByDateRange(
+        fromDate: String,
+        toDate: String,
+        type: Int = 0,
+    ): Map<String, Double> =
+        transactionDao.getCategoryBreakdownByDateRange(fromDate, toDate, type)
 
     /** 获取所有数据的月份列表（去重降序） */
     fun getAvailableMonths(): List<String> = transactionDao.getAvailableMonths()

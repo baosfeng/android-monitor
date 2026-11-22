@@ -38,6 +38,28 @@ internal class FinanceStatsService(private val dao: FinanceDao) {
         )
     }
 
+    /**
+     * 年度 Top 一级分类（s07「年度 Top 分类」卡）。
+     *
+     * 走 [FinanceDao.getCategoryBreakdownByDateRange] 的区间聚合，再按 [CategoryTree.aggregateByTopLevel]
+     * 把二级归到一级 —— 与分类环、预算进度同一套归并口径，同一个分类在三处不会出现两个名字。
+     * 排序 / 截断在纯函数 [topCategoriesOf] 里，可 JVM 单测。
+     *
+     * @return 金额降序的前 [limit] 个一级分类；区间为空（未来年 / 无数据）返回空列表
+     */
+    fun yearTopCategories(
+        fromDate: String,
+        toDate: String,
+        limit: Int = YEAR_TOP_CATEGORY_LIMIT,
+    ): List<CategoryAmount> {
+        if (fromDate > toDate) return emptyList()
+        val rows = CategoryTree(dao.getAllCategories())
+            .aggregateByTopLevel(
+                dao.getCategoryBreakdownByDateRange(fromDate, toDate, FinanceManager.TYPE_EXPENSE),
+            )
+        return topCategoriesOf(rows, limit)
+    }
+
     /** 分类占比（一律归到一级）：环形图/图例只出现一级名 */
     fun categoryBreakdown(yearMonth: String, type: Int = 0): Map<String, Double> =
         // 交易可能存二级名（电商）或一级名（购物）：统一归到一级，环形图/图例只出现一级

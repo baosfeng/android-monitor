@@ -99,7 +99,9 @@ internal fun FinanceScreenHead(
             Text(title, style = MaterialTheme.typography.headlineMedium, color = t.fg)
             if (subtitle != null) {
                 Spacer(Modifier.height(t.space1))
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = t.meta)
+                // 原型 .meta = --text-sm 14px（20-base.html:177）：labelSmall 12sp 比它小一档，
+                // 与同屏「最近 3 天 · N 笔」（FinanceMainSections 的 s04-listmeta）也不一致。
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.meta)
             }
         }
         if (trailing != null) {
