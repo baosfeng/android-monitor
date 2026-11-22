@@ -68,6 +68,9 @@ internal fun GalleryChartRamp() {
                 color = t.meta,
             )
             Spacer(Modifier.height(t.space3))
+            // 图例保持「3 条语义」而不是原型的 7 行 s1..s7 灰阶：上面的色板已经是
+            // chart-1..16 分类色板（设计规范 §7.4 的现行口径），再配一套 7 槽灰阶图例会自相矛盾。
+            // 这一块与原型的几何差登记在 scripts/parity-known-diffs.tsv（s12-scale）。
             Legend(
                 items = listOf(
                     LegendItem("分类色板 · 扇形分片", "chart-1..16", t.chartRamp.first()),
@@ -91,11 +94,6 @@ internal fun GalleryCharts() {
                 ChartAxisLabels(listOf("00", "04", "08", "12", "16", "20"))
             }
             AppCard {
-                Text("折线图 line · 近 7 日趋势", style = MaterialTheme.typography.bodySmall, color = t.muted)
-                Spacer(Modifier.height(t.space3))
-                LineChart(WEEK_7, Modifier.fillMaxWidth().height(t.chartH))
-            }
-            AppCard {
                 Text("柱状图 bars · 近 7 日事件量", style = MaterialTheme.typography.bodySmall, color = t.muted)
                 Spacer(Modifier.height(t.space3))
                 BarChart(WEEK_7, Modifier.fillMaxWidth().height(t.chartH))
@@ -105,7 +103,7 @@ internal fun GalleryCharts() {
                 AppCard(Modifier.weight(1f)) {
                     // 原型 s12「图表基元」此卡的标签写 ring，实际渲染 data-chart="pie"（08-prototype.html:5153）：
                     // 占比一律实心扇形、数值只在外部图例里（无 centerLabel）。
-                    Text("扇形图 pie · 占比", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                    Text("环形图 ring", style = MaterialTheme.typography.bodySmall, color = t.muted)
                     Spacer(Modifier.height(t.space3))
                     PieChart(listOf(42f, 31f, 24f, 18f, 13f), Modifier.fillMaxWidth())
                 }
@@ -115,10 +113,15 @@ internal fun GalleryCharts() {
                     RingProgress(0.68f, Modifier.fillMaxWidth(), centerLabel = "68%")
                 }
             }
+            // 原型 s12:190-197 是两张独立的卡（迷你走势 spark / 热力条 heat），不是一张卡两行：
+            // 合并会让这块比原型矮 360+，且与「一件一卡」的陈列口径不符。
             AppCard {
-                Text("迷你走势 spark + 热力条 heat", style = MaterialTheme.typography.bodySmall, color = t.muted)
+                Text("迷你走势 spark", style = MaterialTheme.typography.bodySmall, color = t.muted)
                 Spacer(Modifier.height(t.space3))
                 Sparkline(WEEK_7, Modifier.fillMaxWidth().height(t.sparkHeight))
+            }
+            AppCard {
+                Text("热力条 heat · 24 小时活跃强度", style = MaterialTheme.typography.bodySmall, color = t.muted)
                 Spacer(Modifier.height(t.space3))
                 HeatBar(HOURS_24, Modifier.fillMaxWidth().height(t.heatHeight))
             }

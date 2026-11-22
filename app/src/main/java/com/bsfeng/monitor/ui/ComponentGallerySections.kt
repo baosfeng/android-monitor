@@ -34,11 +34,21 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
 /** 小节外壳：modifier 承载口径的块级锚点（如 s12-buttons），锚点不自带在共享件里。 */
 @Composable
-internal fun DemoSection(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun DemoSection(
+    label: String,
+    modifier: Modifier = Modifier,
+    /**
+     * 与前一块的间距（原型口径 = .stack gap 12 + .demo margin-bottom 16 = 28）。
+     * 首页头那块是 8（.content 的 padding-top space-2）。
+     * 不用外层 Column 的 spacedBy：五态切换条在未解锁调试时高度为 0，仍会占一个间距位。
+     */
+    topGap: androidx.compose.ui.unit.Dp = 28.dp,
+    content: @Composable () -> Unit,
+) {
     val t = LocalDesignTokens.current
     // 原型 s12 的每块都在 .pad 内（x=16 / w=361）：把锚点包进 16 的 pad，
-    // 锚点盒才与原型同口径；标题与卡片一起缩进，不再内外各一层
-    Box(Modifier.padding(horizontal = t.space4)) {
+    // 锚点盒才与原型同口径；标题与卡片一起缩进，不再内外各一层。
+    Box(Modifier.padding(start = t.space4, end = t.space4, top = topGap)) {
         Column(modifier.fillMaxWidth()) {
             GroupLabel(label)
             content()
@@ -54,7 +64,8 @@ internal fun DemoSection(label: String, modifier: Modifier = Modifier, content: 
 internal fun GalleryButtons(toast: ToastHostState) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
-    DemoSection("按钮 Button", Modifier.testTag("s12-buttons")) {
+    // 首块：原型 .content 的 padding-top 是 space-2(8)，不是块间距 28
+    DemoSection("按钮 Button", Modifier.testTag("s12-buttons"), topGap = t.space2) {
         AppCard {
             Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
                 // 主按钮：一屏至多 1 个（口径边界）
@@ -80,12 +91,6 @@ internal fun GalleryButtons(toast: ToastHostState) {
                 AppButton("禁用态", {}, Modifier.weight(1f), AppButtonVariant.Ghost, enabled = false)
                 AppIconButton(Icons.Filled.Add, "更多操作", onClick = { toast.show("图标按钮") })
             }
-            Spacer(Modifier.height(t.space1))
-            Text(
-                "禁用原因：没有可导出的数据",
-                style = MaterialTheme.typography.labelSmall,
-                color = t.meta,
-            )
             Spacer(Modifier.height(t.space3))
             AppButton(
                 "通栏次按钮 btn-block",
@@ -93,12 +98,6 @@ internal fun GalleryButtons(toast: ToastHostState) {
                 Modifier.keyboardFocusRing(shape),
                 AppButtonVariant.Ghost,
                 block = true,
-            )
-            Spacer(Modifier.height(t.space2))
-            Text(
-                "Tab 按视觉顺序推进 · Enter / Space 等同 click · 焦点环 2dp",
-                style = MaterialTheme.typography.labelSmall,
-                color = t.meta,
             )
         }
     }
@@ -145,6 +144,8 @@ internal fun GallerySwitchesAndBadges(
 ) {
     val t = LocalDesignTokens.current
     DemoSection("开关 Switch 与徽标 Badge", Modifier.testTag("s12-switch-badge")) {
+        // 原型 s12:88 用 .group（不是 .card）：surface 底 + 1px 描边 + 圆角 + 水平 padding 16、
+        // 行自带上下 8；AppCard 默认 16 的四周 padding 会把三行压矮 16。
         AppCard(padding = 0.dp) {
             TokenRow(
                 title = "已开启",
@@ -178,7 +179,7 @@ internal fun GallerySwitchesAndBadges(
             TokenDivider(first = false)
             TokenRow(
                 title = "徽标形态",
-                subtitle = "数字 / 千分位 / 文本 · 纯展示不进 Tab 顺序",
+                subtitle = "数字 / 千分位 / 文本",
                 trailing = {
                     Badge("12")
                     Badge("1,286")

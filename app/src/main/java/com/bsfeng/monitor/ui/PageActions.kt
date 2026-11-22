@@ -11,7 +11,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -79,7 +79,9 @@ internal fun AppButton(
     Box(
         modifier = modifier
             .then(if (block) Modifier.fillMaxWidth() else Modifier)
-            .height(t.tapMin)
+            // 原型 .btn 是 min-height:48px（--btn-h），44 是 tap-min 的触达下限、不是按钮高度：
+            // 用 heightIn 而非 height，字号放大时行盒仍能撑开（原型同为 min-height）。
+            .heightIn(min = t.btnH)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(t.radiusMd))
             .background(bg)
@@ -93,7 +95,7 @@ internal fun AppButton(
                     onClick()
                 },
             )
-            .padding(horizontal = t.space4),
+            .padding(horizontal = t.space5),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -125,8 +127,10 @@ internal fun AppIconButton(
     val haptic = rememberHaptic()
     Box(
         modifier = modifier
+            // 原型 .icon-btn 是 width/height = --icon-size(44) 的**圆形**（border-radius: pill）：
+            // 之前用 radiusMd 画成圆角方，与按钮组的视觉口径不一致。
             .size(t.tapMin)
-            .clip(RoundedCornerShape(t.radiusMd))
+            .clip(RoundedCornerShape(t.radiusPill))
             .background(t.surfaceWarm)
             .testTag("button.icon")
             .clickable {

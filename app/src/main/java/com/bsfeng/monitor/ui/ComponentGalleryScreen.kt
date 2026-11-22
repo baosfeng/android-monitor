@@ -136,8 +136,10 @@ fun ComponentGalleryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     .weight(1f)
                     .navigationBarsPadding()
                     .verticalScroll(scroll),
-                verticalArrangement = Arrangement.spacedBy(t.space4),
             ) {
+                // 块间距由各块自己带（原型 = .stack gap 12 + .demo margin-bottom 16 = 28，
+                // 首页头那块 8 = .content 的 padding-top）。不用 spacedBy：调试未解锁时
+                // StateSwitchRow 高度为 0，spacedBy 仍会多算一个间距，整页就整体偏 28。
                 StateSwitchRow(state = state, onSelect = { state = it })
 
                 if (state == FiveState.POPULATED) {

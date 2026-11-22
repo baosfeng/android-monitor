@@ -30,7 +30,8 @@ import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
 import com.bsfeng.monitor.ui.components.FiveState
-import com.bsfeng.monitor.ui.components.StateSkeleton
+import com.bsfeng.monitor.ui.components.SkeletonRow
+import androidx.compose.ui.unit.Dp
 import com.bsfeng.monitor.ui.components.ToastHostState
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
@@ -49,9 +50,21 @@ internal fun GalleryFiveStates(
     val t = LocalDesignTokens.current
     val showAll = state == FiveState.POPULATED
     DemoSection("五种状态 State coverage", modifier.testTag("s12-states")) {
+        // 原型 s12:203 的 .stack 是 gap space-3(12)；卡之间是 12 不是 8
         Column(verticalArrangement = Arrangement.spacedBy(t.space3)) {
             if (showAll || state == FiveState.LOADING) {
-                StateCard("loading · 骨架屏", Modifier.testTag("s12-st-loading")) { StateSkeleton(rows = 5) }
+                StateCard("loading · 骨架屏", Modifier.testTag("s12-st-loading")) {
+                    // 原型 s12:204 的骨架是 5 行（w-40 tall / w-100 / w-80 / w-100 / w-60）：
+                    // 宽比按原型逐行给，不用 StateSkeleton 的轮转比例（那会把 80/100 换成 60/40）。
+                    // 原型 .sk + .sk 的 margin-top 是 space-2(8)：5 行 = 20+12×4 + 8×4 = 100
+                    Column(verticalArrangement = Arrangement.spacedBy(t.space2)) {
+                        SkeletonRow(height = GALLERY_SKELETON_H_TALL, widthFraction = 0.40f)
+                        SkeletonRow(height = GALLERY_SKELETON_H, widthFraction = 1f)
+                        SkeletonRow(height = GALLERY_SKELETON_H, widthFraction = 0.80f)
+                        SkeletonRow(height = GALLERY_SKELETON_H, widthFraction = 1f)
+                        SkeletonRow(height = GALLERY_SKELETON_H, widthFraction = 0.60f)
+                    }
+                }
             }
             if (showAll || state == FiveState.EMPTY) {
                 StateCard("empty · 空态", Modifier.testTag("s12-st-empty")) {
@@ -127,24 +140,26 @@ private const val RETRY_LOCK_MS = 800L
 private fun GalleryPopulatedCard() {
     val t = LocalDesignTokens.current
     AppCard(padding = 0.dp, modifier = Modifier.testTag("s12-st-populated")) {
+        // 原型 s12:235-242：卡 padding 16 → meta → .mt-3(12) → 三行 → 卡底 padding 16。
+        // 行内自带水平 16，所以卡本身 padding 0，这两段由 label 的上/下 spacer 承担。
         Text(
             "populated · 有数据",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
-            modifier = Modifier.padding(start = t.space4, top = t.space3),
+            modifier = Modifier.padding(start = t.space4, top = t.space4),
         )
-        Spacer(Modifier.height(t.space2))
+        Spacer(Modifier.height(t.space3))
         ListRow("微信", "42 分钟", "前台切换 · 9:12")
         TokenDivider(first = false)
         ListRow("哔哩哔哩", "3 次", "广告跳过 · 9:05")
         TokenDivider(first = false)
         ListRow("高德地图", "16 分钟", "前台切换 · 8:41")
-        Spacer(Modifier.height(t.space1))
+        Spacer(Modifier.height(t.space4))
     }
 }
 
 /**
- * 边界态（锚点 s12-st-edge）：超长标题最多 2 行省略、右侧计数不换行；缺结束时间按 0 计。
+ * 边界态（锚点 s12-st-edge）：超长标题单行省略、右侧计数不换行；缺结束时间按 0 计。
  *
  * 共享 EdgeState 的内容槽只接一段说明，表达不了「两行 = 标题/副标题 + 右侧定宽计数」，
  * 故本页局部实现两条只读行（仅本页使用，不改共享件）。
@@ -167,7 +182,10 @@ private fun GalleryEdgeBlock() {
     }
 }
 
-/** 只读边界行：标题 2 行省略、右侧计数单行不换行、长按标题可复制全文（selection 默认开）。 */
+/**
+ * 只读边界行：标题**单行**省略（原型 .row-title 是 white-space:nowrap + text-overflow:ellipsis，
+ * 2 行会让每行比原型高 22dp、整块高出 44dp）、右侧计数单行不换行、长按标题可复制全文。
+ */
 @Composable
 private fun GalleryEdgeRow(title: String, subtitle: String, value: String) {
     val t = LocalDesignTokens.current
@@ -179,13 +197,17 @@ private fun GalleryEdgeRow(title: String, subtitle: String, value: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = t.fg, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = t.fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(t.space3))
         Text(value, style = MaterialTheme.typography.bodySmall, color = t.fg2, maxLines = 1, overflow = TextOverflow.Clip)
     }
 }
+
+/** 原型 .sk 尺寸：细行 12px、tall 行 20px（s12-st-loading 的五行为 20/12/12/12/12）。 */
+private val GALLERY_SKELETON_H = 12.dp
+private val GALLERY_SKELETON_H_TALL = 20.dp
 
 /** 单格演示壳：块级锚点由调用点逐字传 literal（锚点不做字符串拼接）。 */
 @Composable

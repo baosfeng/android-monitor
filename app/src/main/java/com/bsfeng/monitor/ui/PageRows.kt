@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,6 +121,8 @@ internal fun TokenRow(
                     else -> Modifier
                 }
             )
+            // 原型 .group-row/.row：min-height 52（--row-min-h）是含 padding 8 的盒子，
+            // 内容区 = 52 - 2×8 = 36（heightIn 在 padding 之内生效，所以要减掉两边的 8）
             .padding(horizontal = t.space4, vertical = t.space2)
             .heightIn(min = t.rowMinH - t.space4),
         verticalAlignment = Alignment.CenterVertically,
@@ -136,23 +139,31 @@ internal fun TokenRow(
             }
             Spacer(Modifier.width(t.space3))
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = titleColor ?: t.fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("row.token"),
-            )
-            if (subtitle != null) {
+        // 行盒（台账「固定盒 + unbounded」）：原型 .row-title 17px×1.25=21.25、.row-sub 14px×1.3=18.2，
+        // 两行 + .row-body 的 2px gap 共 41.4；Compose 单行 Text 是字体行盒（中文 1.47 倍），
+        // 17sp 撑到 25dp，整行会比原型高 4~7dp。
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Box(Modifier.height(TITLE_LINE)) {
                 Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = subtitleColor ?: t.muted,
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = titleColor ?: t.fg,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("row.token").wrapContentHeight(Alignment.Top, unbounded = true),
                 )
+            }
+            if (subtitle != null) {
+                Box(Modifier.height(SUB_LINE)) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subtitleColor ?: t.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                    )
+                }
             }
         }
         if (trailing != null) {
@@ -164,23 +175,61 @@ internal fun TokenRow(
     }
 }
 
-/** 紧凑行（原型 .list-row，48dp）。 */
+/**
+ * 紧凑行（原型 .list-row）：min-height 48px + 上下 padding 8 + 行标题/副标题各自的行盒。
+ *
+ * 行盒口径：原型 .row-title 是 17px × line-height 1.25 = 21.25px、.row-sub 是 14px × 1.3 = 18.2px，
+ * 两行之间还有 .row-body 的 2px gap；Compose 的单行 Text 高度是字体行盒（中文 1.47 倍），
+ * 17sp 会撑到 25dp、14sp 到 20.6dp，三行累计比原型高 2–7dp。故按台账「行盒」解法：
+ * 外层 Box 钉原型行盒、Text 用 wrapContentHeight(unbounded) 溢出绘制，字形不裁。
+ */
 @Composable
 internal fun ListRow(title: String, value: String, subtitle: String? = null) {
     val t = LocalDesignTokens.current
     Row(
-        Modifier.fillMaxWidth().heightIn(min = t.space12).padding(horizontal = t.space4),
+        // 原型 .list-row：min-height 48 + 上下 padding 8（水平 padding 在原型由卡提供，这里行内自带）
+        Modifier.fillMaxWidth().heightIn(min = t.space12).padding(horizontal = t.space4, vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = t.fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Box(Modifier.height(LIST_ROW_TITLE_LINE)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = t.fg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = t.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box(Modifier.height(LIST_ROW_SUB_LINE)) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                    )
+                }
             }
         }
         Text(value, style = MaterialTheme.typography.bodySmall, color = t.muted)
     }
 }
+
+/** 原型 .row-title = 17px × 1.25；[ListRow] / [TokenRow] 用它钉单行的行盒。 */
+private val LIST_ROW_TITLE_LINE = 21.25.dp
+
+/** [TokenRow] 的主标题行盒（与 [LIST_ROW_TITLE_LINE] 同口径，别名让两处调用读起来更清楚）。 */
+private val TITLE_LINE = LIST_ROW_TITLE_LINE
+
+/** [TokenRow] 的副标题行盒（.row-sub = 14px × 1.3）。 */
+private val SUB_LINE = 18.2.dp
+
+/** 原型 .row-sub = 14px × 1.3；与 .row-body 的 2px gap 一起决定行高。 */
+private val LIST_ROW_SUB_LINE = 18.2.dp
 
 /** 尾部数字（原型 .num：等宽、tabular）。 */
 @Composable
