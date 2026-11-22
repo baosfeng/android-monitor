@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.ui.components.AppCard
@@ -52,9 +55,12 @@ internal fun BudgetKpiSection(
     totalFocusRequester: FocusRequester? = null,
 ) {
     val t = LocalDesignTokens.current
-    val pct = fraction.coerceIn(0f, 9.99f).times(100).toInt()
-    Column(modifier.padding(horizontal = t.space4, vertical = t.space2)) {
-        GlassCard {
+    // 原型显示 62%（2468/4000 = 61.7）：这里必须四舍五入，直接 toInt 会截成 61%（差 1 个百分点）
+    val pct = kotlin.math.round(fraction.coerceIn(0f, 9.99f) * 100).toInt()
+    // 锚点 s06-card 是**卡片本身**（原型 .card.glass，宽 361、x 16）：外边距由调用方的
+    // Spacer 提供，所以 16dp 水平留白放在外层 Column，testTag 通过 modifier 传到 GlassCard 上。
+    Column(Modifier.padding(horizontal = t.space4)) {
+        GlassCard(modifier = modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -125,9 +131,10 @@ internal fun BudgetCategoryRowsSection(
         requesters.getOrNull(index)?.requestFocus()
         onRefocused()
     }
-    Column(modifier.padding(horizontal = t.space4)) {
+    Column(modifier.testTag("s06-list").fillMaxWidth().padding(horizontal = t.space4)) {
         BudgetListHead()
-        AppCard(padding = t.space1) {
+        // 原型 .group：卡片本身左右 16 内边距（行宽 327 = 361 − 2×16 − 2×1 边框），上下 0
+        AppCard(padding = t.space4 + 1.dp) {
             rows.forEachIndexed { index, category ->
                 val budget = budgetByCategory[category.name]
                 val enterIndex = if (index in seenRows) -1 else index
@@ -161,21 +168,27 @@ internal fun BudgetCategoryRowsSection(
     }
 }
 
+/** 小标题行高：原型 .h2 行盒 22（21px × leading-tight 1.05）。 */
+private val BUDGET_LIST_HEAD_H = 22.dp
+private val BUDGET_LIST_HEAD_BOTTOM = 12.dp
+
 /** 分类预算小标题行。 */
 @Composable
 internal fun BudgetListHead(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Row(
+        // 原型 .sec-head：h2 行盒 22 + margin-bottom 12（不是上下各 8）
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = t.space2),
+            .height(BUDGET_LIST_HEAD_H)
+            .padding(bottom = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             "分类预算",
             style = MaterialTheme.typography.headlineSmall,
             color = t.fg,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).wrapContentHeight(unbounded = true, align = Alignment.CenterVertically),
         )
         Text(
             "点任意一行可修改",

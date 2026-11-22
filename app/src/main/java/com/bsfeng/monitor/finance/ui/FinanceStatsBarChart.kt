@@ -25,6 +25,9 @@ import kotlin.math.roundToInt
 /** Y 轴刻度文字与绘图区的水平间距（原型 text x = padL - 6）。 */
 internal val WEEK_AXIS_TICK_GAP: Dp = 6.dp
 
+/** X 轴日期区高度（原型 176 高中留给日期的一行）。 */
+private val X_AXIS_H: Dp = 24.dp
+
 /** 图表网格行数 */
 internal const val GRID_ROWS = 2
 
@@ -40,6 +43,8 @@ internal const val GRID_ROWS = 2
 internal fun GroupedBarChart(
     values: List<Triple<Float, Float, String>>,
     modifier: Modifier = Modifier,
+    /** X 轴日期标签（08/09/…）；为空时不画。原型把它们画在同一个 svg 里，不是外面另起一行。 */
+    xLabels: List<String> = emptyList(),
 ) {
     val t = LocalDesignTokens.current
     val animated = rememberMotionEnabled()
@@ -74,8 +79,10 @@ internal fun GroupedBarChart(
         val padLeft = WEEK_AXIS_PAD_LEFT.toPx()
         val padRight = WEEK_AXIS_PAD_RIGHT.toPx()
         val plotWidth = (size.width - padLeft - padRight).coerceAtLeast(1f)
+        // 绘图区底部留 24 给 X 轴日期（原型 svg viewBox 176 高，柱区 154、日期基线 170）
+        val plotHeight = (size.height - X_AXIS_H.toPx()).coerceAtLeast(1f)
         for (i in 0..rows) {
-            val y = size.height * i / rows
+            val y = plotHeight * i / rows
             drawLine(
                 t.border,
                 Offset(padLeft, y),
@@ -90,7 +97,7 @@ internal fun GroupedBarChart(
                 topLeft = Offset(
                     (padLeft - WEEK_AXIS_TICK_GAP.toPx() - layout.size.width).coerceAtLeast(0f),
                     (y - layout.size.height / 2f)
-                        .coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f)),
+                        .coerceIn(0f, (plotHeight - layout.size.height).coerceAtLeast(0f)),
                 ),
             )
         }
@@ -101,15 +108,30 @@ internal fun GroupedBarChart(
             val per = ((progress.value * values.size) - index).coerceIn(0f, 1f)
             val startX = padLeft + groupWidth * index + groupWidth / 2f - barWidth - barGap / 2f
             listOf(day.first to colors[0], day.second to colors[1]).forEachIndexed { slot, pair ->
-                val height = (size.height - 2f) * (pair.first / maxValue) * per
+                val height = (plotHeight - 2f) * (pair.first / maxValue) * per
                 if (height > 0f) {
                     drawRoundRect(
                         color = pair.second,
-                        topLeft = Offset(startX + slot * (barWidth + barGap), size.height - height),
+                        topLeft = Offset(startX + slot * (barWidth + barGap), plotHeight - height),
                         size = Size(barWidth, height),
                         cornerRadius = CornerRadius(3f, 3f),
                     )
                 }
+            }
+        }
+        // X 轴日期：与柱组中心对齐（原型 text x = 组中心、y = 170/176）
+        if (xLabels.size == values.size) {
+            val labelLayouts = xLabels.map { measurer.measure(it, tickStyle) }
+            values.indices.forEach { index ->
+                val center = padLeft + groupWidth * index + groupWidth / 2f
+                val layout = labelLayouts[index]
+                drawText(
+                    layout,
+                    topLeft = Offset(
+                        (center - layout.size.width / 2f).coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f)),
+                        plotHeight + (X_AXIS_H.toPx() - layout.size.height) / 2f,
+                    ),
+                )
             }
         }
     }

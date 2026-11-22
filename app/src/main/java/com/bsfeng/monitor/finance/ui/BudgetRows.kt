@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.model.Budget
 import com.bsfeng.monitor.finance.model.Category
 import com.bsfeng.monitor.ui.components.MotionToken
@@ -45,6 +47,15 @@ import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
+
+/** 分类行标题行盒：原型 .s06-brow-top 高 25（.row-title 21.25 与 .s06-amt 24.99 取高者）。 */
+private val BUDGET_ROW_TOP_H = 25.dp
+
+/** 分类行内间距：原型 .s06-brow gap = 6（不是 token 的 8）。 */
+private val BUDGET_ROW_GAP = 6.dp
+
+/** 分类行副行行盒：原型 .row-sub 18.2（14px × 1.3）。 */
+private val BUDGET_ROW_SUB_H = 18.2.dp
 
 /** 交易类型：支出 */
 internal const val TYPE_EXPENSE = 0
@@ -219,8 +230,10 @@ internal fun BudgetRow(
             }
             .padding(horizontal = t.space3, vertical = t.space3),
     ) {
+        // 原型 .s06-brow 行盒：上下 12 + 标题行 25 + 6 + 进度条 7 + 6 + 副行 18.2。
+        // 行距 6 是 .s06-brow 的 gap（不是 token 的 8），标题/副行都要钉行盒，否则 CJK 自然行盒 25/21 会把行撑高。
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(BUDGET_ROW_TOP_H),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -241,9 +254,9 @@ internal fun BudgetRow(
                 color = if (hasBudget) t.fg else t.muted,
             )
         }
-        Spacer(Modifier.height(t.space2))
+        Spacer(Modifier.height(BUDGET_ROW_GAP))
         BudgetProgressBar(fraction = if (hasBudget) animatedProgress else 0f, isOver = isOverBudget)
-        Spacer(Modifier.height(t.space2))
+        Spacer(Modifier.height(BUDGET_ROW_GAP))
         Text(
             when {
                 !hasBudget -> "未设置预算"
@@ -252,6 +265,7 @@ internal fun BudgetRow(
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (isOverBudget) t.expenseText else t.meta,
+            modifier = Modifier.height(BUDGET_ROW_SUB_H).wrapContentHeight(unbounded = true, align = Alignment.CenterVertically),
         )
     }
 }

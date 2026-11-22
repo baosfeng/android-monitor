@@ -208,6 +208,10 @@ internal fun FinanceIconButton(
  *
  * 箭头留 [previousModifier] / [nextModifier] 两个槽：页面用它们注 `testTag`（锚点必须落在
  * 实际命中元素上）或补额外反馈；默认空修饰，既有调用点行为不变。
+ *
+ * 锚点盒：[anchorTag] 在**水平内边距之内**挂载 —— 原型把 `s06-monthbar` / `s07-monthbar` 打在
+ * .pad 里的胶囊本身上（宽 361、x 16），而 [modifier] 是最外层（宽 393）。以前调用方只能把 tag
+ * 放在 modifier 上，几何比原型各宽 32 / 左移 16。
  */
 @Composable
 internal fun FinanceMonthBar(
@@ -215,6 +219,8 @@ internal fun FinanceMonthBar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 月份胶囊本体的锚点名（null = 不打）。落在 padding 之内，盒子与原型同比。 */
+    anchorTag: String? = null,
     /** 左侧箭头（上一月）追加的修饰，默认空。 */
     previousModifier: Modifier = Modifier,
     /** 右侧箭头（下一月）追加的修饰，默认空。 */
@@ -227,10 +233,13 @@ internal fun FinanceMonthBar(
         bump.animateTo(1f, t.springOf(MotionToken.Press))
     }
     val shape = RoundedCornerShape(t.radiusPill)
+    // 水平 16 放在**外层**：锚点要落在胶囊本体上（原型 s06/s07-monthbar 宽 361、x 16），
+    // 若把 padding 与 testTag 放在同一节点上，语义盒会把内边距一起算进去（量到 393）。
+    Box(modifier.fillMaxWidth().padding(horizontal = t.space4)) {
     Row(
-        modifier = modifier
+        modifier = Modifier
+            .then(if (anchorTag != null) Modifier.testTag(anchorTag) else Modifier)
             .fillMaxWidth()
-            .padding(horizontal = t.space4)
             .clip(shape)
             .background(t.fgFade(4))
             .border(1.dp, t.borderSoft, shape)
@@ -273,6 +282,7 @@ internal fun FinanceMonthBar(
                 modifier = Modifier.size(t.iconSize),
             )
         }
+    }
     }
 }
 

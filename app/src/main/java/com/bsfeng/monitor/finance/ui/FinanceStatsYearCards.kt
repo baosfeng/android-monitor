@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.finance.CategoryAmount
 import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.PeriodStats
@@ -36,6 +37,18 @@ import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import java.time.LocalDate
+
+/** 年度趋势整图高：原型 svg 显示高 150（327 × 156/340）。 */
+private val YEAR_TREND_CHART_H = 150.dp
+
+/** 年度趋势绘图区高：整图 150 − 单位行 18 − X 轴行 19。 */
+private val YEAR_TREND_PLOT_H = YEAR_TREND_CHART_H - 37.dp
+
+/** 图例行盒：原型 li 高 20.6（14px 正文行盒，无额外内边距）。 */
+private val LEGEND_ROW_H_Y = 20.6.dp
+
+/** 图例行距：原型 .legend gap = 8。 */
+private val LEGEND_ROW_GAP_Y = 8.dp
 
 /**
  * 五档段级锚点（s07-range-day / week / month / year / all）。
@@ -85,16 +98,11 @@ internal fun FinanceStatsRangeCard(
 
     // 只补上边距（不加下边距）：下一张卡自己补上边距，卡间距恒为 --space-3（原型 mt-3 的 12px 节奏），
     // 不会因为两张卡各补一半而变成 24dp。
-    Column(modifier.padding(horizontal = t.space4).padding(top = t.space3).testTag("s07-range")) {
+    // 锚点挂在原型 .pad.mt-3 上：宽 393（含左右 16 内边距）、盒顶 = 卡片顶（12dp 的外边距在盒外）。
+    // 所以 padding(top) 必须在 testTag 之前、horizontal padding 在之后。
+    Column(modifier.padding(top = t.space3).fillMaxWidth().testTag("s07-range").padding(horizontal = t.space4)) {
         GlassCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("时间范围", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("支持日 / 周 / 月 / 年 / 全部", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
+            StatsCardTitleRow("时间范围", "支持日 / 周 / 月 / 年 / 全部")
             Spacer(Modifier.height(t.space3))
             // 五档切换：键盘 ← → / Home / End 与切换触觉由公共 SegmentedControl 内建
             SegmentedControl(
@@ -164,16 +172,9 @@ internal fun FinanceStatsYearTrendCard(
     val expenseTotal = yearStats?.totalExpense
     val incomeTotal = yearStats?.totalIncome
 
-    Column(modifier.padding(horizontal = t.space4).padding(top = t.space3).testTag("s07-yeartrend")) {
-        AppCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("年度趋势", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("12 个月 · 支出 / 收入", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
+    Column(modifier.padding(top = t.space3).fillMaxWidth().testTag("s07-yeartrend").padding(horizontal = t.space4)) {
+        AppCard(padding = t.space4 + 1.dp) {
+            StatsCardTitleRow("年度趋势", "12 个月 · 支出 / 收入")
             Spacer(Modifier.height(t.space2))
             DualLineChartFrame(
                 primary = expense,
@@ -184,11 +185,15 @@ internal fun FinanceStatsYearTrendCard(
                 primaryColor = t.expenseText,
                 secondaryColor = t.incomeText,
                 unit = "单位：元",
+                // 原型 svg 显示高 150（viewBox 340×156 × 327/340）**含**轴标签；
+                // 实现的轴标签是 canvas 外的两行（单位行 18 + X 轴行 19），绘图区要扣掉它们，
+                // 整卡才与原型 267.2 同高。
+                height = YEAR_TREND_PLOT_H,
                 contentDescription = "年度收支趋势：" + buckets.size + " 个月，支出 " +
                     (expenseTotal?.let { yen(it, 0) } ?: PLACEHOLDER_AMOUNT) +
                     "，收入 " + (incomeTotal?.let { yen(it, 0) } ?: PLACEHOLDER_AMOUNT),
             )
-            Spacer(Modifier.height(t.space2))
+            // 原型 .legend{margin:0} 覆盖 mt-3：图例紧贴图表（实测 legend 顶 = chart 底）
             if (!hasData) {
                 Text(
                     "这一年还没有可统计的收支",
@@ -198,7 +203,10 @@ internal fun FinanceStatsYearTrendCard(
                 Spacer(Modifier.height(t.space1))
             }
             // 图例（原型 95-98）：色点 + 系列名 + 年累计
-            Column(Modifier.fillMaxWidth().testTag("s07-yeartrend-legend")) {
+            Column(
+                Modifier.fillMaxWidth().testTag("s07-yeartrend-legend"),
+                verticalArrangement = Arrangement.spacedBy(LEGEND_ROW_GAP_Y),
+            ) {
                 YearTrendLegendRow(color = t.expenseText, label = "支出", total = expenseTotal)
                 YearTrendLegendRow(color = t.incomeText, label = "收入", total = incomeTotal)
             }
@@ -215,7 +223,7 @@ private fun YearTrendLegendRow(
 ) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = t.space1),
+        modifier = Modifier.fillMaxWidth().height(LEGEND_ROW_H_Y),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LegendDot(color)
@@ -245,17 +253,9 @@ internal fun FinanceStatsTopCategoriesCard(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
-    Column(modifier.padding(horizontal = t.space4).padding(top = t.space3).testTag("s07-topcats")) {
-        AppCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("年度 Top 分类", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("累计", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
-            Spacer(Modifier.height(t.space2))
+    Column(modifier.padding(top = t.space3).fillMaxWidth().testTag("s07-topcats").padding(horizontal = t.space4)) {
+        AppCard(padding = t.space4 + 1.dp) {
+            StatsCardTitleRow("年度 Top 分类", "累计")
             if (categories.isEmpty()) {
                 Text(
                     "本年度还没有可统计的支出分类",
@@ -269,6 +269,7 @@ internal fun FinanceStatsTopCategoriesCard(
                     Modifier
                         .fillMaxWidth()
                         .semantics(mergeDescendants = true) { contentDescription = spoken },
+                    verticalArrangement = Arrangement.spacedBy(LEGEND_ROW_GAP_Y),
                 ) {
                     categories.forEach { item ->
                         TopCategoryRow(item)
@@ -280,7 +281,8 @@ internal fun FinanceStatsTopCategoriesCard(
             // 空数据也照样给：说明的是「这一块能做什么」，与有没有分类无关。
             Text(
                 "点击分类可下钻到交易明细（原型示意）。",
-                style = MaterialTheme.typography.labelSmall,
+                // 原型卡底注是 .meta（14px），不是 12sp
+                style = MaterialTheme.typography.bodySmall,
                 color = t.meta,
             )
         }
@@ -292,7 +294,7 @@ internal fun FinanceStatsTopCategoriesCard(
 private fun TopCategoryRow(item: CategoryAmount) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = t.space1),
+        modifier = Modifier.fillMaxWidth().height(LEGEND_ROW_H_Y),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 色点与分类环 / 交易行同源（categoryColorOf），同一分类在三处同色

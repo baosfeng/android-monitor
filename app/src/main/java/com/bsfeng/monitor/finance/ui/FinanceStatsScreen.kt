@@ -338,9 +338,9 @@ fun FinanceStatsScreen(
                                     monthText = monthLabel,
                                     onPrevious = onPreviousMonth,
                                     onNext = onNextMonth,
+                                    anchorTag = "s07-monthbar",
                                     modifier = Modifier
                                         .padding(vertical = t.space2)
-                                        .testTag("s07-monthbar")
                                         .onPreviewKeyEvent { event ->
                                             // 锚点 s07-monthbar：条内 ← / → 等同 prev / next
                                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.finance.monthDailyAverage
 import com.bsfeng.monitor.ui.components.AppCard
@@ -69,16 +70,18 @@ internal fun FinanceStatsDailyAvgCard(
     val noteText = monthDailyAverageNote(monthExpense, elapsedDays)
     // 整卡一个焦点停位、整体朗读（与 s07-kpicard / s07-ringcard 同一交互口径）
     val spoken = "本月日均 " + amountText + " " + S07_DAILY_AVG_UNIT + "，" + noteText
+    // 锚点 = 原型 .pad.mt-3 的盒（宽 393、盒顶 = 卡片顶）：padding(top) 在 testTag 之前
     Column(
         modifier
-            .padding(horizontal = t.space4)
             .padding(top = t.space3)
+            .fillMaxWidth()
             .testTag("s07-dailyavg")
+            .padding(horizontal = t.space4)
             .focusable()
             .keyboardFocusRing(shape)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
-        AppCard {
+        AppCard(padding = t.space4 + 1.dp) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

@@ -342,9 +342,9 @@ fun BudgetScreen(
                                 monthText = monthLabelOf(currentMonth),
                                 onPrevious = { viewModel.previousMonth() },
                                 onNext = { viewModel.nextMonth() },
+                                anchorTag = "s06-monthbar",
                                 modifier = Modifier
                                     .padding(vertical = t.space2)
-                                    .testTag("s06-monthbar")
                                     .onPreviewKeyEvent { event ->
                                         // 锚点 s06-monthbar：条内 ← / → 等同 prev / next，边界只出 toast
                                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

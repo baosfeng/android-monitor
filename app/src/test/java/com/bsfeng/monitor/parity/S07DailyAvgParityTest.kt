@@ -121,10 +121,12 @@ class S07DailyAvgParityTest {
                 " note=" + noteLayout?.layoutInput?.text,
         )
 
-        // 几何：视口 393dp - 两侧 --space-4(16) = 361dp；卡内 361 - 2×16 = 329dp
+        // 几何：视口 393dp - 两侧 --space-4(16) = 361dp；卡内 361 - 2×(16 + 1px 边框) = 327dp。
+        // 1dp 是 border-box 补偿：原型 .card 的 1px 描边占位，Compose 的 border 绘制不占位，
+        // 所以 AppCard 的 padding 加了 1dp（见 FinanceStatsDailyAvgCard 里的注释）。
         assertEquals("卡片宽 = 393 - 2×16", 361f, w(card), 0.5f)
-        assertEquals("卡内容宽 = 361 - 2×16", 329f, w(amount), 0.5f)
-        assertEquals("口径行取满内容宽（原型的块级 .meta）", 329f, w(note), 0.5f)
+        assertEquals("卡内容宽 = 361 - 2×17", 327f, w(amount), 0.5f)
+        assertEquals("口径行取满内容宽（原型的块级 .meta）", 327f, w(note), 0.5f)
         // 高度对照原型量得的 123.4 / 30.8：容差取台账的「几何每边 ≤3dp」。
         // 标题行盒已按原型 .h2 钉成 22dp（S07_DAILY_AVG_TITLE_LINE_HEIGHT），残差只来自
         // 等宽数字的自然行盒（原型 30.8px vs 实现 33dp，+2.2dp）。

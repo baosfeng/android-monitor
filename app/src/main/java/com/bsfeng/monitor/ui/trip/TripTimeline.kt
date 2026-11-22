@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.bsfeng.monitor.domain.trip.DaySegment
@@ -70,7 +71,8 @@ internal fun TripTimelineCard(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
-    AppCard(modifier = modifier) {
+    // 原型 .card 是 padding 0 16（上下 0 + 左右 16），且 1px 描边占位：补 1dp 让行宽回到 327
+    AppCard(modifier = modifier, padding = t.space4 + 1.dp) {
         // 处数 / 段数已由结论卡次行给出，这里只给操作提示，避免同一组计数在屏内出现两遍
         CardHead("时间轴", "停留段可点开详情")
         Spacer(Modifier.height(t.space2))

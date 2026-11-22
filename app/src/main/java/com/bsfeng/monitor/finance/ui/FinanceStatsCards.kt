@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,17 +70,35 @@ import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.fgFade
 import com.bsfeng.monitor.ui.theme.heatRamp
+import com.bsfeng.monitor.ui.theme.monitorMonoBadge
 import com.bsfeng.monitor.ui.theme.monitorMonoKpi
 import kotlinx.coroutines.delay
-
-/** 读数提示条（锚点 s07-barscard：抬指后顶部浮出、1.6s 消失）预留高度，避免出现/消失时图表跳动。 */
-private val TIP_BAR_H: Dp = 20.dp
 
 /** 图例行按下右移量（锚点 s07-ringcard：整行右移 2px）。 */
 private val LEGEND_SHIFT: Dp = 2.dp
 
 /** 热力格圆角（原型 .heat i radius 2px）。 */
 private val HEAT_CELL_RADIUS: Dp = 2.dp
+
+/** 热力轴标签上间距（原型 .s07-heatlabels margin-top:6px）。 */
+private val HEAT_LABEL_GAP: Dp = 6.dp
+
+/** 近 7 天柱区宽高比（原型 svg viewBox 340×176）。 */
+private const val WEEK_CHART_ASPECT: Float = 340f / 176f
+
+/** 24 小时热力宽高比（原型 svg viewBox 340×44）。 */
+private const val HEAT_ASPECT: Float = 340f / 44f
+
+/** 图例行间距（原型 .legend gap = --space-2 = 8px）。 */
+private val LEGEND_ROW_GAP: Dp = 8.dp
+
+/**
+ * 图例行盒：li 高 = 14px 正文行盒 20.6（原型没有额外 padding）。
+ *
+ * 内层 Text 的 CJK 自然行盒是 25dp，6 行会多出 26dp；钉成 20.6 后整卡的
+ * 「标题 + 环 150 + 图例」才与原型 369.5 对得上。
+ */
+private val LEGEND_ROW_H: Dp = 20.6.dp
 
 /**
  * 三格 KPI 行（锚点 s07-kpicard）。整卡一个焦点停位（三格不拆停位）；
@@ -91,15 +110,19 @@ internal fun FinanceStatsKpiRow(stats: FinanceStats, modifier: Modifier = Modifi
     val shape = RoundedCornerShape(t.radiusMd)
     val spoken = "支出 " + formatCount(stats.totalExpense.toInt()) + " 元，收入 " +
         formatCount(stats.totalIncome.toInt()) + " 元，结余 " + formatCount(stats.balance.toInt()) + " 元"
+    // 原型锚点 s07-kpicard 打在 .pad.mt-2 这个**容器**上（宽 393、含左右 16 内边距）。
+    // Compose 的语义盒会吃掉同一节点上的 padding，所以锚点必须挂在独立的外层 Box 上，
+    // 16dp 内边距放到内层 Row —— 否则锚点只能量到内容行（361，差 16/32）。
+    Box(modifier.fillMaxWidth().testTag("s07-kpicard")) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = t.space4)
-            .testTag("s07-kpicard")
             .focusable()
             .keyboardFocusRing(shape)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
-        horizontalArrangement = Arrangement.spacedBy(t.space3),
+        // 原型 .grid-3 gap = 8px（--space-2），不是卡间距的 12
+        horizontalArrangement = Arrangement.spacedBy(t.space2),
     ) {
         KpiTile(
             label = "支出",
@@ -121,6 +144,7 @@ internal fun FinanceStatsKpiRow(stats: FinanceStats, modifier: Modifier = Modifi
             modifier = Modifier.weight(1f),
         )
     }
+    }
 }
 
 /**
@@ -139,25 +163,19 @@ internal fun FinanceStatsRingCard(
     val shape = RoundedCornerShape(t.radiusLg)
     val spoken = "分类支出，共 " + sortedEntries.size + " 个分类，总支出 " +
         formatCount(stats.totalExpense.toInt()) + " 元"
+    // 同 s07-kpicard：锚点 = 原型 .pad 容器（393），16dp 内边距在内层
+    Box(modifier.fillMaxWidth().testTag("s07-ringcard")) {
     Column(
-        modifier
-            .padding(horizontal = t.space4, vertical = t.space3)
-            .testTag("s07-ringcard")
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = t.space4)
             .clip(shape)
             .focusable()
             .keyboardFocusRing(shape)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
-        AppCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("分类支出", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("占比", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
-            Spacer(Modifier.height(t.space3))
+        AppCard(padding = t.space4 + 1.dp) {
+            StatsCardTitleRow("分类支出", "占比")
             val sliceColors = sortedEntries.map { categoryColorOf(it.key) }
             // 占比用环形图：原型 s07 运行时由 ring() 渲染（环心才是 .s07-ringctr 的落点）
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -181,16 +199,19 @@ internal fun FinanceStatsRingCard(
                     Text("总支出", style = MaterialTheme.typography.bodySmall, color = t.muted)
                 }
             }
-            Spacer(Modifier.height(t.space3))
-            // 图例：图例行不可聚焦；按下右移 2px、抬指复位（120ms）
-            sortedEntries.forEachIndexed { index, entry ->
-                FinanceLegendRow(
-                    label = entry.key,
-                    value = yen(entry.value, 0),
-                    color = sliceColors[index],
-                )
+            // 图例：图例行不可聚焦；按下右移 2px、抬指复位（120ms）。
+            // 行距 8（原型 .legend gap），行内不加上下内边距：原型 li 高 20.6 = 14px 正文行盒本身。
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(LEGEND_ROW_GAP)) {
+                sortedEntries.forEachIndexed { index, entry ->
+                    FinanceLegendRow(
+                        label = entry.key,
+                        value = yen(entry.value, 0),
+                        color = sliceColors[index],
+                    )
+                }
             }
         }
+    }
     }
 }
 
@@ -209,10 +230,10 @@ private fun FinanceLegendRow(label: String, value: String, color: androidx.compo
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(LEGEND_ROW_H)
             .graphicsLayer { translationX = shift }
             .testTag("row.legend")
-            .clickable(interactionSource = interaction, indication = LocalIndication.current) { }
-            .padding(vertical = t.space1),
+            .clickable(interactionSource = interaction, indication = LocalIndication.current) { },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LegendDot(color)
@@ -257,34 +278,15 @@ internal fun FinanceStatsWeekCard(
     val padRightPx = with(density) { WEEK_AXIS_PAD_RIGHT.toPx() }
     val barsShape = RoundedCornerShape(t.radiusMd)
 
-    Column(modifier.padding(horizontal = t.space4).testTag("s07-barscard")) {
-        AppCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("近 7 天收支", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("单位 ¥", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
+    Column(modifier.fillMaxWidth().testTag("s07-barscard").padding(horizontal = t.space4)) {
+        AppCard(padding = t.space4 + 1.dp) {
+            StatsCardTitleRow("近 7 天收支", "单位 ¥")
             Spacer(Modifier.height(t.space2))
-            // 读数提示条：固定高度，避免浮出/消失时图表跳动
-            Box(Modifier.fillMaxWidth().height(TIP_BAR_H), contentAlignment = Alignment.CenterStart) {
-                val day = tipDay
-                if (day != null && day in week.indices) {
-                    val item = week[day]
-                    Text(
-                        monthDayLabelOf(item.third) + " · 支出 " + yen(item.first.toDouble(), 0) +
-                            " · 收入 " + yen(item.second.toDouble(), 0),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = t.fg,
-                    )
-                }
-            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(t.chartH)
+                    // 原型 svg viewBox 340×176，显示宽 327 时高 169.3（不是 token chart-h 148）
+                    .aspectRatio(WEEK_CHART_ASPECT)
                     .testTag("s07-bars")
                     .focusable()
                     .keyboardFocusRing(barsShape)
@@ -335,7 +337,22 @@ internal fun FinanceStatsWeekCard(
                 GroupedBarChart(
                     values = week,
                     modifier = Modifier.fillMaxSize(),
+                    // 日期画进 canvas（原型同一个 svg），避免外面再起一行 19dp 的轴
+                    xLabels = week.map { dayLabelOf(it.third) },
                 )
+                // 读数浮层：原型没有「预留高度」的读数条，读数直接盖在绘图区顶部，
+                // 再预留 20dp 会把整卡推高（已实测 +28）。浮层不吃点击：pointerInput 在父层。
+                val tip = tipDay
+                if (tip != null && tip in week.indices) {
+                    val item = week[tip]
+                    Text(
+                        monthDayLabelOf(item.third) + " · 支出 " + yen(item.first.toDouble(), 0) +
+                            " · 收入 " + yen(item.second.toDouble(), 0),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = t.fg,
+                        modifier = Modifier.align(Alignment.TopStart),
+                    )
+                }
                 // 选中柱组加深一档（120ms）
                 val day = tipDay
                 if (day != null && day in week.indices) {
@@ -353,15 +370,7 @@ internal fun FinanceStatsWeekCard(
                     }
                 }
             }
-            // X 轴日期与柱区左右边界对齐（跳掉左侧 Y 轴刻度列与右侧留白）
-            ChartAxisLabels(
-                week.map { dayLabelOf(it.third) },
-                modifier = Modifier.padding(
-                    start = WEEK_AXIS_PAD_LEFT,
-                    end = WEEK_AXIS_PAD_RIGHT,
-                ),
-            )
-            Spacer(Modifier.height(t.space3))
+            // 图例紧贴柱区：原型 .legend{margin:0} 覆盖了 mt-3（实测 legend 顶 = 柱区底）
             // 图例两行、金额右推（原型 s07:164-167 + 20-base.html:368-369 的 .legend-num）：
             // 压成一行时两个金额跟在系列名后面，读者要停下来分辨「哪个数属于哪条」。
             WeekLegendRow(color = t.danger, label = "支出", total = weekExpense)
@@ -416,21 +425,15 @@ internal fun FinanceStatsHeatCard(
     val ramp = t.heatRamp
     val max = hourly.maxOrNull()?.takeIf { it > 0f } ?: 1f
 
-    Column(modifier.padding(horizontal = t.space4, vertical = t.space3).testTag("s07-heatcard")) {
-        AppCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("24 小时消费强度", style = MaterialTheme.typography.headlineSmall, color = t.fg)
-                Text("笔 / 小时", style = MaterialTheme.typography.labelSmall, color = t.meta)
-            }
+    Column(modifier.fillMaxWidth().testTag("s07-heatcard").padding(horizontal = t.space4)) {
+        AppCard(padding = t.space4 + 1.dp) {
+            StatsCardTitleRow("24 小时消费强度", "笔 / 小时")
             Spacer(Modifier.height(t.space3))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(t.heatH)
+                    // 原型 svg viewBox 340×44，显示宽 327 时高 42.3（不是 token heat-h 44）
+                    .aspectRatio(HEAT_ASPECT)
                     .pointerInput(hourly) {
                         fun hourAt(x: Float): Int =
                             ((x / size.width) * HOURS).toInt().coerceIn(0, HOURS - 1)
@@ -471,11 +474,20 @@ internal fun FinanceStatsHeatCard(
                     )
                 }
             }
-            ChartAxisLabels(listOf("00", "04", "08", "12", "16", "20"))
+            // 原型 .s07-heatlabels：11px 等宽 + 上间距 6（不是通用轴标签的 12sp / 4dp）
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = HEAT_LABEL_GAP),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                listOf("00", "04", "08", "12", "16", "20").forEach {
+                    Text(it, style = monitorMonoBadge, color = t.muted)
+                }
+            }
             Spacer(Modifier.height(t.space3))
             Text(
                 heatNoteText(hourly, peak, hour),
-                style = MaterialTheme.typography.labelSmall,
+                // 原型说明行是 .meta（--text-sm 14px），不是 12sp 的 .fine
+                style = MaterialTheme.typography.bodySmall,
                 color = if (hour == null) t.meta else t.fg,
             )
         }

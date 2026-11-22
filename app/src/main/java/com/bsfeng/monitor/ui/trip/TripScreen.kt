@@ -406,7 +406,7 @@ private const val DEFAULT_ERROR_TEXT = "本地数据库暂时不可用（SQLITE_
  * 内容本身的替换跟着数据走，不额外套转场，避免把滚动位置一起重置。
  */
 @Composable
-private fun TripDayBar(
+internal fun TripDayBar(
     dayStart: Long,
     now: Long,
     onPrevious: () -> Unit,
@@ -509,7 +509,7 @@ private fun DayArrow(
  * 未接线（[onClick] 无来源）时整行不渲染，不伪造跳转。
  */
 @Composable
-private fun TripLocationHint(onClick: () -> Unit) {
+internal fun TripLocationHint(onClick: () -> Unit) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
@@ -534,6 +534,7 @@ private fun TripLocationHint(onClick: () -> Unit) {
             }
             .heightIn(min = t.rowMinH)
             .padding(horizontal = t.space4, vertical = t.space3)
+            // 锚点 = 原型 .row（宽 327，扣掉两侧 16 内边距）：tag 必须在 padding 之后
             .testTag("s16-goto-location"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
