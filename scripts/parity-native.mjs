@@ -35,7 +35,8 @@ const load = (p) => {
   const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
   return raw.screens || raw;
 };
-const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+// 原型靠 DOM 空格分隔标签与数值、实现靠布局：文案比较一律去掉全部空白
+const norm = (s) => (s || '').replace(/\s+/g, '');
 const px = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
 
 const proto = load(PROTO);
@@ -64,6 +65,8 @@ for (const s of screens) {
     if (pi.fs != null && ii.fs != null && Math.abs(px(pi.fs) - px(ii.fs)) > 0.5) {
       findings.push({ screen: s, id: pi.id, level: 'P0', kind: '字号', detail: 'proto ' + px(pi.fs) + ' / impl ' + px(ii.fs) });
     }
+    // 滚动容器（-content）的高度由视口决定，长页导出必然不一致，只比存在性
+    const skipGeom = /-content$/.test(pi.id);
     const d = {
       x: Math.abs(px(pi.x) - px(ii.x)),
       y: Math.abs(px(pi.y) - px(ii.y)),
@@ -72,7 +75,7 @@ for (const s of screens) {
     };
     // 长页滚动后 y 是视口坐标，两端口径不同：y 差超过一屏时只比 x/w/h
     const scrolled = d.y > 200;
-    const bad = Object.entries(d).filter(([k, v]) => v > TOL && !(scrolled && k === 'y'));
+    const bad = skipGeom ? [] : Object.entries(d).filter(([k, v]) => v > TOL && !(scrolled && k === 'y'));
     if (bad.length) {
       findings.push({ screen: s, id: pi.id, level: 'P1', kind: '几何', detail: bad.map(([k, v]) => k + ' 差 ' + v.toFixed(1)).join(', ') + '（容差 ' + TOL + '）' });
     }

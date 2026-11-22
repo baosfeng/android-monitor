@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -125,13 +126,24 @@ internal fun OverviewHead(dateText: String, onBell: () -> Unit, onOpenTotp: (() 
         modifier = Modifier
             .fillMaxWidth()
             .testTag("s01-head")
-            .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space3),
-        verticalAlignment = Alignment.CenterVertically,
+            // 原型：.content 顶部 8 + .screen-head 顶部 8（外层 Spacer 补 8，这里取 8）→ 盒高 78、内容起点 16
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
+        // 原型 .screen-head 是 align-items:flex-start，右侧图标与日期行顶部对齐
+        verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
             MetaText(dateText)
             Spacer(Modifier.height(t.space2))
-            Text("今日概览", style = MaterialTheme.typography.headlineMedium, color = t.fg)
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；Compose 的 CJK 自然行盒是 41.3，
+            // 固定 30dp 让行盒按原型取值，文字用 unbounded 正常绘制（不裁字形）。
+            Box(Modifier.height(30.dp)) {
+                Text(
+                    "今日概览",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
         }
         Spacer(Modifier.width(t.space3))
         OverviewIconButton(
@@ -213,7 +225,6 @@ internal fun RangeSegment(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("s01-range")
             .height(t.tapMin + segmentPad * 2)
             .clip(shape)
             .background(t.fgFade(5))
@@ -383,7 +394,8 @@ internal fun OverviewKpiCard(
             color = t.meta,
             modifier = Modifier.testTag("kpi.card"),
         )
-        Spacer(Modifier.height(t.space2))
+        // 原型 .kpi 的 column-gap 是 2px（--space 档位没有 2，按布局语义留字面量）
+        Spacer(Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             value(replay)
             if (unit != null) {

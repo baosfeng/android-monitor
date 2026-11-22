@@ -12,6 +12,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -133,16 +135,21 @@ internal fun LazyListScope.todayPanelS01(
             Modifier
                 .fillMaxWidth()
                 .testTag("s01-kpi"),
-            verticalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space3),
+            // 原型 .grid-2 的 gap 是 --space-2(8)，不是 space3(12)
+            verticalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space2),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space3)) {
+            // 原型 grid 默认 stretch：同一行两张卡等高（等高由 IntrinsicSize.Max + fillMaxHeight 实现）
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space2),
+            ) {
                 OverviewKpiCard(
                     label = "事件",
                     unit = "条",
                     delta = "较昨日 " + signedDelta(eventDelta),
                     deltaTone = toneOf(eventDelta),
                     spark = state.dailyEventCounts7,
-                    modifier = Modifier.testTag("s01-kpi-events").weight(1f).staggerEnterAt(0),
+                    modifier = Modifier.testTag("s01-kpi-events").weight(1f).fillMaxHeight().staggerEnterAt(0),
                     onHaptic = onHaptic,
                 ) { replay ->
                     RollingInt(state.todayEventCount, replay, t0Fg = LocalDesignTokens.current.fg)
@@ -152,20 +159,23 @@ internal fun LazyListScope.todayPanelS01(
                     delta = "较昨日 " + signedMinutes(activeDelta),
                     deltaTone = toneOf(activeDelta),
                     spark = state.dailyActiveMinutes7,
-                    modifier = Modifier.testTag("s01-kpi-active").weight(1f).staggerEnterAt(1),
+                    modifier = Modifier.testTag("s01-kpi-active").weight(1f).fillMaxHeight().staggerEnterAt(1),
                     onHaptic = onHaptic,
                 ) { replay ->
                     RollingActive(state.todayActiveMinutes, replay)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space3)) {
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(LocalDesignTokens.current.space2),
+            ) {
                 OverviewKpiCard(
                     label = "跳过广告",
                     unit = "次",
                     delta = "较昨日 " + signedDelta(skipDelta),
                     deltaTone = toneOf(skipDelta),
                     spark = state.dailySkipCounts7,
-                    modifier = Modifier.testTag("s01-kpi-skip").weight(1f).staggerEnterAt(2),
+                    modifier = Modifier.testTag("s01-kpi-skip").weight(1f).fillMaxHeight().staggerEnterAt(2),
                     onHaptic = onHaptic,
                 ) { replay ->
                     RollingInt(state.todaySkipCount, replay, t0Fg = LocalDesignTokens.current.fg)
@@ -174,7 +184,7 @@ internal fun LazyListScope.todayPanelS01(
                     label = "今日支出",
                     delta = "收入 ¥" + money(state.todayIncome) + " · 结余 ¥" + money(state.todayIncome - state.todayExpense),
                     deltaTone = toneOf(state.todayIncome - state.todayExpense),
-                    modifier = Modifier.testTag("s01-kpi-spend").weight(1f).staggerEnterAt(3),
+                    modifier = Modifier.testTag("s01-kpi-spend").weight(1f).fillMaxHeight().staggerEnterAt(3),
                     onHaptic = onHaptic,
                 ) { replay ->
                     RollingMoney(state.todayExpense, replay)

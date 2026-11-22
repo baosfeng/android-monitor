@@ -199,6 +199,8 @@ fun OverviewScreen(
 
     Box(modifier.fillMaxSize().testTag("screen-s01")) {
         Column(Modifier.fillMaxSize()) {
+            // 原型 .content 有 8 顶部内边距（s01-head 的 y=8），实现没有这层容器
+            Spacer(Modifier.height(t.space2))
             OverviewHead(
                 dateText = formatFullDate(now) + " · " + weekdayLabel(now),
                 onBell = { toast.show("今日已记录 " + state.todayEventCount + " 条事件") },
@@ -214,7 +216,8 @@ fun OverviewScreen(
                     }
                 },
                 onHaptic = { haptic(HapticTone.LIGHT) },
-                modifier = Modifier.padding(horizontal = t.space4),
+                // 原型锚点 s01-range 绑在 .pad 外层（x=16 / w=361），不是内层 segmented
+                modifier = Modifier.testTag("s01-range").padding(horizontal = t.space4),
             )
             Spacer(Modifier.height(t.space3))
             Box(Modifier.weight(1f)) {
