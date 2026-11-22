@@ -35,14 +35,25 @@ data class LegendItem(val label: String, val value: String, val color: Color)
 
 /** 图例列表（.legend：10px 圆角方块 + 标签 + 右侧等宽数值）。 */
 @Composable
-fun Legend(items: List<LegendItem>, modifier: Modifier = Modifier) {
+fun Legend(
+    items: List<LegendItem>,
+    modifier: Modifier = Modifier,
+    /**
+     * 行盒高度；null = 沿用 [LEGEND_ROW_H]（s01 等既有屏的口径）。
+     *
+     * s13 的 .legend li 是 14 × 1.47 = 20.58（该屏没有等宽金额行撑高），
+     * 与 s01 的 22.5 不同 —— 由调用方按本屏原型取值传入，不在这里按屏分支。
+     */
+    rowHeight: Dp? = null,
+) {
     val t = LocalDesignTokens.current
+    val rowH = rowHeight ?: LEGEND_ROW_H
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(t.space2)) {
         items.forEach { item ->
             // 原型 .legend li 的实测行高是 22.58（等宽金额行的字体行盒撑出来的）；
             // Compose 里显式钉住，不然 7 行图例会逐行少 1.9dp，整块差 13dp
             Row(
-                modifier = Modifier.heightIn(min = LEGEND_ROW_H),
+                modifier = Modifier.heightIn(min = rowH),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(

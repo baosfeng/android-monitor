@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +54,15 @@ import com.bsfeng.monitor.ui.theme.fgFade
 
 /** 网格列数（锚点 s13-picker-grid：两列 4 行、项间距 8dp）。 */
 private const val GRID_COLUMNS = 2
+
+/** 原型 .theme-cn 行盒（17 × line-height 1.2）。 */
+private val THEME_CN_LINE = 20.4.dp
+
+/** 原型 .theme-en 行盒（12 × line-height 1.2）。 */
+private val THEME_EN_LINE = 14.4.dp
+
+/** 原型 .theme-opt 实测盒高 54（padding 8 12 + 内容 36.8 + 1px 描边）。 */
+private val THEME_OPT_H = 54.dp
 
 /**
  * 组内导航键 → 目标下标（纯函数，便于把「两列间移动 / 到边界不回绕」直接单测钉死）。
@@ -97,7 +108,7 @@ internal fun ThemePicker(
     Column(modifier.fillMaxWidth()) {
         // 区块标题与「当前」值同行两端对齐；点两者都无反应（不展开下拉、无触感）
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = t.space4),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("主题", style = MaterialTheme.typography.labelLarge, color = t.muted, modifier = Modifier.weight(1f))
@@ -110,11 +121,11 @@ internal fun ThemePicker(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(t.space2))
+        // 原型 .sec-head 的 margin-bottom 是 --space-3（12），不是 space-2
+        Spacer(Modifier.height(t.space3))
         Column(
             gridModifier
                 .fillMaxWidth()
-                .padding(horizontal = t.space4)
                 .focusGroup()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -182,8 +193,8 @@ internal fun ThemeGridItem(
         modifier = modifier
             // 锚点逐字落 testTag（glassmorphism → s13-theme-glass，见 themeAnchor）
             .testTag(themeAnchor(id))
-            // 行高 ≥ 52dp（口径口径：列表行高 52dp / 点击区 ≥ 44dp）
-            .heightIn(min = t.rowMinH)
+            // 原型 .theme-opt 盒高 54（列表行 52 的通用口径在这里被内容顶到 54）
+            .heightIn(min = THEME_OPT_H)
             .rowPressFeedback(interaction)
             .tokenShadow(if (selected) 1 else 0, shape)
             .clip(shape)
@@ -222,21 +233,29 @@ internal fun ThemeGridItem(
         )
         Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f)) {
-            Text(
-                themeNameCn(id),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) t.fg else t.fg2,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                themeNameEn(id),
-                style = MaterialTheme.typography.labelSmall,
-                color = t.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // 原型 .theme-cn 行盒 = 17 × 1.2 = 20.4、.theme-en = 12 × 1.2 = 14.4（gap 2）：
+            // CJK 自然行盒比 CSS 高，不钉行盒时 8 个选项逐行 +1dp，网格整体高出 4dp
+            Box(Modifier.height(THEME_CN_LINE)) {
+                Text(
+                    themeNameCn(id),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selected) t.fg else t.fg2,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+            Box(Modifier.height(THEME_EN_LINE)) {
+                Text(
+                    themeNameEn(id),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = t.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
         }
     }
 }

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.model.Record
+import com.bsfeng.monitor.ui.components.AppIcon
 import com.bsfeng.monitor.ui.components.Badge
 import com.bsfeng.monitor.ui.components.STAGGER_MAX_STEPS
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
@@ -64,6 +65,7 @@ import com.bsfeng.monitor.ui.live.HourGroup
 import com.bsfeng.monitor.ui.live.LiveFilter
 import com.bsfeng.monitor.ui.live.PLACEHOLDER
 import com.bsfeng.monitor.ui.live.StackRow
+import com.bsfeng.monitor.ui.live.TypeIconDot
 import com.bsfeng.monitor.ui.live.formatClock
 import com.bsfeng.monitor.ui.live.recordSourceLabel
 import com.bsfeng.monitor.ui.live.recordTypeLabel
@@ -81,7 +83,7 @@ import java.util.Locale
  * 列宽仍是 46dp（与原设计逐像素一致）；字体放大时列按需变宽，行内后两列（space1 + weight(1f)）
  * 自动让位，不产生位移。
  */
-private val TL_TIME_COL_W = 46.dp
+private val TL_TIME_COL_W = 42.dp
 
 /**
  * 聚焦命中行的高亮时长 / 淡出 / 底色（s01-recent-1..3：从概览点进来要能看出是哪一条）。
@@ -179,6 +181,20 @@ internal fun lazyIndexesOfRecord(groups: List<HourGroup>, recordId: String): Pai
     }
     return -1 to -1
 }
+
+/**
+ * 原型行盒高度（.list-row min-height 48 被「标题 + 副行」顶到 58.4；含卡边框）。
+ *
+ * Compose 的 CJK 行盒比 CSS 少 0.7dp，逐行累积会让后面的组头一路往上漂（实测第三组差 19.5dp），
+ * 所以按原型取值钉成下限：正常字号下与原型逐像素一致，大字体时仍能自然长高。
+ */
+private val ROW_MIN_H = 58.44.dp
+
+/** 原型组头行盒（.grp-head padding 8 0 → 37.6），同理钉下限。 */
+private val GROUP_HEAD_MIN_H = 36.58.dp
+
+/** 原型卡片描边占布局 1dp，Compose 的 border 不占位：行内容右侧补同样 1dp。 */
+private val CARD_BORDER = 1.dp
 
 /** 行副标题：口径固定「页面轨迹 · 无障碍服务」「通知事件 · 正文不记录」，其余按类型推导。 */
 internal fun rowSubtitleOf(record: Record): String = when {
@@ -336,6 +352,8 @@ internal fun LiveEventTimeline(
                     last = ei == group.events.lastIndex,
                     modifier = Modifier.staggerEnterAt(rowEnter),
                 ) {
+                    // 原型 .od-grp 卡片内边距 0 16：行在卡内再缩 --space-4（行 x=33/w=327 = 卡 16/361 内缩 17）
+                    androidx.compose.foundation.layout.Box(Modifier.padding(horizontal = t.space4)) {
                     LiveTimelineRow(
                         record = record,
                         highlighted = record.id == focusedRowId,
@@ -352,7 +370,19 @@ internal fun LiveEventTimeline(
                                 onSelect(record)
                             },
                     )
+                    }
                 }
+            }
+            // 原型 .od-grp 的 padding-bottom 是 --space-2（8）：最后一行的圆角下方还有 8dp 卡底
+            item(key = "pad-" + group.hour) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = t.space4)
+                        // 卡底 8 + 下描边 1（同上：原型边框占布局）
+                        .height(t.space2 + CARD_BORDER)
+                        .background(t.surface, RoundedCornerShape(bottomStart = t.radiusLg, bottomEnd = t.radiusLg)),
+                )
             }
             if (gi != groups.lastIndex) {
                 item(key = "gap-" + group.hour) { Spacer(Modifier.height(t.space3)) }
@@ -409,7 +439,10 @@ private fun LiveHourGroupHead(
             .clip(shape)
             .background(t.surface)
             .border(1.dp, t.borderSoft, shape)
-            .padding(horizontal = t.space4, vertical = t.space3),
+            // 原型 .grp-head 的 padding 是 8 0；上面那 1dp 是卡片描边（原型 border 占布局，
+            // Compose 的 border 不占位）—— 补上它组卡总高才与原型一致，后续组头才不会逐组上漂
+            .heightIn(min = GROUP_HEAD_MIN_H)
+            .padding(start = t.space4, end = t.space4, top = t.space2 + CARD_BORDER, bottom = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -434,8 +467,8 @@ private fun LiveTimelineRow(
         modifier = modifier
             .fillMaxWidth()
             .then(if (highlighted) Modifier.focusHighlight() else Modifier)
-            .heightIn(min = t.rowMinH)
-            .padding(horizontal = t.space4, vertical = t.space2),
+            .heightIn(min = ROW_MIN_H)
+            .padding(start = t.space4 + CARD_BORDER, end = t.space4 + CARD_BORDER, top = t.space2, bottom = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -449,7 +482,19 @@ private fun LiveTimelineRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(min = TL_TIME_COL_W),
         )
-        Spacer(Modifier.width(t.space1))
+        Spacer(Modifier.width(t.space3))
+        // 原型 .list-row 的第二列是图标：应用事件用 .app-icon（30），系统事件用 .row-icon（36）。
+        // 缺了它整行只剩「时间 + 文字」，与原型不是同一张卡（锚点文案也会少一个应用首字）。
+        val pkg = record.detail?.get("package_name")?.takeIf { it.isNotBlank() }
+        if (pkg != null) {
+            AppIcon(
+                packageName = pkg,
+                appName = record.detail?.get("app_name")?.takeIf { it.isNotBlank() } ?: record.label,
+            )
+        } else {
+            TypeIconDot(record.type)
+        }
+        Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f)) {
             Text(
                 text = record.label.ifBlank { PLACEHOLDER },
@@ -502,7 +547,8 @@ private fun LiveLoadMore(isLoading: Boolean, remaining: Int, onClick: () -> Unit
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = t.tapMin)
+            // 原型 .btn 的 min-height 是 --btn-h（48），不是触达下限 --tap-min（44）
+            .heightIn(min = t.btnH)
             .pressFeedback(interaction)
             .clip(shape)
             .background(t.surface)

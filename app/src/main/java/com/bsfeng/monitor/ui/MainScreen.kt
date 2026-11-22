@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,6 +88,9 @@ import kotlinx.coroutines.delay
 
 // ── 文案口径（口径末尾「文案口径」逐字） ──
 private const val TOAST_SORTED = "已按时间倒序排列"
+
+/** 原型 .h1 行盒：28px × leading-tight 1.05 ≈ 29.4（CJK 自然行盒 41.3，会把页头撑高 12dp）。 */
+private val HEAD_TITLE_LINE = 29.4.dp
 private const val TOAST_WAITING = "监控中 · 等待事件"
 private const val TOAST_RECONNECT = "正在重新连接采集服务…"
 private const val EMPTY_TITLE = "还没有事件"
@@ -219,7 +223,8 @@ fun MainScreen(
                 LiveFilterTip()
             }
 
-            Spacer(Modifier.height(t.space2))
+            // 原型时间线容器是 .pad.stack.mt-3（上外边距 12）
+            Spacer(Modifier.height(t.space3))
 
             Box(Modifier.weight(1f)) {
                 when (shownState) {
@@ -320,7 +325,7 @@ internal fun <V> MutableMap<String, V>.retainOnly(visibleIds: Collection<String>
 
 /** 页头：「今日已记录 N 条 · 最近更新 HH:mm」+ 大标题 + 排序按钮（44dp，0.96，LIGHT）。 */
 @Composable
-private fun LivePageHead(count: Int, lastUpdatedAt: Long, onSortClick: () -> Unit) {
+internal fun LivePageHead(count: Int, lastUpdatedAt: Long, onSortClick: () -> Unit) {
     val t = LocalDesignTokens.current
     val interaction = remember { MutableInteractionSource() }
     val haptic = rememberHaptic()
@@ -328,8 +333,9 @@ private fun LivePageHead(count: Int, lastUpdatedAt: Long, onSortClick: () -> Uni
         modifier = Modifier
             .fillMaxWidth()
             .testTag("s02-head")
-            .padding(start = t.space4, end = t.space4, top = t.space4, bottom = t.space3),
-        verticalAlignment = Alignment.CenterVertically,
+            // 原型 .screen-head：padding 8 16 12、align-items:flex-start（锚点 s02-head 的 y=8、盒高 78）
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
+        verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
             MetaText(
@@ -337,7 +343,16 @@ private fun LivePageHead(count: Int, lastUpdatedAt: Long, onSortClick: () -> Uni
                     (if (lastUpdatedAt > 0L) formatClock(lastUpdatedAt) else PLACEHOLDER),
             )
             Spacer(Modifier.height(t.space2))
-            Text("实时事件流", style = MaterialTheme.typography.headlineMedium, color = t.fg)
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；CJK 自然行盒 41.3，
+            // 固定盒 + unbounded 让行盒按原型取值、字形完整绘制（台账「固定盒 + unbounded」解法）
+            Box(Modifier.height(HEAD_TITLE_LINE)) {
+                Text(
+                    "实时事件流",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
         }
         Spacer(Modifier.width(t.space3))
         Box(
@@ -367,7 +382,7 @@ private fun LivePageHead(count: Int, lastUpdatedAt: Long, onSortClick: () -> Uni
 
 /** 类型筛选 chip 组：六选一互斥；键盘左右方向键即时切换；Tab 只停当前选中项。 */
 @Composable
-private fun LiveFilterChips(
+internal fun LiveFilterChips(
     items: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
@@ -388,7 +403,8 @@ private fun LiveFilterChips(
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .testTag("s02-chips")
-            .padding(horizontal = t.space4),
+            // 原型 .s02-chips 的 padding 是 0 16 8 16（盒高 52 = chip 44 + 下内边距 8）
+            .padding(start = t.space4, end = t.space4, bottom = t.space2),
         horizontalArrangement = Arrangement.spacedBy(t.space2),
     ) {
         items.forEachIndexed { index, label ->
@@ -480,7 +496,7 @@ private fun LiveFilterChip(
 
 /** 筛选提示行：仅类型 ≠ 全部时出现；纯说明文案，不可点、不可关闭。 */
 @Composable
-private fun LiveFilterTip(modifier: Modifier = Modifier) {
+internal fun LiveFilterTip(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Text(
         text = FILTER_TIP,

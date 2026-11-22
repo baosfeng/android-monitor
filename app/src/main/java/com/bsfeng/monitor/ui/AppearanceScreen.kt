@@ -1,6 +1,8 @@
 package com.bsfeng.monitor.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +16,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -176,9 +181,13 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .weight(1f)
                     .navigationBarsPadding()
+                    // 原型 .content 的上下内边距（--space-2 / --space-6）+ .pad 的左右 --space-4：
+                    // 锚点 s13-body/picker/preview/note 的 x=16、w=361 都来自这一层，不能在子件里各补一次
+                    .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space6)
                     .testTag("s13-body")
                     .verticalScroll(scroll),
-                verticalArrangement = Arrangement.spacedBy(t.space4),
+                // 原型 .stack 的 gap 是 --space-3（12），不是 space4
+                verticalArrangement = Arrangement.spacedBy(t.space3),
             ) {
                 StateSwitchRow(state = state, onSelect = { state = it })
 
@@ -256,6 +265,24 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 /** 「重新应用」转 loading 的最长窗口（锚点 s13-st-error：最长 800ms）。 */
 private const val RETRY_APPLY_MS = 800L
 
+/** 原型 .kpi-label / .kpi-delta 行盒（14 × leading-body 1.47）。 */
+private val KPI_LABEL_LINE = 20.58.dp
+
+/** 原型 .kpi-value 行盒（28 × 1.1）。 */
+private val KPI_VALUE_LINE = 30.8.dp
+
+/** 原型 s13 .pv-ring 的宽度（本屏覆盖成 104px）。 */
+private val PV_RING_SIZE = 104.dp
+
+/** 原型 .legend li 在本屏的行盒（14 × 1.47；s01 是 22.5，故只在本屏传入）。 */
+private val LEGEND_ROW_LINE = 20.58.dp
+
+/** 原型 .note 里 .meta 的行盒（14 × 1.47）。 */
+private val NOTE_META_LINE = 20.58.dp
+
+/** 原型 .note 里 .fine 的行盒（12 × 1.47）。 */
+private val NOTE_FINE_LINE = 17.64.dp
+
 /** 选择器区块装配：锚点 s13-picker（区块）/ s13-picker-grid（两列网格）。 */
 @Composable
 private fun AppearanceThemePicker(
@@ -309,31 +336,60 @@ private fun AppearancePreviewCard(modifier: Modifier = Modifier) {
             Text("实时预览", style = MaterialTheme.typography.labelLarge, color = t.muted, modifier = Modifier.weight(1f))
             Text("底色 / 文字 / 描边 / 灰阶同步变化", style = MaterialTheme.typography.labelSmall, color = t.meta)
         }
+        // 原型 .kpi.mt-3：KPI 是**独立小卡**（surface 底 + 1px 描边 + radius-md + 12 内边距），
+        // 且内部按 column 排「标签 / 数值 / 环比 / 迷你走势」四行 —— 前两版挤成一行会让整卡矮 23dp
         Spacer(Modifier.height(t.space3))
-        Text("今日事件", style = MaterialTheme.typography.labelMedium, color = t.meta)
-        Spacer(Modifier.height(t.space1))
-        Row(verticalAlignment = Alignment.Bottom) {
-            // 首次进入 0 → 128 滚动（时长取 --dur-chart），换主题只换颜色、不重播
-            AnimatedNumber(value = 128, style = MaterialTheme.typography.headlineMedium, color = t.fg)
-            Spacer(Modifier.width(t.space1))
-            Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
-            Spacer(Modifier.weight(1f))
-            Text("较昨日 +12%", style = MaterialTheme.typography.labelMedium, color = t.successText)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(t.radiusMd))
+                .background(t.surface)
+                .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusMd))
+                .padding(t.space3),
+            // 原型 .kpi：gap 2 + 每个子块按 CSS 行盒取值（label 20.58 / value 30.8 / delta 20.58 /
+            // spark 28 且 margin-top 4）。CJK 自然行盒比 CSS 高，不钉行盒整卡会高出 19dp。
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Box(Modifier.height(KPI_LABEL_LINE)) {
+                Text(
+                    "今日事件",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = t.muted,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+            Box(Modifier.height(KPI_VALUE_LINE)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    // 首次进入 0 → 128 滚动（时长取 --dur-chart），换主题只换颜色、不重播
+                    AnimatedNumber(value = 128, style = MaterialTheme.typography.headlineMedium, color = t.fg)
+                    Spacer(Modifier.width(t.space1))
+                    Text("条", style = MaterialTheme.typography.labelMedium, color = t.muted)
+                }
+            }
+            Box(Modifier.height(KPI_LABEL_LINE)) {
+                Text(
+                    "较昨日 +12%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = t.successText,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+            Spacer(Modifier.height(t.space1))
+            Sparkline(
+                values = listOf(62f, 88f, 74f, 96f, 120f, 110f, 128f),
+                modifier = Modifier.fillMaxWidth().height(t.sparkHeight),
+            )
         }
-        Spacer(Modifier.height(t.space2))
-        Sparkline(
-            values = listOf(62f, 88f, 74f, 96f, 120f, 110f, 128f),
-            modifier = Modifier.fillMaxWidth().height(t.sparkHeight),
-        )
         Spacer(Modifier.height(t.space3))
         Row(verticalAlignment = Alignment.CenterVertically) {
             // 占比用实心扇形图（原型 s13 .pv-ring data-chart="pie"），不叠中心文案。
             // 分片色与右图例**同源**：两侧都按 s1..s5 下标取 chartRamp；图例只列前 4 项，与原型一致。
             PieChart(
                 segments = listOf(42f, 31f, 24f, 18f, 13f),
-                modifier = Modifier.size(t.ringSize),
+                // 原型 s13 在本屏把 .pv-ring 覆盖成 104px（token --ring-size 是 128，用于 s01）
+                modifier = Modifier.size(PV_RING_SIZE),
                 colors = t.chartRamp,
-                size = t.ringSize,
+                size = PV_RING_SIZE,
             )
             Spacer(Modifier.width(t.space4))
             Legend(
@@ -345,6 +401,7 @@ private fun AppearancePreviewCard(modifier: Modifier = Modifier) {
                     LegendItem("充电", "24", t.chartRamp[3]),
                 ),
                 modifier = Modifier.weight(1f),
+                rowHeight = LEGEND_ROW_LINE,
             )
         }
         Spacer(Modifier.height(t.space3))
@@ -360,21 +417,32 @@ private fun AppearancePreviewCard(modifier: Modifier = Modifier) {
 @Composable
 private fun AppearanceNoteCard(currentId: String, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
-    AppCard(modifier = modifier) {
-        Text(
-            "8 套主题的差异全部由 token 承载（底色、文字、描边、圆角、字号、图表灰阶），没有一屏写死颜色，也没有按主题分支的样式。",
-            style = MaterialTheme.typography.bodySmall,
-            color = t.fg2,
-        )
+    // 原型 .note 的 padding 是 --space-3(12) + 1px 描边（border 占布局）；AppCard 的 border 不占位，
+    // 所以这里传 13 把描边那 1dp 一起算进去（同 s01-recent 的处理）
+    AppCard(modifier = modifier, padding = 13.dp) {
+        // 原型 .note 内：.meta 三段共 61.73（3 × 20.58，14px × 1.47）+ .fine 17.63（mt 8，12px × 1.47）
+        Box(Modifier.height(NOTE_META_LINE * 3)) {
+            Text(
+                "8 套主题的差异全部由 token 承载（底色、文字、描边、圆角、字号、图表灰阶），没有一屏写死颜色，也没有按主题分支的样式。",
+                style = MaterialTheme.typography.bodySmall,
+                color = t.fg2,
+                modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+            )
+        }
         Spacer(Modifier.height(t.space2))
-        Text(
-            "选择态只用描边加粗 + 字重提升表示，不占用强调色预算。",
-            style = MaterialTheme.typography.labelSmall,
-            color = t.meta,
-        )
+        Box(Modifier.height(NOTE_FINE_LINE)) {
+            Text(
+                "选择态只用描边加粗 + 字重提升表示，不占用强调色预算。",
+                style = MaterialTheme.typography.labelSmall,
+                color = t.meta,
+                modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+            )
+        }
         Spacer(Modifier.height(t.space3))
         Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-            // 徽标取当前主题 token：切主题时随外壳同帧刷新
+            // 徽标取当前主题 token：切主题时随外壳同帧刷新。
+            // 注意：原型 .note 没有这一行（对照里记作 s13-note 的 h 差 ~35）——
+            // 这是实现自有的信息，去留待产品裁决，不在对照任务里擅自删。
             val preview = DesignTokens(currentId)
             Badge("bg " + hex(preview.bg), tone = BadgeTone.Neutral)
             Badge("accent " + hex(preview.accent), tone = BadgeTone.Accent)

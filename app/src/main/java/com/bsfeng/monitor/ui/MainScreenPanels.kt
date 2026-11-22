@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.HeatBar
@@ -24,6 +26,17 @@ import com.bsfeng.monitor.ui.theme.heatHeight
 import java.util.Locale
 
 private val EMPTY_TRACK_HEIGHT = 2.dp
+
+/** 原型 .meta 行盒（14 × 1.47）：CJK 自然行盒比它高，说明行要按它取值才不会撑高整块。 */
+private val META_LINE = 20.6.dp
+
+/**
+ * 热力条实际渲染高度 46.7（不是 token --heat-h 的 44）。
+ *
+ * 原型 heat 图默认 w=340，而 svg 被 .chart 拉到容器宽 361，等比缩放后 44 × 361/340 = 46.7。
+ * 真值按渲染后的盒子取（proto-screens.json 的 s02-heatwrap 高 75.28 = 20.58 + 8 + 46.7）。
+ */
+private val HEAT_BAR_H = 46.7.dp
 private val EMPTY_TRACK_RADIUS = 2.dp
 private const val EMPTY_HEAT_TEXT = "暂无数据"
 
@@ -43,10 +56,18 @@ internal fun LiveIntensityPanel(hourlyIntensity: List<Float>, modifier: Modifier
     } else {
         EMPTY_HEAT_TEXT
     }
-    Column(modifier.padding(horizontal = t.space4, vertical = t.space2)) {
+    // 原型 s02-heatwrap 只有 padding-inline（0 16）：纵向留白由 .mt-2 / 下一块的 mt-3 提供，
+    // 这里加纵向内边距会让热力块高出 16dp、把整个时间线往下推。
+    Column(modifier.padding(horizontal = t.space4)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            MetaText("今日活跃强度")
-            MetaText(peakText)
+            // 原型 .meta 行盒 = 14 × leading-body 1.47 ≈ 20.6；labelMedium 的行高是 18，
+            // 不钉行盒会让整块热力区矮 2.6dp，把后面整条时间线一路往上带。
+            Box(Modifier.height(META_LINE)) {
+                MetaText("今日活跃强度", Modifier.wrapContentHeight(Alignment.Top, unbounded = true))
+            }
+            Box(Modifier.height(META_LINE)) {
+                MetaText(peakText, Modifier.wrapContentHeight(Alignment.Top, unbounded = true))
+            }
         }
         Spacer(Modifier.height(t.space2))
         if (hasIntensity) {
@@ -54,7 +75,7 @@ internal fun LiveIntensityPanel(hourlyIntensity: List<Float>, modifier: Modifier
                 values = hourlyIntensity,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(t.heatHeight),
+                    .height(HEAT_BAR_H),
             )
         } else {
             Box(
