@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+/**
+ * 原型规则检查：原型分片里「实现侧写不出来」的写法。
+ *
+ * 为什么需要它：原型在浏览器里自由度无限（任意 px、任意 hex），实现侧受 token 门禁约束
+ * （裸色 / 裸字号会被 checkUiStyle 拦）。两端自由度不对称，每轮实现都要把「原型里合法的写法」
+ * 手工翻译成「实现里合法的写法」，翻译损耗就是一轮返工。本脚本把损耗量化成清单。
+ *
+ * 判据（只看 screens/ 与 styles/20-base.html；tokens 定义处与外壳不进实现）：
+ *   1 裸色值        #hex / rgb() / hsl()
+ *   2 裸字号        font-size: Npx           —— 不在 --text-* 档位 = 孤儿值
+ *   3 裸间距        padding/margin/gap: Npx  —— 不在 --space-* 档位 = 孤儿值
+ *   4 裸圆角        border-radius: Npx       —— 不在 --radius-* 档位 = 孤儿值
+ *   5 几何字面量    width/height/min-height… —— 非违规，是几何契约导出对象
+ * 含 var() / calc() / % / em / rem 的值不判定。
+ *
+ * 用法：node scripts/check-prototype-rules.mjs [--warn]
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SRC = path.join(ROOT, '.open-design/src');
+const WARN = process.argv.includes('--warn');
+const read = (p) => fs.readFileSync(p, 'utf8');
+const walk = (dir, out = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (e.name.endsWith('.html')) out.push(p);
+  }
+  return out;
+};
+
+function tokenValues() {
+  const text = read(path.join(SRC, 'styles/10-tokens.html'));
+  const collect = (prefix) => {
+    const set = new Set();
+    const re = new RegExp('--' + prefix + '[a-z0-9-]*: *([0-9.]+)px', 'g');
+    for (const m of text.matchAll(re)) set.add(Number(m[1]));
+    return set;
+  };
+  return { fontSize: collect('text-'), space: collect('space-'), radius: collect('radius-') };
+}
+
+const TOK = tokenValues();
+const FILES = [path.join(SRC, 'styles/20-base.html'), ...walk(path.join(SRC, 'screens'))];
+const declRe = /([a-z-]+): *([^;{}"']+)/gi;
+const pxRe = /(-?[0-9]+(?:\.[0-9]+)?)px/g;
+const colorRe = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/g;
+const SPACE_PROPS = /^(padding|margin|gap|row-gap|column-gap)(-|$)/;
+const GEOM_PROPS = /^(width|height|min-width|min-height|max-width|max-height|top|left|right|bottom|inset)(-|$)/;
+
+const rules = { color: [], fontSize: [], space: [], radius: [], geom: [] };
+const orphans = new Map();
+
+function record(rule, file, line, decl, value) {
+  rules[rule].push({ file, line, decl, value });
+  if (rule !== 'fontSize' && rule !== 'space' && rule !== 'radius') return;
+  if (TOK[rule].has(value)) return;
+  const key = rule + ':' + value;
+  if (!orphans.has(key)) orphans.set(key, { rule, value, hits: [] });
+  orphans.get(key).hits.push({ file, line, decl });
+}
+
+for (const file of FILES) {
+  const rel = path.relative(ROOT, file);
+  read(file).split('\n').forEach((raw, i) => {
+    const line = i + 1;
+    for (const m of raw.matchAll(colorRe)) record('color', rel, line, m[0], m[0]);
+    for (const d of raw.matchAll(declRe)) {
+      const prop = d[1].toLowerCase();
+      const val = d[2].trim();
+      if (val.includes('var(') || val.includes('calc(')) continue;
+      if (!/px/.test(val)) continue;
+      const nums = [...val.matchAll(pxRe)].map((m) => Number(m[1]));
+      for (const n of nums) {
+        if (prop === 'font-size') record('fontSize', rel, line, prop + ': ' + val, n);
+        else if (SPACE_PROPS.test(prop)) record('space', rel, line, prop + ': ' + val, n);
+        else if (prop === 'border-radius') record('radius', rel, line, prop + ': ' + val, n);
+        else if (GEOM_PROPS.test(prop)) record('geom', rel, line, prop + ': ' + val, n);
+      }
+    }
+  });
+}
+
+const orphanList = [...orphans.values()].sort((a, b) => b.hits.length - a.hits.length || a.value - b.value);
+const orphanHits = orphanList.reduce((n, o) => n + o.hits.length, 0);
+const total = rules.color.length + rules.fontSize.length + rules.space.length + rules.radius.length;
+
+console.log('# 原型规则检查（screens/ + styles/20-base.html）\n');
+console.log('| 规则 | 命中 | 说明 |');
+console.log('|---|---|---|');
+console.log('| 裸色值 | ' + rules.color.length + ' | 颜色必须走 var(--*) |');
+console.log('| 裸字号 | ' + rules.fontSize.length + ' | 不在 --text-* 档位 = 孤儿值 |');
+console.log('| 裸间距 | ' + rules.space.length + ' | 不在 --space-* 档位 = 孤儿值 |');
+console.log('| 裸圆角 | ' + rules.radius.length + ' | 不在 --radius-* 档位 = 孤儿值 |');
+console.log('| 几何字面量 | ' + rules.geom.length + ' | 非违规，是契约导出对象 |');
+console.log('\n## 孤儿值（实现侧没有对应 token，只能写死或改档位）\n');
+if (!orphanList.length) console.log('无。');
+for (const o of orphanList.slice(0, 30)) {
+  const s = o.hits[0];
+  console.log('- ' + o.rule + ' ' + o.value + 'px × ' + o.hits.length + ' ｜ 例 ' + s.file + ':' + s.line + '  ' + s.decl);
+}
+if (orphanList.length > 30) console.log('- …另有 ' + (orphanList.length - 30) + ' 种孤儿值');
+console.log('\n孤儿总值：' + orphanHits + ' 处 / ' + total + ' 处违规');
+process.exit(WARN || orphanHits === 0 ? 0 : 1);

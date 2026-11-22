@@ -49,6 +49,11 @@ jobs:
       - name: Docs gate
         run: node scripts/check-docs.mjs
 
+      # 原型规则检查：原型里出现、实现侧却没有 token 可用的 px（孤儿值）。
+      # 收敛期用 --warn 只报不红；判据与每处孤儿值的处理方式见 docs/UI设计/原型实现对齐台账.md。
+      - name: Prototype rules gate
+        run: node scripts/check-prototype-rules.mjs --warn
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
