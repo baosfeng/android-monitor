@@ -99,7 +99,7 @@ internal fun FinancePeriodQueryCard(
         }
         Spacer(Modifier.height(t.space3))
         Row(
-            modifier = Modifier.fillMaxWidth().then(periodKpiTag(selected)),
+            modifier = Modifier.fillMaxWidth().periodKpiTag(selected),
             horizontalArrangement = Arrangement.spacedBy(t.space3),
         ) {
             // 档位两格走 .s04-amt 口径：标签 14px（.kpi-label，20-base:275）、数值 17px 等宽
@@ -122,7 +122,7 @@ internal fun FinancePeriodQueryCard(
             )
         }
         Spacer(Modifier.height(t.space3))
-        Box(Modifier.fillMaxWidth().then(periodPaneTag(selected))) {
+        Box(Modifier.fillMaxWidth().periodPaneTag(selected)) {
         ChartFrame(
             values = periodChartValues(selected, stats),
             xLabels = periodXLabels(selected, stats),
@@ -135,7 +135,7 @@ internal fun FinancePeriodQueryCard(
             xTickStep = periodXTickStep(selected),
             // 全部档是 4 位年份（2018..2026），标签短 → 放宽刻度数，避免忽 1 忽 2 的抽稀
             xLabelMax = periodXLabelMax(selected),
-            modifier = periodChartTag(selected),
+            modifier = Modifier.periodChartTag(selected),
         )
         }
         // day 档的图注口径说明（含合计与峰值）+ 月 / 年 / 全部档的峰值补注：只在读不全时补，

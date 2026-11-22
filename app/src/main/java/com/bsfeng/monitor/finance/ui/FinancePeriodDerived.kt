@@ -155,31 +155,37 @@ internal fun periodXLabels(period: FinancePeriod, stats: PeriodStats?): List<Str
  * 写成 when + 字面量而不是 "s04-unitkpi-" + key 拼接：锚点对账只认字面量或可追踪的常量，
  * 运行时拼接会让 5 个锚点在代码侧「查不到」。
  */
-internal fun periodKpiTag(period: FinancePeriod): Modifier = when (period) {
-    FinancePeriod.DAY -> Modifier.testTag("s04-unitkpi-day")
-    FinancePeriod.WEEK -> Modifier.testTag("s04-unitkpi-week")
-    FinancePeriod.MONTH -> Modifier.testTag("s04-unitkpi-month")
-    FinancePeriod.YEAR -> Modifier.testTag("s04-unitkpi-year")
-    FinancePeriod.ALL -> Modifier.testTag("s04-unitkpi-all")
-}
+internal fun Modifier.periodKpiTag(period: FinancePeriod): Modifier = then(
+    when (period) {
+        FinancePeriod.DAY -> Modifier.testTag("s04-unitkpi-day")
+        FinancePeriod.WEEK -> Modifier.testTag("s04-unitkpi-week")
+        FinancePeriod.MONTH -> Modifier.testTag("s04-unitkpi-month")
+        FinancePeriod.YEAR -> Modifier.testTag("s04-unitkpi-year")
+        FinancePeriod.ALL -> Modifier.testTag("s04-unitkpi-all")
+    },
+)
 
 /** 该档面板的锚点（五档各一个字面量）。 */
-internal fun periodPaneTag(period: FinancePeriod): Modifier = when (period) {
-    FinancePeriod.DAY -> Modifier.testTag("s04-pane-day")
-    FinancePeriod.WEEK -> Modifier.testTag("s04-pane-week")
-    FinancePeriod.MONTH -> Modifier.testTag("s04-pane-month")
-    FinancePeriod.YEAR -> Modifier.testTag("s04-pane-year")
-    FinancePeriod.ALL -> Modifier.testTag("s04-pane-all")
-}
+internal fun Modifier.periodPaneTag(period: FinancePeriod): Modifier = then(
+    when (period) {
+        FinancePeriod.DAY -> Modifier.testTag("s04-pane-day")
+        FinancePeriod.WEEK -> Modifier.testTag("s04-pane-week")
+        FinancePeriod.MONTH -> Modifier.testTag("s04-pane-month")
+        FinancePeriod.YEAR -> Modifier.testTag("s04-pane-year")
+        FinancePeriod.ALL -> Modifier.testTag("s04-pane-all")
+    },
+)
 
 /** 该档图表的锚点（同上：五档各一个字面量）。 */
-internal fun periodChartTag(period: FinancePeriod): Modifier = when (period) {
-    FinancePeriod.DAY -> Modifier.testTag("s04-chart-day")
-    FinancePeriod.WEEK -> Modifier.testTag("s04-chart-week")
-    FinancePeriod.MONTH -> Modifier.testTag("s04-chart-month")
-    FinancePeriod.YEAR -> Modifier.testTag("s04-chart-year")
-    FinancePeriod.ALL -> Modifier.testTag("s04-chart-all")
-}
+internal fun Modifier.periodChartTag(period: FinancePeriod): Modifier = then(
+    when (period) {
+        FinancePeriod.DAY -> Modifier.testTag("s04-chart-day")
+        FinancePeriod.WEEK -> Modifier.testTag("s04-chart-week")
+        FinancePeriod.MONTH -> Modifier.testTag("s04-chart-month")
+        FinancePeriod.YEAR -> Modifier.testTag("s04-chart-year")
+        FinancePeriod.ALL -> Modifier.testTag("s04-chart-all")
+    },
+)
 
 /** 周期 KPI 文案：今日支出 / 本周支出 …（档位标签前缀 + 支出 / 收入）。 */
 internal fun periodKpiLabel(period: FinancePeriod, kind: String): String = period.label + kind
