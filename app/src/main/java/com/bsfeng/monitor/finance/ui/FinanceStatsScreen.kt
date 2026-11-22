@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.finance.ui
 
-// 来源：原 finance/ui/FinanceStatsScreen.kt；职责：统计分析屏幕装配（月份条、KPI/环/柱/热力四卡、五态与提示）。
+// 来源：原 finance/ui/FinanceStatsScreen.kt；职责：统计分析屏幕装配（月份条、本月日均、KPI/环/柱/热力四卡、五态与提示）。
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -56,6 +56,7 @@ import com.bsfeng.monitor.finance.FinancePeriod
 import com.bsfeng.monitor.finance.model.FinanceStats
 import com.bsfeng.monitor.finance.model.PeriodStats
 import com.bsfeng.monitor.finance.model.Transaction
+import com.bsfeng.monitor.finance.monthElapsedDays
 import com.bsfeng.monitor.finance.yearAverageAnchor
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppToast
@@ -73,9 +74,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 
 /**
- * s07 统计分析（锚点账本，16 个锚点）。
+ * s07 统计分析（锚点见 scripts/anchor-ledger.tsv）。
  *
- * 收支卡 + 分类支出环与图例 + 近 7 天分组柱 + 24 小时消费热力；顶栏固定、内容单列纵向滚动，
+ * 收支卡 + 本月日均 + 分类支出环与图例 + 近 7 天分组柱 + 24 小时消费热力；顶栏固定、内容单列纵向滚动，
  * 底部留白 [DesignTokens.fabSize] + 8dp，滚到底时日期轴不被底部 Tab 条遮住。
  */
 @Composable
@@ -139,6 +140,8 @@ fun FinanceStatsScreen(
     // 周均锚点：今年取今天、往年取年末（往年整年已过完），见 FinanceYearStats.yearAverageAnchor。
     val browsedYear = remember(currentMonth) { currentMonth.take(4).toIntOrNull() ?: LocalDate.now().year }
     val averageAnchor = remember(browsedYear) { yearAverageAnchor(browsedYear, LocalDate.now()) }
+    // 本月日均的分母（锚点 s07-dailyavg）：本月取今天几号、过去月取整月天数、未来月取 0
+    val elapsedDays = remember(currentMonth) { monthElapsedDays(currentMonth, LocalDate.now()) }
     // 时间范围卡第一格：跟着本页选中的档走（五档结果一次取齐，切档不再查库）
     val selectedExpense = remember(allPeriods, rangePeriod) {
         vm?.periodStatsOf(allPeriods, rangePeriod)?.totalExpense
@@ -387,7 +390,16 @@ fun FinanceStatsScreen(
                             FinanceStatsKpiRow(stats)
                         }
 
-                        // 原型 s07 的 DOM 顺序（62-132）：时间范围卡 → 年度趋势 → 年度 Top 分类 → 分类支出环
+                        // 本月日均紧跟 KPI 三格：两块同源（浏览月、同一份 stats.totalExpense），
+                        // 日均就是这个月的花钱节奏；时间范围卡是固定口径块，不混进来。
+                        item(key = "dailyavg") {
+                            FinanceStatsDailyAvgCard(
+                                monthExpense = stats.totalExpense,
+                                elapsedDays = elapsedDays,
+                            )
+                        }
+
+                        // 原型 s07 的 DOM 顺序（54-132）：本月日均 → 时间范围卡 → 年度趋势 → 年度 Top 分类 → 分类支出环
                         item(key = "range") {
                             FinanceStatsRangeCard(
                                 selected = rangePeriod,
