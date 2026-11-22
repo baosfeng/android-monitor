@@ -109,8 +109,18 @@ fun ChartFrame(
     val plotHeight = height ?: if (kind == ChartFrameKind.Heat) t.heatH else t.chartH
     // 空数据（全 0 / 空列表）不画 Y 轴刻度：画 0..1 的假刻度会让空卡看起来「有量但很小」
     val hasValues = values.any { it > 0f }
-    val yRows = if (kind == ChartFrameKind.Heat || !hasValues) 0 else yTicks.coerceAtLeast(0)
-    val axisMax = chartYAxisMax(values.maxOrNull() ?: 0f)
+    // 刻度数对齐原型：柱只标 0 与 max 两条（原型 bars 2 刻度；5 等分会掉出 6.2 / 18.8 这种小数，
+    // 真机实测不好读）；面积 / 折线仍按 yTicks（默认 5 条，面积图原型是 3 条更接近）。
+    val yRows = when {
+        kind == ChartFrameKind.Heat || !hasValues -> 0
+        kind == ChartFrameKind.Bars -> 1
+        else -> yTicks.coerceAtLeast(0)
+    }
+    // 柱状图按实际峰值定上限（原型柱图 Y 轴就是 0..max，柱顶顶到最高网格线）：
+    // 抬到 1/2/5 档会让「25 元的柱子」只占一半高，读起来像花了 12 元（真机实测）。
+    // 面积 / 折线仍抬档：看走势时整档刻度更好读。
+    val rawMax = values.maxOrNull() ?: 0f
+    val axisMax = if (kind == ChartFrameKind.Bars && rawMax > 0f) rawMax else chartYAxisMax(rawMax)
 
     Column(modifier.fillMaxWidth()) {
         if (title.isNotEmpty() || unit.isNotEmpty()) {
@@ -147,7 +157,11 @@ fun ChartFrame(
                 Spacer(Modifier.width(t.space1))
             }
             Box(Modifier.weight(1f)) {
-                ChartPlot(values, kind, showValueLabels, animated, plotHeight, axisMax)
+                // 全 0 数据不直标：空图上的「0」看着像绘图故障（真机实测）
+                ChartPlot(
+                    values, kind, showValueLabels && hasValues, animated, plotHeight, axisMax,
+                    gridRows = yRows.coerceAtLeast(1),
+                )
             }
         }
         if (xLabels.isNotEmpty()) {
@@ -253,6 +267,8 @@ internal fun ChartPlot(
     animated: Boolean,
     height: Dp,
     axisMax: Float,
+    /** 柱图网格行数：与 Y 轴刻度行数同源（柱 1 → 0 与 max 两条线，原型口径）。 */
+    gridRows: Int = CHART_Y_TICKS,
 ) {
     // 柱高 / 曲线高度与 Y 轴刻度同源（axisMax）：否则柱顶标 468、刻度却把 468 画在 93% 处
     when (kind) {
@@ -262,6 +278,7 @@ internal fun ChartPlot(
             animated = animated,
             showValues = showValues,
             maxValue = axisMax,
+            gridRows = gridRows,
         )
         ChartFrameKind.Area -> AreaChart(
             values,

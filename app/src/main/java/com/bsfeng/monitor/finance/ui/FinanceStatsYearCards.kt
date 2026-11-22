@@ -43,6 +43,9 @@ import java.time.LocalDate
  * 收成常量而不是写在调用点的 listOf 里：[SegmentedControl] 的逐段锚点要靠 optionTags 传，
  * 锚点对账要从实参回溯到字面量，写在实参里的集合字面量会断链（同 FINANCE_PERIOD_UNIT_TAGS 的口径）。
  */
+/** 原型 s07 年度趋势的 X 轴刻度位置（12 个月 → 1 / 3 / 5 / 7 / 9 / 12）。 */
+internal val YEAR_TREND_X_TICKS: List<Int> = listOf(0, 2, 4, 6, 8, 11)
+
 internal val S07_RANGE_TAGS: List<String> = listOf(
     "s07-range-day",
     "s07-range-week",
@@ -176,6 +179,8 @@ internal fun FinanceStatsYearTrendCard(
                 primary = expense,
                 secondary = income,
                 xLabels = buckets.map { it.label },
+                // 原型 s07 手摆 1/3/5/7/9/12：通用抽稀会给 7 与 8 相邻（真机实测）
+                xTickIndices = if (buckets.size == 12) YEAR_TREND_X_TICKS else null,
                 primaryColor = t.expenseText,
                 secondaryColor = t.incomeText,
                 unit = "单位：元",

@@ -502,7 +502,9 @@ internal fun heatNoteText(hourly: List<Float>, peaks: List<Int>, selectedHour: I
     if (peaks.isEmpty() || hourly.all { it <= 0f }) return "本月还没有交易记录，热力图为空。"
     val parts = peaks.map { hourText(it) + "（" + (hourly.getOrNull(it)?.toInt() ?: 0) + " 笔）" }
     val nightQuiet = (0 until NIGHT_QUIET_HOURS).all { (hourly.getOrNull(it) ?: 0f) <= 0f }
-    return "峰值出现在 " + parts.joinToString(" 与 ") + if (nightQuiet) "，夜间无消费。" else "。"
+    // 原型 s07:182 是「（9 笔）与 19:00」：括号后直接接「与」，不留空格
+    // 原型 s07:182 逐字：「12:00（9 笔）与 19:00（8 笔）」——「与」后有一个空格
+    return "峰值出现在 " + parts.joinToString("与 ") + if (nightQuiet) "，夜间无消费。" else "。"
 }
 
 private fun hourText(hour: Int): String = (if (hour < 10) "0" else "") + hour + ":00"

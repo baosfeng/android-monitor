@@ -19,7 +19,7 @@ class FinanceStatsCardsNoteTest {
     fun `峰值文案用原型原句 不再说柱高归一`() {
         val note = heatNoteText(hourly(12, 19), listOf(12, 19), null)
         // 原型 s07:182「峰值出现在 12:00（9 笔）与 19:00（8 笔），夜间无消费。」
-        assertEquals("峰值出现在 12:00（3 笔） 与 19:00（3 笔），夜间无消费。", note)
+        assertEquals("峰值出现在 12:00（3 笔）与 19:00（3 笔），夜间无消费。", note)
         assertFalse("热力是色阶不是柱，不能写柱高归一", note.contains("柱高"))
     }
 

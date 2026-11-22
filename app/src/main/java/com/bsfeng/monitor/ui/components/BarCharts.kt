@@ -53,6 +53,8 @@ fun BarChart(
      * 柱顶标着 468、刻度却把 468 画在 93% 高度处，读数自相矛盾。
      */
     maxValue: Float? = null,
+    /** 网格线条数-1（默认 4 → 5 条线）；柱图按原型只画 0 与 max 两条时传 1。 */
+    gridRows: Int = 4,
 ) {
     val t = LocalDesignTokens.current
     val ramp = colors ?: listOf(t.chartSeq)
@@ -73,10 +75,12 @@ fun BarChart(
             val corner = CornerRadius(3.dp.toPx(), 3.dp.toPx())
             val valueGap = BAR_VALUE_OFFSET.toPx()
             // 数值文本的测量与落点在 build 块内一次算好，绘制期只 drawText（T3 性能要求）
+            // 0 值柱不直标：一排「0」压在 X 轴日期上方，读起来像一串噪点而不是数据（真机实测）
             val labels = if (!showValues) {
                 emptyList()
             } else {
-                pts.mapIndexed { i, v ->
+                pts.mapIndexedNotNull { i, v ->
+                    if (!shouldLabelBarValue(values.getOrElse(i) { 0f })) return@mapIndexedNotNull null
                     val layout = measurer.measure(
                         text = chartValueLabel(values.getOrElse(i) { 0f }),
                         style = valueStyle,
@@ -87,7 +91,7 @@ fun BarChart(
             }
             onDrawBehind {
                 // 网格线画在柱区（padT..height）：与柱顶最高处 + Y 轴刻度共线（审计 s04 #27）
-                gridLines(border, 4, padT)
+                gridLines(border, gridRows, padT)
                 if (pts.isEmpty()) return@onDrawBehind
                 val p = anim.value
                 pts.forEachIndexed { i, v ->
@@ -151,3 +155,6 @@ fun HeatBar(
         },
     )
 }
+
+/** 柱顶数值是否直标：0 值柱不标（一排 0 压着 X 轴像噪点），见真机实测。 */
+internal fun shouldLabelBarValue(value: Float): Boolean = value > 0f

@@ -3,12 +3,16 @@ package com.bsfeng.monitor.finance
 // 本轮测试写区固定在 finance/，而 ChartFrame 的刻度计算是记账五档图表的消费点，
 // 因此把它的纯计算断言放在这里（无 Android 依赖，纯 JVM 即可跑）。
 
+import com.bsfeng.monitor.finance.ui.YEAR_TREND_X_TICKS
 import com.bsfeng.monitor.ui.components.CHART_X_TICKS_MAX
 import com.bsfeng.monitor.ui.components.chartRowFraction
+import com.bsfeng.monitor.ui.components.dualLineXTicks
+import com.bsfeng.monitor.ui.components.shouldLabelBarValue
 import com.bsfeng.monitor.ui.components.chartXLabelsOf
 import com.bsfeng.monitor.ui.components.chartYAxisMax
 import com.bsfeng.monitor.ui.components.chartYTickLabels
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,5 +87,27 @@ class FinanceChartFrameAxisTest {
     fun `空序列不产生刻度`() {
         assertTrue(chartXLabelsOf(emptyList()).isEmpty())
         assertEquals("全 0 时上限兜底为 1，避免除零", 1f, chartYAxisMax(0f), 0.001f)
+    }
+
+    @Test
+    fun `双线图可用原型固定刻度 1 3 5 7 9 12`() {
+        val labels = (1..12).map { it.toString() }
+        val picks = dualLineXTicks(labels, YEAR_TREND_X_TICKS)
+        assertEquals(listOf("1", "3", "5", "7", "9", "12"), picks.map { it.second })
+        assertEquals(listOf(0, 2, 4, 6, 8, 11), picks.map { it.first })
+    }
+
+    @Test
+    fun `双线图自定义刻度无效时回退通用抽稀`() {
+        val labels = (1..12).map { it.toString() }
+        assertEquals(chartXLabelsOf(labels), dualLineXTicks(labels, listOf(99, 100)))
+        assertEquals(chartXLabelsOf(labels), dualLineXTicks(labels, null))
+    }
+
+    @Test
+    fun `柱顶 0 值不直标`() {
+        assertFalse(shouldLabelBarValue(0f))
+        assertTrue(shouldLabelBarValue(0.01f))
+        assertTrue(shouldLabelBarValue(25f))
     }
 }

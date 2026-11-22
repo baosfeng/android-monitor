@@ -58,6 +58,7 @@ private val DUAL_LINE_PAD_TOP = AREA_PAD_TOP
  * @param primary 主序列（支出），长度应与 [secondary] 一致
  * @param secondary 次序列（收入）
  * @param xLabels 每桶的 X 轴文案（1..12），超出 [CHART_X_TICKS_MAX] 自动抽稀
+ * @param xTickIndices 调用方指定的刻度桶下标（如原型固定 1/3/5/7/9/12）；为空或全部越界时走通用抽稀
  * @param primaryColor 主序列线色；null 取语义色 expense-text
  * @param secondaryColor 次序列线色；null 取语义色 income-text
  * @param contentDescription 读屏名（图表本身是纯绘制，没有它读屏只会说「图片」）
@@ -69,6 +70,7 @@ fun DualLineChartFrame(
     secondary: List<Float>,
     modifier: Modifier = Modifier,
     xLabels: List<String> = emptyList(),
+    xTickIndices: List<Int>? = null,
     primaryColor: Color? = null,
     secondaryColor: Color? = null,
     title: String = "",
@@ -130,7 +132,7 @@ fun DualLineChartFrame(
         if (xLabels.isNotEmpty()) {
             Row(modifier = Modifier.fillMaxWidth().padding(top = t.space1)) {
                 if (yRows > 0) Spacer(Modifier.width(CHART_Y_LABEL_WIDTH + t.space1))
-                ChartXAxis(chartXLabelsOf(xLabels), xLabels.size, ChartFrameKind.Line)
+                ChartXAxis(dualLineXTicks(xLabels, xTickIndices), xLabels.size, ChartFrameKind.Line)
             }
         }
     }
@@ -210,4 +212,19 @@ private fun DualLinePlot(
                 }
             },
     )
+}
+
+/**
+ * 双线图 X 轴刻度：调用方给了 [indices] 就用它（只保留落在范围内的），否则走通用抽稀。
+ *
+ * 为什么允许自定义：原型 s07 年度趋势手摆 1/3/5/7/9/12 六个刻度；通用抽稀在 12 桶时
+ * 给的是 1,3,5,7,8,10,12 —— 7 与 8 只隔一桶，两段文字贴在一起（真机实测）。
+ */
+internal fun dualLineXTicks(labels: List<String>, indices: List<Int>?): List<Pair<Int, String>> {
+    val custom = indices.orEmpty()
+        .filter { it in labels.indices }
+        .distinct()
+        .sorted()
+        .map { it to labels[it] }
+    return custom.ifEmpty { chartXLabelsOf(labels) }
 }
