@@ -390,7 +390,8 @@ internal fun OverviewKpiCard(
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            // 原型 .kpi-label 是 14px（labelSmall 的 12sp 会小一档，字号对照会报 P0）
+            style = MaterialTheme.typography.bodySmall,
             color = t.meta,
             modifier = Modifier.testTag("kpi.card"),
         )

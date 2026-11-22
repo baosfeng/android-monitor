@@ -47,6 +47,8 @@ data class TaggedNode(
     val w: Float,
     val h: Float,
     val text: String,
+    /** 文字节点的解析字号（sp）；容器节点为 null，对照时跳过。 */
+    val fs: Float? = null,
 )
 
 /** 递归收集带 testTag 的节点（同名只取第一个，与 testTag 唯一性口径一致）。 */
@@ -61,6 +63,11 @@ fun collectTaggedNodes(root: SemanticsNode, density: Density): List<TaggedNode> 
                 .orEmpty()
                 .replace(Regex("\\s+"), " ")
                 .trim()
+            // 字号只对文字节点可读：主题派生色不进 layoutInput，所以这里不取颜色
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult)
+                ?.action?.invoke(layouts)
+            val fs = layouts.firstOrNull()?.layoutInput?.style?.fontSize?.value
             out[tag] = TaggedNode(
                 id = tag,
                 x = bounds.left / density.density,
@@ -68,6 +75,7 @@ fun collectTaggedNodes(root: SemanticsNode, density: Density): List<TaggedNode> 
                 w = bounds.width / density.density,
                 h = bounds.height / density.density,
                 text = text.take(120),
+                fs = fs,
             )
         }
         node.children.forEach { walk(it) }
@@ -105,6 +113,7 @@ fun writeScreens(screens: Map<String, List<TaggedNode>>, outFile: File) {
                 .append("\"w\":").append(fmt(n.w)).append(",")
                 .append("\"h\":").append(fmt(n.h)).append(",")
                 .append("\"text\":\"").append(esc(n.text)).append("\",")
+                .apply { if (n.fs != null) append("\"fs\":").append(fmt(n.fs)).append(",") }
                 .append("\"visible\":true}")
             if (i != items.lastIndex) sb.append(",")
             sb.append("\n")
