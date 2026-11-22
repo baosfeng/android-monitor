@@ -1,6 +1,6 @@
 // ============================================================================
 // DesignTokenSpecs8.kt —— 生成文件，请勿手改。
-// 职责：SPECS 分片 （第 200–271 个 token：income-text … splash-ink），由 DesignTokenTable 按原顺序合并。
+// 职责：SPECS 分片 （第 201–272 个 token：income-text … splash-ink），由 DesignTokenTable 按原顺序合并。
 // 来源：.open-design/08-prototype.html 的 :root 与 [data-theme] 块
 // 生成器：tools/gen-design-tokens.mjs（重跑：node tools/gen-design-tokens.mjs）
 // ============================================================================

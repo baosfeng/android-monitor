@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 
 /**
- * 8 套主题的全部非 Material 语义 token（160 个 getter）。
+ * 8 套主题的全部非 Material 语义 token（161 个 getter）。
  * 每个 getter 直接读 DesignTokenTable，因此本文件里没有任何色值/尺寸被手抄。
  * themeId 非法时回落到 apple（DesignTokenTable.raw 内保证）。
  */
@@ -92,6 +92,7 @@ class DesignTokens(val themeId: String) {
     val gestureH: Dp get() = DesignTokenTable.dp(themeId, "gesture-h")
     val tapMin: Dp get() = DesignTokenTable.dp(themeId, "tap-min")
     val rowMinH: Dp get() = DesignTokenTable.dp(themeId, "row-min-h")
+    val btnH: Dp get() = DesignTokenTable.dp(themeId, "btn-h")
     val appBg: Color get() = DesignTokenTable.colorOf(themeId, "app-bg")
     val backdropA: Color get() = DesignTokenTable.colorOf(themeId, "backdrop-a")
     val backdropB: Color get() = DesignTokenTable.colorOf(themeId, "backdrop-b")

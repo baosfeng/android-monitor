@@ -1,13 +1,13 @@
 // ============================================================================
 // DesignTokenSpecs6.kt —— 生成文件，请勿手改。
-// 职责：SPECS 分片 （第 169–187 个 token：frame-a … backdrop-b），由 DesignTokenTable 按原顺序合并。
+// 职责：SPECS 分片 （第 169–188 个 token：frame-a … backdrop-b），由 DesignTokenTable 按原顺序合并。
 // 来源：.open-design/08-prototype.html 的 :root 与 [data-theme] 块
 // 生成器：tools/gen-design-tokens.mjs（重跑：node tools/gen-design-tokens.mjs）
 // ============================================================================
 package com.bsfeng.monitor.ui.theme
 
 /**
- * 把本分片的 19 个 token 追加进接收者映射。
+ * 把本分片的 20 个 token 追加进接收者映射。
  * 由 DesignTokenTable.SPECS 的 buildMap 依次调用，顺序即声明顺序。
  */
 internal fun MutableMap<String, CssToken>.putDesignTokenSpecs6() {
@@ -149,6 +149,7 @@ internal fun MutableMap<String, CssToken>.putDesignTokenSpecs6() {
         put("gesture-h", CssToken("gesture-h", TokenKind.LENGTH, "22px", emptyMap()))
         put("tap-min", CssToken("tap-min", TokenKind.LENGTH, "44px", emptyMap()))
         put("row-min-h", CssToken("row-min-h", TokenKind.LENGTH, "52px", emptyMap()))
+        put("btn-h", CssToken("btn-h", TokenKind.LENGTH, "48px", emptyMap()))
         put(
             "app-bg",
             CssToken(
