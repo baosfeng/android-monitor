@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · 公共厕所（ic_cat_restroom）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M8 3.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zM8 7.2v6.2M8 13.4l-1.8 5.4M8 13.4l1.8 5.4M5.8 9.4h4.4M16 3.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zM16 7.2l-2.6 6.4h5.2zM14.6 13.6v5.2M17.4 13.6v5.2"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

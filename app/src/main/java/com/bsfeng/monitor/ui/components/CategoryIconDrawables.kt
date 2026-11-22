@@ -50,6 +50,10 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "nightsnack" -> R.drawable.ic_cat_nightsnack
     "drinks" -> R.drawable.ic_cat_drinks
     "bakery" -> R.drawable.ic_cat_bakery
+    // 第三批：生活琐碎
+    "canteen" -> R.drawable.ic_cat_canteen
+    "groupbuy" -> R.drawable.ic_cat_groupbuy
+    "bottledwater" -> R.drawable.ic_cat_bottledwater
     // 购物
     "ecommerce" -> R.drawable.ic_cat_ecommerce
     "grocery" -> R.drawable.ic_cat_grocery
@@ -62,6 +66,7 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "appliance" -> R.drawable.ic_cat_appliance
     "bedding" -> R.drawable.ic_cat_bedding
     "tools" -> R.drawable.ic_cat_tools
+    "sundries" -> R.drawable.ic_cat_sundries
     // 交通
     "taxi" -> R.drawable.ic_cat_taxi
     "metro" -> R.drawable.ic_cat_metro
@@ -72,6 +77,11 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "designateddriver" -> R.drawable.ic_cat_designateddriver
     "carshare" -> R.drawable.ic_cat_carshare
     "ferry" -> R.drawable.ic_cat_ferry
+    // 第三批：电瓶车（电动车）细分
+    "ebikecharge" -> R.drawable.ic_cat_ebikecharge
+    "batteryswap" -> R.drawable.ic_cat_batteryswap
+    "ebikerepair" -> R.drawable.ic_cat_ebikerepair
+    "ebikeparking" -> R.drawable.ic_cat_ebikeparking
     // 汽车
     "fuel" -> R.drawable.ic_cat_fuel
     "parking" -> R.drawable.ic_cat_parking
@@ -98,6 +108,9 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "heating" -> R.drawable.ic_cat_heating
     "parkingspace" -> R.drawable.ic_cat_parkingspace
     "rentdeposit" -> R.drawable.ic_cat_rentdeposit
+    // 第三批：桶装水 / 垃圾处理费
+    "watercooler" -> R.drawable.ic_cat_watercooler
+    "garbagefee" -> R.drawable.ic_cat_garbagefee
     // 通讯
     "phonebill" -> R.drawable.ic_cat_phonebill
     "data" -> R.drawable.ic_cat_data
@@ -112,6 +125,7 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "tcm" -> R.drawable.ic_cat_tcm
     "glasses" -> R.drawable.ic_cat_glasses
     "vaccine" -> R.drawable.ic_cat_vaccine
+    "registrationfee" -> R.drawable.ic_cat_registrationfee
     // 娱乐休闲
     "film" -> R.drawable.ic_cat_film
     "game" -> R.drawable.ic_cat_game
@@ -167,6 +181,7 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "accessory" -> R.drawable.ic_cat_accessory
     "underwear" -> R.drawable.ic_cat_underwear
     "dryclean" -> R.drawable.ic_cat_dryclean
+    "laundromat" -> R.drawable.ic_cat_laundromat
     // 母婴育儿
     "milkbottle" -> R.drawable.ic_cat_milkbottle
     "diaper" -> R.drawable.ic_cat_diaper
@@ -194,6 +209,7 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "camera" -> R.drawable.ic_cat_camera
     "console" -> R.drawable.ic_cat_console
     "digitalrepair" -> R.drawable.ic_cat_digitalrepair
+    "screenfilm" -> R.drawable.ic_cat_screenfilm
     // 运动健身
     "gym" -> R.drawable.ic_cat_gym
     "equipment" -> R.drawable.ic_cat_equipment
@@ -208,6 +224,13 @@ internal fun categoryIconDrawableOf(key: String): Int = when (key) {
     "servicebox" -> R.drawable.ic_cat_servicebox
     "delivery" -> R.drawable.ic_cat_delivery
     "printing" -> R.drawable.ic_cat_printing
+    // 第三批：生活琐碎
+    "errand" -> R.drawable.ic_cat_errand
+    "locksmith" -> R.drawable.ic_cat_locksmith
+    "raingear" -> R.drawable.ic_cat_raingear
+    "powerbank" -> R.drawable.ic_cat_powerbank
+    "restroom" -> R.drawable.ic_cat_restroom
+    "lockerfee" -> R.drawable.ic_cat_lockerfee
     // 工资
     "payslip" -> R.drawable.ic_cat_payslip
     "gearcoin" -> R.drawable.ic_cat_gearcoin

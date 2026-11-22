@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · 挂号费（ic_cat_registrationfee）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6 3.4h8.4L19 7.6v13H6zM14.4 3.4v4.2H19M9.4 12.6h5.6M12.2 9.8v5.6"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

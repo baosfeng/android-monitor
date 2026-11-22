@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · 自助洗衣（ic_cat_laundromat）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.6 3.4h14.8v17.2H4.6zM4.6 7.4h14.8M6.8 5.4h1.4M9.4 5.4h1.4M12 10.2a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8zM9.6 14.6c1.2-0.9 2.4 0.9 3.6 0s2.4 0.9 3.6 0"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

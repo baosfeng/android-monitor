@@ -106,10 +106,10 @@ class FinanceCategorySyncTest {
 
         val all = manager.getAllCategories()
         assertEquals("补齐后分类总数应等于当前目录", CategoryCatalog.allNames().size, all.size)
-        assertEquals("新增条数 = 当前目录 - 旧目录", 64, added)
+        assertEquals("新增条数 = 当前目录 - 旧目录", 83, added)
         assertTrue("旧分类必须保留（历史交易可能引用）", all.map { it.name }.containsAll(legacyNames))
         assertEquals("名称不能重复", all.size, all.map { it.name }.toSet().size)
-        assertEquals("二级总数", 183, childCount(all))
+        assertEquals("二级总数", 202, childCount(all))
         // 新增项落在正确的一级下、顺序接在旧二级之后
         val carId = all.first { it.name == "汽车" }.id
         val carChildren = all.filter { it.parentId == carId }.sortedBy { it.sortOrder }.map { it.name }
@@ -125,7 +125,7 @@ class FinanceCategorySyncTest {
     @Test
     fun `补齐可重复调用 第二次不再新增`() = runBlocking {
         seedLegacyCatalog()
-        assertEquals(64, manager.syncCatalog())
+        assertEquals(83, manager.syncCatalog())
         assertEquals("再跑一次必须返回 0", 0, manager.syncCatalog())
         assertEquals(CategoryCatalog.allNames().size, manager.getAllCategories().size)
     }

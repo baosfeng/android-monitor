@@ -64,6 +64,42 @@ class BillCategoryKeywordsTest {
     }
 
     @Test
+    fun `第三批生活琐碎能推断到新二级`() {
+        val cases = mapOf(
+            "小区充电桩" to "电动车充电",
+            "多多买菜" to "社区团购",
+            "桶装水配送" to "桶装水",
+            "怪兽充电" to "共享充电宝",
+            "丰巢智能柜" to "快递柜超时",
+            "挂号费" to "挂号费",
+            "单位食堂" to "食堂",
+            "手机贴膜" to "贴膜",
+            "自助洗衣房" to "自助洗衣",
+            "公厕" to "公共厕所",
+        )
+        val misses = cases.filter { (text, expected) ->
+            BillCategoryKeywords.lookup(text, false) != expected
+        }
+        assertTrue("未按预期命中：" + misses, misses.isEmpty())
+    }
+
+    @Test
+    fun `第三批更具体不被泛词抢走`() {
+        // 「电动车」三字里含「动车」，所以电动车细分必须排在「火车高铁」之前
+        assertEquals("电动车充电", BillCategoryKeywords.lookup("小电驴充电", false))
+        assertEquals("电动车维修", BillCategoryKeywords.lookup("电动车补胎", false))
+        // 「修车」已收窄成限定词，「汽车修理」不能落到电动车维修
+        assertEquals("保养维修", BillCategoryKeywords.lookup("XX汽车修理厂", false))
+        assertEquals("保养维修", BillCategoryKeywords.lookup("4S店修车", false))
+        assertEquals("夜宵", BillCategoryKeywords.lookup("深夜食堂", false))
+        assertEquals("电车充电", BillCategoryKeywords.lookup("特来电充电桩", false))
+        assertEquals("停车", BillCategoryKeywords.lookup("停车场缴费", false))
+        assertEquals("手机", BillCategoryKeywords.lookup("华为手机", false))
+        assertEquals("家电", BillCategoryKeywords.lookup("洗衣机", false))
+        assertEquals("快递", BillCategoryKeywords.lookup("菜鸟驿站", false))
+    }
+
+    @Test
     fun `收入侧只查收入表`() {
         assertEquals("工资", BillCategoryKeywords.lookup("某某公司代发工资", true))
         assertEquals("公积金", BillCategoryKeywords.lookup("住房公积金提取", true))

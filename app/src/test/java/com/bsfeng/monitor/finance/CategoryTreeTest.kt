@@ -67,7 +67,7 @@ class CategoryTreeTest {
         val t = tree()
         val children = t.childrenOf("购物").map { it.name }
         assertEquals(
-            listOf("电商", "超市便利", "家居日用", "礼品", "其他购物", "纸品清洁", "洗护个护", "厨卫用品", "家电", "家纺", "五金工具"),
+            listOf("电商", "超市便利", "家居日用", "礼品", "其他购物", "纸品清洁", "洗护个护", "厨卫用品", "家电", "家纺", "五金工具", "日用杂货"),
             children,
         )
         assertTrue(t.childrenOf("不存在的").isEmpty())
@@ -76,7 +76,7 @@ class CategoryTreeTest {
     @Test
     fun `二级总量与分类目录一致`() {
         val childCount = (CategoryCatalog.expense + CategoryCatalog.income).sumOf { it.children.size }
-        assertEquals(183, childCount)
+        assertEquals(202, childCount)
     }
 
     @Test

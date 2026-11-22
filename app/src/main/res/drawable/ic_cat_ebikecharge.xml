@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 分类图标 · 电动车充电（ic_cat_ebikecharge）· 24dp 线描，fill=none，描边色由调用方 tint -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.6 18.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8zM13.4 18.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8zM4.6 16 7 11.4h3.6L13.4 16M7.4 11.4h3.2M17 3.2 14.4 8.2h2.2l-1.2 3.8 3.6-4.8h-2.2z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

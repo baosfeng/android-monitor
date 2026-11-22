@@ -1333,6 +1333,54 @@ class AutoBookParserTest {
     }
 
     @Test
+    fun `第三批生活琐碎关键词落到新二级`() {
+        val cases = listOf(
+            "小区充电桩" to "电动车充电",
+            "雅迪电动车" to "电动车充电",
+            "铁塔换电柜" to "换电",
+            "电动车补胎" to "电动车维修",
+            "看车费" to "电动车停车",
+            "单位食堂" to "食堂",
+            "多多买菜" to "社区团购",
+            "农夫山泉" to "瓶装水",
+            "桶装水配送" to "桶装水",
+            "垃圾处理费" to "垃圾处理费",
+            "闪送跑腿" to "跑腿代买",
+            "开锁换锁" to "开锁换锁",
+            "雨伞" to "雨具",
+            "怪兽充电" to "共享充电宝",
+            "公共厕所" to "公共厕所",
+            "丰巢快递柜" to "快递柜超时",
+            "日用杂货" to "日用杂货",
+            "手机贴膜" to "贴膜",
+            "自助洗衣房" to "自助洗衣",
+            "挂号费" to "挂号费"
+        )
+        for ((merchant, expected) in cases) {
+            assertEquals(
+                "商户「$merchant」",
+                expected,
+                AutoBookParser.mapCategory(null, merchant, AutoBookDraft.TYPE_EXPENSE)
+            )
+        }
+    }
+
+    @Test
+    fun `更具体的泛化词仍落在原二级`() {
+        // 新增二级按「更具体优先」插入，不能把原有的泛化命中抢走
+        assertEquals("夜宵", AutoBookParser.mapCategory(null, "深夜食堂", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("电车充电", AutoBookParser.mapCategory(null, "国家电网充电", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("手机", AutoBookParser.mapCategory(null, "华为手机", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("停车", AutoBookParser.mapCategory(null, "停车场缴费", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("快递", AutoBookParser.mapCategory(null, "菜鸟驿站", AutoBookDraft.TYPE_EXPENSE))
+        // 「小电」是共享充电宝品牌，但「小电驴充电」必须先落电动车充电
+        assertEquals("电动车充电", AutoBookParser.mapCategory(null, "小电驴充电", AutoBookDraft.TYPE_EXPENSE))
+        // 「修车」收窄成限定词后，汽车修理/4S 店修车仍归保养维修
+        assertEquals("保养维修", AutoBookParser.mapCategory(null, "XX汽车修理厂", AutoBookDraft.TYPE_EXPENSE))
+        assertEquals("保养维修", AutoBookParser.mapCategory(null, "4S店修车", AutoBookDraft.TYPE_EXPENSE))
+    }
+
+    @Test
     fun `未知商户与未知平台分类兜底一级`() {
         assertEquals(
             "其他",

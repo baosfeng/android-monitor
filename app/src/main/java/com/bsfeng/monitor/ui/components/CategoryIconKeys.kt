@@ -77,6 +77,10 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "夜宵" to "nightsnack",
     "饮料" to "drinks",
     "烘焙甜品" to "bakery",
+    // 第三批：生活琐碎
+    "食堂" to "canteen",
+    "社区团购" to "groupbuy",
+    "瓶装水" to "bottledwater",
     // 购物
     "电商" to "ecommerce",
     "超市便利" to "grocery",
@@ -89,6 +93,7 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "家电" to "appliance",
     "家纺" to "bedding",
     "五金工具" to "tools",
+    "日用杂货" to "sundries",
     // 交通
     "打车" to "taxi",
     "公交地铁" to "metro",
@@ -99,6 +104,11 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "代驾" to "designateddriver",
     "租车" to "carshare",
     "船票" to "ferry",
+    // 第三批：电瓶车（电动车）细分
+    "电动车充电" to "ebikecharge",
+    "换电" to "batteryswap",
+    "电动车维修" to "ebikerepair",
+    "电动车停车" to "ebikeparking",
     // 汽车
     "加油" to "fuel",
     "停车" to "parking",
@@ -125,6 +135,9 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "供暖费" to "heating",
     "车位租金" to "parkingspace",
     "房屋押金" to "rentdeposit",
+    // 第三批：桶装水 / 垃圾处理费
+    "桶装水" to "watercooler",
+    "垃圾处理费" to "garbagefee",
     // 通讯
     "话费" to "phonebill",
     "流量" to "data",
@@ -139,6 +152,7 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "中医理疗" to "tcm",
     "配镜" to "glasses",
     "疫苗" to "vaccine",
+    "挂号费" to "registrationfee",
     // 娱乐休闲
     "电影" to "film",
     "游戏" to "game",
@@ -194,6 +208,7 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "配饰" to "accessory",
     "内衣" to "underwear",
     "干洗" to "dryclean",
+    "自助洗衣" to "laundromat",
     // 母婴育儿
     "奶粉" to "milkbottle",
     "尿布" to "diaper",
@@ -221,6 +236,7 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "相机" to "camera",
     "游戏机" to "console",
     "数码维修" to "digitalrepair",
+    "贴膜" to "screenfilm",
     // 运动健身
     "健身房" to "gym",
     "器材" to "equipment",
@@ -235,6 +251,13 @@ private val CHILD_KEY: Map<String, String> = mapOf(
     "生活服务" to "servicebox",
     "快递" to "delivery",
     "打印" to "printing",
+    // 第三批：生活琐碎
+    "跑腿代买" to "errand",
+    "开锁换锁" to "locksmith",
+    "雨具" to "raingear",
+    "共享充电宝" to "powerbank",
+    "公共厕所" to "restroom",
+    "快递柜超时" to "lockerfee",
     // 工资
     "基本工资" to "payslip",
     "绩效" to "gearcoin",
