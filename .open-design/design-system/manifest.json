@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "android-monitor",
+  "name": "Android Monitor",
+  "category": "Productivity",
+  "description": "Android 行为监控 App 的项目自有风格：iPhone 分组卡 + 8 套浅色主题 + 自绘图表，token 与 Compose 实现同源。",
+  "source": {
+    "type": "user",
+    "origin": "取自 android-monitor 源码 ui/theme 与 docs/UI设计（生成链 tools/gen-design-tokens.mjs）"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css"
+  }
+}
