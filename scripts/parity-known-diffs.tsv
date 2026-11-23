@@ -77,3 +77,36 @@ s23	s23-entries	几何	屏内起算差：TotpScaffold 顶部 padding space2 与�
 s23	s23-entry-manual	几何	同上（随卡片整体下移）
 s23	s23-entry-album	几何	同上
 s23	s23-support	几何	内容量口径：实现多「类型」一行、位数/周期写的是允许范围（1–10 位 / 1–86400 秒）而非原型示例值（6 / 8 位、30 / 60 秒），并多一段 Google 迁移说明，整卡高 46.8
+s25	s25-form	几何	屏内起算差：原型 s25 的 .content 顶部从 content 起算 8（含 .s25-hint 的 padding-top），实现页壳 contentTag 内已有 space2 + 提示行，整块起点差 19.5
+s25	s25-preview	几何	同上（随表单块下移）
+s25	s25-adv	几何	同上
+s25	s25-submit	几何	同上
+s26	s26-code	几何	块间距：原型 .s26-code{margin-top:8} 与父级 grid gap 叠加，实现页壳 gap 为 8 时缺 8
+s26	s26-fields	几何	内容量口径：实现密钥字段多一行掩码说明，整块矮 6.6
+s26	s26-reveal	几何	按钮宽度按内容撑（原型固定 48 宽），差 7.3
+s26	s26-params	几何	内容量口径：实现参数卡含原型未画的「形态」行（TOTP/HOTP 可切），三行 kv 高 30.3
+s26	s26-order	几何	内容量口径：排序卡实现多一行说明文案，高 21.3
+s26	s26-move-up	几何	两按钮等分卡宽（原型按钮宽由内容撑），差 8.8
+s26	s26-move-down	几何	同上
+s26	s26-danger	几何	内容量口径：删除卡实现含原型未画的两段说明，高 31.7
+s27	s27-export	几何	内容量口径：导出块实现含原型未画的错误提示行，高 21.7
+s27	s27-export-btn	几何	同上：随导出块内容下移
+s27	s27-import	几何	内容量口径：导入块实现保留两段 fine 说明（原型只有一段），高 39.8
+s27	s27-import-aegis	几何	同上：随导入块内容下移；副标题按真实限制改写（原型写支持加密导出，实现只支持明文）
+s27	s27-import-2fas	几何	同上
+s27	s27-import-unsupported	几何	同上
+s27	s27-warn	几何	行盒：警告条两行文字的中文行盒比原型 1.45 行高高的 4.2
+s22	s22-list	几何	行盒累积：两组分组标签（各钉 20.6）+ 卡片间距比原型多 21.2，两组行锚点因此累计下移
+s22	s22-row-tencent	几何	同上：首组三行 y+3.1/4.3/4.5
+s22	s22-row-aliyun	几何	同上
+s22	s22-row-aws	几何	同上
+s22	s22-row-github	几何	同上：第二组累计 y+17.8（组间多出的一段间距）
+s22	s22-row-google	几何	同上
+s22	s22-actions	几何	同上：随列表累计下移；h-12 是原型 .s22-actions 含 12 的上下内边距
+s22	s22-add	几何	同上
+s22	s22-backup	几何	同上
+s24	s24-tools	几何	块间距：原型 .s24-tools{margin-top:12} 与父级 gap 叠加，实现只吃到一份
+s24	s24-torch	几何	同上
+s24	s24-album	几何	同上
+s24	s24-fallback	几何	同上（累计到 -7.6）
+s24	s24-manual	几何	按钮宽度按内容撑（原型固定 110 宽），差 13

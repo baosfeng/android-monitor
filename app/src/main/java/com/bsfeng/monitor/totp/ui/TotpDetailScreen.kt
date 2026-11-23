@@ -126,7 +126,11 @@ fun TotpDetailScreen(
 
         // 原型 s26-body 包住英雄行 + 码块 + 字段区 + 参数卡 + 排序卡 + 保存 + 删除 + 说明
         Column(Modifier.testTag("s26-body")) {
-        Row(Modifier.testTag("s26-hero"), verticalAlignment = Alignment.CenterVertically) {
+        // 原型 .s26-hero{padding:12px 0}：缺了这段上下内边距会矮 24，下面所有块整体上移
+        Row(
+            Modifier.testTag("s26-hero").padding(vertical = t.space3),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
                 Modifier.size(44.dp).clip(RoundedCornerShape(t.radiusMd)).background(t.fgFade(8)),
                 contentAlignment = Alignment.Center,
@@ -292,8 +296,13 @@ fun TotpDetailScreen(
         }
 
         Spacer(Modifier.height(t.space1))
-        // 原型 s26-save 是「保存按钮」的容器块
-        Box(Modifier.fillMaxWidth().testTag("s26-save")) {
+        // 原型 .s26-save{padding:12px 0 16px}：缺了这段会矮 28，后面删除块上移
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .testTag("s26-save")
+                .padding(top = t.space3, bottom = t.space4),
+        ) {
             AppButton(
                 text = "保存修改",
                 onClick = onSave,

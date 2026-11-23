@@ -102,6 +102,8 @@ fun TotpBackupScreen(
                     color = t.muted,
                     modifier = Modifier.padding(top = t.space2),
                 )
+                // 原型 .s27-export 是 .card（padding 16）+ .s27-block{padding:12px 0}：
+                // 卡片内「卡片头」与「内容块」之间没有额外 gap，内容块自带上下 12
                 AppCard(modifier = Modifier.testTag("s27-export")) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -112,7 +114,8 @@ fun TotpBackupScreen(
                         )
                         Badge("AES-256")
                     }
-                    Spacer(Modifier.height(t.space2))
+                    // 原型 .s27-block{padding:12px 0}：内容块上下各 12
+                    Column(Modifier.fillMaxWidth().padding(vertical = t.space3)) {
                     TotpTextField(
                         value = exportPassword,
                         onValueChange = onExportPasswordChange,
@@ -144,12 +147,15 @@ fun TotpBackupScreen(
                         block = true,
                         modifier = Modifier.testTag("s27-export-btn"),
                     )
+                    // 原型 .s27-note{padding:0 0 12px}：说明行在内容块底部
                     TotpFine("密码不随文件保存，丢了就解不开；文件写入「下载」目录，同名文件会被覆盖。")
+                    }
                 }
 
-                AppCard(modifier = Modifier.testTag("s27-import"), padding = t.space1) {
+                // 原型 .s27-import{margin-top:12px; padding:16px}：卡内 16，行自带 8 上下、无额外水平内缩
+                AppCard(modifier = Modifier.testTag("s27-import").padding(top = t.space3), padding = 0.dp) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = t.space2, vertical = t.space2),
+                        Modifier.fillMaxWidth().padding(horizontal = t.space4, vertical = t.space2),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -163,7 +169,7 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "Aegis（JSON 导出）",
                         subtitle = "请先在 Aegis 里选「明文导出」；加密导出用 scrypt，暂不支持",
-                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-aegis"),
+                        innerModifier = Modifier.testTag("s27-import-aegis"),
                         onClick = { onRequestImport("Aegis") },
                         trailing = { Badge("明文导出") },
                     )
@@ -171,7 +177,7 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "2FAS（.2fas 备份）",
                         subtitle = "读取 accounts 数组，忽略应用内设置项",
-                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-2fas"),
+                        innerModifier = Modifier.testTag("s27-import-2fas"),
                         onClick = { onRequestImport("2FAS") },
                         trailing = { Badge("可导入") },
                     )
@@ -179,7 +185,7 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "其他专有格式",
                         subtitle = "无公开格式，需改用扫码或手动输入逐条添加",
-                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-unsupported"),
+                        innerModifier = Modifier.testTag("s27-import-unsupported"),
                         trailing = { Badge("不支持") },
                     )
                     TotpFine("Aegis 请选「明文导出」；加密导出用 scrypt，暂不支持（导入时会直接报格式不识别）。")

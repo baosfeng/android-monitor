@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -167,12 +169,28 @@ internal fun TotpParamRow(label: String, value: String) {
         Modifier.fillMaxWidth().padding(vertical = t.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = t.muted,
-            modifier = Modifier.weight(1f),
-        )
-        Text(value, style = monitorMonoMeta, color = t.fg2)
+        // 两列都钉原型 .meta / .num 的行盒（14px × 1.47 = 20.6）：中文自然行盒是 20.7，
+        // 每行多 0.1 不显眼，但 s26 参数卡三行 + 卡片内边距会累计到 30
+        Box(Modifier.weight(1f).height(KV_LINE)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+                maxLines = 1,
+                modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+            )
+        }
+        Box(Modifier.height(KV_LINE)) {
+            Text(
+                value,
+                style = monitorMonoMeta,
+                color = t.fg2,
+                maxLines = 1,
+                modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+            )
+        }
     }
 }
+
+/** 原型 .s26-kv / .s23-kv 的行盒：14px × 1.47 ≈ 20.6。 */
+private val KV_LINE = 20.6.dp

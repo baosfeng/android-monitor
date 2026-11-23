@@ -85,9 +85,17 @@ fun TotpManualEntryScreen(
             color = t.muted,
             modifier = Modifier.padding(top = t.space2),
         )
-        // 原型 s25-form 包住三个字段 + 密钥提示 + 错误行 + 预演 + 高级参数 + 两个动作。
-        // 列内间距沿用页壳列间距，不额外加 Spacer，视觉与补锚点前一致。
-        Column(Modifier.testTag("s25-form"), verticalArrangement = Arrangement.spacedBy(t.space2)) {
+        // 原型 .s25-form{display:grid;gap:12px;padding:12px 0 16px}：列内 gap 是 space3 不是 space2，
+        // 且上下各带 12 / 16 内边距。按 space2 时整块矮 33，预演 / 高级 / 两颗按钮一起上移 36–47
+        // 原型 .s25-form{display:grid;gap:12px;padding:12px 0 16px}：列内 gap 是 space3 不是 space2，
+        // 上下各带 12 / 16 内边距。用 space2 时整块矮 33，预演 / 高级 / 两颗按钮一起上移 36–47。
+        // 注意 .s25-preview / .s25-adv 自己还带 margin-top 12 / 8，与 grid gap 叠加 —— 原型就是叠加的。
+        // 原型 .s25-form{display:grid;gap:12px;padding:12px 0 16px}：gap 是 space3（早先用 space2 → 整块矮 33）。
+        // 上下 padding 不补：原型 .content 的 padding 已由页壳给出，再补 28 会让整块反而高 31
+        Column(
+            Modifier.testTag("s25-form"),
+            verticalArrangement = Arrangement.spacedBy(t.space3),
+        ) {
             TotpTextField(
                 value = form.issuer,
                 onValueChange = { onFormChange(form.copy(issuer = it)) },
@@ -134,7 +142,7 @@ fun TotpManualEntryScreen(
                 }
             }
 
-            // 原型 s25-preview 包住「预演说明 + 码 + 倒计时」整块
+            // 原型 .s25-preview{self padding:12px}（ManualPreview 内部已含）；外边距由上面的 grid gap 承担
             Column(Modifier.testTag("s25-preview")) {
                 ManualPreview(form = form, nowMillis = nowMillis)
             }
