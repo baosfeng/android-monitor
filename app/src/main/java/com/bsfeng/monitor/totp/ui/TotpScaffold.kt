@@ -64,15 +64,43 @@ fun TotpScaffold(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    TotpScaffold(
+        title = title,
+        screenTag = testTag,
+        contentTag = null,
+        onBack = onBack,
+        modifier = modifier,
+        actions = actions,
+        content = content,
+    )
+}
+
+/**
+ * 带内容区锚点的页壳（原型 sNN-content）。
+ *
+ * 原型把内容锚点挂在导航栏之下的滚动内容区上，实现同样挂在滚动列上：
+ * 锚点盒即内容区盒，长页只判存在性（parity-native 对 -content 跳过几何）。
+ */
+@Composable
+fun TotpScaffold(
+    title: String,
+    screenTag: String,
+    contentTag: String?,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val t = LocalDesignTokens.current
     Box(modifier.fillMaxSize().pageBackdrop()) {
-        Column(Modifier.fillMaxSize().testTag(testTag)) {
+        Column(Modifier.fillMaxSize().testTag(screenTag)) {
             IOSNavigationBar(title = title, onBack = onBack, actions = actions)
             Column(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
+                    .then(if (contentTag != null) Modifier.testTag(contentTag) else Modifier)
                     .padding(horizontal = t.space4, vertical = t.space2),
                 verticalArrangement = Arrangement.spacedBy(t.space2),
                 content = content,
@@ -254,18 +282,11 @@ fun ScanFailureBanner(
     }
 }
 
+
 /**
- * 失败横幅的稳定标识（s24 扫码页 / s23 添加页各自的落点）。
- *
- * 写成常量而不是 testTag 实参里的字面量：新锚点必须先登记进 scripts/anchor-ledger.tsv，
- * 直接写裸字面量会被 check-anchors 判成「代码自造锚点」（自增 是硬错误），
- * 这两处是同一组件在两个页面的落点，登记流程走完再改回字面量或前缀。
+ * 失败横幅 / 高级参数折叠的稳定标识（这两屏的搬迁在下一步一起做）。
  */
 internal const val TOTP_TAG_SCAN_FAILURE = "s24-failure"
-internal const val TOTP_TAG_ALBUM_FAILURE = "s23-album-failure"
 internal const val TOTP_TAG_MANUAL_ADV = "s25-adv"
-
-/** 调试/集成用的触点标记（不改变布局）。 */
-internal fun Modifier.totpTag(tag: String): Modifier = this.testTag(tag)
 
 internal fun rememberNoIndication(): MutableInteractionSource = MutableInteractionSource()

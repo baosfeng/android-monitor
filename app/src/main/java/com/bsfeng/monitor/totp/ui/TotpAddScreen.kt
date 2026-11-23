@@ -48,7 +48,7 @@ fun TotpAddScreen(
     onRetryAlbum: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
-    TotpScaffold(title = "添加账户", testTag = "screen-s23", onBack = onBack, modifier = modifier) {
+    TotpScaffold(title = "添加账户", screenTag = "screen-s23", contentTag = "s23-content", onBack = onBack, modifier = modifier) {
         if (state == FiveState.LOADING) {
             AppCard { StateSkeleton(rows = 4) }
         } else {
@@ -68,15 +68,16 @@ fun TotpAddScreen(
                     onPrimary = onRetryAlbum ?: onPickFromAlbum,
                     secondaryLabel = "手动输入",
                     onSecondary = onManualEntry,
-                    modifier = Modifier.testTag(TOTP_TAG_ALBUM_FAILURE),
+                    modifier = Modifier.testTag("s23-album-failure"),
                 )
             }
-            AppCard(padding = t.space1) {
+            AppCard(modifier = Modifier.testTag("s23-entries"), padding = t.space1) {
                 TotpEntryRow(
                     icon = Icons.Outlined.QrCodeScanner,
                     title = "扫码添加",
                     subtitle = "对准网站出示的 otpauth 二维码",
                     onClick = onScan,
+                    modifier = Modifier.testTag("s23-entry-scan"),
                 )
                 TokenDivider(first = false)
                 TotpEntryRow(
@@ -84,6 +85,7 @@ fun TotpAddScreen(
                     title = "手动输入",
                     subtitle = "粘贴 Base32 密钥，可调算法与周期",
                     onClick = onManualEntry,
+                    modifier = Modifier.testTag("s23-entry-manual"),
                 )
                 TokenDivider(first = false)
                 TotpEntryRow(
@@ -91,10 +93,11 @@ fun TotpAddScreen(
                     title = "从相册识别",
                     subtitle = "选择二维码截图，本机离线解码",
                     onClick = onPickFromAlbum,
+                    modifier = Modifier.testTag("s23-entry-album"),
                 )
             }
             Spacer(Modifier.height(t.space2))
-            AppCard {
+            AppCard(modifier = Modifier.testTag("s23-support")) {
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -129,6 +132,7 @@ private fun TotpEntryRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     TokenRow(
@@ -136,7 +140,7 @@ private fun TotpEntryRow(
         subtitle = subtitle,
         icon = icon,
         onClick = onClick,
-        modifier = Modifier.padding(horizontal = t.space2),
+        modifier = modifier.padding(horizontal = t.space2),
         trailing = {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,

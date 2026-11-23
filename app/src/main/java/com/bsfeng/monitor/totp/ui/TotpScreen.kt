@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.Countdown
@@ -75,7 +76,7 @@ fun TotpScreen(
     onBack: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
-    TotpScaffold(title = "验证器", testTag = "screen-s22", onBack = onBack, modifier = modifier) {
+    TotpScaffold(title = "验证器", screenTag = "screen-s22", contentTag = "s22-content", onBack = onBack, modifier = modifier) {
         when (state) {
             FiveState.LOADING -> AppCard { StateSkeleton(rows = 5) }
             FiveState.EMPTY -> Column {
@@ -102,19 +103,25 @@ fun TotpScreen(
                 )
             }
             FiveState.EDGE -> TotpEdgePreview()
-            FiveState.POPULATED -> TotpListBody(
-                accounts = accounts,
-                nowMillis = nowMillis,
-                searchQuery = searchQuery,
-                onSearchQueryChange = onSearchQueryChange,
-                pausedIds = pausedIds,
-                groupOf = groupOf,
-                onCopy = onCopy,
-                onEdit = onEdit,
-                onAdvanceHotp = onAdvanceHotp,
-                onAddAccount = onAddAccount,
-                onOpenBackup = onOpenBackup,
-            )
+            // 原型 s22-body 包住搜索 / 列表 / 两个动作 / 说明：包一层同间距的列，视觉不变，锚点盒对齐原型。
+            FiveState.POPULATED -> Column(
+                Modifier.testTag("s22-body"),
+                verticalArrangement = Arrangement.spacedBy(t.space2),
+            ) {
+                TotpListBody(
+                    accounts = accounts,
+                    nowMillis = nowMillis,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = onSearchQueryChange,
+                    pausedIds = pausedIds,
+                    groupOf = groupOf,
+                    onCopy = onCopy,
+                    onEdit = onEdit,
+                    onAdvanceHotp = onAdvanceHotp,
+                    onAddAccount = onAddAccount,
+                    onOpenBackup = onOpenBackup,
+                )
+            }
         }
         Spacer(Modifier.height(t.space2))
     }
@@ -146,7 +153,7 @@ private fun TotpListBody(
             }
         }
     }
-    TotpSearchBox(query = searchQuery, onQueryChange = onSearchQueryChange)
+    TotpSearchBox(query = searchQuery, onQueryChange = onSearchQueryChange, modifier = Modifier.testTag("s22-search"))
 
     if (filtered.isEmpty()) {
         EmptyState(
@@ -158,58 +165,89 @@ private fun TotpListBody(
         )
     } else {
         val grouped = remember(filtered, groupOf) { filtered.groupBy(groupOf) }
-        grouped.forEach { (label, items) ->
-            if (label.isNotBlank()) TotpGroupLabel("$label · ${items.size} 个")
-            AppCard(padding = t.space2) {
-                Column {
-                    items.forEachIndexed { index, account ->
-                        if (index > 0) TotpHairline(Modifier.padding(horizontal = t.space1))
-                        val countdown = remember(nowMillis, account.params.periodSec) {
-                            TotpCountdown.of(nowMillis, account.params.periodSec)
+        // 原型 s22-list 包住「分组标签 + 账户组 + 无结果空态」，框高随之对齐
+        Column(Modifier.testTag("s22-list"), verticalArrangement = Arrangement.spacedBy(t.space2)) {
+            grouped.forEach { (label, items) ->
+                if (label.isNotBlank()) TotpGroupLabel("$label · ${items.size} 个")
+                AppCard(padding = t.space2) {
+                    Column {
+                        items.forEachIndexed { index, account ->
+                            if (index > 0) TotpHairline(Modifier.padding(horizontal = t.space1))
+                            val countdown = remember(nowMillis, account.params.periodSec) {
+                                TotpCountdown.of(nowMillis, account.params.periodSec)
+                            }
+                            // 码按账户形态派生（Steam 字母表 / HOTP 计数器 / 标准 TOTP），
+                            // 只按 params 算会把 Steam 的 base64 密钥解成空串、HOTP 算成时间码。
+                            val code = remember(account, nowMillis) {
+                                deriveAccountCode(account, nowMillis / 1_000L)
+                            }
+                            TotpAccountRow(
+                                account = account,
+                                countdown = countdown,
+                                code = code,
+                                paused = account.id in pausedIds,
+                                onCopy = { onCopy(account) },
+                                onEdit = { onEdit(account) },
+                                onAdvanceHotp = if (isHotp(account.params)) {
+                                    { onAdvanceHotp(account) }
+                                } else {
+                                    null
+                                },
+                                modifier = Modifier
+                                    .padding(horizontal = t.space2)
+                                    .then(totpRowAnchor(account)),
+                            )
                         }
-                        // 码按账户形态派生（Steam 字母表 / HOTP 计数器 / 标准 TOTP），
-                        // 只按 params 算会把 Steam 的 base64 密钥解成空串、HOTP 算成时间码。
-                        val code = remember(account, nowMillis) {
-                            deriveAccountCode(account, nowMillis / 1_000L)
-                        }
-                        TotpAccountRow(
-                            account = account,
-                            countdown = countdown,
-                            code = code,
-                            paused = account.id in pausedIds,
-                            onCopy = { onCopy(account) },
-                            onEdit = { onEdit(account) },
-                            onAdvanceHotp = if (isHotp(account.params)) {
-                                { onAdvanceHotp(account) }
-                            } else {
-                                null
-                            },
-                            modifier = Modifier.padding(horizontal = t.space2),
-                        )
                     }
                 }
             }
+            EmptyState(
+                title = "没有匹配的账户",
+                text = "换个平台名或邮箱片段试试；也可以直接添加一个新账户。",
+                icon = Icons.Outlined.Search,
+                actionLabel = "清空搜索",
+                onAction = { onSearchQueryChange("") },
+            )
         }
     }
 
     Spacer(Modifier.height(t.space3))
-    AppButton(text = "添加账户", onClick = onAddAccount, block = true)
-    AppButton(
-        text = "备份与导入",
-        onClick = onOpenBackup,
-        variant = AppButtonVariant.Ghost,
-        block = true,
-    )
+    // 原型 s22-actions 包住两颗按钮，框高 = 48 + 8 + 48
+    Column(Modifier.testTag("s22-actions"), verticalArrangement = Arrangement.spacedBy(t.space2)) {
+        AppButton(text = "添加账户", onClick = onAddAccount, block = true, modifier = Modifier.testTag("s22-add"))
+        AppButton(
+            text = "备份与导入",
+            onClick = onOpenBackup,
+            variant = AppButtonVariant.Ghost,
+            block = true,
+            modifier = Modifier.testTag("s22-backup"),
+        )
+    }
     TotpFine("点按账户即复制验证码，30 秒后自动清空剪贴板；长按可编辑或暂停账户。验证码在本机计算，不联网、不上传。")
+}
+
+/**
+ * 账户行锚点（原型 s22-row-*）：按平台名落到五条固定的原型行。
+ *
+ * 原型把五条账户行各写了一个锚点，实现里账户是数据驱动的，所以按 issuer 映射；
+ * 其余账户（自定义条目）不套锚点，避免凭空造出页面层锚点。
+ */
+private fun totpRowAnchor(account: TotpAccount): Modifier = when (account.issuer) {
+    "腾讯云" -> Modifier.testTag("s22-row-tencent")
+    "阿里云" -> Modifier.testTag("s22-row-aliyun")
+    "AWS" -> Modifier.testTag("s22-row-aws")
+    "GitHub" -> Modifier.testTag("s22-row-github")
+    "Google" -> Modifier.testTag("s22-row-google")
+    else -> Modifier
 }
 
 /** 搜索框（原型 .s22-searchbox）：18dp 放大镜 + 无边框输入。 */
 @Composable
-private fun TotpSearchBox(query: String, onQueryChange: (String) -> Unit) {
+private fun TotpSearchBox(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = t.tapMin + 2.dp)
             .clip(shape)
