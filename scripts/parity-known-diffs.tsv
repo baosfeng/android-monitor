@@ -21,3 +21,8 @@ s12	s12-states	几何	同上族：五态区五张卡的行盒累积，h+7.6、�
 s12	s12-st-loading	几何	起点随 s12-states 平移（同一处累计漂移，非独立残差）
 s12	s12-st-populated	几何	同上
 s12	s12-st-edge	几何	边界态两行超长标题的 CJK 行盒被压到 maxLines=2 后短 5.8
+s22	s22-row-tencent	文案	TOTP 码本质随时间变：原型写死「482913 / 14s」，实现是真实 TOTP 码与倒计时，逐位比较无意义（两边长度与结构一致即可）
+s22	s22-row-aliyun	文案	同上
+s22	s22-row-aws	文案	同上
+s22	s22-row-github	文案	同上
+s22	s22-row-google	文案	同上
