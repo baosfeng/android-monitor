@@ -282,11 +282,4 @@ fun ScanFailureBanner(
     }
 }
 
-
-/**
- * 失败横幅 / 高级参数折叠的稳定标识（这两屏的搬迁在下一步一起做）。
- */
-internal const val TOTP_TAG_SCAN_FAILURE = "s24-failure"
-internal const val TOTP_TAG_MANUAL_ADV = "s25-adv"
-
 internal fun rememberNoIndication(): MutableInteractionSource = MutableInteractionSource()

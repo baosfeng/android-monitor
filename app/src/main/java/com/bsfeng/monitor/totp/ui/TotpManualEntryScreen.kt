@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -77,71 +78,84 @@ fun TotpManualEntryScreen(
 ) {
     val t = LocalDesignTokens.current
     var advancedOpen by rememberSaveable { mutableStateOf(false) }
-    TotpScaffold(title = "手动输入", testTag = "screen-s25", onBack = onBack, modifier = modifier) {
+    TotpScaffold(title = "手动输入", screenTag = "screen-s25", contentTag = "s25-content", onBack = onBack, modifier = modifier) {
         Text(
             "网站「两步验证」页给出的密钥通常是一串 Base32 字符（A–Z 与 2–7），可带空格。",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
             modifier = Modifier.padding(top = t.space2),
         )
-        TotpTextField(
-            value = form.issuer,
-            onValueChange = { onFormChange(form.copy(issuer = it)) },
-            label = "平台名",
-            placeholder = "例如 GitHub / 腾讯云",
-            invalid = error != null && form.issuer.isBlank(),
-        )
-        TotpTextField(
-            value = form.accountName,
-            onValueChange = { onFormChange(form.copy(accountName = it)) },
-            label = "账户（可选）",
-            placeholder = "例如 alice@acme.com",
-            keyboardType = KeyboardType.Email,
-        )
-        TotpTextField(
-            value = form.secretBase32,
-            onValueChange = { onFormChange(form.copy(secretBase32 = it.uppercase())) },
-            label = "密钥（Base32）",
-            placeholder = "例如 JBSWY3DPEHPK3PXP",
-            mono = true,
-            invalid = error != null,
-        )
-        // 原型 .s25-hint 是密钥字段组内的说明行（组内 gap = space-1），TotpFine 的上下内边距不适用。
-        Text(
-            "真实密钥请从网站的「无法扫码」入口复制；不要贴到聊天记录或截图里。",
-            style = MaterialTheme.typography.bodySmall,
-            color = t.muted,
-            modifier = Modifier.fillMaxWidth().padding(top = t.space1),
-        )
+        // 原型 s25-form 包住三个字段 + 密钥提示 + 错误行 + 预演 + 高级参数 + 两个动作。
+        // 列内间距沿用页壳列间距，不额外加 Spacer，视觉与补锚点前一致。
+        Column(Modifier.testTag("s25-form"), verticalArrangement = Arrangement.spacedBy(t.space2)) {
+            TotpTextField(
+                value = form.issuer,
+                onValueChange = { onFormChange(form.copy(issuer = it)) },
+                label = "平台名",
+                placeholder = "例如 GitHub / 腾讯云",
+                invalid = error != null && form.issuer.isBlank(),
+            )
+            TotpTextField(
+                value = form.accountName,
+                onValueChange = { onFormChange(form.copy(accountName = it)) },
+                label = "账户（可选）",
+                placeholder = "例如 alice@acme.com",
+                keyboardType = KeyboardType.Email,
+            )
+            TotpTextField(
+                value = form.secretBase32,
+                onValueChange = { onFormChange(form.copy(secretBase32 = it.uppercase())) },
+                label = "密钥（Base32）",
+                placeholder = "例如 JBSWY3DPEHPK3PXP",
+                mono = true,
+                invalid = error != null,
+            )
+            // 原型 .s25-hint 是密钥字段组内的说明行（组内 gap = space-1），TotpFine 的上下内边距不适用。
+            Text(
+                "真实密钥请从网站的「无法扫码」入口复制；不要贴到聊天记录或截图里。",
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+                modifier = Modifier.fillMaxWidth().padding(top = t.space1),
+            )
 
-        if (error != null) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = t.space1),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(t.space2),
-            ) {
-                Icon(
-                    Icons.Outlined.Warning,
-                    contentDescription = null,
-                    tint = t.dangerText,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(error, style = MaterialTheme.typography.bodySmall, color = t.dangerText)
+            if (error != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = t.space1),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(t.space2),
+                ) {
+                    Icon(
+                        Icons.Outlined.Warning,
+                        contentDescription = null,
+                        tint = t.dangerText,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = t.dangerText)
+                }
             }
+
+            // 原型 s25-preview 包住「预演说明 + 码 + 倒计时」整块
+            Column(Modifier.testTag("s25-preview")) {
+                ManualPreview(form = form, nowMillis = nowMillis)
+            }
+
+            AdvancedParams(
+                open = advancedOpen,
+                onToggle = { advancedOpen = !advancedOpen },
+                form = form,
+                onFormChange = onFormChange,
+            )
+
+            Spacer(Modifier.height(t.space2))
+            AppButton(text = "添加账户", onClick = onSubmit, block = true, modifier = Modifier.testTag("s25-submit"))
+            AppButton(
+                text = "改扫码添加",
+                onClick = onGoScan,
+                variant = AppButtonVariant.Ghost,
+                block = true,
+                modifier = Modifier.testTag("s25-goto-scan"),
+            )
         }
-
-        ManualPreview(form = form, nowMillis = nowMillis)
-
-        AdvancedParams(
-            open = advancedOpen,
-            onToggle = { advancedOpen = !advancedOpen },
-            form = form,
-            onFormChange = onFormChange,
-        )
-
-        Spacer(Modifier.height(t.space2))
-        AppButton(text = "添加账户", onClick = onSubmit, block = true)
-        AppButton(text = "改扫码添加", onClick = onGoScan, variant = AppButtonVariant.Ghost, block = true)
         TotpFine("密钥加密后只存本机，不写日志、不上传、不进导出包；添加后可在账户详情里改名、换平台或删除。")
     }
 }
@@ -232,7 +246,7 @@ private fun AdvancedParams(
     Column(
         Modifier
             .fillMaxWidth()
-            .testTag(TOTP_TAG_MANUAL_ADV),
+            .testTag("s25-adv"),
     ) {
         TotpHairline()
         Column(Modifier.padding(top = t.space2)) {
