@@ -98,6 +98,8 @@ internal fun TokenRow(
      * 行盒按行数同比放大，仍是「固定盒 + unbounded」解法。
      */
     subtitleMaxLines: Int = 1,
+    /** 行内纵向内边距（原型 .row 是 8，.s23-entry 这类是 12）。 */
+    verticalPadding: androidx.compose.ui.unit.Dp? = null,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -145,8 +147,8 @@ internal fun TokenRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(innerModifier)
-                // 行内垂直 8；min-height 52 是含 padding 的盒子，内容区下限 = 52 - 2×8
-                .padding(vertical = t.space2)
+                // 行内垂直默认 8；min-height 52 是含 padding 的盒子，内容区下限 = 52 - 2×8
+                .padding(vertical = verticalPadding ?: t.space2)
                 .heightIn(min = t.rowMinH - t.space4),
             verticalAlignment = Alignment.CenterVertically,
         ) {

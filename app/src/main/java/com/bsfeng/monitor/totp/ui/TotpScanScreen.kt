@@ -78,8 +78,13 @@ fun TotpScanScreen(
         } else {
             // 原型 s24-body 包住取景 / 失败横幅 / 工具条 / 手动回退 / 说明；列内间距沿用原来的显式 Spacer，视觉不变
             Column(Modifier.testTag("s24-body")) {
-                // 原型 s24-view 包住取景框与「把二维码放进取景框」提示，二者构成一个整块
-                Column(Modifier.testTag("s24-view")) {
+                // 原型 s24-view 包住取景框与提示，且自带 padding:8px 0 12px：
+                // 缺这段内边距会让取景框顶到 55（原型 16）、整块矮 19.6，下面工具条与回退条一起上移
+                Column(
+                    Modifier
+                        .testTag("s24-view")
+                        .padding(top = t.space2, bottom = t.space3),
+                ) {
                     ScanLens(
                         torchOn = torchOn,
                         preview = preview,

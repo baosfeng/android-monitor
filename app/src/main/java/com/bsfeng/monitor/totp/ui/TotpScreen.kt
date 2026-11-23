@@ -167,9 +167,13 @@ private fun TotpListBody(
         val grouped = remember(filtered, groupOf) { filtered.groupBy(groupOf) }
         // 原型 s22-list 包住「分组标签 + 账户组 + 无结果空态」，框高随之对齐
         Column(Modifier.testTag("s22-list"), verticalArrangement = Arrangement.spacedBy(t.space2)) {
-            grouped.forEach { (label, items) ->
-                if (label.isNotBlank()) TotpGroupLabel("$label · ${items.size} 个")
-                AppCard(padding = t.space2) {
+            grouped.entries.forEachIndexed { groupIndex, (label, items) ->
+                if (label.isNotBlank()) {
+                    TotpGroupLabel("$label · ${items.size} 个", first = groupIndex == 0)
+                }
+                // 原型 .group{background;border;radius;padding:0 16px}：垂直 padding 是 0，
+                // 行自己带 8 上下。这里给 8 会让每组卡多 16、五条行锚点与两颗按钮整体下移
+                AppCard(padding = 0.dp) {
                     Column {
                         items.forEachIndexed { index, account ->
                             if (index > 0) TotpHairline(Modifier.padding(horizontal = t.space1))
@@ -193,21 +197,19 @@ private fun TotpListBody(
                                 } else {
                                     null
                                 },
-                                modifier = Modifier
-                                    .padding(horizontal = t.space2)
-                                    .then(totpRowAnchor(account)),
+                                // 锚点要量到行本体（原型 .row x=33/w=327，卡内 16 缩进之后）：
+                                // 挂在 padding 之内的一层，而不是调制链最前面的 modifier
+                                innerModifier = totpRowAnchor(account),
+                                // 原型 .group{padding:0 16px}：卡内水平 16，行锚点落在 16 之内（x=33）
+                                modifier = Modifier.padding(horizontal = t.space4),
                             )
                         }
                     }
                 }
             }
-            EmptyState(
-                title = "没有匹配的账户",
-                text = "换个平台名或邮箱片段试试；也可以直接添加一个新账户。",
-                icon = Icons.Outlined.Search,
-                actionLabel = "清空搜索",
-                onAction = { onSearchQueryChange("") },
-            )
+            // 空态不在这里：它已经由上面 filtered.isEmpty() 的分支渲染。
+            // 早先这里无条件又画了一遍，有账户时列表底下始终压着一块「没有匹配的账户」，
+            // 整块比原型高 333.9dp，下面五个行锚点与两颗按钮全部跟着漂。
         }
     }
 

@@ -157,6 +157,13 @@ fun TotpAccountRow(
     onEdit: () -> Unit = {},
     /** HOTP 账户：右侧不画倒计时环，改画「下一码」按钮。 */
     onAdvanceHotp: (() -> Unit)? = null,
+    /**
+     * 落在**水平内边距之内**的修饰符（锚点用）。
+     *
+     * 原型 s22 的行锚点挂在 .row 本体（x=33 / w=327）：卡片本身有 16 水平内缩，
+     * 锚点若写在 [modifier]（调制链最前）会连卡片缩进一起量进去（x=24 / w=345）。
+     */
+    innerModifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -191,6 +198,7 @@ fun TotpAccountRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(innerModifier)
             .heightIn(min = ROW_MIN_HEIGHT)
             .then(rowSemantics)
             .combinedClickable(

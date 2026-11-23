@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -200,15 +201,30 @@ fun TotpFine(text: String, modifier: Modifier = Modifier) {
 
 /** 分组标签（原型 .group-label）：14sp muted，带顶部间距。 */
 @Composable
-fun TotpGroupLabel(text: String, modifier: Modifier = Modifier) {
+fun TotpGroupLabel(text: String, modifier: Modifier = Modifier, first: Boolean = true) {
     val t = LocalDesignTokens.current
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = t.muted,
-        modifier = modifier.fillMaxWidth().padding(top = t.space3, bottom = t.space1),
-    )
+    // 原型 .group-label{font-size:14px; margin:0 0 var(--space-2)}：**上下 margin 都被这条覆盖**，
+    // 页面上写的 .mt-4 被同特异度的 margin:0 冲掉（实测第二组标签 y 紧贴上一组卡底，没有 16）。
+    // 所以这里不给上内边距，只留底 8。
+    // 早先统一 12 上 / 4 下，首组凭空高 8、后续组少 8，五条行锚点与两颗按钮整体漂 19–59dp。
+    // 行盒按原型 .group-label（14px × 1.47 = 20.6）钉死：中文自然行盒是 1.47 倍的字体 metric，
+    // labelMedium 撑出来的高度不稳定，会让每组整体下移 7 左右（s22 第二组行锚点因此偏 34–59dp）
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier.fillMaxWidth().padding(bottom = t.space2),
+    ) {
+        androidx.compose.foundation.layout.Box(Modifier.height(GROUP_LABEL_LINE)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = t.muted,
+                modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+            )
+        }
+    }
 }
+
+/** 原型 .group-label 行盒：14px × 1.47 ≈ 20.6。 */
+private val GROUP_LABEL_LINE = 20.6.dp
 
 /** 轻分隔线（原型 border-soft 1px）；[interaction] 仅用于让调用点复用同一按压源。 */
 @Composable

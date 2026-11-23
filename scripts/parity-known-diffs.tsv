@@ -73,3 +73,7 @@ s09	s09-finance-homecard-switch	几何	同上
 s09	s09-finance-multiperiod	几何	同上
 s09	s09-finance-multiperiod-switch	几何	同上
 s09	s09-finance-budgetentry	几何	同上
+s23	s23-entries	几何	屏内起算差：TotpScaffold 顶部 padding space2 与原型 .content padding-top 8 的中文行盒差，整卡起点差 3.7
+s23	s23-entry-manual	几何	同上（随卡片整体下移）
+s23	s23-entry-album	几何	同上
+s23	s23-support	几何	内容量口径：实现多「类型」一行、位数/周期写的是允许范围（1–10 位 / 1–86400 秒）而非原型示例值（6 / 8 位、30 / 60 秒），并多一段 Google 迁移说明，整卡高 46.8

@@ -71,7 +71,8 @@ fun TotpAddScreen(
                     modifier = Modifier.testTag("s23-album-failure"),
                 )
             }
-            AppCard(modifier = Modifier.testTag("s23-entries"), padding = t.space1) {
+            // 原型 .group{padding:0 16px}：卡片自身不给上下内边距，行自己带 8
+            AppCard(modifier = Modifier.testTag("s23-entries"), padding = 0.dp) {
                 TotpEntryRow(
                     icon = Icons.Outlined.QrCodeScanner,
                     title = "扫码添加",
@@ -140,7 +141,13 @@ private fun TotpEntryRow(
         subtitle = subtitle,
         icon = icon,
         onClick = onClick,
-        modifier = modifier.padding(horizontal = t.space2),
+        // 锚点落行内边距之内（原型 .s23-entry 是卡内 16 缩进后的行本体：x=17 / w=327）。
+        // 卡自身 padding 0（原型 .group{padding:0 16px}），水平 16 由 TokenRow 自带，
+        // 这里不再叠一层 space2 —— 叠了行会窄 16 / 右移 16。
+        innerModifier = modifier,
+        // 原型 .s23-entry{padding:12px 0}：行内上下 12（TokenRow 默认 8，会让每行矮 8）
+        verticalPadding = t.space3,
+        modifier = Modifier,
         trailing = {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
