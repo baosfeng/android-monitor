@@ -231,6 +231,8 @@ internal fun SettingsLocationCard(
                     // 上一次失败是什么原因。文案由 LocationHealthText 统一生成（纯函数、有单测）。
                     // 门禁态一并交给文案层：门禁 SLEEPING 时「30 分钟前最后一点」是待机而非断档，
                     // 不传它就会出现「静止一天、徽标常年红」的假掉线。
+                    // 只读一次门禁快照：健康档必须由 LocationCollector.health() 里的 service 信号判定，
+                    // 单看门禁态会把「服务被系统降级」显示成正常或断档（见 LocationHealthText.levelOf）。
                     val gate = LocationGateState.state
                     val health = remember(locationOn, rechecking, locationPermission, gate) {
                         runCatching { LocationCollector.get(context).health() }.getOrNull()

@@ -18,10 +18,29 @@ import com.bsfeng.monitor.record.LocationFailureReason
 import com.bsfeng.monitor.record.LocationPermissionStatus
 import com.bsfeng.monitor.record.LocationStatus
 import com.bsfeng.monitor.record.MotionGate
+import com.bsfeng.monitor.record.ServiceHealth
 import com.bsfeng.monitor.ui.components.BadgeTone
 
-/** 采集健康度的五档；档位只影响徽标颜色，文案仍逐条说明。 */
-enum class LocationHealthLevel { GOOD, DORMANT, WAITING, STALE, OFF }
+/**
+ * 采集健康度的七档；档位只影响徽标颜色，文案仍逐条说明。
+ *
+ * 多出来的两档是「服务壳化」：门禁态非 null 不代表服务健康（真机壳化时它照样写着 SLEEPING），
+ * 只看门禁就会出现「面板说正常、实际 5.4 小时没采点」。这两档由 [LocationStatus.service]
+ * 的 [com.bsfeng.monitor.record.ServiceHealth] 给出，与心跳读同一份判定。
+ */
+enum class LocationHealthLevel {
+    GOOD,
+    DORMANT,
+    WAITING,
+    STALE,
+    OFF,
+
+    /** 服务被系统降级（壳化），心跳已请求重新拉起：恢复动作在跑，但还没确认活过来。 */
+    SERVICE_PENDING,
+
+    /** 服务定时器被挂起（doze），心跳已接管兜底：链路没断，只是拍子变慢。 */
+    SERVICE_HEALED,
+}
 
 object LocationHealthText {
 
@@ -59,13 +78,30 @@ object LocationHealthText {
      */
     fun levelOf(status: LocationStatus?, gate: MotionGate.State? = null): LocationHealthLevel {
         if (status == null) return LocationHealthLevel.OFF
-        val silent = status.msSinceLastSuccess
+        val base = baseLevelOf(status, gate)
+        // 优先级：断档 > 服务异常 > 省电待机 > 正常。
+        // 断档是**用户能感知的后果**（真的没采到点），必须占主标题；服务降级是原因，放副标题
+        // （见 describe）。反过来先报「服务异常」，用户看到的是内部状态机，而不是「我的轨迹缺了一段」。
+        if (base == LocationHealthLevel.STALE) return base
+        return when (status.service.health) {
+            ServiceHealth.SHELLED -> LocationHealthLevel.SERVICE_PENDING
+            ServiceHealth.TICKER_STALLED -> LocationHealthLevel.SERVICE_HEALED
+            ServiceHealth.NOT_RUNNING, ServiceHealth.HEALTHY -> base
+        }
+    }
+
+    /**
+     * 只看「采到点有多新鲜」的基础档（不含服务健康）：断档判据是用户可感知的那一条。
+     *
+     * 拆出来是为了让优先级显式（断档 > 服务异常）：服务降级只在**没有**断档时才成为主标题。
+     */
+    private fun baseLevelOf(status: LocationStatus, gate: MotionGate.State?): LocationHealthLevel {
         val hasLast = status.lastSuccessAtMs != null
         if (!hasLast) {
             // 从没成功过：订阅建起来了就是「等第一个点」，否则算没跑起来
             return if (status.subscriptionActive) LocationHealthLevel.WAITING else LocationHealthLevel.OFF
         }
-        val elapsed = silent ?: 0L
+        val elapsed = status.msSinceLastSuccess ?: 0L
         // 睡着时「有点」和「正在采」是两件事：待机窗口内一律算待机，超过才是断档
         if (gate == MotionGate.State.SLEEPING && elapsed <= DORMANT_WINDOW_MS) {
             return LocationHealthLevel.DORMANT
@@ -85,6 +121,9 @@ object LocationHealthText {
             LocationHealthLevel.WAITING -> "等待中"
             LocationHealthLevel.STALE -> "已断档"
             LocationHealthLevel.OFF -> "未运行"
+            // 与「省电待机」「已断档」都必须能区分：用户要知道这是服务被系统降级、已在自愈
+            LocationHealthLevel.SERVICE_PENDING -> "服务异常"
+            LocationHealthLevel.SERVICE_HEALED -> "已自愈"
         }
 
     /** 徽标色调：正常用成功色，断档用警告色，待机与未运行保持中性（不是故障）。 */
@@ -95,6 +134,9 @@ object LocationHealthText {
             LocationHealthLevel.WAITING -> BadgeTone.Warn
             LocationHealthLevel.STALE -> BadgeTone.Danger
             LocationHealthLevel.OFF -> BadgeTone.Neutral
+            // 壳化是真故障（危险色），doze 停摆是已接管的降级（警告色）：两者都不许是绿色
+            LocationHealthLevel.SERVICE_PENDING -> BadgeTone.Danger
+            LocationHealthLevel.SERVICE_HEALED -> BadgeTone.Warn
         }
 
     /**
@@ -106,11 +148,75 @@ object LocationHealthText {
         if (status == null) return "读取采集状态失败"
         val level = levelOf(status, gate)
         if (level == LocationHealthLevel.DORMANT) return DORMANT_TEXT
-        val parts = ArrayList<String>(3)
+        serviceTextOf(status, level)?.let { return it }
+        val parts = ArrayList<String>(4)
         parts.add(lastSuccessText(status))
         parts.add(if (status.subscriptionActive) "持续订阅在跑" else "持续订阅未建立")
         if (level != LocationHealthLevel.GOOD) parts.add(reasonText(status.lastFailure))
+        // 断档时把「为什么」也写出来：服务被降级导致的断档，用户看到原因才知道要不要动手
+        serviceReasonOf(status)?.let { parts.add("原因：" + it) }
         return parts.joinToString(" · ")
+    }
+
+    /**
+     * 服务降级两档（**没有断档**时才会成为主标题）的副标题：说清系统做了什么、我们做了什么。
+     *
+     * 与断档时的 [serviceReasonOf] 是同一份措辞的两处用法：这里没有断档，只是服务状态异常，
+     * 所以要把「上次成功多久」也带上；断档那处已经写了时间，只补原因。
+     */
+    /**
+     * 断档副标题里的「原因」片段：服务降级导致的断档要说明白，否则用户只看到「已断档」。
+     *
+     * 只在服务确实降级时返回；服务健康时返回 null（断档另有失败原因文案，别重复堆）。
+     */
+    private fun serviceReasonOf(status: LocationStatus): String? =
+        when (status.service.health) {
+            ServiceHealth.SHELLED -> {
+                val tick = if (status.service.tickerIdleMs > 0L) {
+                    "定时器已停 " + humanDuration(status.service.tickerIdleMs)
+                } else {
+                    "从未进前台"
+                }
+                "服务被系统降级 · " + tick + " · 已请求重新拉起"
+            }
+
+            ServiceHealth.TICKER_STALLED ->
+                "定时器被系统挂起 " + humanDuration(status.service.tickerIdleMs) +
+                    " · 兜底已由心跳接管"
+
+            ServiceHealth.NOT_RUNNING, ServiceHealth.HEALTHY -> null
+        }
+
+    private fun serviceTextOf(status: LocationStatus, level: LocationHealthLevel): String? {
+        val service = status.service
+        val last = lastSuccessText(status)
+        return when (level) {
+            LocationHealthLevel.SERVICE_PENDING -> {
+                val tick = if (service.tickerIdleMs > 0L) {
+                    "定时器已停 " + humanDuration(service.tickerIdleMs)
+                } else {
+                    "从未进前台"
+                }
+                "服务被系统降级 · " + tick + " · 已请求重新拉起（" + last + "）"
+            }
+
+            LocationHealthLevel.SERVICE_HEALED -> {
+                "定时器被系统挂起 " + humanDuration(service.tickerIdleMs) +
+                    " · 兜底已由心跳接管 · " + last
+            }
+
+            else -> null
+        }
+    }
+
+    /** 毫秒 → 人话（「19 小时」「35 分钟」）：徽标副标题要短，不写秒。 */
+    private fun humanDuration(ms: Long): String {
+        val minutes = ms / 60_000L
+        return when {
+            minutes < 60 -> minutes.toString() + " 分钟"
+            minutes < 24 * 60 -> (minutes / 60).toString() + " 小时"
+            else -> (minutes / (24 * 60)).toString() + " 天"
+        }
     }
 
     /** 「最后成功」的人话版本。 */
