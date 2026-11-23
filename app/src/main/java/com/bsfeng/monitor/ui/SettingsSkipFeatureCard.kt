@@ -31,7 +31,6 @@ import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.bsfeng.monitor.ui.components.ToastHostState
-import com.bsfeng.monitor.ui.MainViewModel
 import com.bsfeng.monitor.ui.theme.DesignTokens
 
 /**
@@ -42,7 +41,7 @@ internal fun SettingsSkipFeatureCard(
     t: DesignTokens,
     view: View,
     toast: ToastHostState,
-    viewModel: MainViewModel,
+    onSetWatchWindowMs: (Long) -> Unit,
     adSkipOn: Boolean,
     watchWindowMs: Long,
     ruleCount: Int,
@@ -92,7 +91,7 @@ if (adSkipOn) {
                 label = (option / 1000).toString() + " 秒",
                 selected = option == watchWindowMs,
                 onClick = {
-                    viewModel.setWatchWindowMs(option)
+                    onSetWatchWindowMs(option)
                     toast.show("监控时长窗口：" + (option / 1000) + " 秒")
                 },
             )

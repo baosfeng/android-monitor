@@ -53,7 +53,7 @@ internal fun SettingsMonitorSection(rt: SettingsScreenRuntime) {
                 AppSwitch(
                     checked = !rt.isPaused,
                     onCheckedChange = {
-                        rt.viewModel.togglePause()
+                        rt.onTogglePause()
                         rt.toast.show(if (rt.isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                     },
                     // 锚点落在开关本身：锚点 s09-monitor 的触发是「拨开关」而不是点整行
@@ -105,7 +105,7 @@ internal fun SettingsMonitorSection(rt: SettingsScreenRuntime) {
                     label = (option / 1000).toString() + " 秒",
                     selected = option == rt.watchWindowMs,
                     onClick = {
-                        rt.viewModel.setWatchWindowMs(option)
+                        rt.onSetWatchWindowMs(option)
                         rt.toast.show("监控时长窗口：" + (option / 1000) + " 秒")
                     },
                 )

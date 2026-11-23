@@ -45,7 +45,7 @@ internal fun SettingsDebugSection(rt: SettingsScreenRuntime) {
             icon = Icons.Outlined.BugReport,
             trailing = {
                 AppSwitch(rt.debugEnabled, {
-                    rt.viewModel.toggleDebug()
+                    rt.onToggleDebug()
                     rt.view.performConfirmHaptic()
                     rt.toast.show(
                         "调试模式" + if (rt.debugEnabled) "已关闭" else "已开启，日志级别 DEBUG"

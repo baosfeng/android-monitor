@@ -267,7 +267,10 @@ internal fun rememberSettingsScreenRuntime(
         reloadCounters = reloadCounters,
         setFeature = ::setFeature,
         openLocationAppSettings = ::openLocationAppSettings,
-        viewModel = viewModel,
+        deviceId = viewModel.getDeviceId().take(8),
+        onTogglePause = viewModel::togglePause,
+        onSetWatchWindowMs = viewModel::setWatchWindowMs,
+        onToggleDebug = viewModel::toggleDebug,
         effective = if (demoStateState.value == FiveState.POPULATED) {
             FiveState.POPULATED
         } else {

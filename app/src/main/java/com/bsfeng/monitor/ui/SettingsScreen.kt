@@ -19,11 +19,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,6 +45,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.BuildConfig
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import com.bsfeng.monitor.feature.Feature
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.AppSwitch
@@ -109,7 +115,6 @@ fun SettingsScreen(
     val context = rt.context
     val toast = rt.toast
     val scope = rt.scope
-    val demoState = rt.demoStateState.value
     val localAppearance = rt.localAppearanceState.value
     val localGallery = rt.localGalleryState.value
 
@@ -139,51 +144,12 @@ fun SettingsScreen(
             .pageBackdrop()
             .testTag("screen-s09")
     ) {
-        Column(Modifier.fillMaxSize()) {
-            ScreenHead(
-                title = "设置",
-                modifier = Modifier
-                    .testTag("s09-head")
-                    .focusRequester(headFocus)
-                    .focusable(),
-                // 版本号与「关于」页同源（SettingsAboutSection 的 TailNum(BuildConfig.VERSION_NAME)），
-                // 不再写死字面量——升级后两处会不一致
-                meta = "行为记录 " + BuildConfig.VERSION_NAME + " · 设备 " + viewModel.getDeviceId().take(8),
-                badge = {
-                    Badge(
-                        text = if (rt.isPaused) "已暂停" else "运行中",
-                        modifier = Modifier.testTag("s09-run-badge"),
-                        tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
-                    )
-                },
-            )
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .testTag("s09-body")
-                    .verticalScroll(bodyScroll),
-                verticalArrangement = Arrangement.spacedBy(t.space4),
-            ) {
-                // 演示件闸门统一走 rememberDemoVisible()（debug 构建 + 已解锁 + 调试模式已开），
-                // 与「组件与状态演示」「模拟自动记账浮窗」同一判据。
-                StateSwitchRow(state = demoState, onSelect = { rt.demoStateState.value = it })
-
-                // 五态容器 + 快捷区 + 六组入口（见下）；anchored 只在一级页落五态锚点，
-                // 覆盖层里的二级页不打同键（防同名节点）
-                SettingsStateContainer(rt, anchored = true) {
-                    Column(
-                        Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(t.space4),
-                    ) {
-                        SettingsQuickAccess(rt)
-                        SettingsGroupIndex(rt, onOpenSubPage)
-                    }
-                }
-                // 底部留白：导航条与悬浮操作避让（锚点 screen-s09「底部留 96dp」）
-                Spacer(Modifier.height(96.dp))
-            }
-        }
+        SettingsIndexPage(
+            rt = rt,
+            onOpenSubPage = onOpenSubPage,
+            bodyScroll = bodyScroll,
+            headFocus = headFocus,
+        )
 
         // 返回：下钻页（功能开关 → 细则）先回父页，一级页入口才关覆盖层。
         // 判据是页面关系（settingsParentOf），不是「上次打开过谁」——后者会跨分支串路径。
@@ -269,6 +235,109 @@ fun SettingsScreen(
 private class LastOpenedPage(var value: SettingsSubPage? = null)
 
 /**
+ * 一级页整屏：页头 + 快捷区 + 六组入口。
+ *
+ * 抽成 internal 的第二个理由与 [SettingsIndexContent] 相同：屏级对照要组合**这一份真实排布**
+ * （含页头高度与滚动容器），测试里再拼一遍就只能测到拼的那一份。
+ */
+@Composable
+internal fun SettingsIndexPage(
+    rt: SettingsScreenRuntime,
+    onOpenSubPage: (SettingsSubPage) -> Unit,
+    bodyScroll: ScrollState,
+    headFocus: FocusRequester,
+) {
+    val t = rt.t
+    Column(Modifier.fillMaxSize()) {
+        SettingsIndexHead(rt = rt, headFocus = headFocus)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .testTag("s09-body")
+                .verticalScroll(bodyScroll),
+            verticalArrangement = Arrangement.spacedBy(t.space4),
+        ) {
+            // 演示件闸门统一走 rememberDemoVisible()（debug 构建 + 已解锁 + 调试模式已开），
+            // 与「组件与状态演示」「模拟自动记账浮窗」同一判据。
+            StateSwitchRow(state = rt.demoStateState.value, onSelect = { rt.demoStateState.value = it })
+
+            // 五态容器 + 快捷区 + 六组入口；anchored 只在一级页落五态锚点，
+            // 覆盖层里的二级页不打同键（防同名节点）
+            SettingsStateContainer(rt, anchored = true) {
+                SettingsIndexContent(rt, onOpenSubPage)
+            }
+            // 底部留白：导航条与悬浮操作避让（锚点 screen-s09「底部留 96dp」）
+            Spacer(Modifier.height(96.dp))
+        }
+    }
+}
+
+/**
+ * 一级页页头（原型 .screen-head + .h1）：大标题 30dp 行盒 + 副标题 + 右侧运行状态徽标。
+ *
+ * 为什么不复用 [ScreenHead]：那个页头按原型 .h2（21px）排版，给二级页用；设置页是一级 Tab 页，
+ * 原型用的是 .h1（28px，行盒 29.4），复用会让页头矮 7.3dp（实测 70.7 vs 原型 78）。
+ * 与 [com.bsfeng.monitor.ui.overview.OverviewHead] 同口径（固定行盒 + unbounded 绘制）。
+ */
+@Composable
+internal fun SettingsIndexHead(rt: SettingsScreenRuntime, headFocus: FocusRequester) {
+    val t = rt.t
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .testTag("s09-head")
+            .focusRequester(headFocus)
+            .focusable()
+            // 原型 .screen-head：padding 8 16 12、align-items:flex-start
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f)) {
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；CJK 自然行盒 41.3，用固定盒 + unbounded
+            Box(Modifier.height(30.dp)) {
+                Text(
+                    "设置",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+            Spacer(Modifier.height(t.space2))
+            // 版本号与「关于」页同源，设备码取运行时快照（不再每帧读 ViewModel）
+            Text(
+                "行为记录 " + BuildConfig.VERSION_NAME + " · 设备 " + rt.deviceId,
+                style = MaterialTheme.typography.bodySmall,
+                color = t.muted,
+            )
+        }
+        Spacer(Modifier.width(t.space2))
+        Badge(
+            text = if (rt.isPaused) "已暂停" else "运行中",
+            modifier = Modifier.testTag("s09-run-badge"),
+            tone = if (rt.isPaused) BadgeTone.Warn else BadgeTone.Success,
+        )
+    }
+}
+
+/**
+ * 一级页正文：快捷区 + 六组入口。
+ *
+ * 单独抽成 internal 是为了让屏级对照（S09SettingsParityTest）组合**真实排布**，
+ * 而不是在测试里再抄一份入口卡 —— 抄一份就再也测不到真实那一份。
+ */
+@Composable
+internal fun SettingsIndexContent(rt: SettingsScreenRuntime, onOpenSubPage: (SettingsSubPage) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(rt.t.space4),
+    ) {
+        SettingsQuickAccess(rt)
+        SettingsGroupIndex(rt, onOpenSubPage)
+    }
+}
+
+/**
  * 一级页快捷区：无障碍服务（点进系统设置）与前台应用监控开关。
  *
  * 为什么只有这两项：它们是每次进设置页都要确认 / 拨一次的东西 —— 无障碍是全部采集的前提、
@@ -276,7 +345,7 @@ private class LastOpenedPage(var value: SettingsSubPage? = null)
  * （广告跳过开关只留在「功能开关」页，不在这里重复第二处）。
  */
 @Composable
-private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
+internal fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
     val t = rt.t
     val state = rt.state
     // 整行按压缩到 0.96 + LIGHT（锚点 s09-a11y）：按压基元与 clickable 共用同一 interaction；
@@ -317,7 +386,7 @@ private fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
                 AppSwitch(
                     checked = !rt.isPaused,
                     onCheckedChange = {
-                        rt.viewModel.togglePause()
+                        rt.onTogglePause()
                         rt.toast.show(if (rt.isPaused) "已恢复前台应用监控" else "已暂停前台应用监控")
                     },
                     modifier = Modifier.testTag("s09-monitor"),

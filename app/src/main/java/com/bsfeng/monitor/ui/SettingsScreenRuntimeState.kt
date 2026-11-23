@@ -85,7 +85,13 @@ internal class SettingsScreenRuntime(
     val reloadCounters: () -> Unit,
     val setFeature: (Feature, Boolean) -> Unit,
     val openLocationAppSettings: () -> Unit,
-    val viewModel: MainViewModel,
+    /** 设备标识（页头副标题用，已截前 8 位）。 */
+    val deviceId: String,
+    // 三个由 MainViewModel 承担的动作以回调形式持有：分区组件因此不依赖 ViewModel，
+    // 对照测试可直接构造本运行时状态组合真组件（同 s01 / s04 的做法）。
+    val onTogglePause: () -> Unit,
+    val onSetWatchWindowMs: (Long) -> Unit,
+    val onToggleDebug: () -> Unit,
     val effective: FiveState,
     val onNavigateToSkipRules: () -> Unit,
     val onNavigateToWhitelist: () -> Unit,

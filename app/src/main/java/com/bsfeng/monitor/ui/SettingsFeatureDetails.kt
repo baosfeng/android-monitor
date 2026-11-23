@@ -65,7 +65,7 @@ internal fun SettingsSkipDetail(rt: SettingsScreenRuntime) {
         t = rt.t,
         view = rt.view,
         toast = rt.toast,
-        viewModel = rt.viewModel,
+        onSetWatchWindowMs = rt.onSetWatchWindowMs,
         adSkipOn = rt.adSkipOn,
         watchWindowMs = rt.watchWindowMs,
         ruleCount = rt.ruleCount.value,
