@@ -178,8 +178,9 @@ private fun SettingsThemeRow(rt: SettingsScreenRuntime) {
     }
     TokenRow(
         title = "外观与主题",
+        // 锚点落行内边距之内（原型 .row 宽 327，不是含内边距的 361）
+        innerModifier = Modifier.testTag("s09-goto-theme"),
         modifier = Modifier
-            .testTag("s09-goto-theme")
             .focusRequester(rowFocus)
             .pressFeedback(themeInteraction)
             .clickable(

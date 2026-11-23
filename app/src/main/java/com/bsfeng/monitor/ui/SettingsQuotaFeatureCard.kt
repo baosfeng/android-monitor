@@ -84,8 +84,10 @@ if (quotaOn) {
         TokenDivider(first = false)
         TokenRow(
             title = "Provider 与凭据",
+            // 锚点落行内边距之内（原型 .row 是 .group 的内容区，宽 327）；
+            // 写在 modifier 上会连 16dp 内边距一起量成 361（x 差 17 / w 差 34）
+            innerModifier = Modifier.testTag("s09-goto-quota"),
             modifier = Modifier
-                .testTag("s09-goto-quota")
                 .pressFeedback(providerInteraction)
                 .clickable(
                     interactionSource = providerInteraction,
@@ -94,6 +96,8 @@ if (quotaOn) {
                     haptic(HapticTone.LIGHT)
                     onNavigateToQuotaSettings()
                 },
+            // 原型 .s09-quota-body .row-sub{white-space:normal}：这一行副标题本来就折两行（原型 36.4 高）
+            subtitleMaxLines = 2,
             subtitle = "Ollama API Key · DeepSeek Key 与平台令牌",
             icon = Icons.Outlined.Key,
             trailing = { TailChevron() },
@@ -117,8 +121,8 @@ if (quotaOn) {
         TokenDivider(first = false)
         TokenRow(
             title = "后台刷新",
+            innerModifier = Modifier.testTag("s09-quota-refresh"),
             modifier = Modifier
-                .testTag("s09-quota-refresh")
                 .pressFeedback(refreshInteraction)
                 .clickable(
                     interactionSource = refreshInteraction,

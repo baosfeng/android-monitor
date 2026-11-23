@@ -84,6 +84,20 @@ internal fun TokenRow(
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /**
+     * 落在**行内边距之内**的修饰符（锚点用）。
+     *
+     * [modifier] 在 padding 之前应用，锚点会连 16dp 水平内边距一起量进去（宽 = 卡宽 361）；
+     * 而原型 .row 是 .group 的子元素、宽度已是内容宽 327。需要与原型同口径的锚点走这里，
+     * 量到的才是内容区。行为修饰（clickable / pressFeedback）仍走 [modifier]。
+     */
+    innerModifier: Modifier = Modifier,
+    /**
+     * 副标题最多几行（原型默认 .row-sub 是 nowrap，只有 s09 的额度 / 验证器两卡把它
+     * 覆盖成 white-space:normal —— 那两处的副标题本来就该折两行）。
+     * 行盒按行数同比放大，仍是「固定盒 + unbounded」解法。
+     */
+    subtitleMaxLines: Int = 1,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -121,55 +135,65 @@ internal fun TokenRow(
                     else -> Modifier
                 }
             )
-            // 原型 .group-row/.row：min-height 52（--row-min-h）是含 padding 8 的盒子，
-            // 内容区 = 52 - 2×8 = 36（heightIn 在 padding 之内生效，所以要减掉两边的 8）
-            .padding(horizontal = t.space4, vertical = t.space2)
-            .heightIn(min = t.rowMinH - t.space4),
+            // 原型 .group{padding:0 16px} + .row{padding:8px 0}：水平 16 在**行外**、
+            // 垂直 8 在**行内**。拆开写是为了让 innerModifier 量到 .row 本体（x=32 / w=329），
+            // 而不是含水平内边距的整行（x=16 / w=361）
+            .padding(horizontal = t.space4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
-            Box(
-                Modifier
-                    .size(t.space8)
-                    .clip(RoundedCornerShape(t.radiusMd))
-                    .background(t.surfaceWarm),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = t.fg2, modifier = Modifier.size(t.space5))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(innerModifier)
+                // 行内垂直 8；min-height 52 是含 padding 的盒子，内容区下限 = 52 - 2×8
+                .padding(vertical = t.space2)
+                .heightIn(min = t.rowMinH - t.space4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Box(
+                    Modifier
+                        .size(t.space8)
+                        .clip(RoundedCornerShape(t.radiusMd))
+                        .background(t.surfaceWarm),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, contentDescription = null, tint = t.fg2, modifier = Modifier.size(t.space5))
+                }
+                Spacer(Modifier.width(t.space3))
             }
-            Spacer(Modifier.width(t.space3))
-        }
-        // 行盒（台账「固定盒 + unbounded」）：原型 .row-title 17px×1.25=21.25、.row-sub 14px×1.3=18.2，
-        // 两行 + .row-body 的 2px gap 共 41.4；Compose 单行 Text 是字体行盒（中文 1.47 倍），
-        // 17sp 撑到 25dp，整行会比原型高 4~7dp。
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Box(Modifier.height(TITLE_LINE)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = titleColor ?: t.fg,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag("row.token").wrapContentHeight(Alignment.Top, unbounded = true),
-                )
-            }
-            if (subtitle != null) {
-                Box(Modifier.height(SUB_LINE)) {
+            // 行盒（台账「固定盒 + unbounded」）：原型 .row-title 17px×1.25=21.25、.row-sub 14px×1.3=18.2，
+            // 两行 + .row-body 的 2px gap 共 41.4；Compose 单行 Text 是字体行盒（中文 1.47 倍），
+            // 17sp 撑到 25dp，整行会比原型高 4~7dp。
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.height(TITLE_LINE)) {
                     Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = subtitleColor ?: t.muted,
+                        title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = titleColor ?: t.fg,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                        modifier = Modifier.testTag("row.token").wrapContentHeight(Alignment.Top, unbounded = true),
                     )
                 }
+                if (subtitle != null) {
+                    Box(Modifier.height(SUB_LINE * subtitleMaxLines)) {
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = subtitleColor ?: t.muted,
+                            maxLines = subtitleMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                        )
+                    }
+                }
             }
-        }
-        if (trailing != null) {
-            Spacer(Modifier.width(t.space3))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                trailing()
+            if (trailing != null) {
+                Spacer(Modifier.width(t.space3))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(t.space2)) {
+                    trailing()
+                }
             }
         }
     }

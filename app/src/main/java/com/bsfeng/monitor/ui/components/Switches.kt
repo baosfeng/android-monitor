@@ -90,7 +90,10 @@ fun AppSwitch(
     // 触达口径（交互口径 §二「可点元素点击区 ≥ 44×44dp」）：视觉轨道保持 52×32 不变，
     // 点击域由外层撑开——minimumInteractiveComponentSize 兜住 Material 的 48dp 下限，
     // 外层 size 取 max(视觉, tapMin)；视觉轨道另画在内层，尺寸与轨道动画完全不动。
-    val (touchW, touchH) = switchTouchSize(t.switchTrackW, t.switchTrackH, t.tapMin)
+    // 元素宽取 --switch-w(56) 而不是轨道宽 52：原型 .switch{width:var(--switch-w)} 里
+    // 轨道是 ::before 的 52，两侧各留 2 的内缩，元素本身占 56（锚点 s09-quota-switch 等
+    // 六处的 w 差 4 全来自这里）。轨道视觉仍由内层 52 绘制，不受影响。
+    val (touchW, touchH) = switchTouchSize(t.switchW, t.switchTrackH, t.tapMin)
     // 可读名先落成局部量：semantics 里的 contentDescription 是接收者扩展属性，
     // 直接写 contentDescription = contentDescription 会命中它自己的 getter（读即抛）。
     val label = contentDescription

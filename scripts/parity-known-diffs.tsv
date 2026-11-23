@@ -26,3 +26,50 @@ s22	s22-row-aliyun	文案	同上
 s22	s22-row-aws	文案	同上
 s22	s22-row-github	文案	同上
 s22	s22-row-google	文案	同上
+s09	s09-quota-body	几何	容器锚点口径差：原型挂在 .group 卡身（327 宽），实现挂在卡内 361 宽的 Column；为实现它加一层 padding 属于为凑数改结构，不改
+s09	s09-window	几何	信息架构差异：原型 s09 是 10 个分组卡平铺长页，实现是一级页六组入口 + 二级页（s09 合并归一化取数）；本锚点属「监控与采集」二级页，一级页对应不到
+s09	s09-a11y	几何	同上：属「监控与采集」二级页
+s09	s09-monitor	几何	同上：属「监控与采集」二级页
+s09	s09-battery	几何	同上：属「监控与采集」二级页
+s09	s09-body	几何	滚动容器口径：原型 .content 含 16 水平内边距（361 宽），实现 s09-body 是整屏 393；宽度差属容器锚点口径
+s09	s09-finance-group	几何	容器锚点口径差：原型挂「组头 + 卡片」整块的包裹元素（x=16/w=361），实现挂未内缩的外层 Column（x=0/w=393），内层子锚点已对齐
+s09	s09-finance-grouphead	几何	同上：组头锚点随容器一起偏
+s09	s09-a11y	文案	文案口径：原型写死「已运行 6 小时 12 分」，实现是真实的本次进程存活时长（formatUptime(processUptimeMs())），随运行时间变，与固定值比无意义
+s09	s09-battery	文案	锚点落点差：原型 s09-battery 是整行（标题 + 副标题 + 尾巴），实现挂在行尾「设置」按钮上（按钮才是可点目标）；文案比较对象因此不同
+s09	s09-quota-sub	文案	文案口径：原型写「2 个 provider 已连接 · 每小时刷新」，实现写能力描述「聚合 AI 服务的余额与用量 · 每小时刷新」；连接数由卡内行尾与设置页表达，不在摘要里重复
+s09	s09-location	几何	内容量口径：实现的位置采集页含原型未画的「采集覆盖」卡（s09-loc-cov / -cov-sub / -cov-badge / -cov-bar / -gap-list），整页因此高 58.9
+s09	location-guide	几何	同上：随整卡内容量下推
+s09	s09-loc-summary	几何	同上
+s09	s09-loc-summary-sub	几何	同上（x 差 5 属副标题文案长度差）
+s09	s09-loc-badge	几何	同上
+s09	s09-loc-steps	几何	同上
+s09	s09-loc-check	几何	同上
+s09	s09-loc-check-sub	几何	同上
+s09	s09-loc-check-badge	几何	同上
+s09	s09-loc-recheck	几何	同上
+s09	s09-loc-open	几何	同上
+s09	s09-quota	几何	内容量口径：实现额度卡含原型未画的多账号 / 预警通知两行，整卡高 34；卡内锚点随之下移
+s09	s09-quota-sub	几何	同上：随卡内行序下移
+s09	s09-quota-switch	几何	同上
+s09	s09-goto-quota	几何	同上
+s09	s09-quota-refresh	几何	同上
+s09	s09-totp	几何	内容量口径：实现验证器卡含原型未画的「隐私三开关」明细（-flag-secure / -clip-clear / -blur 已有锚点但行高不同），整卡高 103.8
+s09	s09-totp-switch	几何	同上：随卡内行序下移
+s09	s09-totp-flag-secure	几何	同上（x 差来自行尾开关列宽）
+s09	s09-totp-clip-clear	几何	同上
+s09	s09-totp-blur	几何	同上
+s09	s09-skip	几何	内容量口径：实现跳过卡在大屏上还渲染了「监控时长窗口」chip 组（原型关闭态不渲染），整卡高 157.5
+s09	s09-goto-rules	几何	同上：随卡内行序下移
+s09	s09-goto-white	几何	同上
+s09	s09-appearance	几何	内容量口径：实现外观页把主题选择器（8 套主题网格）一起渲染，原型 s09 只画一行入口，整卡高 213.3
+s09	s09-goto-theme	几何	同上：随卡内行序下移
+s09	s09-debug	几何	内容量口径：实现调试页含「模拟自动记账浮窗」等原型未画的入口，整卡高 32.3
+s09	s09-goto-demo	几何	同上
+s09	s09-about	几何	内容量口径：实现关于页含开源许可与检查更新明细，原型只画一行版本，整卡矮 28.3
+s09	s09-finance-budget	几何	行盒差异：三行开关行各高 64 / 原型 60–61（CJK 副标题行盒 + 开关触达 44 的取大值），整块累计 13.3
+s09	s09-finance-budget-switch	几何	同上：开关列右缘随行高变化
+s09	s09-finance-homecard	几何	同上
+s09	s09-finance-homecard-switch	几何	同上
+s09	s09-finance-multiperiod	几何	同上
+s09	s09-finance-multiperiod-switch	几何	同上
+s09	s09-finance-budgetentry	几何	同上

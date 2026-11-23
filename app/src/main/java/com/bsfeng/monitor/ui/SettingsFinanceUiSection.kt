@@ -101,7 +101,8 @@ internal fun SettingsFinanceUiSection(
                 },
                 icon = Icons.Outlined.Savings,
                 onClick = onOpenBudget,
-                modifier = Modifier.testTag("s09-finance-budgetentry"),
+                // 锚点落行内边距之内（原型 .row 宽 327，不是含内边距的 361）
+                innerModifier = Modifier.testTag("s09-finance-budgetentry"),
                 trailing = { TailChevron() },
             )
             Spacer(Modifier.height(t.space1))
@@ -133,7 +134,8 @@ private fun FinanceToggleRow(
             FinanceUiToggle.HOME_CARD -> Icons.Outlined.BarChart
             FinanceUiToggle.PERIOD_BAR -> Icons.Outlined.DateRange
         },
-        modifier = Modifier.testTag(rowTag),
+        // 锚点落行内边距之内（原型 .row 宽 327）
+        innerModifier = Modifier.testTag(rowTag),
         trailing = {
             AppSwitch(
                 checked = checked,
