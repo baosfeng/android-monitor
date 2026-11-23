@@ -104,8 +104,9 @@ if (adSkipOn) {
 TokenDivider(first = false)
 TokenRow(
     title = "开屏跳过规则",
+    // 锚点落行内边距之内（原型 .row 宽 327，不是含内边距的 361）
+    innerModifier = Modifier.testTag("s09-goto-rules"),
     modifier = Modifier
-        .testTag("s09-goto-rules")
         .pressFeedback(rulesInteraction)
         .clickable(
             interactionSource = rulesInteraction,
@@ -121,8 +122,8 @@ TokenRow(
 TokenDivider(first = false)
 TokenRow(
     title = "应用白名单",
+    innerModifier = Modifier.testTag("s09-goto-white"),
     modifier = Modifier
-        .testTag("s09-goto-white")
         .pressFeedback(whiteInteraction)
         .clickable(
             interactionSource = whiteInteraction,

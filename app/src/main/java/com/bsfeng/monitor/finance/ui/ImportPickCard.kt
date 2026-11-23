@@ -102,7 +102,8 @@ internal fun ImportPickCard(
                 }
                 Spacer(Modifier.height(t.space3))
                 Text(
-                    "选择数据文件",
+                    // 文案与原型 s08-drop 一致（锚点判据是文案逐字）
+                    "选择账单文件",
                     style = MaterialTheme.typography.titleSmall,
                     color = t.fg,
                     fontWeight = FontWeight.SemiBold,

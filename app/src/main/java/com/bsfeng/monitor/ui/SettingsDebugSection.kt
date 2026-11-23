@@ -61,8 +61,8 @@ internal fun SettingsDebugSection(rt: SettingsScreenRuntime) {
             val demoHaptic = rememberHaptic()
             TokenRow(
                 title = "组件与状态演示",
+                innerModifier = Modifier.testTag("s09-goto-demo"),
                 modifier = Modifier
-                    .testTag("s09-goto-demo")
                     .pressFeedback(demoInteraction)
                     .clickable(
                         interactionSource = demoInteraction,
