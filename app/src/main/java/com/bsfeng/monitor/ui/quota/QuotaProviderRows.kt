@@ -189,7 +189,9 @@ internal fun ProviderSettingsRow(
                 if (shownExpanded) pendingRowFocus = true
                 onToggle()
             }
-            .padding(t.space3)
+            // 原型 .row{padding: var(--space-2) 0}：纵向 8（左右缩进由 .group 的 16 提供），
+            // 用 12 会让每行高 8dp、四行把下面的预警区整体推下去
+            .padding(horizontal = t.space3, vertical = t.space2)
             .alpha(affordance.alpha),
     ) {
         AccountRowHeader(
@@ -265,7 +267,8 @@ private fun AccountRowHeader(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(info.displayName, style = MaterialTheme.typography.titleSmall, color = t.fg)
-            Spacer(Modifier.height(t.space1))
+            // 原型 .row-body{gap:2px}：标题与副行之间只有 2（space1=4 会让每行高 2dp）
+            Spacer(Modifier.height(2.dp))
             Text(
                 // 未接入行副行说明为什么填不了，而不是继续显示「未配置」骗人
                 if (affordance.useUnavailableHint) UNAVAILABLE_HINT else statusText(info),

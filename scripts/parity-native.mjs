@@ -62,6 +62,22 @@ const load = (p) => {
   const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
   return raw.screens || raw;
 };
+
+// 「同屏多页 / 坐标原点」拼接表：一张原型页被实现拆成多页（设置 s09），或两端原点不同
+// （原型 appbar 由外壳生成、实现自绘导航栏占 70dp）时，逐页按对齐锚点整体平移 dy 再合并。
+// 不登记在这里的屏严格按原坐标比。格式见 scripts/parity-compose.tsv。
+const COMPOSE_FILE = 'scripts/parity-compose.tsv';
+const composeRows = new Map();
+if (fs.existsSync(COMPOSE_FILE)) {
+  for (const line of fs.readFileSync(COMPOSE_FILE, 'utf8').split('\n')) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const [screen, file, ref, reason] = line.split('\t');
+    if (!screen || !file) continue;
+    if (!composeRows.has(screen)) composeRows.set(screen, []);
+    composeRows.get(screen).push({ file, ref, reason: reason || '' });
+  }
+}
+const composedLog = [];
 // 原型靠 DOM 空格分隔标签与数值、实现靠布局：文案比较一律去掉全部空白
 const norm = (s) => (s || '').replace(/\s+/g, '');
 const px = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
@@ -81,6 +97,31 @@ for (const s of screens) {
     continue;
   }
   const byId = new Map((i.items || []).map((it) => [it.id, it]));
+  // 拼接表命中：逐页按对齐锚点平移 dy 后合并（同名锚点先到先得）
+  const compose = composeRows.get(s);
+  if (compose) {
+    byId.clear();
+    for (const row of compose) {
+      const file = path.resolve(path.dirname(IMPL), row.file);
+      if (!fs.existsSync(file)) {
+        composedLog.push({ screen: s, file: row.file, ref: row.ref, dy: null, reason: '实现文件不存在，跳过' });
+        continue;
+      }
+      const part = load(file);
+      const page = part[s] || part[Object.keys(part)[0]];
+      if (!page) { composedLog.push({ screen: s, file: row.file, ref: row.ref, dy: null, reason: '实现文件里没有该屏' }); continue; }
+      const pi = row.ref === '-' ? null : (p.items || []).find((it) => it.id === row.ref);
+      const ii = row.ref === '-' ? null : (page.items || []).find((it) => it.id === row.ref);
+      const dy = pi && ii ? px(pi.y) - px(ii.y) : 0;
+      if (row.ref !== '-' && !(pi && ii)) {
+        composedLog.push({ screen: s, file: row.file, ref: row.ref, dy: null, reason: '对齐锚点两端缺一，按原坐标拼' });
+      }
+      for (const it of page.items || []) {
+        if (!byId.has(it.id)) byId.set(it.id, { ...it, y: px(it.y) + dy });
+      }
+      composedLog.push({ screen: s, file: row.file, ref: row.ref, dy, reason: row.reason, merged: byId.size });
+    }
+  }
   for (const pi of p.items || []) {
     if (!pi.visible) continue;
     const ii = byId.get(pi.id);
@@ -158,6 +199,11 @@ if (JSON_OUT) {
     console.log('- [' + f.level + '] ' + f.screen + ' · ' + f.id + ' · ' + f.kind + '：' + f.detail);
   }
   if (findings.length > 40) console.log('- …另有 ' + (findings.length - 40) + ' 条');
+}
+for (const a of composedLog) {
+  console.log('- [拼接] ' + a.screen + ' · ' + a.file + ' · ref=' + a.ref + ' · dy=' +
+    (a.dy == null ? '—' : a.dy.toFixed(1)) + (a.merged != null ? ' · 合并后 ' + a.merged + ' 个锚点' : '') +
+    '：' + a.reason);
 }
 for (const k of knownSkipped) console.log('- [已知] ' + k.screen + ' · ' + k.id + ' · ' + k.kind + '：' + k.reason);
 process.exit(p0.length ? 1 : 0);

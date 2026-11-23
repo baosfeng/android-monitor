@@ -35,6 +35,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.domain.quota.QuotaAggregateRow
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
@@ -57,8 +58,8 @@ private val RANK_SIZE = 22.dp
 /** 进度条高度（原型 .s20-bar 6px）。 */
 private val BAR_H = 6.dp
 
-/** 行内纵向间距（原型 `.s20-main{gap:6px}`）：名称行 / 进度条 / 副文案三段之间。 */
-private val MAIN_GAP = 6.dp
+/** 行内纵向间距（原型 s18 的 `.s18-agg-main{gap:5px}`）：名称行 / 进度条 / 副文案三段之间。 */
+private val MAIN_GAP = 5.dp
 
 /** 名称与 tag 之间（原型 `.s20-name{gap:6px}`）。 */
 private val TAG_GAP = 6.dp
@@ -109,7 +110,8 @@ internal fun AggregateRankRow(
                 haptic(HapticTone.LIGHT)
                 onClick()
             }
-            .padding(horizontal = t.space4, vertical = t.space2),
+            // 原型 .s18-agg-btn{padding:var(--space-3) 2px}：纵向 12
+            .padding(horizontal = t.space4, vertical = t.space3),
     ) {
         Row(
             modifier = Modifier.testTag("row.agg"),
@@ -118,10 +120,17 @@ internal fun AggregateRankRow(
             RankBadge(rank = row.rank, top = row.rank == 1)
             Spacer(Modifier.width(t.space3))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MAIN_GAP)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // 名称行行盒按原型 .s18-agg-head 的高度钉死（21px × 1.47 ≈ 30.9）：原型这一行由
+                // 右侧 21px 百分比撑起，Compose 里等宽 Text 的行盒压不住，会矮 5dp
+                Row(
+                    modifier = Modifier.height(30.9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         row.displayName,
-                        style = MaterialTheme.typography.titleMedium,
+                        // 原型 .s18-agg-name-t 只给字号，行高继承正文 1.47（≈25dp）；titleMedium 的 22
+                        // 会让每行矮 3dp、四行累计错位（榜单行高由这一行决定）
+                        style = MaterialTheme.typography.titleMedium.copy(lineHeight = 25.sp),
                         color = t.fg,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -142,7 +151,9 @@ internal fun AggregateRankRow(
                 QuotaAggregateBar(fraction = row.primaryFraction, stale = row.stale)
                 Text(
                     aggregateSubText(row),
-                    style = MaterialTheme.typography.bodySmall,
+                    // 原型 .s18-agg-sub{line-height:1.4}：14 × 1.4 = 19.6，bodySmall 的行盒是 20.8，
+                    // 每行多 1.2dp，四行累计把末行推出 4.5dp
+                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.6.sp),
                     color = t.muted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -171,16 +182,20 @@ internal fun ExcludedRow(item: QuotaExcludedProvider, modifier: Modifier = Modif
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space4, vertical = t.space2),
+            // 原型 .s18-agg-btn{padding:var(--space-3) 2px}：灰行与榜单行同一条上下 12，
+            // 按 space2 会让灰行矮 6.8dp、下方说明条整体上移
+            .padding(horizontal = t.space4, vertical = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RankBadge(rank = 0, top = false)
         Spacer(Modifier.width(t.space3))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MAIN_GAP)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 与榜单行同一条名称行口径（原型 .s18-agg-head 行盒 ≈ 30.9，由 21px 百分比撑起）
+            Row(modifier = Modifier.height(30.9.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     item.displayName,
-                    style = MaterialTheme.typography.titleMedium,
+                    // 与榜单行同一条名称行口径（原型 .s18-agg-name-t 行高 1.47）
+                    style = MaterialTheme.typography.titleMedium.copy(lineHeight = 25.sp),
                     color = t.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -297,5 +312,7 @@ internal fun percentColor(t: DesignTokens, fraction: Float): Color = when {
 internal fun percentStyle(t: DesignTokens): TextStyle = monitorMonoMeta.copy(
     fontSize = t.textLg,
     fontWeight = FontWeight.Bold,
-    lineHeight = t.textLg,
+    // 原型 .s18-agg-pct 只给字号、行高继承正文 1.47：这一行是榜单行高的决定项（≈30.9），
+    // 压成 21 会让每行矮 5dp、四行累计错位 20dp
+    lineHeight = t.textLg * 1.47f,
 )

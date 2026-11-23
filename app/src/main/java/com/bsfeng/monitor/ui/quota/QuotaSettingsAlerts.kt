@@ -58,7 +58,9 @@ internal fun AlertSwitchRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusPill)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = t.space3, vertical = t.space3),
+        // 原型 .row{padding: var(--space-2) 0}：左右缩进由 .group 的 16 提供，行内不再叠加，
+        // 否则开关与行尾角标整体左移 12（锚点 s19-alert-switch x 差 30）
+        Modifier.fillMaxWidth().padding(vertical = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -115,7 +117,8 @@ internal fun LowBalanceRow(
                 haptic(HapticTone.LIGHT)
                 onClick()
             }
-            .padding(horizontal = t.space3, vertical = t.space3),
+            // 与开关行同一条口径：左右缩进由 .group 提供
+            .padding(vertical = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -176,7 +179,8 @@ internal fun NotificationPermissionRow() {
                     )
                 }
             }
-            .padding(horizontal = t.space3, vertical = t.space3),
+            // 与开关行同一条口径：左右缩进由 .group 提供
+            .padding(vertical = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {

@@ -25,14 +25,15 @@ class QuotaAggregateTextTest {
             ),
         )
 
-        val text = aggregateMetaText(AggregateFixtures.snapshotOf(listOf(provider), states), zone)
+        val text = aggregateMetaText(AggregateFixtures.snapshotOf(listOf(provider), states), zone = zone)
 
-        assertEquals("1 个账号参与排序 · 更新于 09:41", text)
+        // 原型 s18 页头写「更新于 9:41」（时不补零）
+        assertEquals("1 个 provider 已连接 · 更新于 9:41", text)
     }
 
     @Test
     fun `从未更新时统计行写尚未更新`() {
-        assertEquals("0 个账号参与排序 · 尚未更新", aggregateMetaText(QuotaAggregateSnapshot(), zone))
+        assertEquals("0 个 provider 已连接 · 尚未更新", aggregateMetaText(QuotaAggregateSnapshot(), zone = zone))
     }
 
     @Test
@@ -91,7 +92,27 @@ class QuotaAggregateTextTest {
 
         val row = AggregateFixtures.snapshotOf(listOf(provider), states).rows.single()
 
-        assertEquals("每周 40%", aggregateSubText(row, zone))
+        // 只有一档时补「单窗口」（原型 .s18-agg-sub「月度 34% · 单窗口」同一口径）
+        assertEquals("每周 40% · 单窗口", aggregateSubText(row, zone))
+    }
+
+    @Test
+    fun `多窗口不补单窗口标记`() {
+        val provider = AggregateFixtures.fakeProvider("ollama", "Ollama")
+        val states = mapOf(
+            "ollama" to AggregateFixtures.stateOf(
+                instanceId = "ollama",
+                items = listOf(
+                    AggregateFixtures.percentItem("included", "每周额度", "40", primary = true),
+                    AggregateFixtures.percentItem("session", "会话额度", "75"),
+                ),
+                balanceConfigured = true,
+            ),
+        )
+
+        val row = AggregateFixtures.snapshotOf(listOf(provider), states).rows.single()
+
+        assertEquals("每周 40% · 会话 75%", aggregateSummary(row))
     }
 
     @Test

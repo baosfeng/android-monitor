@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -71,6 +72,9 @@ private const val REFRESH_SPIN_MS = 720
 
 /** 「刚刚更新」的时间窗：过了这个窗口就退回「HH:mm 更新」。 */
 private const val JUST_UPDATED_WINDOW_SECOND = 60L
+
+/** 页头标题行盒（原型 .h1 = 28 × leading-tight 1.05 ≈ 29.4）：CJK 自然行盒 41.3 会把页头顶高。 */
+private val HEAD_TITLE_LINE = 30.dp
 
 /**
  * 「额度」Tab（聚合视图 = 原型 s20a，单家视图 = s18）。
@@ -139,7 +143,10 @@ fun QuotaScreen(
     // 页头已经显示时间，聚合视图再在下面单独排一行同样的时间是重复信息
     val updatedMeta = updatedMetaText(
         aggregateMode = aggregateMode,
-        aggregateMeta = aggregateMetaText(snapshot),
+        aggregateMeta = aggregateMetaText(
+            snapshot,
+            connectedCount = providers.count { it.connected },
+        ),
         fetchedAtEpochSecond = state.fetchedAtEpochSecond,
     )
     // 切 provider / 进聚合视图时拉一次；repository 自带节流，来回切不会打满限流。
@@ -171,8 +178,10 @@ fun QuotaScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag("s18-content"),
-                contentPadding = PaddingValues(top = t.space2, bottom = t.space12),
-                verticalArrangement = Arrangement.spacedBy(t.space3),
+                // 原型：mode 紧贴页头（y=78，自带 padding-bottom 8），章节之间 gap = --space-2，
+                // 顶部不再补 8（那会把 mode 与下面整列一起下移 8）
+                contentPadding = PaddingValues(bottom = t.space12),
+                verticalArrangement = Arrangement.spacedBy(t.space2),
             ) {
                 item {
                     ViewModeSwitch(
@@ -256,6 +265,18 @@ fun QuotaScreen(
     }
 }
 
+/** 页头 meta 的前半段（「3 个账号参与排序 ·」），没有分隔符时为空串。 */
+internal fun updatedPrefix(meta: String): String {
+    val head = meta.substringBeforeLast("·", "")
+    return if (head.isBlank()) "" else head.trimEnd() + " · "
+}
+
+/** 页头 meta 的后半段（「更新于 HH:mm」/「尚未更新」），独立成锚点 s18-updated。 */
+internal fun updatedClock(meta: String): String {
+    val tail = meta.substringAfterLast("·", "").trim()
+    return tail.ifEmpty { meta }
+}
+
 /** 时间戳文案：聚合态报「N 家参与排序 · 更新于 HH:mm」，单家态「HH:mm 更新 / 刚刚更新 / 尚未更新」。 */
 private fun updatedMetaText(
     aggregateMode: Boolean,
@@ -266,7 +287,8 @@ private fun updatedMetaText(
     fetchedAtEpochSecond <= 0L -> "尚未更新"
     else -> {
         val age = System.currentTimeMillis() / 1000L - fetchedAtEpochSecond
-        if (age in 0L..JUST_UPDATED_WINDOW_SECOND) "刚刚更新" else QuotaFormat.clockOf(fetchedAtEpochSecond) + " 更新"
+        // 单家态同页头口径：原型写「9:41 更新」，时不补零
+        if (age in 0L..JUST_UPDATED_WINDOW_SECOND) "刚刚更新" else QuotaFormat.clockShortOf(fetchedAtEpochSecond) + " 更新"
     }
 }
 
@@ -287,24 +309,51 @@ private fun QuotaHead(
     settingsFocus: FocusRequester,
 ) {
     val t = LocalDesignTokens.current
+    // 原型 .screen-head：两行（meta 在上、h1 在下）+ 右侧两个 44dp 图标，padding 8 / 16 / 12，
+    // align-items:flex-start，页头盒高 78。压成一行会让 meta 与两个图标锚点整体上移 14dp。
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("s18-head")
-            .padding(start = t.space4, end = t.space4, top = t.space3, bottom = t.space2),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
+        verticalAlignment = Alignment.Top,
     ) {
-        // 标题固定两字不换行
-        Text("额度", style = MaterialTheme.typography.headlineMedium, color = t.fg, maxLines = 1, softWrap = false)
-        Spacer(Modifier.width(t.space2))
-        Text(
-            updated,
-            style = MaterialTheme.typography.labelSmall,
-            color = t.meta,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).testTag("s18-updated"),
-        )
+        Column(Modifier.weight(1f)) {
+            // 原型 .s18-head .meta 是「<前缀> · <更新于 HH:mm>」，锚点只包后半段（x=158.7 起）：
+            // 整行都打上 s18-updated 会把锚点宽度量成整行，文案判据也会比到前缀
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    updatedPrefix(updated),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.meta,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    updatedClock(updated),
+                    // 原型 .s18-head .meta 把字号下限钉在 --text-sm（14px）：labelSmall 的 12sp 会小一档，
+                    // 对照判据里是 P0（字号差）
+                    style = MaterialTheme.typography.bodySmall,
+                    color = t.meta,
+                    maxLines = 1,
+                    modifier = Modifier.testTag("s18-updated"),
+                )
+            }
+            Spacer(Modifier.height(t.space2))
+            // 原型 .h1 行盒 = 28 × leading-tight(1.05) ≈ 29.4；CJK 自然行盒 41.3，
+            // 固定 30dp 让行盒按原型取值、文字用 unbounded 完整绘制（同 AdScreenHead 的台账解法）
+            Box(Modifier.height(HEAD_TITLE_LINE)) {
+                Text(
+                    "额度",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = t.fg,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                )
+            }
+        }
+        Spacer(Modifier.width(t.space3))
         QuotaHeadIcon(
             icon = Icons.Outlined.Refresh,
             contentDescription = "刷新额度",

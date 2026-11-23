@@ -69,7 +69,14 @@ internal fun AccountGroups(
     val groups = linkedMapOf<String, MutableList<QuotaProviderInfo>>()
     providers.forEach { info -> groups.getOrPut(info.providerTypeId) { mutableListOf() } += info }
 
-    Column(modifier.fillMaxWidth().testTag("s19-providers"), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    // 原型 .content 的左右 --space-4 落在这一层：锚点 s19-providers 量的是 16..377 的卡片列
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = LocalDesignTokens.current.space4)
+            .testTag("s19-providers"),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
         groups.forEach { (providerTypeId, accounts) ->
             val title = accounts.first().typeDisplayName
             SectionHeader(title = title)
@@ -154,10 +161,12 @@ internal fun SettingsGroup(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space4)
             .clip(RoundedCornerShape(t.radiusLg))
             .background(t.surface)
-            .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg)),
+            .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg))
+            // 原型 .group{padding:0 var(--space-4)}：左右 16 在卡片**内部**，
+            // 行与「+ 添加账号」都靠它缩进（卡片本身与 .content 同宽 361）
+            .padding(horizontal = t.space4),
     ) {
         content()
     }

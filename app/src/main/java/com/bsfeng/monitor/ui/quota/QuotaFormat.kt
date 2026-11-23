@@ -102,6 +102,17 @@ object QuotaFormat {
         return "%02d:%02d".format(Locale.US, time.hour, time.minute)
     }
 
+    /**
+     * 时:分（时不补零），只给「更新于 9:41」这类页头时间戳用。
+     *
+     * 原型 s18 / s20a / s21 的页头 meta 写的是 9:41 而不是 09:41；补零会把锚点量宽 6.6dp
+     * （多一个字形），对照里是可见的 P1。重置时刻与失败时间戳仍是两位数口径，走 [clockOf]。
+     */
+    fun clockShortOf(epochSecond: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val time = Instant.ofEpochSecond(epochSecond).atZone(zone)
+        return "%d:%02d".format(Locale.US, time.hour, time.minute)
+    }
+
     fun dateTimeOf(epochSecond: Long, zone: ZoneId = ZoneId.systemDefault()): String =
         dateOf(epochSecond, zone) + " " + clockOf(epochSecond, zone)
 

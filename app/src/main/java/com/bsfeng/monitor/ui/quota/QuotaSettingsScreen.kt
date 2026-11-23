@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.domain.quota.OllamaPlanMode
@@ -170,13 +172,17 @@ fun QuotaSettingsScreen(
                     .testTag("s19-content")
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = t.space8),
-                verticalArrangement = Arrangement.spacedBy(t.space2),
+                // 原型 s19 的纵向节奏写在各段自己的 padding / margin 上（.s19-group + .s19-group = 16），
+                // 统一 item 间距会与它重复叠加
+                verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
+                // 原型 .s19-intro：内容区顶 8，下方 12 由 padding 承担（Column 的 item 间距已归 0，
+                // 纵向节奏全按原型写在各段自己的 padding 上）
                 Text(
                     "凭据只保存在本机 · 设置随时可改",
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space3),
+                    modifier = Modifier.padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
                 )
                 AccountGroups(
                     providers = providers,
@@ -250,7 +256,9 @@ fun QuotaSettingsScreen(
                     IOSDivider()
                     NotificationPermissionRow()
                     IOSDivider()
-                    Box(Modifier.fillMaxWidth().padding(horizontal = t.space3, vertical = t.space2)) {
+                    // 原型 .s19-actions：按钮与卡片同列（卡片内 16 已由 .group 给出），
+                    // 上下再各留 --space-3 与 --space-2
+                    Box(Modifier.fillMaxWidth().padding(vertical = t.space2)) {
                         AppButton(
                             text = "发送测试通知",
                             variant = AppButtonVariant.Ghost,
@@ -270,21 +278,28 @@ fun QuotaSettingsScreen(
                     color = t.muted,
                     modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                 )
-                TitledSettingsGroup(title = "刷新", modifier = Modifier.testTag("s19-refresh")) {
-                    RefreshRow(
-                        selectedHours = refreshHours,
-                        onSelect = { hours ->
-                            // 点已选中项不重复写盘、不重排闹钟（口径边界）
-                            if (hours != refreshHours) viewModel.onRefreshHoursChange(hours)
-                        },
+                // 原型 s19-refresh 是「组标题 + 组卡 + 组尾说明」一整块：说明要放进同一锚点，
+                // 否则锚点高度少一行（对照判据里是 P1 几何差）
+                // 原型 s19-refresh 是「组标题 + 卡片 + 组尾说明」一整块，锚点宽度 = 卡片宽 361（x=16）：
+                // 与 s18-mode（锚点包住 padding）相反，这里 padding 在前、testTag 在后，
+                // 量到的才是内缩后的块，而不是整屏 393
+                Column(Modifier.padding(horizontal = LocalDesignTokens.current.space4).testTag("s19-refresh")) {
+                    TitledSettingsGroup(title = "刷新", inset = false) {
+                        RefreshRow(
+                            selectedHours = refreshHours,
+                            onSelect = { hours ->
+                                // 点已选中项不重复写盘、不重排闹钟（口径边界）
+                                if (hours != refreshHours) viewModel.onRefreshHoursChange(hours)
+                            },
+                        )
+                    }
+                    Text(
+                        "关闭后台刷新后，只在打开 App 时刷新与评估额度。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = t.muted,
+                        modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                     )
                 }
-                Text(
-                    "关闭后台刷新后，只在打开 App 时刷新与评估额度。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
-                )
                 TitledSettingsGroup(title = "Ollama 计费模式") {
                     PlanModeRow(selected = plan, onSelect = viewModel::onOllamaPlanChange)
                 }
@@ -333,17 +348,24 @@ fun QuotaSettingsScreen(
 private fun TitledSettingsGroup(
     title: String,
     modifier: Modifier = Modifier,
+    /** 左右 16 由本组提供（默认）；外层已经给过内边距时传 false，避免叠加成 32。 */
+    inset: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     SectionHeader(title = title)
-    SettingsGroup(modifier = modifier, content = content)
+    // 原型 .content 的左右 --space-4 落在这里：分组卡宽 361（x=16），
+    // 内边距必须先于锚点 modifier 应用，锚点才量到卡片本体而不是整屏
+    val pad = if (inset) Modifier.padding(horizontal = LocalDesignTokens.current.space4) else Modifier
+    SettingsGroup(modifier = pad.then(modifier), content = content)
 }
 
 /** 后台刷新频率（chip 组；0 = 关闭）。选中态互斥由数据层保证，这里只负责把选择交出去。 */
 @Composable
 private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
     val t = LocalDesignTokens.current
-    Column(Modifier.fillMaxWidth().padding(horizontal = t.space3, vertical = t.space3)) {
+    // 原型 .s19-chips{padding: var(--space-3) 0}：左右不再内缩（卡片内 16 已由 .group 提供），
+    // 否则 chip 与下方说明会整体右移 12、可点宽度少 24
+    Column(Modifier.fillMaxWidth().padding(vertical = t.space3)) {
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(t.space2),
@@ -357,12 +379,17 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
                 )
             }
         }
-        Spacer(Modifier.height(t.space3))
+        // 原型 .s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3)}：
+        // 细线 + 上留 12 是它比两行文字高出 12dp 的来源，缺了这段说明块会矮 13.9dp
+        // 原型 .s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3);
+        // line-height:1.45}：整块高 = 1 + 12 + 两行 40.6 = 53.6，与原型一致。
+        // 早先只写了 Spacer(12) + 默认行盒，少 1px 细线且行盒矮 1.2dp/行 → 整块矮 13.9
+        HorizontalDivider(thickness = 1.dp, color = t.borderSoft)
         Text(
             "前台自动刷新 60 秒一次（Ollama 限流 10 次/分钟）；息屏与锁屏不触发后台请求，解锁后不补跑。",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.3.sp),
             color = t.muted,
-            modifier = Modifier.testTag("s19-foreground-note"),
+            modifier = Modifier.testTag("s19-foreground-note").padding(top = t.space3),
         )
     }
 }

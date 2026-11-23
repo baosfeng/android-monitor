@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.domain.quota.QuotaAggregateRow
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.EmptyState
@@ -56,6 +57,9 @@ fun QuotaAggregateBody(
     Column(
         // 锚点 s18-agg：聚合态榜单区块；单家态整块不渲染
         modifier = modifier.fillMaxWidth().testTag("s18-agg").padding(horizontal = t.space4),
+        // 原型 .s18-agg{gap:var(--space-3)}：块间 12。这里取 space1（4）而不是 12：
+        // 榜首卡与排序条各自的内边距已吃掉 8dp，取 12 会把整条榜单再往下推 8。
+        // 实测 space1 → s18-agg-list y 差 3.1；space2 → 4.9（更差），故钉在 space1。
         verticalArrangement = Arrangement.spacedBy(t.space1),
     ) {
         when (snapshot.status) {
@@ -115,7 +119,8 @@ fun QuotaAggregateBody(
             "余额型不进聚合 · 失败的家保留旧数据、照常排序 · 只读本地缓存",
             style = MaterialTheme.typography.bodySmall,
             color = t.muted,
-            modifier = Modifier.padding(top = t.space2).testTag("s18-agg-spec"),
+            // 原型 .s18-cap：块间距由外层 .s18-agg{gap:var(--space-3)} 提供，本身不再补上间距
+            modifier = Modifier.testTag("s18-agg-spec"),
         )
     }
 }
@@ -130,17 +135,16 @@ fun QuotaAggregateBody(
 @Composable
 private fun AggregateHero(row: QuotaAggregateRow, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
-    AppCard(modifier = modifier.testTag("s18-agg-hero"), padding = 0.dp) {
+    // 原型 .card 内边距 = --space-4，内容：36dp 图标 + 竖排两行（.s18-agg-hero-body{flex-direction:column;gap:1px}）
+    AppCard(modifier = modifier.testTag("s18-agg-hero"), padding = t.space4) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = t.space3, vertical = t.space2),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 30dp 是原型 .s20-hero .row-icon 的固定尺寸（比通用 36dp 矮一号），属于布局语义尺寸
+            // 原型 .s18-agg-hero 用的是通用 .row-icon（36dp），不是 s20-hero 收窄后的 30dp
             Box(
                 Modifier
-                    .size(30.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(t.radiusMd))
                     .background(t.danger.copy(alpha = t.danger.alpha * 0.12f)),
                 contentAlignment = Alignment.Center,
@@ -152,10 +156,9 @@ private fun AggregateHero(row: QuotaAggregateRow, modifier: Modifier = Modifier)
                     modifier = Modifier.size(19.dp),
                 )
             }
-            Spacer(Modifier.width(t.space2))
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(t.space3))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text("最先见底", style = MaterialTheme.typography.bodySmall, color = t.muted)
-                Spacer(Modifier.width(t.space1))
                 Text(
                     leaderTitle(row),
                     style = MaterialTheme.typography.titleMedium,
@@ -179,12 +182,17 @@ private fun AggregateHero(row: QuotaAggregateRow, modifier: Modifier = Modifier)
 private fun AggregateSortBar(modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     Row(
-        modifier = modifier.fillMaxWidth().padding(top = t.space4, bottom = t.space2),
+        // 原型 .s18-sortbar 只有行盒（padding 0 2px），上下间距由 .s18-agg{gap:12} 提供；
+        // 这里底边留 12 才对得上榜单首行（留 8 时 s18-agg-list 整体上移 3.1dp）
+        modifier = modifier.fillMaxWidth().padding(top = t.space4, bottom = t.space3),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("按剩余由低到高", style = MaterialTheme.typography.bodySmall, color = t.muted)
-        Text("行首为位次", style = MaterialTheme.typography.bodySmall, color = t.muted)
+        // 原型 .s18-sortbar 的行盒是 14px × 1.47 ≈ 20.6；bodySmall 的 19 会让整块矮 3dp，
+        // 下面整条榜单跟着上移（锚点 s18-agg-list y 差 3.1）
+        val sortStyle = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.6.sp)
+        Text("按剩余由低到高", style = sortStyle, color = t.muted)
+        Text("行首为位次", style = sortStyle, color = t.muted)
     }
 }
 

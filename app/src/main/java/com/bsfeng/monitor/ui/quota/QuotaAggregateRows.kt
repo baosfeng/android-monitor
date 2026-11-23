@@ -232,17 +232,24 @@ fun buildAggregateSnapshot(
     )
 }
 
-/** 统计行：`3 个账号参与排序 · 更新于 9:41`。 */
+/**
+ * 统计行：`4 个 provider 已连接 · 更新于 9:41`（原型 s18-head 的 meta 口径）。
+ *
+ * 前缀报的是**已配置凭据的家数**而不是榜单行数：页头要先回答「接了几家」，
+ * 榜单参与数在下面 .s18-agg 里已经逐行可见。
+ */
 fun aggregateMetaText(
     snapshot: QuotaAggregateSnapshot,
+    connectedCount: Int = snapshot.rows.size,
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
     val updated = if (snapshot.latestFetchedAtEpochSecond > 0L) {
-        "更新于 " + QuotaFormat.clockOf(snapshot.latestFetchedAtEpochSecond, zone)
+        // 原型页头写「更新于 9:41」（时不补零，s18 / s20a / s21 三屏同口径）
+        "更新于 " + QuotaFormat.clockShortOf(snapshot.latestFetchedAtEpochSecond, zone)
     } else {
         "尚未更新"
     }
-    return "${snapshot.rows.size} 个账号参与排序 · $updated"
+    return "$connectedCount 个 provider 已连接 · $updated"
 }
 
 /** 窗口短名：额度项的 title 都带「额度」后缀，行内副文案里省掉（`5 小时 12%`）。 */
@@ -275,10 +282,13 @@ fun percentTextOf(item: QuotaItem): String? {
  *
  * 主指标放在最前：它决定了这个账号的位次，读的人先看到「为什么排这里」。
  */
-fun aggregateSummary(row: QuotaAggregateRow): String =
-    (listOf(row.primaryItem) + row.otherItems)
+fun aggregateSummary(row: QuotaAggregateRow): String {
+    val parts = (listOf(row.primaryItem) + row.otherItems)
         .mapNotNull { item -> percentTextOf(item)?.let { "${windowShortTitle(item.title)} $it" } }
-        .joinToString(" · ")
+    // 只有一档时补「单窗口」（原型 .s18-agg-sub 口径）：榜单行只显示一个百分比，
+    // 不写清楚读者分不出是「这家只有一档」还是「其余档没取到」
+    return (if (parts.size == 1) parts + "单窗口" else parts).joinToString(" · ")
+}
 
 /**
  * 行副文案 + 陈旧数据后缀。

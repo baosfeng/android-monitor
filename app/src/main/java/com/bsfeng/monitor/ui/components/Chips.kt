@@ -123,7 +123,9 @@ fun Chip(
                 haptic(HapticTone.LIGHT)
                 onClick()
             }
-            .padding(horizontal = t.space4),
+            // 原型 .chip{padding:0 var(--space-3)}：左右各 12。按 space4 会让每个 chip 宽 8、
+            // 整条 chip 列累计右移（s19-refresh-* 实测每个宽 6.7–8.3）
+            .padding(horizontal = t.space3),
         contentAlignment = Alignment.Center,
     ) {
         // 组件标识打在文本上，别写在调用方 modifier 之后：同一 semantics 节点上后写的

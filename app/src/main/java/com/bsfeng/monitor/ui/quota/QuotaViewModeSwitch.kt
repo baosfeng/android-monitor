@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,8 +50,11 @@ import com.bsfeng.monitor.ui.theme.fgFade
 private const val VIEW_AGGREGATE = "聚合"
 private const val VIEW_SINGLE = "单家"
 
-/** 分段内边距：外层给 44dp 点击区留出余量（原型 .segmented）。 */
-private val SEGMENT_PAD = 3.dp
+/** 分段内边距与段间距（原型 .segmented：padding 4 / gap 4）。 */
+private val SEGMENT_PAD = 4.dp
+
+/** 段间距（原型 .segmented{gap:4px}）：缺省时两段各宽 2dp。 */
+private val SEGMENT_GAP = 4.dp
 
 /**
  * 「聚合 / 单家」分段切换（原型 s20a 顶部 .segmented）。
@@ -82,7 +86,10 @@ internal fun ViewModeSwitch(
             if (next != aggregateMode) onSelect(next)
         },
         tone = HapticTone.MEDIUM,
-        modifier = Modifier.padding(horizontal = t.space4).testTag("s18-mode"),
+        // 锚点挂在带 16 左右内边距的外层（原型 .pad.s18-mode：x=0 / w=393）：
+        // testTag 写在 padding 之前，节点才包住内边距
+        // 原型 .pad.s18-mode：左右 16、下 8（144-54），锚点包住这三边内边距
+        modifier = Modifier.testTag("s18-mode").padding(start = t.space4, end = t.space4, bottom = t.space2),
     )
 }
 
@@ -134,6 +141,7 @@ internal fun QuotaSegmented(
                 true
             },
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SEGMENT_GAP),
     ) {
         options.forEachIndexed { index, option ->
             val selected = index == selectedIndex

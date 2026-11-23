@@ -1,0 +1,30 @@
+# 原型 ↔ 实现「同屏多页 / 坐标原点」拼接表
+# 格式：屏<TAB>实现文件<TAB>对齐锚点<TAB>原因
+#
+# 两种情形都登记在这里，机制相同：脚本按行读实现文件，把该页整体平移 dy = 原型 y − 实现 y
+# 后按锚点 id 合并（先到先得），再逐锚点比。只平移 y —— x 两端口径一致，不参与。
+#
+# 情形一：实现把原型的一张长页拆成多页（设置 s09 = 一级页 + 10 个二级页），
+#         逐页各自对齐到原型对应区块的起始位置，合并后才谈「整屏还原度」。
+# 情形二：两端原点不同（原型把 appbar 交给外壳生成、实现自绘导航栏占 70dp），
+#         单行登记即可，效果等于整屏平移。
+# 未登记的屏严格按原坐标比。
+s09	impl-s09.json	-	一级页：页头 + 快捷区 + 六组入口（页面顶部，无需平移）
+s09	impl-s09-general.json	s09-monitor	二级页「监控与采集」
+s09	impl-s09-location.json	s09-location	二级页「位置采集」
+s09	impl-s09-quota.json	s09-quota	二级页「额度监控」
+s09	impl-s09-totp.json	s09-totp	二级页「验证器」
+s09	impl-s09-skip.json	s09-skip	二级页「广告跳过」
+s09	impl-s09-finance.json	s09-finance-group	二级页「记账」
+s09	impl-s09-appearance.json	s09-appearance	二级页「外观与动效」
+s09	impl-s09-debug.json	s09-debug	二级页「调试与诊断」
+s09	impl-s09-about.json	s09-about	二级页「关于」
+s09	impl-s09-data.json	-	二级页「数据与备份」（原型无对应区块，仅补全锚点）
+s19	impl-s19.json	s19-content	原型 s19 的 appbar 由外壳按 data-title 生成、不在 section 内；实现自绘 IOSNavigationBar 占 70dp
+
+s22	impl-s22.json	s22-content	原型 s22 的 appbar 由外壳生成、不在 section 内；实现自绘 TotpScaffold 导航栏占 47dp
+s23	impl-s23.json	s23-content	同上（TotpScaffold 导航栏 47dp）
+s24	impl-s24.json	s24-content	同上
+s25	impl-s25.json	s25-content	同上
+s26	impl-s26.json	s26-content	同上
+s27	impl-s27.json	s27-content	同上
