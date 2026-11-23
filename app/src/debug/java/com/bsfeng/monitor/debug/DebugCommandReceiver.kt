@@ -414,6 +414,12 @@ class DebugCommandReceiver : BroadcastReceiver() {
         }
         // 与心跳同一条落库链路（不另开写入路径，避免调试数据与生产数据两套语义）
         context.serviceContainer.recordCollector.onLocation(sample)
+        // bypass_throttle 用的是**另一个**采集器实例（节流状态挂在实例上），它的 onAccepted
+        // 只写自己那份 healthState：不把这次成功回写给进程单例的话，自检面板的
+        // 「上次成功」会停在原地，而库里已经多了一条点 —— 两列读数互相矛盾。
+        if (collector !== LocationCollector.get(context)) {
+            LocationCollector.get(context).adoptSample(sample, System.currentTimeMillis())
+        }
         emit(
             cmd = cmd.name,
             token = token,
