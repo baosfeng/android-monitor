@@ -39,6 +39,7 @@ import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.LocationGateState
 import com.bsfeng.monitor.record.LocationPace
 import com.bsfeng.monitor.record.LocationSample
+import com.bsfeng.monitor.record.LocationSuccessSeed
 import com.bsfeng.monitor.record.LocationTickerPolicy
 import com.bsfeng.monitor.record.LocationTickerScheduler
 import com.bsfeng.monitor.record.MotionDetector
@@ -363,9 +364,23 @@ class LocationForegroundService : Service() {
         log = { message -> Log.d(TAG, message) },
     )
 
+    /**
+     * 进程启动时把「上次成功采样时刻」从库里回填给采集器（一次性、IO 线程）。
+     *
+     * 为什么放在服务的 onCreate：定位链路里最早起来的组件就是它（心跳只在闹钟到点时跑），
+     * 早一步回填，自检面板与断档判定就少一段「假空窗」。查库走 ioWork（Dispatchers.IO），
+     * 不占主线程；失败与无记录都保持 null 语义。
+     */
+    private val successSeed = LocationSuccessSeed(
+        loadLastSuccessAtMs = { serviceContainer.recordStore.latestLocationTimestamp() },
+        applySeed = { ts -> LocationCollector.get(this).seedLastSuccessAtMs(ts) },
+    )
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        // 一次性回填：进程内只跑一次，之后 seeded=true 直接返回（不会每拍查库）
+        ioWork.scope.launch { runCatching { successSeed.seed() } }
         // 门禁位移证据的唯一出口：心跳 / 断档自愈 / 订阅 / 探测拿到的点都从 LocationGateState 进来。
         // 回调线程不固定（传感器、广播 goAsync、定位回调），统一 post 到主线程再动 MotionGate，
         // 这样 MotionGate 保持纯逻辑、不需要锁。

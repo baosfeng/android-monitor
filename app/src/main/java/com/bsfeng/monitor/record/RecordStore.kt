@@ -89,6 +89,19 @@ class RecordStore(private val db: DatabaseHelper) {
         arrayOf(RecordType.Companion.toString(type), action, dateStart.toString(), dateEnd.toString()),
     )
 
+    /**
+     * 最近一条 LOCATION 记录的时刻；null = 库里没有（或查询失败）。
+     *
+     * 只给「进程启动回填 lastSuccessAtMs」用（见 `LocationHealthState.seedLastSuccessAtMs`）：
+     * 不读整行、不反序列化 detail，一次 MAX 聚合就够。
+     */
+    fun latestLocationTimestamp(): Long? = runCatching {
+        db.readableDatabase.rawQuery(
+            "SELECT MAX(timestamp) FROM records WHERE type = 'LOCATION'",
+            null,
+        ).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null }
+    }.getOrNull()
+
     private fun countWhere(selection: String, args: Array<String>): Int =
         db.readableDatabase.rawQuery("SELECT COUNT(*) FROM records WHERE " + selection, args)
             .use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }

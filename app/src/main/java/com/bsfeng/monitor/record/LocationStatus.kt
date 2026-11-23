@@ -134,6 +134,25 @@ internal class LocationHealthState {
         failureDetail = detail
     }
 
+    /**
+     * 进程启动时回填「上次成功采样时刻」（来自库里的最近一条 LOCATION）。
+     *
+     * 为什么需要：`lastSuccessAtMs` 只在 [onAccepted] 里写，是**纯进程内状态** —— 进程重启
+     * （装包 / 系统回收 / 用户杀进程）后归零，自检面板会显示「还没有成功定位」，哪怕 5 分钟前
+     * 刚采到点；诊断上「重启后的 -1」与「真的从没采到」也无法区分（真机观测时踩到过）。
+     *
+     * 三条边界：
+     * - **只在 null 时写**：已经有本进程的成功时刻就不要被旧库值覆盖，否则断档判定会凭空多出一段；
+     * - 传 null（库里没有 LOCATION 记录 / 查询失败）**什么都不做**，保持 null 语义，绝不塞 0；
+     * - 只回填时刻、不回填 [lastAccepted]：库里的点没有精度上下文，拿它当质量闸的对照点会伪造精度。
+     */
+    fun seedLastSuccessAtMs(fromStoreMs: Long?) {
+        if (fromStoreMs == null || fromStoreMs <= 0L) return
+        synchronized(lock) {
+            if (lastSuccessAtMs == null) lastSuccessAtMs = fromStoreMs
+        }
+    }
+
     /** 断档后清掉对照点（旧点 30 分钟后本来就 stale，不该再拦住新点）。 */
     fun resetAccepted() = synchronized(lock) {
         lastAccepted = null

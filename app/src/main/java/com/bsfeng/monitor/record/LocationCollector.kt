@@ -165,6 +165,36 @@ class LocationCollector internal constructor(
     val mode: SampleMode get() = modeTracker.mode
 
     /**
+     * 回填「上次成功采样时刻」：只在进程刚起、`lastSuccessAtMs` 还是 null 时生效（幂等）。
+     *
+     * 调用方必须放在 **IO 线程**、且**进程启动后只调一次**（见 [com.bsfeng.monitor.MonitorApp]）：
+     * 本方法只做一次内存赋值，真正查库的是调用方。传 null = 库里没有记录，语义保持「从没成功」。
+     */
+    fun seedLastSuccessAtMs(fromStoreMs: Long?) {
+        healthState.seedLastSuccessAtMs(fromStoreMs)
+    }
+
+    /**
+     * 把「另一个采集器实例刚采到的点」记进**本实例**的成功统计（debug 专用反向入口）。
+     *
+     * 为什么需要：debug 的 `sample_location --bypass_throttle` 为了绕开节流会新建一个
+     * [LocationCollector] 实例（节流状态挂在实例上，见构造参数），那个实例有自己的
+     * healthState —— 它采到的点落了库，却不进进程单例的健康统计。结果是自检面板
+     * 「上次成功」停在原地，而库里明明多了一条点：两列读数互相矛盾，诊断时分不清
+     * 是「没采到」还是「采到了没记账」（真机观测时踩到）。
+     *
+     * 修法选「回写」而不是「bypass 也走单例」：节流窗口是实例状态，让单例临时绕过节流
+     * 就得给生产单例加一个可变开关，debug 语义会污染生产路径；回写只把一条已经成立的
+     * 事实（成功拿到点）记到唯一的那份统计上。
+     *
+     * 对照点固定不替换：调试点多半是 mock / passive 粗点，替换质量闸的对照点会让后续
+     * 位移判定整体漂移（与「原地确认点」同一条理由）。
+     */
+    fun adoptSample(sample: LocationSample, nowMs: Long) {
+        healthState.onAccepted(sample, nowMs, updateReference = false)
+    }
+
+    /**
      * 传感器给的派点间隔覆盖（毫秒）；null = 用默认。
      *
      * 由 [com.bsfeng.monitor.service.LocationForegroundService] 按运动状态设置：
