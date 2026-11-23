@@ -221,7 +221,29 @@ class LocationCollector internal constructor(
 
     /** 只读状态快照：最后成功时间 / 失败原因 / 订阅是否活跃 / 模式 / 间隔。 */
     fun health(nowMs: Long = System.currentTimeMillis()): LocationStatus =
-        healthState.snapshot(nowMs, mode, samplingIntervalMs(), channel.snapshot(nowMs))
+        healthState.snapshot(
+            nowMs,
+            mode,
+            samplingIntervalMs(),
+            channel.snapshot(nowMs),
+            serviceSignals(nowMs),
+        )
+
+    /**
+     * 服务侧的可观测信号（壳化判据）：**与心跳读同一份判定**，自检面板才不会显示「一切正常」。
+     *
+     * 判据所需的最后成功时刻直接取本采集器的 [LocationHealthState.lastSuccessAtMs]，
+     * 不另外存一份 —— 两份必然漂移。
+     */
+    private fun serviceSignals(nowMs: Long): ServiceSignals {
+        val lastTick = LocationGateState.lastTickAtMs
+        return ServiceSignals(
+            health = LocationGateState.serviceHealth(nowMs, healthState.lastSuccessAtMs),
+            tickerIdleMs = if (lastTick <= 0L || nowMs < lastTick) 0L else nowMs - lastTick,
+            startForegroundCount = LocationGateState.startForegroundCount,
+            foregroundAlive = LocationGateState.foregroundAlive,
+        )
+    }
 
     // ===== 持续订阅通道 =====
 

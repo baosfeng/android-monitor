@@ -1149,6 +1149,10 @@ class LocationForegroundService : Service() {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
         running = true
+        // 心跳侧的壳化判据：这个计数与服务的前台身份是「服务还活着」的唯一可观测证据
+        // （真机壳化时它不再增长、isForeground=false，而门禁快照仍写着 SLEEPING）
+        startForegroundCount += 1
+        LocationGateState.onStartForeground(startForegroundCount)
         true
     }.getOrElse { error ->
         // 缺后台定位权限 / 系统拒绝后台建 FGS：都是「前台服务救不了」，如实退出不重试
@@ -1243,6 +1247,10 @@ class LocationForegroundService : Service() {
         @Volatile
         var running: Boolean = false
             private set
+
+        /** 本进程里成功进前台的累计次数（壳化后不再增长）：只给自检与心跳判据读。 */
+        @Volatile
+        private var startForegroundCount: Int = 0
 
         /**
          * 启动服务（幂等，只在定位功能开启时）。

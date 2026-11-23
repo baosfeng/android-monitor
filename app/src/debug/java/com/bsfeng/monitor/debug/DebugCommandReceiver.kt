@@ -350,6 +350,10 @@ class DebugCommandReceiver : BroadcastReceiver() {
             .put("permission", collector.status().name)
             .put("featureEnabled", flags.isEnabled(Feature.LOCATION))
             .put("gate", LocationGateState.state?.name ?: "UNKNOWN")
+            // 服务健康档：门禁态非 null 只说明 onDestroy 没跑过，壳化时它照样写着 SLEEPING
+            .put("serviceHealth", health.service.health.name)
+            .put("startForegroundCount", health.service.startForegroundCount)
+            .put("foregroundAlive", health.service.foregroundAlive ?: "unknown")
             .put("fallbackMin", LocationForegroundService.lastFallbackIntervalMs / 60_000L)
             // doze 补位的可观测面：ticker 多久没拍（秒）、上一轮兜底是否失败、心跳用的窗口
             .put("tickerIdleSec", tickerIdleSec(now))

@@ -33,6 +33,24 @@ enum class LocationFailureReason {
 }
 
 /**
+ * 前台服务侧的可观测信号（壳化判据的输入，同时供自检展示）。
+ *
+ * 为什么把它并进 [LocationStatus] 而不是让展示层自己读 [LocationGateState]：
+ * 展示层只拿到「门禁态非 null」就会显示「一切正常」，而真机壳化时那个字段照样是 SLEEPING ——
+ * 自检必须与心跳读**同一份**健康判定，否则面板与行为会再次分裂。
+ */
+data class ServiceSignals(
+    /** 服务健康档（[ServiceHealthJudge.judge] 的结果）。 */
+    val health: ServiceHealth = ServiceHealth.NOT_RUNNING,
+    /** ticker 已经多少毫秒没拍过（0 = 从没拍过 / 服务没跑）。 */
+    val tickerIdleMs: Long = 0L,
+    /** 服务成功进前台的累计次数；0 = 从没进过前台。 */
+    val startForegroundCount: Int = 0,
+    /** 最近观测到的前台身份；null = 读不到。 */
+    val foregroundAlive: Boolean? = null,
+)
+
+/**
  * 采集器的只读状态快照。
  *
  * [msSinceLastSuccess] 是「掉线」最直接的度量：用户看到「最后成功定位 3 分钟前」比看到
@@ -52,6 +70,7 @@ data class LocationStatus(
     val lastProvider: String? = null,
     val lastAccuracyMeters: Float? = null,
     val confidence: FixConfidence? = null,
+    val service: ServiceSignals = ServiceSignals(),
 ) {
     /** 一行可读摘要，供 LocationCollector 日志与设置页自检直接使用。 */
     fun summary(): String {
@@ -126,6 +145,7 @@ internal class LocationHealthState {
         mode: SampleMode,
         intervalMs: Long,
         subscription: LocationSubscriptionSupervisor.Snapshot?,
+        service: ServiceSignals = ServiceSignals(),
     ): LocationStatus {
         val last = lastAccepted
         return LocationStatus(
@@ -141,6 +161,7 @@ internal class LocationHealthState {
             lastProvider = last?.provider,
             lastAccuracyMeters = last?.accuracyMeters,
             confidence = last?.let { LocationQuality.confidenceOf(it.provider, it.accuracyMeters) },
+            service = service,
         )
     }
 }

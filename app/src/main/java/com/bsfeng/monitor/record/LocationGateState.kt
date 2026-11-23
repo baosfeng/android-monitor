@@ -71,9 +71,52 @@ object LocationGateState {
     var fallbackWindowMs: Long = 0L
         private set
 
-    /** 由前台服务写入；服务销毁时写回 null，心跳恢复原行为。 */
+    /**
+     * 服务成功进前台的累计次数；0 = 从没进过前台。
+     *
+     * 为什么心跳要读它：这是「服务壳化」最便宜的一条证据 —— 系统把服务变成壳子后
+     * （真机实测 isForeground=false、types=0x0），这个计数不再增长，而 [state] 仍写着
+     * 上一次应用的门禁态。旧口径只看 state != null，于是自检面板显示「一切正常」、心跳让路，
+     * 采点停了 5.4 小时（lastSuccessAgoSec 17719 → 19628）。
+     */
+    @Volatile
+    var startForegroundCount: Int = 0
+        private set
+
+    /**
+     * 最近一次观测到的前台身份；null = 还没观测过 / 当前系统版本读不到。
+     *
+     * 服务进前台成功写 true，心跳的壳化探测按 {@code ActivityManager.RunningServiceInfo.foreground}
+     * 写 true/false。壳化的直接证据是它变 false —— ticker 停摆单独不能定性（doze 也会挂起回调）。
+     */
+    @Volatile
+    var foregroundAlive: Boolean? = null
+        private set
+
+    /**
+     * 由前台服务写入；服务销毁时写回 null，心跳恢复原行为。
+     *
+     * 写 null 时顺带复位前台信号：否则「服务起来过一次、之后 onDestroy」的现场会留着
+     * 上一次的 startForegroundCount / foregroundAlive，心跳到不了 NOT_RUNNING 那一档，
+     * 采点要靠壳化自愈那条路（多绕一圈、还会白白尝试重启）。
+     */
     fun update(state: MotionGate.State?) {
         this.state = state
+        if (state == null) {
+            startForegroundCount = 0
+            foregroundAlive = null
+        }
+    }
+
+    /** 服务每次 [android.app.Service.startForeground] 成功后调用（心跳据此判壳化）。 */
+    fun onStartForeground(count: Int) {
+        startForegroundCount = count
+        foregroundAlive = true
+    }
+
+    /** 心跳探测到的前台身份（壳化探测）：只在真的有观测时写，读不到就保持原值。 */
+    fun onForegroundObserved(alive: Boolean) {
+        foregroundAlive = alive
     }
 
     /** 服务每拍调用（[com.bsfeng.monitor.service.LocationForegroundService] 的 ticker）。 */
@@ -145,6 +188,39 @@ object LocationGateState {
     fun allowsHeartbeatSample(): Boolean = state == null
 
     /**
+     * 心跳这一拍看到的服务健康档（纯判定见 [ServiceHealthJudge.judge]）。
+     *
+     * 这是「健康 = 心跳能观测到的活证据」的唯一入口：state != null 只说明 onDestroy 没跑过，
+     * 不能当服务健康的证据。三个可观测信号：ticker 近期拍过 / 前台身份还在 / 最近确实拿到过点。
+     *
+     * @param lastSuccessAtMs 采集器给的最后成功时刻（心跳读得到的那一份）
+     */
+    fun serviceHealth(nowMs: Long, lastSuccessAtMs: Long?): ServiceHealth =
+        ServiceHealthJudge.judge(
+            observation = ServiceObservation(
+                state = state,
+                lastTickAtMs = lastTickAtMs,
+                startForegroundCount = startForegroundCount,
+                foregroundAlive = foregroundAlive,
+                lastSuccessAtMs = lastSuccessAtMs,
+            ),
+            nowMs = nowMs,
+            tickerStallMs = TICKER_STALL_MS,
+            successStaleMs = SUCCESS_STALE_MS,
+        )
+
+    /**
+     * 心跳这一拍是否该把前台服务重新拉起来（自愈）。
+     *
+     * 只在**壳化**时放行：ticker 停摆但有前台身份且仍在拿点 → 只是 doze 挂起了回调，
+     * 那时重启服务等于把健康的服务拆了重装（还会丢门禁证据），只能让心跳补兜底。
+     *
+     * 门禁未知（服务没跑）也是 false：那条路走 [allowsHeartbeatSample] 的心跳采点。
+     */
+    fun shouldRestartService(nowMs: Long, lastSuccessAtMs: Long?): Boolean =
+        serviceHealth(nowMs, lastSuccessAtMs) == ServiceHealth.SHELLED
+
+    /**
      * 心跳是否该接手 SLEEPING 兜底：**服务在跑、但 ticker 已经停摆**才放行。
      *
      * 为什么需要这第二条放行口径：Android 的 doze 会挂起 Handler 的定时回调，而 RTC_WAKEUP
@@ -157,9 +233,41 @@ object LocationGateState {
      * - 只有 SLEEPING 交给心跳：PROBING / MOVING 有各自的 30 秒拍子，心跳补位只会与探测抢 provider；
      * - ticker 还算活着（[TICKER_STALL_MS] 内拍过）就绝不补：否则又变成「心跳绕过服务阶梯」，
      *   真机 22:17:05 那个「服务刚跳过、心跳 1 秒后强制探测」的问题就是这么回来的。
+     *
+     * 「只有 SLEEPING」这条边界说的是 **doze 停摆**（[ServiceHealth.TICKER_STALLED]）：
+     * 那时服务还活着，PROBING / MOVING 有自己的 30 秒拍子与订阅，心跳补位只会抢 provider。
+     * 壳化走另一条（[heartbeatShouldRecoverShell]）：壳子里的门禁态是陈旧值，不能拿它当闸。
      */
     fun heartbeatShouldCoverSleepingFallback(nowMs: Long): Boolean =
         state == MotionGate.State.SLEEPING && tickerStalled(nowMs)
+
+    /**
+     * 服务已壳化时，心跳这一拍是否该**自己采一个点**顶上（壳化自愈的最后一级）。
+     *
+     * 为什么不复用 SLEEPING 那条：壳子里残留的门禁态是最后一次应用的陈旧值（真机壳化时写着
+     * SLEEPING，若当时停在 PROBING / MOVING 就会一直写 MOVING），拿它当闸会让采点继续空着
+     * —— 那正是这轮修的 bug（真机 5.4 小时零点）。所以壳化**不看**门禁态。
+     *
+     * 但采点节奏绝不放松：窗口仍然复用服务那一份（30 / 60 分钟，失败收紧到 5 分钟），
+     * 只是「发起方」换成了心跳。心跳是 1 分钟一次，不看到期就会在壳化期间每分钟发一次定位，
+     * 那正是这轮省电改造要消灭的行为。
+     */
+    fun heartbeatShouldRecoverShell(
+        nowMs: Long,
+        lastSuccessAtMs: Long?,
+    ): Boolean {
+        if (serviceHealth(nowMs, lastSuccessAtMs) != ServiceHealth.SHELLED) return false
+        // 兜底起点为 0 = 服务从来没跑到「记一次起点」那一拍就被壳化了：壳子永远不会初始化它，
+        // 按「现在到期」处理，否则这条自愈路在真机上永远不触发（与 ticking 路径口径一致：
+        // 服务的第一拍也是「记起点、不采点」，但那要求 ticker 还活着）。
+        if (lastFallbackAtMs <= 0L) return true
+        return LocationTickerPolicy.sleepingFallbackDue(
+            nowMs,
+            lastFallbackAtMs,
+            lastFallbackFailed,
+            heartbeatFallbackWindowMs(),
+        )
+    }
 
     /** ticker 是否已停摆（超过 [TICKER_STALL_MS] 没拍过）。从未拍过不算停摆：服务刚起，拍子在排队。 */
     fun tickerStalled(nowMs: Long): Boolean =
@@ -189,6 +297,8 @@ object LocationGateState {
         lastFallbackAtMs = 0L
         lastFallbackFailed = false
         fallbackWindowMs = 0L
+        startForegroundCount = 0
+        foregroundAlive = null
     }
 
     /**
@@ -207,4 +317,13 @@ object LocationGateState {
      * 才不会把「拍子刚好排到 5 分钟后 + 一两分钟调度漂移」误判成停摆。
      */
     const val TICKER_STALL_MS = 10 * 60_000L
+
+    /**
+     * 「一直拿不到点」的判据：80 分钟。
+     *
+     * 只在 ticker 停摆（≥10 分钟）且前台身份丢失时用到 —— 那时壳化已经由前台身份定性，
+     * 这一项只是兜住「前台身份读不到」的机型：超过最长兜底（60 分钟）+ 余量仍无点，
+     * 说明链路最后一段也断了，按壳化处理（宁可多重启一次前台服务）。
+     */
+    const val SUCCESS_STALE_MS = 80 * 60_000L
 }
