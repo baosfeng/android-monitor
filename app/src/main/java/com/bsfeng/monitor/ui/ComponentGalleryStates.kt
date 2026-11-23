@@ -54,6 +54,9 @@ internal fun GalleryFiveStates(
         Column(verticalArrangement = Arrangement.spacedBy(t.space3)) {
             if (showAll || state == FiveState.LOADING) {
                 StateCard("loading · 骨架屏", Modifier.testTag("s12-st-loading")) {
+                    // 原型 .card 是 display:grid（gap 8），骨架外层 .mt-3 再加 12 → label 到骨架共 20；
+                    // StateCard 统一给 12（= .mt-3），这里补余下的 8
+                    Spacer(Modifier.height(t.space2))
                     // 原型 s12:204 的骨架是 5 行（w-40 tall / w-100 / w-80 / w-100 / w-60）：
                     // 宽比按原型逐行给，不用 StateSkeleton 的轮转比例（那会把 80/100 换成 60/40）。
                     // 原型 .sk + .sk 的 margin-top 是 space-2(8)：5 行 = 20+12×4 + 8×4 = 100

@@ -186,7 +186,8 @@ internal fun GallerySwitchesAndBadges(
                     Badge("新")
                 },
             )
-            Spacer(Modifier.height(t.space1))
+            // 原末尾有一个 Spacer(space1)=4：原型 .group 的最后一行下面直接是卡底，没有这段留白，
+            // 它在对照里表现为 s12-switch-badge 高 4dp（与下一块的间距由 .demo margin 提供）
         }
     }
 }

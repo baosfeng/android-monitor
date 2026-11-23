@@ -16,3 +16,8 @@ s19	s19-refresh-6h	几何	字体字宽：同上，累计到 5.6
 s18	s18-agg-row-2	文案	原型自身不一致：s18 聚合行写 provider id 小写「open-design」，设置页 s19 与额度卡用显示名「Open Design」；实现统一用显示名
 s18	s18-agg-row-3	文案	同上：原型写「ollama」，实现用「Ollama」
 s19	s19-alerts	几何	装饰图标不搬：原型预警组三行各带一枚 36dp 行图标（aria-hidden、无状态语义，状态由开关与角标承担），实现不搬纯装饰图标，整组因此矮 19.5dp
+s12	s12-switch-badge	几何	行盒累积：三行 TokenRow 的 CJK 行盒（标题 21.33 + 副 18.2 + gap 2）比原型 .row（title 21.3 / sub 18.2，行高由内容撑）高 1.5–2dp/行，三行累计 h+6.3
+s12	s12-states	几何	同上族：五态区五张卡的行盒累积，h+7.6、起点被前序块 y 漂移带偏 4
+s12	s12-st-loading	几何	起点随 s12-states 平移（同一处累计漂移，非独立残差）
+s12	s12-st-populated	几何	同上
+s12	s12-st-edge	几何	边界态两行超长标题的 CJK 行盒被压到 maxLines=2 后短 5.8
