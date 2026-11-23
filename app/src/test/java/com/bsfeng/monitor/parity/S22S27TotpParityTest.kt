@@ -36,9 +36,9 @@ import java.io.File
  * TotpManualEntryScreen / TotpDetailScreen / TotpBackupScreen），账户、参数、位置标签全部
  * 走原型里的同一份固定假数据，几何可与 proto-screens.json 的 s22–s27 直接对照。
  *
- * 注意口径：s22–s27 的原型锚点在 scripts/anchor-retired.tsv 里登记为「待实现」，
- * 生产代码目前只落了 screen-sNN / s25-adv / s24-failure / s23-album-failure 等少数锚点，
- * 因此导出结果的 testTag 数量明显少于原型锚点数——缺块由 parity-native.mjs 按清单跳过。
+ * 口径：s22–s27 的 56 条原型可见锚点已全部落到生产代码（scripts/anchor-ledger.tsv 登记、
+ * scripts/anchor-retired.tsv 对应行已销），导出结果与 proto-screens.json 逐屏一一对应，
+ * 判据是 parity-native.mjs 每屏 P0 = 0。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w393dp-h6000dp-xxhdpi")

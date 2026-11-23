@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.AppButton
@@ -69,7 +70,7 @@ fun TotpBackupScreen(
     onBack: (() -> Unit)? = null,
 ) {
     val t = LocalDesignTokens.current
-    TotpScaffold(title = "备份与导入", testTag = "screen-s27", onBack = onBack, modifier = modifier) {
+    TotpScaffold(title = "备份与导入", screenTag = "screen-s27", contentTag = "s27-content", onBack = onBack, modifier = modifier) {
         when (state) {
             FiveState.LOADING -> {
                 AppCard { StateSkeleton(rows = 3) }
@@ -93,13 +94,15 @@ fun TotpBackupScreen(
                 AppButton("添加账户", onAddAccount, block = true)
             }
             FiveState.POPULATED -> {
+                // 原型 s27-body 包住说明 + 导出卡 + 导入卡 + 警示条
+                Column(Modifier.testTag("s27-body")) {
                 Text(
                     "备份文件包含全部密钥，等同账号的第二把钥匙 —— 只放在自己可信的地方。",
                     style = MaterialTheme.typography.bodySmall,
                     color = t.muted,
                     modifier = Modifier.padding(top = t.space2),
                 )
-                AppCard {
+                AppCard(modifier = Modifier.testTag("s27-export")) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "加密导出",
@@ -135,11 +138,16 @@ fun TotpBackupScreen(
                         }
                     }
                     Spacer(Modifier.height(t.space2))
-                    AppButton(text = "导出加密备份", onClick = onExport, block = true)
+                    AppButton(
+                        text = "导出加密备份",
+                        onClick = onExport,
+                        block = true,
+                        modifier = Modifier.testTag("s27-export-btn"),
+                    )
                     TotpFine("密码不随文件保存，丢了就解不开；文件写入「下载」目录，同名文件会被覆盖。")
                 }
 
-                AppCard(padding = t.space1) {
+                AppCard(modifier = Modifier.testTag("s27-import"), padding = t.space1) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = t.space2, vertical = t.space2),
                         verticalAlignment = Alignment.CenterVertically,
@@ -155,7 +163,7 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "Aegis（JSON 导出）",
                         subtitle = "请先在 Aegis 里选「明文导出」；加密导出用 scrypt，暂不支持",
-                        modifier = Modifier.padding(horizontal = t.space2),
+                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-aegis"),
                         onClick = { onRequestImport("Aegis") },
                         trailing = { Badge("明文导出") },
                     )
@@ -163,7 +171,7 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "2FAS（.2fas 备份）",
                         subtitle = "读取 accounts 数组，忽略应用内设置项",
-                        modifier = Modifier.padding(horizontal = t.space2),
+                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-2fas"),
                         onClick = { onRequestImport("2FAS") },
                         trailing = { Badge("可导入") },
                     )
@@ -171,14 +179,18 @@ fun TotpBackupScreen(
                     TokenRow(
                         title = "其他专有格式",
                         subtitle = "无公开格式，需改用扫码或手动输入逐条添加",
-                        modifier = Modifier.padding(horizontal = t.space2),
+                        modifier = Modifier.padding(horizontal = t.space2).testTag("s27-import-unsupported"),
                         trailing = { Badge("不支持") },
                     )
                     TotpFine("Aegis 请选「明文导出」；加密导出用 scrypt，暂不支持（导入时会直接报格式不识别）。")
                     TotpFine("导入按密钥去重，同名账户保留两条；导入过程不联网，解析失败不会写入任何账户。")
                 }
 
-                WarnStrip("导出包请勿放进网盘同步目录或聊天记录；本机卸载 App 会一并删除密钥，届时应删除备份文件本身。")
+                WarnStrip(
+                    "导出包请勿放进网盘同步目录或聊天记录；本机卸载 App 会一并删除密钥，届时应删除备份文件本身。",
+                    modifier = Modifier.testTag("s27-warn"),
+                )
+                }
             }
         }
     }
@@ -254,11 +266,11 @@ private fun BackupOverflowCard() {
 
 /** 警示条（原型 .s27-warn）：--warn 14% 底 + 30% 描边。 */
 @Composable
-private fun WarnStrip(text: String) {
+private fun WarnStrip(text: String, modifier: Modifier = Modifier) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(shape)
             .background(t.warn.copy(alpha = t.warn.alpha * 0.14f))

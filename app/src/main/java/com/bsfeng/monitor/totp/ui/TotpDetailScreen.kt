@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.totp.TotpAccount
 import com.bsfeng.monitor.domain.totp.TotpCountdown
@@ -107,7 +108,7 @@ fun TotpDetailScreen(
         }
     }
 
-    TotpScaffold(title = "账户详情", testTag = "screen-s26", onBack = onBack, modifier = modifier) {
+    TotpScaffold(title = "账户详情", screenTag = "screen-s26", contentTag = "s26-content", onBack = onBack, modifier = modifier) {
         if (account == null) {
             AppCard { StateSkeleton(rows = 4) }
             return@TotpScaffold
@@ -123,7 +124,9 @@ fun TotpDetailScreen(
             deriveAccountCode(liveAccount, nowMillis / 1_000L)
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 原型 s26-body 包住英雄行 + 码块 + 字段区 + 参数卡 + 排序卡 + 保存 + 删除 + 说明
+        Column(Modifier.testTag("s26-body")) {
+        Row(Modifier.testTag("s26-hero"), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(44.dp).clip(RoundedCornerShape(t.radiusMd)).background(t.fgFade(8)),
                 contentAlignment = Alignment.Center,
@@ -144,6 +147,8 @@ fun TotpDetailScreen(
             }
         }
 
+        // 原型 s26-code 包住「当前验证码 + 码 + 倒计时」整块
+        Column(Modifier.testTag("s26-code")) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -191,37 +196,44 @@ fun TotpDetailScreen(
                 )
             }
         }
+        }
 
-        TotpTextField(
-            value = issuerDraft,
-            onValueChange = onIssuerChange,
-            label = "平台名",
-            placeholder = account.issuer,
-        )
-        TotpTextField(
-            value = accountDraft,
-            onValueChange = onAccountChange,
-            label = "账户",
-            placeholder = "例如 alice@acme.com",
-        )
-        TotpTextField(
-            value = if (revealed) account.secretBase32 else "•••• •••• •••• ••••",
-            onValueChange = {},
-            label = "密钥（Base32）",
-            placeholder = "",
-            readOnly = true,
-            mono = true,
-            trailing = {
-                AppButton(
-                    text = if (revealed) "隐藏" else "显示",
-                    onClick = { revealed = !revealed },
-                    variant = AppButtonVariant.Ghost,
-                )
-            },
-        )
-        TotpFine("掩码显示，默认不落屏；显示 15 秒后自动收回。")
+        // 原型 s26-fields 包住三个字段（平台名 / 账户 / 掩码密钥）与掩码说明
+        Column(Modifier.testTag("s26-fields")) {
+            TotpTextField(
+                value = issuerDraft,
+                onValueChange = onIssuerChange,
+                label = "平台名",
+                placeholder = account.issuer,
+            )
+            Spacer(Modifier.height(t.space2))
+            TotpTextField(
+                value = accountDraft,
+                onValueChange = onAccountChange,
+                label = "账户",
+                placeholder = "例如 alice@acme.com",
+            )
+            Spacer(Modifier.height(t.space2))
+            TotpTextField(
+                value = if (revealed) account.secretBase32 else "•••• •••• •••• ••••",
+                onValueChange = {},
+                label = "密钥（Base32）",
+                placeholder = "",
+                readOnly = true,
+                mono = true,
+                trailing = {
+                    AppButton(
+                        text = if (revealed) "隐藏" else "显示",
+                        onClick = { revealed = !revealed },
+                        variant = AppButtonVariant.Ghost,
+                        modifier = Modifier.testTag("s26-reveal"),
+                    )
+                },
+            )
+            TotpFine("掩码显示，默认不落屏；显示 15 秒后自动收回。")
+        }
 
-        AppCard {
+        AppCard(modifier = Modifier.testTag("s26-params")) {
             TotpParamRow("形态", codeKindLabel(account))
             TotpHairline()
             TotpParamRow("来源", sourceLabel)
@@ -248,7 +260,7 @@ fun TotpDetailScreen(
         }
         TotpFine("参数由二维码决定，事后可在这里修正；改错会一直算出错的码，但不会损坏密钥。")
 
-        AppCard(padding = t.space2) {
+        AppCard(modifier = Modifier.testTag("s26-order"), padding = t.space2) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = t.space2, vertical = t.space2),
                 verticalAlignment = Alignment.CenterVertically,
@@ -264,17 +276,37 @@ fun TotpDetailScreen(
                 Text(positionLabel, style = monitorMonoMeta.copy(fontSize = t.textXs), color = t.fg2)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-                AppButton("上移一位", onMoveUp, variant = AppButtonVariant.Ghost, modifier = Modifier.weight(1f))
-                AppButton("下移一位", onMoveDown, variant = AppButtonVariant.Ghost, modifier = Modifier.weight(1f))
+                AppButton(
+                    "上移一位",
+                    onMoveUp,
+                    variant = AppButtonVariant.Ghost,
+                    modifier = Modifier.weight(1f).testTag("s26-move-up"),
+                )
+                AppButton(
+                    "下移一位",
+                    onMoveDown,
+                    variant = AppButtonVariant.Ghost,
+                    modifier = Modifier.weight(1f).testTag("s26-move-down"),
+                )
             }
         }
 
         Spacer(Modifier.height(t.space1))
-        AppButton(text = "保存修改", onClick = onSave, block = true, tone = HapticTone.SUCCESS)
+        // 原型 s26-save 是「保存按钮」的容器块
+        Box(Modifier.fillMaxWidth().testTag("s26-save")) {
+            AppButton(
+                text = "保存修改",
+                onClick = onSave,
+                block = true,
+                tone = HapticTone.SUCCESS,
+                modifier = Modifier.testTag("s26-save-btn"),
+            )
+        }
 
         Column(
             Modifier
                 .fillMaxWidth()
+                .testTag("s26-danger")
                 .padding(top = t.space3)
                 .border(width = 0.dp, color = t.borderSoft)
                 .padding(top = t.space3),
@@ -304,9 +336,11 @@ fun TotpDetailScreen(
                 variant = AppButtonVariant.Ghost,
                 block = true,
                 tone = HapticTone.REJECT,
+                modifier = Modifier.testTag("s26-del"),
             )
         }
         TotpFine("改名与换平台只影响本机展示，不影响网站上已绑定的两步验证。")
+        }
     }
 
     ConfirmDialog(
