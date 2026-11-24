@@ -110,3 +110,9 @@ s24	s24-torch	几何	同上
 s24	s24-album	几何	同上
 s24	s24-fallback	几何	同上（累计到 -7.6）
 s24	s24-manual	几何	按钮宽度按内容撑（原型固定 110 宽），差 13
+s16	s16-source	几何	字体字宽：中文 12px 8 字，原型角标 96 / 实现 91（同 s01-trip-source 口径，等宽族 11sp 渲染）
+s16	s16-seg-home-pm	几何	内容量口径：原型停留段在标题/副标题下多一行 .s16-seg-track（页面轨迹摘要，18.2 + gap 2 ≈ 20.2），产品已下线页面轨迹（1ae2e44）；实现按盒模型钉 66.45，与原型移动段 66.4 一致
+s16	s16-seg-home-noon	几何	同上
+s16	s16-seg-office	几何	同上
+s16	s16-seg-cafe	几何	同上
+s16	s16-seg-home-am	几何	同上

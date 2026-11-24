@@ -25,11 +25,9 @@ import com.bsfeng.monitor.domain.trip.Move
 import com.bsfeng.monitor.domain.trip.Place
 import com.bsfeng.monitor.domain.trip.Stay
 import com.bsfeng.monitor.domain.trip.TRIP_DAY_MS
-import com.bsfeng.monitor.ui.ScreenHead
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
-import com.bsfeng.monitor.ui.trip.TripDayBar
-import com.bsfeng.monitor.ui.trip.TripLocationHint
+import com.bsfeng.monitor.ui.trip.TripHead
 import com.bsfeng.monitor.ui.trip.TripRulesCard
 import com.bsfeng.monitor.ui.trip.TripSummaryCard
 import com.bsfeng.monitor.ui.trip.TripTimelineCard
@@ -111,16 +109,14 @@ class S16TripParityTest {
                     Column(Modifier.fillMaxSize()) {
                         // 原型 .content 的 padding-top 8：锚点 y 从内容区顶端 8 起算
                         Spacer(Modifier.height(8.dp))
-                        // 页头常驻：ScreenHead（返回 + 标题）+ 日期条（前后一天）
-                        Column(Modifier.fillMaxWidth().testTag("s16-head")) {
-                            ScreenHead(title = "每日行程", onBack = {})
-                            TripDayBar(
-                                dayStart = dayStart(),
-                                now = now,
-                                onPrevious = {},
-                                onNext = {},
-                            )
-                        }
+                        // 页头常驻：原型 header.screen-head 一个 flex 行 —— 左列（日期 / 标题）+ 右侧两个箭头
+                        TripHead(
+                            dayStart = dayStart(),
+                            now = now,
+                            onBack = {},
+                            onPrevious = {},
+                            onNext = {},
+                        )
                         // 锚点盒 = 原型 .pad（宽 393、含左右 16）：水平内边距必须放在锚点的**外层**，
                         // 所以 LazyColumn 不再给 contentPadding，改为每个 item 外面包一层带 tag 的 Box。
                         LazyColumn(
@@ -142,13 +138,10 @@ class S16TripParityTest {
                                 }
                             }
                             item(key = "rules") {
+                                // 原型「开启定位后可显示距离与地址」是这张卡里的最后一行（.s16-hint），
+                                // 锚点 s16-goto-location 也跟着卡片一起在一层里，不另起 item
                                 Box(Modifier.fillMaxWidth().testTag("s16-rules").padding(horizontal = t.space4)) {
-                                    TripRulesCard(basis = timeline.basis)
-                                }
-                            }
-                            item(key = "goto") {
-                                Box(Modifier.fillMaxWidth().padding(horizontal = t.space4)) {
-                                    TripLocationHint(onClick = {})
+                                    TripRulesCard(basis = timeline.basis, onOpenLocationSettings = {})
                                 }
                             }
                         }

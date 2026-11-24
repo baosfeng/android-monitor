@@ -20,34 +20,17 @@ package com.bsfeng.monitor.ui.trip
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,10 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bsfeng.monitor.MonitorApp
@@ -77,7 +58,6 @@ import com.bsfeng.monitor.record.CoverageSnapshot
 import com.bsfeng.monitor.record.LocationCollector
 import com.bsfeng.monitor.record.SampleMode
 import com.bsfeng.monitor.record.StoreCoverageReader
-import com.bsfeng.monitor.ui.ScreenHead
 import com.bsfeng.monitor.ui.components.AppToast
 import com.bsfeng.monitor.ui.components.EmptyState
 import com.bsfeng.monitor.ui.components.ErrorState
@@ -85,15 +65,11 @@ import com.bsfeng.monitor.ui.components.StateSkeleton
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
-import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
-import com.bsfeng.monitor.ui.live.MetaText
 import com.bsfeng.monitor.ui.live.formatFullDate
-import com.bsfeng.monitor.ui.live.weekdayLabel
 import com.bsfeng.monitor.ui.maps.MapEntryCard
 import com.bsfeng.monitor.ui.maps.MapEntryPoint
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
-import com.bsfeng.monitor.ui.theme.fgFade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,10 +82,6 @@ private const val EMPTY_TITLE = "这一天还没有行程"
 
 /** 空态 CTA：只在定位权限未开且已接线设置页时出现。 */
 private const val EMPTY_CTA = "去开启定位权限"
-
-/** 无定位时的提示行（锚点 s16-goto-location 固定文案）。 */
-private const val LOCATION_HINT_TITLE = "开启定位后可显示距离与地址"
-private const val LOCATION_HINT_TEXT = "现在按设备活动推算，地点名来自网络名与使用簇"
 
 /**
  * 每日行程屏。
@@ -255,29 +227,19 @@ fun TripScreen(
     ) {
         Column(Modifier.fillMaxSize()) {
             // 页头常驻不随内容滚出；页头文字不可点，只有前后箭头可点（锚点 s16-head / s16-prev / s16-next）
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .testTag("s16-head"),
-            ) {
-                ScreenHead(
-                    title = "每日行程",
-                    onBack = onBack,
-                    consumeTopInset = true,
-                )
-                TripDayBar(
-                    dayStart = dayStart,
-                    now = now,
-                    onPrevious = {
-                        haptic(HapticTone.LIGHT)
-                        viewModel.selectDay(TripDays.previous(dayStart, now))
-                    },
-                    onNext = {
-                        haptic(HapticTone.LIGHT)
-                        viewModel.selectDay(TripDays.next(dayStart, now))
-                    },
-                )
-            }
+            TripHead(
+                dayStart = dayStart,
+                now = now,
+                onBack = onBack,
+                onPrevious = {
+                    haptic(HapticTone.LIGHT)
+                    viewModel.selectDay(TripDays.previous(dayStart, now))
+                },
+                onNext = {
+                    haptic(HapticTone.LIGHT)
+                    viewModel.selectDay(TripDays.next(dayStart, now))
+                },
+            )
             // 内容区：只有这一块跟手滚动，页头与日期条不动（锚点 s16-content）
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when {
@@ -361,16 +323,15 @@ fun TripScreen(
                             )
                         }
                         item(key = "trip-rules") {
+                            // 「开启定位后可显示距离与地址」是这张卡内的最后一行（原型 .s16-hint 在 .card 里），
+                            // 不是在下面另起一块 —— 拆出去会让 s16-rules 矮一整行、提示行落到卡外
                             TripRulesCard(
                                 basis = timeline.basis,
                                 modifier = Modifier.testTag("s16-rules"),
+                                // 提示行只在「按设备活动推算」时才有意义（有定位时地点名与距离本来就有）
+                                onOpenLocationSettings = onOpenLocationSettings
+                                    ?.takeIf { timeline.basis == Basis.DEVICE },
                             )
-                        }
-                        // 无定位时才提示去开定位；有坐标时整行不渲染（锚点 s16-goto-location 边界）
-                        if (timeline.basis == Basis.DEVICE && onOpenLocationSettings != null) {
-                            item(key = "trip-goto-location") {
-                                TripLocationHint(onClick = onOpenLocationSettings)
-                            }
                         }
                     }
                 }
@@ -399,169 +360,8 @@ fun TripScreen(
 /** 错态兜底文案（VM 已给可读文案，这里只防 null）。 */
 private const val DEFAULT_ERROR_TEXT = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
 
-/**
- * 日期切换条：前一天 / 日期文案 / 后一天。
- *
- * 换日时日期文案 150ms 交叉淡入（锚点 s16-prev「内容 150ms 内整体替换，不播整页转场」）；
- * 内容本身的替换跟着数据走，不额外套转场，避免把滚动位置一起重置。
- */
-@Composable
-internal fun TripDayBar(
-    dayStart: Long,
-    now: Long,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = t.space4, vertical = t.space1),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        DayArrow(
-            icon = Icons.Outlined.ChevronLeft,
-            description = "前一天",
-            modifier = Modifier.testTag("s16-prev"),
-            enabled = TripDays.canPrevious(dayStart, now),
-            onClick = onPrevious,
-        )
-        Column(
-            Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Crossfade(
-                targetState = dayStart,
-                animationSpec = tween(t.durOverlayOut),
-                label = "tripDayText",
-            ) { day ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = formatFullDate(day) + " · " + weekdayLabel(day),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = t.fg,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    MetaText(dayCaption(day, now))
-                }
-            }
-        }
-        DayArrow(
-            icon = Icons.Outlined.ChevronRight,
-            description = "后一天",
-            modifier = Modifier.testTag("s16-next"),
-            enabled = TripDays.canNext(dayStart, now),
-            onClick = onNext,
-        )
-    }
-}
-
-/** 日期条第二行：今天 / 历史日期。 */
-private fun dayCaption(dayStart: Long, now: Long): String =
-    if (dayStart == TripDays.today(now)) "今天 · 可回看最近 30 天" else "历史日期 · 右箭头回今天"
-
-/**
- * 日期箭头：点击区 44dp，按下 0.96 + LIGHT（锚点 s16-prev / s16-next）。
- *
- * 边界：已是最早一天 / 今天 → 底色 fgFade(4)、图标 muted、不可点、不弹提示（原因由灰态表达）。
- */
-@Composable
-private fun DayArrow(
-    icon: ImageVector,
-    description: String,
-    modifier: Modifier = Modifier,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    val haptic = rememberHaptic()
-    val interaction = remember { MutableInteractionSource() }
-    Box(
-        modifier
-            .size(t.tapMin)
-            .pressFeedback(interaction, enabled)
-            .clip(RoundedCornerShape(t.radiusPill))
-            .background(if (enabled) t.surfaceWarm else t.fgFade(4))
-            .clickable(
-                interactionSource = interaction,
-                indication = LocalIndication.current,
-                enabled = enabled,
-            ) {
-                haptic(HapticTone.LIGHT)
-                onClick()
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            icon,
-            contentDescription = description,
-            tint = if (enabled) t.fg else t.muted,
-            modifier = Modifier.size(t.space5).testTag("button.icon"),
-        )
-    }
-}
-
-/**
- * 「开启定位后可显示距离与地址」提示行（锚点 s16-goto-location）。
- *
- * click：行底色 120ms 加深 + LIGHT，右侧 › 不动画 → 跳设置页定位权限项；
- * 未接线（[onClick] 无来源）时整行不渲染，不伪造跳转。
- */
-@Composable
-internal fun TripLocationHint(onClick: () -> Unit) {
-    val t = LocalDesignTokens.current
-    val haptic = rememberHaptic()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val bg by animateColorAsState(
-        targetValue = if (pressed) t.fgFade(7) else t.surfaceWarm,
-        animationSpec = tween(t.durState),
-        label = "gotoLocationBg",
-    )
-    val shape = RoundedCornerShape(t.radiusLg)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(bg)
-            .clickable(
-                interactionSource = interaction,
-                indication = LocalIndication.current,
-            ) {
-                haptic(HapticTone.LIGHT)
-                onClick()
-            }
-            .heightIn(min = t.rowMinH)
-            .padding(horizontal = t.space4, vertical = t.space3)
-            // 锚点 = 原型 .row（宽 327，扣掉两侧 16 内边距）：tag 必须在 padding 之后
-            .testTag("s16-goto-location"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            Icons.Outlined.LocationOn,
-            contentDescription = null,
-            tint = t.accent,
-            modifier = Modifier.size(t.space5),
-        )
-        Column(Modifier.weight(1f).padding(start = t.space3)) {
-            Text(
-                text = LOCATION_HINT_TITLE,
-                style = MaterialTheme.typography.bodyMedium,
-                color = t.fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            MetaText(LOCATION_HINT_TEXT)
-        }
-        Icon(
-            Icons.Outlined.ChevronRight,
-            contentDescription = null,
-            tint = t.muted,
-            modifier = Modifier.size(t.space5),
-        )
-    }
-}
+// 页头（TripHead）与「开启定位后可显示距离与地址」提示行（TripLocationHint，在口径说明卡内）
+// 已按职责拆到 ui/trip/TripHead.kt 与 ui/trip/TripRulesCard.kt。
 
 /**
  * 当日覆盖的数据源：DI 容器里的记录库 + 全局失败日志。
