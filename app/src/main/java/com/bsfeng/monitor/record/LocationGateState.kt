@@ -129,6 +129,30 @@ object LocationGateState {
         lastFallbackAtMs = nowMs
     }
 
+    /**
+     * 进程启动时从库里回填兜底锚点（[LocationSuccessSeed] 的一个消费方）。
+     *
+     * 为什么需要：锚点是纯进程内状态，进程被杀后归零。服务重启后第一拍看到 0 就"记起点、
+     * 不采点"，于是**每一轮重启都白丢一整个窗口**。真机 11-24 实测：服务 22:34 被
+     * SwipeUpClean 杀掉，心跳在 22:46:05 采到一个真实点，用户 23:13 打开 App 才把服务拉起来，
+     * 锚点记为 23:13 → 下一次兜底 23:48，中间 62 分钟零定位（充电档设计值是 30 分钟）。
+     *
+     * 三条边界（读准"取较早值"这条，它是整个修复的方向）：
+     * - **取较早值（min）**：查库是 IO 异步，可能晚于第一拍。若那一拍已经写了起点（"记起点、
+     *   不采点"），取较晚值等于把库里真实的最后一点丢掉 —— 这次真机的 62 分钟空窗原样重现。
+     *   两端代价不对称：窗口偏短最多多发一次定位（几秒射频），窗口偏长就是漏点。
+     *   所以宁可早，不可晚；
+     * - **查不到 / 未来时刻都保持原值**：0 是"还没记过起点"的既有语义，未来值会把窗口锁死
+     *   到时钟追平（见 [LocationTickerPolicy.anchorSeedMs]）；
+     * - **只回填锚点，不回填"上次兜底是否失败"**：失败状态只对"刚失败的那一轮"有意义，
+     *   重启后按成功算（保守：先等满一个窗口，而不是再用 5 分钟窗口刷一次射频）。
+     */
+    fun seedFallbackAnchor(fromStoreMs: Long?, nowMs: Long = System.currentTimeMillis()) {
+        val seeded = LocationTickerPolicy.anchorSeedMs(fromStoreMs, nowMs)
+        if (seeded <= 0L) return
+        if (lastFallbackAtMs <= 0L || seeded < lastFallbackAtMs) lastFallbackAtMs = seeded
+    }
+
     /** 兜底结果：失败时把窗口收紧成重试窗口，别让一次失败白等一整个兜底周期。 */
     fun onFallbackResult(success: Boolean) {
         lastFallbackFailed = !success

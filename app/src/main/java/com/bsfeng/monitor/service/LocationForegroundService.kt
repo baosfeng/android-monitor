@@ -365,22 +365,36 @@ class LocationForegroundService : Service() {
     )
 
     /**
-     * 进程启动时把「上次成功采样时刻」从库里回填给采集器（一次性、IO 线程）。
+     * 进程启动时的一次性回填：从库里最近一条 LOCATION 反推两处进程内状态（IO 线程）。
+     *
+     * 两个消费者读的是**同一条**查询（同一条记录时刻），别拆成两次 seed、两次查库：
+     * - 采集器的「上次成功采样时刻」：自检面板与断档判定少一段「假空窗」；
+     * - 门禁的兜底锚点 [LocationGateState.lastFallbackAtMs]：**进程被杀 / 服务重启后不再
+     *   白丢一整个兜底窗口**。真机 11-24 实测：22:34 被 SwipeUpClean 杀掉 → 心跳 22:46:05
+     *   在服务死着的时候采到一个真实点（不写锚点）→ 23:13 用户解锁才把服务拉起来 →
+     *   锚点记为 23:13 → 下一次兜底 23:48，中间 62 分钟零定位（充电档设计值 30 分钟）。
      *
      * 为什么放在服务的 onCreate：定位链路里最早起来的组件就是它（心跳只在闹钟到点时跑），
-     * 早一步回填，自检面板与断档判定就少一段「假空窗」。查库走 ioWork（Dispatchers.IO），
-     * 不占主线程；失败与无记录都保持 null 语义。
+     * 早一步回填，自检面板、断档判定与兜底拍子就少一段「假空窗」。查库走 ioWork
+     * （Dispatchers.IO），不占主线程；失败与无记录都保持原值（null / 0）。
      */
-    private val successSeed = LocationSuccessSeed(
+    private val startupSeed = LocationSuccessSeed(
         loadLastSuccessAtMs = { serviceContainer.recordStore.latestLocationTimestamp() },
-        applySeed = { ts -> LocationCollector.get(this).seedLastSuccessAtMs(ts) },
+        applySeed = { ts ->
+            LocationCollector.get(this).seedLastSuccessAtMs(ts)
+            // 「上一次成功落库」当兜底锚点：那个点证明有人量过位置，按「兜底已发生」记账。
+            // 语义差与边界见 LocationGateState.seedFallbackAnchor 的 KDoc。
+            LocationGateState.seedFallbackAnchor(ts)
+            // 锚点一落地就重排：回填前算出的「启动 300s」会把已经过期的兜底白拖 5 分钟
+            handler.post { tickerScheduler.onStateChanged() }
+        },
     )
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         // 一次性回填：进程内只跑一次，之后 seeded=true 直接返回（不会每拍查库）
-        ioWork.scope.launch { runCatching { successSeed.seed() } }
+        ioWork.scope.launch { runCatching { startupSeed.seed() } }
         // 门禁位移证据的唯一出口：心跳 / 断档自愈 / 订阅 / 探测拿到的点都从 LocationGateState 进来。
         // 回调线程不固定（传感器、广播 goAsync、定位回调），统一 post 到主线程再动 MotionGate，
         // 这样 MotionGate 保持纯逻辑、不需要锁。

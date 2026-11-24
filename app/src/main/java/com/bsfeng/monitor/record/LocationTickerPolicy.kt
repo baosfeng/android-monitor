@@ -74,9 +74,30 @@ object LocationTickerPolicy {
         if (lastFallbackFailed) SLEEPING_FALLBACK_RETRY_MS else baseIntervalMs
 
     /**
+     * 进程启动回填兜底锚点时该用的值；0 = 不适用（保持「还没记过起点」的既有语义）。
+     *
+     * 语义差（读这段再动手）：库里的时刻是「上一次**成功**落库」，锚点语义是「上一次兜底**发起**」。
+     * 成功必然晚于发起（一次定位耗时，PROBE 档 ≤8 秒 / 满预算 ≤20 秒），所以拿成功时刻当锚点会让
+     * 窗口**长了这一次定位的耗时**—— 几秒，可以忽略；绝不会把窗口缩短。
+     * 反向的坑才致命 —— 锚点落在未来（时钟回拨 / 设备时间被改）时会一直判「没到期」，
+     * 兜底被锁到时钟追平为止，比多等一个窗口更糟，所以未来值一律作废。
+     *
+     * 库里那个点也未必来自兜底（心跳普通采样 / 订阅 / 被动点都算）：那时确实刚有人量过位置，
+     * 按「兜底已发生」记账是对的 —— 兜底窗口的语义就是「最多等一个窗口，就该有人量过位置」。
+     * 反过来说，被质量闸拒掉、没能落库的兜底**无法回填**：那种情况下锚点保持原值（最坏退化成
+     * 「重启后再等满一个窗口」，即本缺陷的旧行为），这是「只认库里的成功记录」的固有代价。
+     */
+    fun anchorSeedMs(lastSuccessAtMs: Long?, nowMs: Long): Long {
+        if (lastSuccessAtMs == null || lastSuccessAtMs <= 0L) return 0L
+        if (lastSuccessAtMs > nowMs) return 0L
+        return lastSuccessAtMs
+    }
+
+    /**
      * 兜底是否到期（服务 ticker 与心跳共用这一条判定，别各写一份）。
      *
      * [lastFallbackAtMs] 为 0 表示还没初始化：服务刚起，先让它自己记一次起点、不在启动瞬间采点。
+     * 进程重启后的归零由 [com.bsfeng.monitor.record.LocationGateState.seedFallbackAnchor] 回填。
      */
     fun sleepingFallbackDue(
         nowMs: Long,
