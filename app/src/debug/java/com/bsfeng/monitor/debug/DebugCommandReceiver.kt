@@ -325,6 +325,12 @@ class DebugCommandReceiver : BroadcastReceiver() {
         return if (lastTick <= 0L || nowMs < lastTick) 0L else (nowMs - lastTick) / 1000
     }
 
+    /** 兜底锚点 [LocationGateState.lastFallbackAtMs] 距今秒数；0 = 还没记过起点（含回填未跑）。 */
+    private fun fallbackAnchorAgeSec(nowMs: Long): Long {
+        val anchor = LocationGateState.lastFallbackAtMs
+        return if (anchor <= 0L || nowMs < anchor) 0L else (nowMs - anchor) / 1000
+    }
+
     // ────────────────────────────── state ──────────────────────────────
 
     private fun emitState(context: Context, token: String?) {
@@ -357,6 +363,9 @@ class DebugCommandReceiver : BroadcastReceiver() {
             .put("fallbackMin", LocationForegroundService.lastFallbackIntervalMs / 60_000L)
             // doze 补位的可观测面：ticker 多久没拍（秒）、上一轮兜底是否失败、心跳用的窗口
             .put("tickerIdleSec", tickerIdleSec(now))
+            // 兜底锚点距今秒数：0 = 本进程还没记过（旧行为）；非 0 且约等于「库里最后一点距今」
+            // = 进程启动回填生效。没有这个字段，「回填有没有跑」在真机上无法观测。
+            .put("fallbackAnchorAgeSec", fallbackAnchorAgeSec(now))
             .put("fallbackFailed", LocationGateState.lastFallbackFailed)
             .put("heartbeatWindowMin", LocationGateState.heartbeatFallbackWindowMs() / 60_000L)
             .put("passive", collector.isPassiveTapActive())
