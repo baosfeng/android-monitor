@@ -1025,15 +1025,6 @@
       if (!abOpenNow()) openAutoBook();   /* 演示入口：没有浮窗就先开，再模拟「切到记账页」 */
       abSwitch();
     });
-    /* s20 不在 TABS 里（额度聚合是评审中的两张对比稿，不是已定稿的 Tab），
-       外壳没有屏导航入口，评审时必须靠 hash 或这两个按钮直达 */
-    var devS20A = document.getElementById('devS20A');
-    if (devS20A) devS20A.addEventListener('click', function () { go('s20a'); });
-    var devS20B = document.getElementById('devS20B');
-    if (devS20B) devS20B.addEventListener('click', function () { go('s20b'); });
-    /* s21 同理：全额度聚合是评审中的新方案，同样不在 TABS 里 */
-    var devS21 = document.getElementById('devS21');
-    if (devS21) devS21.addEventListener('click', function () { go('s21'); });
 
     document.addEventListener('keydown', function (e) {
       /* Esc 也关不掉浮窗：等价于点遮罩（轻震 + 每笔一次 Toast） */

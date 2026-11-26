@@ -1,0 +1,323 @@
+[
+  {
+    "file": "tab-overview.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-overview.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s01\",\"want\":\"s01\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"overview\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-quota.html\",\"tab-settings.html\"],\"buttons\":[\"overview\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "11/11 figures=11"
+      },
+      {
+        "step": "子页进入 s16",
+        "ok": true,
+        "detail": "{\"cur\":\"s16\",\"stack\":[\"s01\"]}"
+      },
+      {
+        "step": "子页出现返回页头",
+        "ok": true,
+        "detail": "{\"appbarHidden\":false}"
+      },
+      {
+        "step": "返回栈回到 s01",
+        "ok": true,
+        "detail": "{\"cur\":\"s01\",\"stack\":[]}"
+      },
+      {
+        "step": "跨 Tab 真跳转到 finance",
+        "ok": true,
+        "detail": "{\"url\":\"tab-finance.html\",\"cur\":\"s04\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  },
+  {
+    "file": "tab-live.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-live.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s02\",\"want\":\"s02\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"live\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-overview.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-quota.html\",\"tab-settings.html\"],\"buttons\":[\"live\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "1/1 figures=1"
+      },
+      {
+        "step": "跨 Tab 真跳转到 quota",
+        "ok": true,
+        "detail": "{\"url\":\"tab-quota.html\",\"cur\":\"s18\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  },
+  {
+    "file": "tab-ad.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-ad.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s03\",\"want\":\"s03\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"ad\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-finance.html\",\"tab-quota.html\",\"tab-settings.html\"],\"buttons\":[\"ad\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "1/1 figures=1"
+      },
+      {
+        "step": "Toast 出现",
+        "ok": true,
+        "detail": "{\"toasts\":1}"
+      },
+      {
+        "step": "跨 Tab 真跳转到 settings",
+        "ok": true,
+        "detail": "{\"url\":\"tab-settings.html\",\"cur\":\"s09\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  },
+  {
+    "file": "tab-finance.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-finance.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s04\",\"want\":\"s04\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"finance\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-ad.html\",\"tab-quota.html\",\"tab-settings.html\"],\"buttons\":[\"finance\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "12/12 figures=9"
+      },
+      {
+        "step": "子页进入 s14a",
+        "ok": true,
+        "detail": "{\"cur\":\"s14a\",\"stack\":[\"s04\"]}"
+      },
+      {
+        "step": "子页出现返回页头",
+        "ok": true,
+        "detail": "{\"appbarHidden\":false}"
+      },
+      {
+        "step": "返回栈回到 s04",
+        "ok": true,
+        "detail": "{\"cur\":\"s04\",\"stack\":[]}"
+      },
+      {
+        "step": "跨 Tab 真跳转到 overview",
+        "ok": true,
+        "detail": "{\"url\":\"tab-overview.html\",\"cur\":\"s01\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  },
+  {
+    "file": "tab-quota.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-quota.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s18\",\"want\":\"s18\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"quota\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-settings.html\"],\"buttons\":[\"quota\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "0/0 figures=24"
+      },
+      {
+        "step": "子页进入 s19",
+        "ok": true,
+        "detail": "{\"cur\":\"s19\",\"stack\":[\"s18\"]}"
+      },
+      {
+        "step": "子页出现返回页头",
+        "ok": true,
+        "detail": "{\"appbarHidden\":false}"
+      },
+      {
+        "step": "返回栈回到 s18",
+        "ok": true,
+        "detail": "{\"cur\":\"s18\",\"stack\":[]}"
+      },
+      {
+        "step": "跨 Tab 真跳转到 live",
+        "ok": true,
+        "detail": "{\"url\":\"tab-live.html\",\"cur\":\"s02\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  },
+  {
+    "file": "tab-settings.html",
+    "steps": [
+      {
+        "step": "open",
+        "ok": true,
+        "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-settings.html"
+      },
+      {
+        "step": "首屏 = Tab 首页",
+        "ok": true,
+        "detail": "{\"cur\":\"s09\",\"want\":\"s09\"}"
+      },
+      {
+        "step": "选中 Tab 正确",
+        "ok": true,
+        "detail": "{\"selected\":\"settings\"}"
+      },
+      {
+        "step": "其余 5 个 Tab 是真链接",
+        "ok": true,
+        "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-quota.html\"],\"buttons\":[\"settings\"]}"
+      },
+      {
+        "step": "图表全部渲染",
+        "ok": true,
+        "detail": "9/9 figures=0"
+      },
+      {
+        "step": "子页进入 s10",
+        "ok": true,
+        "detail": "{\"cur\":\"s10\",\"stack\":[\"s09\"]}"
+      },
+      {
+        "step": "子页出现返回页头",
+        "ok": true,
+        "detail": "{\"appbarHidden\":false}"
+      },
+      {
+        "step": "返回栈回到 s09",
+        "ok": true,
+        "detail": "{\"cur\":\"s09\",\"stack\":[]}"
+      },
+      {
+        "step": "弹窗打开",
+        "ok": true,
+        "detail": "{\"hidden\":false}"
+      },
+      {
+        "step": "弹窗关闭",
+        "ok": true,
+        "detail": "{\"hidden\":true}"
+      },
+      {
+        "step": "跨 Tab 真跳转到 ad",
+        "ok": true,
+        "detail": "{\"url\":\"tab-ad.html\",\"cur\":\"s03\"}"
+      },
+      {
+        "step": "console 无报错",
+        "ok": true,
+        "detail": "{\"total\":0,\"texts\":[]}"
+      }
+    ],
+    "ok": true
+  }
+]

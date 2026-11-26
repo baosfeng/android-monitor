@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "id": "open",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "file:// 加载成功，无页面 JS 报错"
+    },
+    {
+      "id": "images",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "无 <img>"
+    },
+    {
+      "id": "overflow",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "横向溢出 0px（画布 390）"
+    },
+    {
+      "id": "content",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "正文 645 字"
+    },
+    {
+      "id": "color",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "39 处非灰颜色（span.legend-dot bg rgb(232, 131, 58) · span.legend-dot bg rgb(59, 130, 246) · span.legend-dot bg rgb(194, 65, 12)）"
+    },
+    {
+      "id": "copy",
+      "level": "FAIL",
+      "ok": true,
+      "evidence": "无 lorem / Feature One / 示例文本"
+    }
+  ],
+  "warnings": [],
+  "canvas": {
+    "w": 390,
+    "h": 844,
+    "source": "00-brief.md"
+  }
+}

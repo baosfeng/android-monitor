@@ -128,3 +128,8 @@ tools/
 ## 结论已提炼进契约与覆盖报告；评审结论 / 返工台账 / 功能盘点按任务记录处理，不入库
 ## ==============================
 docs/交互设计/_归档/
+
+# 按 Tab 拆分原型（.open-design/tabs/）：产物与自测 JSON 入库，
+# 逐轮核对截图与临时脚本留在本地（体积大头，且下一轮就过期）。
+.open-design/tabs/evidence/shots/
+.open-design/tabs/verify-*.mjs

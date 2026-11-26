@@ -1,0 +1,56 @@
+{
+  "file": "tab-overview.html",
+  "steps": [
+    {
+      "step": "open",
+      "ok": true,
+      "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-overview.html"
+    },
+    {
+      "step": "首屏 = Tab 首页",
+      "ok": true,
+      "detail": "{\"cur\":\"s01\",\"want\":\"s01\"}"
+    },
+    {
+      "step": "选中 Tab 正确",
+      "ok": true,
+      "detail": "{\"selected\":\"overview\"}"
+    },
+    {
+      "step": "其余 5 个 Tab 是真链接",
+      "ok": true,
+      "detail": "{\"links\":[\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-quota.html\",\"tab-settings.html\"],\"buttons\":[\"overview\"]}"
+    },
+    {
+      "step": "图表全部渲染",
+      "ok": true,
+      "detail": "11/11 figures=11"
+    },
+    {
+      "step": "子页进入 s16",
+      "ok": true,
+      "detail": "{\"cur\":\"s16\",\"stack\":[\"s01\"]}"
+    },
+    {
+      "step": "子页出现返回页头",
+      "ok": true,
+      "detail": "{\"appbarHidden\":false}"
+    },
+    {
+      "step": "返回栈回到 s01",
+      "ok": true,
+      "detail": "{\"cur\":\"s01\",\"stack\":[]}"
+    },
+    {
+      "step": "跨 Tab 真跳转到 finance",
+      "ok": true,
+      "detail": "{\"url\":\"tab-finance.html\",\"cur\":\"s04\"}"
+    },
+    {
+      "step": "console 无报错",
+      "ok": true,
+      "detail": "{\"total\":0,\"texts\":[]}"
+    }
+  ],
+  "ok": true
+}

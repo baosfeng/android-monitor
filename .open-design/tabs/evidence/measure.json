@@ -1,0 +1,129 @@
+[
+  {
+    "file": "tab-overview.html",
+    "ready": "ready",
+    "active": "s01",
+    "screens": [
+      "s01",
+      "s16"
+    ],
+    "textLen": 597,
+    "colored": 39,
+    "tabHref": [
+      "live=tab-live.html",
+      "ad=tab-ad.html",
+      "finance=tab-finance.html",
+      "quota=tab-quota.html",
+      "settings=tab-settings.html"
+    ],
+    "selfTab": "overview"
+  },
+  {
+    "file": "tab-live.html",
+    "ready": "ready",
+    "active": "s02",
+    "screens": [
+      "s02"
+    ],
+    "textLen": 545,
+    "colored": 5,
+    "tabHref": [
+      "overview=tab-overview.html",
+      "ad=tab-ad.html",
+      "finance=tab-finance.html",
+      "quota=tab-quota.html",
+      "settings=tab-settings.html"
+    ],
+    "selfTab": "live"
+  },
+  {
+    "file": "tab-ad.html",
+    "ready": "ready",
+    "active": "s03",
+    "screens": [
+      "s03"
+    ],
+    "textLen": 500,
+    "colored": 9,
+    "tabHref": [
+      "overview=tab-overview.html",
+      "live=tab-live.html",
+      "finance=tab-finance.html",
+      "quota=tab-quota.html",
+      "settings=tab-settings.html"
+    ],
+    "selfTab": "ad"
+  },
+  {
+    "file": "tab-finance.html",
+    "ready": "ready",
+    "active": "s04",
+    "screens": [
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s14a",
+      "s15"
+    ],
+    "textLen": 271,
+    "colored": 34,
+    "tabHref": [
+      "overview=tab-overview.html",
+      "live=tab-live.html",
+      "ad=tab-ad.html",
+      "quota=tab-quota.html",
+      "settings=tab-settings.html"
+    ],
+    "selfTab": "finance"
+  },
+  {
+    "file": "tab-quota.html",
+    "ready": "ready",
+    "active": "s18",
+    "screens": [
+      "s18",
+      "s19"
+    ],
+    "textLen": 996,
+    "colored": 21,
+    "tabHref": [
+      "overview=tab-overview.html",
+      "live=tab-live.html",
+      "ad=tab-ad.html",
+      "finance=tab-finance.html",
+      "settings=tab-settings.html"
+    ],
+    "selfTab": "quota"
+  },
+  {
+    "file": "tab-settings.html",
+    "ready": "ready",
+    "active": "s09",
+    "screens": [
+      "s09",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s17",
+      "s22",
+      "s23",
+      "s24",
+      "s25",
+      "s26",
+      "s27"
+    ],
+    "textLen": 1150,
+    "colored": 64,
+    "tabHref": [
+      "overview=tab-overview.html",
+      "live=tab-live.html",
+      "ad=tab-ad.html",
+      "finance=tab-finance.html",
+      "quota=tab-quota.html"
+    ],
+    "selfTab": "settings"
+  }
+]

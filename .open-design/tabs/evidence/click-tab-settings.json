@@ -1,0 +1,66 @@
+{
+  "file": "tab-settings.html",
+  "steps": [
+    {
+      "step": "open",
+      "ok": true,
+      "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-settings.html"
+    },
+    {
+      "step": "首屏 = Tab 首页",
+      "ok": true,
+      "detail": "{\"cur\":\"s09\",\"want\":\"s09\"}"
+    },
+    {
+      "step": "选中 Tab 正确",
+      "ok": true,
+      "detail": "{\"selected\":\"settings\"}"
+    },
+    {
+      "step": "其余 5 个 Tab 是真链接",
+      "ok": true,
+      "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-quota.html\"],\"buttons\":[\"settings\"]}"
+    },
+    {
+      "step": "图表全部渲染",
+      "ok": true,
+      "detail": "9/9 figures=0"
+    },
+    {
+      "step": "子页进入 s10",
+      "ok": true,
+      "detail": "{\"cur\":\"s10\",\"stack\":[\"s09\"]}"
+    },
+    {
+      "step": "子页出现返回页头",
+      "ok": true,
+      "detail": "{\"appbarHidden\":false}"
+    },
+    {
+      "step": "返回栈回到 s09",
+      "ok": true,
+      "detail": "{\"cur\":\"s09\",\"stack\":[]}"
+    },
+    {
+      "step": "弹窗打开",
+      "ok": true,
+      "detail": "{\"hidden\":false}"
+    },
+    {
+      "step": "弹窗关闭",
+      "ok": true,
+      "detail": "{\"hidden\":true}"
+    },
+    {
+      "step": "跨 Tab 真跳转到 ad",
+      "ok": true,
+      "detail": "{\"url\":\"tab-ad.html\",\"cur\":\"s03\"}"
+    },
+    {
+      "step": "console 无报错",
+      "ok": true,
+      "detail": "{\"total\":0,\"texts\":[]}"
+    }
+  ],
+  "ok": true
+}

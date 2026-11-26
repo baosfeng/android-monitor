@@ -1,0 +1,34 @@
+[
+  {
+    "name": "data-goto 跨 Tab 真跳转（概览→验证器）",
+    "ok": true,
+    "detail": {
+      "url": "tab-settings.html#s22",
+      "cur": "s22",
+      "theme": "apple"
+    }
+  },
+  {
+    "name": "主题跨文件延续（kami）",
+    "ok": true,
+    "detail": {
+      "theme": "kami",
+      "cur": "s02"
+    }
+  },
+  {
+    "name": "非直达不播开屏",
+    "ok": true,
+    "detail": {
+      "hidden": true
+    }
+  },
+  {
+    "name": "直达打开播开屏",
+    "ok": true,
+    "detail": {
+      "hidden": false,
+      "wanted": true
+    }
+  }
+]

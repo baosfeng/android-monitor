@@ -1,207 +1,322 @@
 <!-- ============================================================
      s19 · 额度设置（push 屏）
 
-     一屏一个文件：样式段由组装器放进 <head>，结构段放进 <body>。
-     文件内三行 od 标记（style / section / end）由组装脚本消费，
-     scripts/assemble-prototype.mjs 只认独占一行的标记，请勿删除或改名。
-
-     入口：设置页「额度监控 › Provider 与 API Key」/ 额度页右上角齿轮。
-     push 屏：appbar 由外壳按 data-title 生成，不要放进 TABS。
+     r3 重设计：按「账号 → 恢复提醒 → 刷新节奏」三组重排；同家可挂多账号，
+       每账号独立 Key（Keystore 加密）、独立刷新、独立预警；Key 支持剪贴板粘贴。
+     push 屏：返回按钮与标题由外壳 appbar 生成，不要放进 TABS。
+     入口：额度页右上角齿轮（s18-settings）/ 设置页额度分组。
      ============================================================ -->
 <!--@od:style-->
 <style data-for="s19">
-/* ── s19 额度设置 ─────────────────────────────────────────────── */
-.screen.s19{font-size:max(var(--text-sm),14px)}
-.screen.s19 [data-state-when]{grid-template-columns:minmax(0,1fr)}
-.screen.s19 :is(.meta,.group-label,.row-sub,.row-tail,.chip,.segmented>*,.st-desc,.field){font-size:max(var(--text-sm),14px)}
-.screen.s19 :is(.btn,.row-title){font-size:max(var(--text-base),14px)}
-.screen.s19 [role="switch"]:focus-visible,.screen.s19 .chip:focus-visible,
-.screen.s19 .btn:focus-visible,.screen.s19 .row:focus-visible{outline:var(--focus-ring);outline-offset:2px}
+/* ── s19 额度设置（push 屏；页头由外壳 appbar 提供） ──────────────── */
+.screen.s19{font-size:var(--text-sm)}
+.screen.s19 .badge.is-back{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success-text)}
+.screen.s19 .badge.is-low{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
+.screen.s19 .badge.is-dead{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger-text)}
+.screen.s19 .s19-save-all{margin:var(--space-3) var(--space-4) var(--space-4);width:calc(100% - var(--space-8))}
+.screen.s19 button:focus-visible,.screen.s19 input:focus-visible{outline:var(--focus-ring);outline-offset:2px}
 
-.s19-intro{display:block;margin:0 0 var(--space-3)}
-.s19-intro .meta{line-height:1.45}
-.s19-group + .s19-group{margin-top:var(--space-4)}
-.s19-chips{display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-3) 0}
-.s19-actions{padding:0 0 var(--space-3)}
-.s19-actions .btn{width:100%}
-.s19-note{display:block;padding:0 0 var(--space-3);line-height:1.45}
-.s19-provider .row-sub{white-space:normal}
-.s19-provider .badge{flex:0 0 auto;white-space:nowrap}
-.s19-badge-ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success-text)}
-.s19-badge-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn-text)}
-.s19-badge-off{color:var(--muted)}
-.s19-soon{opacity:.85}
-.s19-threshold{font-size:var(--text-sm);color:var(--fg-2);white-space:nowrap}
-.s19-row-alert .row-sub{white-space:normal}
-.s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3);white-space:normal;line-height:1.45}
-.s19-foot{margin-top:var(--space-4);line-height:1.45}
-.s19-in{opacity:0}
-.s19.is-active .s19-in{animation:od-rise var(--dur-page) var(--ease-out) both}
-.s19.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
-.s19.is-active .od-d2{animation-delay:calc(var(--stagger) * 2)}
-.s19.is-active .od-d3{animation-delay:calc(var(--stagger) * 3)}
-.s19.is-active .od-d4{animation-delay:calc(var(--stagger) * 4)}
-.device-screen:has(#odSplash:not([hidden])) #s19 *{animation:none}
+/* 局部变量：只在本屏生效 */
+.screen.s19{
+  --fill-1:color-mix(in srgb,var(--fg) 5%,transparent);
+  --fill-2:color-mix(in srgb,var(--fg) 8%,transparent);
+}
+
+.screen.s19 .settings-intro{margin:0 var(--space-4) 10px;font-size:11px;color:var(--muted);line-height:1.4}
+.screen.s19 .grp{margin:0 var(--space-4) 12px}
+.screen.s19 .grp + .grp{margin-top:var(--space-3)}
+.screen.s19 .grp-label{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2);margin:0 var(--space-1) var(--space-1)}
+.screen.s19 .grp-label b{font-size:11px;font-weight:700;color:var(--fg)}
+.screen.s19 .grp-label span{font-size:11px;color:var(--muted)}
+.screen.s19 .box{border:1px solid var(--border-soft);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
+.screen.s19 .arow{display:flex;align-items:center;gap:var(--space-2);min-height:48px;padding:6px var(--space-3);border-top:1px solid var(--border-soft);width:100%;background:transparent;border-left:0;border-right:0;border-bottom:0;text-align:left;cursor:pointer}
+.screen.s19 .arow:first-child{border-top:0}
+.screen.s19 .arow:active{background:var(--fill-1)}
+.screen.s19 .arow .av{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;border-radius:var(--radius-sm);background:var(--fill-2);color:var(--fg-2);font-size:var(--text-xs);font-weight:700}
+.screen.s19 .arow .body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.screen.s19 .arow .nm{display:flex;align-items:center;gap:var(--space-1);font-size:var(--text-xs);font-weight:700;line-height:1.2;min-width:0}
+.screen.s19 .arow .sub{display:flex;align-items:center;gap:var(--space-1);font-size:11px;color:var(--muted);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen.s19 .arow .tail{flex:0 0 auto;display:flex;align-items:center;gap:var(--space-2)}
+.screen.s19 .chev{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--muted);flex:0 0 auto}
+.screen.s19 .acc{padding:0 var(--space-3) 12px;border-top:1px solid var(--border-soft);background:var(--surface-warm)}
+.screen.s19 .field-lab{display:block;margin:var(--space-2) 0 var(--space-1);font-size:11px;color:var(--fg-2);font-weight:600}
+.screen.s19 .field{display:flex;align-items:center;gap:var(--space-2)}
+.screen.s19 .field input{flex:1 1 auto;min-width:0;min-height:44px;padding:0 var(--space-3);
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font:inherit;font-size:13px;}
+.screen.s19 .field input::placeholder{color:var(--meta)}
+.screen.s19 .field input:focus{outline:0;box-shadow:var(--focus-ring);border-color:var(--accent)}
+.screen.s19 .icon-sq{flex:0 0 auto;width:44px;height:44px;display:grid;place-items:center;padding:0;
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg-2);cursor:pointer;}
+.screen.s19 .icon-sq[aria-pressed="true"]{background:var(--fill-2);color:var(--fg)}
+.screen.s19 .icon-sq svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.screen.s19 .paste{width:100%;min-height:44px;margin-top:var(--space-2);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);
+  color:var(--fg);font-size:var(--text-xs);font-weight:600;cursor:pointer;}
+.screen.s19 .paste svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.screen.s19 .paste:active{transform:scale(.99);background:var(--fill-1)}
+.screen.s19 .paste-hint{display:block;margin-top:var(--space-1);font-size:11px;color:var(--muted);line-height:1.35}
+.screen.s19 .paste-hint.is-ok{color:var(--success-text)}
+.screen.s19 .save{width:100%;min-height:44px;margin-top:var(--space-2);border:0;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-on);font-size:var(--text-sm);font-weight:600;cursor:pointer}
+.screen.s19 .save:active{transform:scale(.99)}
+.screen.s19 .danger{width:100%;min-height:44px;margin-top:var(--space-2);border:1px solid color-mix(in srgb,var(--danger) 34%,transparent);border-radius:var(--radius-md);background:transparent;color:var(--danger-text);font-size:13px;font-weight:600;cursor:pointer}
+.screen.s19 .acc-note{font-size:11px;color:var(--muted);line-height:1.4;margin-top:var(--space-2)}
+.screen.s19 .addbtn{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:44px;padding:0 var(--space-3);
+  border:0;border-top:1px solid var(--border-soft);background:transparent;
+  color:var(--accent-text);font-size:13px;font-weight:600;cursor:pointer;}
+.screen.s19 .addbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.screen.s19 .srow{display:flex;align-items:center;gap:var(--space-2);min-height:48px;padding:6px var(--space-3);border-top:1px solid var(--border-soft)}
+.screen.s19 .srow:first-child{border-top:0}
+.screen.s19 .srow .body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.screen.s19 .srow .t{font-size:var(--text-xs);font-weight:600;line-height:1.25}
+.screen.s19 .srow .s{font-size:11px;color:var(--muted);line-height:1.3}
+.screen.s19 .switch{position:relative;flex:0 0 auto;width:52px;height:44px;padding:0;border:0;background:transparent;cursor:pointer}
+.screen.s19 .switch::before{content:"";position:absolute;left:0;top:8px;width:52px;height:28px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 16%,transparent);transition:background var(--dur-state) var(--ease-standard)}
+.screen.s19 .switch::after{content:"";position:absolute;left:3px;top:11px;width:22px;height:22px;border-radius:50%;background:var(--surface-warm);box-shadow:var(--elev-raised);transition:transform var(--dur-state) var(--ease-spring)}
+.screen.s19 .switch[aria-checked="true"]::before{background:var(--accent)}
+.screen.s19 .switch[aria-checked="true"]::after{transform:translateX(24px)}
+.screen.s19 .tristate{display:flex;flex-direction:column;gap:var(--space-1);padding:10px var(--space-3);border-top:1px solid var(--border-soft);background:var(--surface-warm)}
+.screen.s19 .ts{display:flex;align-items:center;gap:var(--space-2)}
+.screen.s19 .ts-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%}
+.screen.s19 .ts-t{font-size:11px;color:var(--fg-2);line-height:1.3}
+.screen.s19 .ts-t b{font-weight:700;color:var(--fg)}
+.screen.s19 .chips{display:flex;flex-wrap:wrap;gap:var(--space-2);padding:10px var(--space-3);border-top:1px solid var(--border-soft)}
+.screen.s19 .chip{min-height:44px;padding:0 var(--space-3);display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-pill);background:transparent;color:var(--fg-2);font-size:11px;font-weight:600;cursor:pointer}
+.screen.s19 .chip[aria-pressed="true"]{background:color-mix(in srgb,var(--fg) 7%,transparent);border-color:color-mix(in srgb,var(--fg) 24%,transparent);color:var(--fg)}
+.screen.s19 .rhythm{padding:0 var(--space-3) 10px;font-size:11px;color:var(--muted);line-height:1.45}
+.screen.s19 .rhythm b{color:var(--fg-2);font-weight:600}
+.screen.s19 .bottombar{flex:0 0 var(--tab-h);height:var(--tab-h);display:flex;align-items:center;gap:var(--space-2);
+  padding:6px var(--space-4);background:var(--surface);border-top:1px solid var(--border-soft);}
+.screen.s19 .bottombar .btn-primary{flex:1 1 auto;min-height:44px;border:0;border-radius:var(--radius-md);background:var(--accent);
+  color:var(--accent-on);font-size:var(--text-sm);font-weight:600;cursor:pointer;}
+.screen.s19 .bottombar .btn-primary:active{transform:scale(.99)}
 </style>
 <!--@od:section-->
 <section class="screen s19" data-screen="s19" data-title="额度设置" id="s19" data-od-id="screen-s19">
-  <div class="content pad" data-od-id="s19-content">
+  <div class="content s19-content" data-od-id="s19-content" data-od-min-fs>
+<p class="settings-intro" data-od-id="s19-intro">同一家可以挂多个账号：每行独立刷新、独立预警，榜单里也会分开展示。凭据只存本机。</p>
 
-    <p class="s19-intro s19-in od-d1" data-od-min-fs>
-      <span class="meta">凭据只保存在本机 · 设置随时可改</span>
-    </p>
+<!-- 1 · 账号 -->
+<div class="grp" data-od-id="s19-accounts">
+  <div class="grp-label"><b>账号</b><span>7 个 · 2 个需处理</span></div>
+  <div class="box">
 
-    <div class="stack" data-state-hide="loading empty error">
-      <div class="s19-group s19-in od-d1" data-od-id="s19-providers">
-        <p class="group-label">Provider</p>
-        <div class="group">
-          <button class="row s19-provider" type="button" data-s19-provider="Ollama" data-connected="true" data-od-id="s19-provider-ollama">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.8v10.4"/><path d="M8.8 9.6h6.4"/><path d="M8.8 13.2h6.4"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">Ollama</span>
-              <span class="row-sub">已连接 · 10 次/分钟限流</span>
-            </span>
-            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已连接</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-          </button>
-          <button class="row s19-provider" type="button" data-s19-provider="DeepSeek" data-connected="false" data-od-id="s19-provider-deepseek">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><path d="M12 3.4 20.6 8v8L12 20.6 3.4 16V8z"/><path d="M9.2 12h5.6"/><path d="M12 9.2v5.6"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">DeepSeek</span>
-              <span class="row-sub">未配置 · 余额 + 用量（需平台登录令牌）</span>
-            </span>
-            <span class="row-tail"><span class="badge s19-badge-warn" data-od-min-fs>未配置</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-          </button>
-          <div class="row s19-soon" data-od-id="s19-provider-opencode">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><rect x="3.4" y="6" width="17.2" height="13" rx="3"/><path d="M3.4 10.4h17.2"/><path d="M8 15h3"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">opencode-go</span>
-              <span class="row-sub">有公开接口 · 下版接入</span>
-            </span>
-            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>下次接入</span></span>
-          </div>
-          <div class="row s19-soon" data-od-id="s19-provider-opendesign">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">opendesign</span>
-              <span class="row-sub">无公开接口 · 手动录入</span>
-            </span>
-            <span class="row-tail"><span class="badge s19-badge-off" data-od-min-fs>手动</span></span>
-          </div>
-        </div>
-        <p class="fine mt-2" data-od-min-fs>API Key 与平台令牌都加密后只存本机，不写日志、不导出；卸载 App 即随之删除。</p>
+    <!-- Ollama：主号已展开 -->
+    <button class="arow" type="button" aria-expanded="true" aria-label="Ollama 主号，已连接，点击收起" data-act="acc" data-od-id="s19-acc-ollama">
+      <span class="av" aria-hidden>O</span>
+      <span class="body">
+        <span class="nm">Ollama · 主号 <span class="badge is-back">已连接</span></span>
+        <span class="sub">API Key · 5 分钟前更新 · 每周 96%</span>
+      </span>
+      <span class="tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+    </button>
+    <div class="acc" data-acc-panel data-od-id="s19-panel-ollama">
+      <label class="field-lab" for="s19-tok-ollama">API Key</label>
+      <div class="field">
+        <input id="s19-tok-ollama" data-token-input type="password" value="sk-ollama-6f2c9a1b4e" autocomplete="off" spellcheck="false" aria-label="Ollama API Key" data-od-id="s19-input-ollama" />
+        <button class="icon-sq" type="button" aria-pressed="false" aria-label="显示令牌" data-act="reveal" data-od-id="s19-reveal-ollama"><svg viewBox="0 0 24 24" aria-hidden><path d="M2.6 12s3.4-5.4 9.4-5.4S21.4 12 21.4 12s-3.4 5.4-9.4 5.4S2.6 12 2.6 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
       </div>
-
-      <div class="s19-group s19-in od-d2" data-od-id="s19-alerts">
-        <p class="group-label">预警</p>
-        <div class="group">
-          <div class="row s19-row-alert">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">额度预警</span>
-              <span class="row-sub">剩余 5% / 4% / 3% / 2% / 1% 各提醒一次，周期重置后重新计数</span>
-            </span>
-            <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度预警" data-s19-switch data-od-id="s19-alert-switch"></button>
-          </div>
-          <div class="row s19-row-alert">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><path d="M4 17.5h16"/><path d="M6.5 17.5V11a5.5 5.5 0 1 1 11 0v6.5"/><path d="M12 5.5V3.6"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">低余额提醒</span>
-              <span class="row-sub">仅余额型 provider · 低于阈值提醒一次，充值回升后重新计数</span>
-            </span>
-            <span class="row-tail"><span class="num s19-threshold">¥50.00</span></span>
-          </div>
-          <div class="row s19-row-alert">
-            <span class="row-icon" aria-hidden>
-              <svg viewBox="0 0 24 24"><rect x="3.4" y="5.4" width="17.2" height="13.2" rx="3"/><path d="M3.4 10.2h17.2"/><path d="M7 15h3"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">通知权限</span>
-              <span class="row-sub">点通知可直接进入额度页</span>
-            </span>
-            <span class="row-tail"><span class="badge s19-badge-ok" data-od-min-fs>已允许</span></span>
-          </div>
-          <div class="s19-actions">
-            <button class="btn btn-ghost" type="button" data-s19-test data-od-id="s19-test">发送测试通知</button>
-          </div>
-        </div>
-        <p class="fine mt-2" data-od-min-fs>一次刷新命中多档只合并成一条通知；总开关关闭时仍刷新额度，但不评估预警。</p>
-      </div>
-
-      <div class="s19-group s19-in od-d3" data-od-id="s19-refresh">
-        <p class="group-label">刷新</p>
-        <div class="group">
-          <div class="s19-chips" role="group" aria-label="后台刷新频率">
-            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="0" data-od-id="s19-refresh-off">关闭</button>
-            <button class="chip is-on" type="button" aria-pressed="true" data-s19-refresh="1" data-od-id="s19-refresh-1h">每小时</button>
-            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="3" data-od-id="s19-refresh-3h">每 3 小时</button>
-            <button class="chip" type="button" aria-pressed="false" data-s19-refresh="6" data-od-id="s19-refresh-6h">每 6 小时</button>
-          </div>
-          <p class="row-sub s19-refresh-note" data-od-id="s19-foreground-note">前台自动刷新 60 秒一次（Ollama 限流 10 次/分钟）；息屏与锁屏不触发后台请求，解锁后不补跑。</p>
-        </div>
-        <p class="fine mt-2" data-od-min-fs>关闭后台刷新后，只在打开 App 时刷新与评估额度。</p>
-      </div>
-
-      <p class="fine s19-foot s19-in od-d4" data-od-min-fs>额度数据只用于本机展示与预警通知，不上传。</p>
+      <button class="paste" type="button" aria-label="从剪贴板粘贴 API Key" data-act="paste" data-od-id="s19-paste-ollama"><svg viewBox="0 0 24 24" aria-hidden><rect x="7" y="4.6" width="10" height="16" rx="2.4"/><path d="M9.6 4.6V3.4h4.8v1.2"/><path d="M10 10h4"/><path d="M10 13.6h4"/></svg> 从剪贴板粘贴</button>
+      <span class="paste-hint" data-paste-hint data-od-id="s19-paste-hint">复制到剪贴板后点这里，不用逐字输入</span>
+      <button class="save" type="button" data-act="toast" data-toast="已保存 Ollama 主号凭据" data-od-id="s19-save-ollama">保存并查询</button>
+      <button class="danger" type="button" data-act="toast" data-toast="确认后断开该账号（清凭据 + 清快照）" data-od-id="s19-clear-ollama">断开连接</button>
+      <p class="acc-note">Key 用 Android Keystore 加密存本机；清空后不再显示上次余额。</p>
     </div>
 
+    <!-- Ollama 备用号：未展开 -->
+    <button class="arow" type="button" aria-expanded="false" aria-label="Ollama 备用号，未配置，点击展开" data-act="acc" data-od-id="s19-acc-ollama2">
+      <span class="av" aria-hidden>O</span>
+      <span class="body">
+        <span class="nm">Ollama · 备用号 <span class="badge">未配置</span></span>
+        <span class="sub">添加后与主号并列，不覆盖主号凭据</span>
+      </span>
+      <span class="tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+    </button>
+    <div class="acc" data-acc-panel hidden data-od-id="s19-panel-ollama2">
+      <label class="field-lab" for="s19-tok-ollama2">API Key</label>
+      <div class="field">
+        <input id="s19-tok-ollama2" type="password" value="" placeholder="sk-…" autocomplete="off" spellcheck="false" aria-label="Ollama 备用号 API Key" data-od-id="s19-input-ollama2" />
+        <button class="icon-sq" type="button" aria-pressed="false" aria-label="显示令牌" data-act="reveal" data-od-id="s19-reveal-ollama2"><svg viewBox="0 0 24 24" aria-hidden><path d="M2.6 12s3.4-5.4 9.4-5.4S21.4 12 21.4 12s-3.4 5.4-9.4 5.4S2.6 12 2.6 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+      </div>
+      <button class="paste" type="button" aria-label="从剪贴板粘贴备用号 API Key" data-act="paste" data-od-id="s19-paste-ollama2"><svg viewBox="0 0 24 24" aria-hidden><rect x="7" y="4.6" width="10" height="16" rx="2.4"/><path d="M9.6 4.6V3.4h4.8v1.2"/><path d="M10 10h4"/><path d="M10 13.6h4"/></svg> 从剪贴板粘贴</button>
+      <span class="paste-hint" data-paste-hint data-od-id="s19-paste-hint2">剪贴板为空时会提示「没读到内容」</span>
+      <button class="save" type="button" data-act="toast" data-toast="已保存 Ollama 备用号" data-od-id="s19-save-ollama2">保存并查询</button>
+    </div>
+
+    <button class="addbtn" type="button" data-act="toast" data-toast="新增 Ollama 账号（第 3 个实例）" data-od-id="s19-add-ollama"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加 Ollama 账号</button>
+
+    <!-- DeepSeek：平台令牌过期，行内直给修 -->
+    <button class="arow" type="button" aria-expanded="false" aria-label="DeepSeek 账号 1，令牌过期，点击展开" data-act="acc" data-od-id="s19-acc-ds1">
+      <span class="av" aria-hidden>S</span>
+      <span class="body">
+        <span class="nm">DeepSeek · 账号 1 <span class="badge is-low">令牌过期</span></span>
+        <span class="sub">平台登录令牌 · 停在 1 小时 12 分钟前</span>
+      </span>
+      <span class="tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+    </button>
+    <div class="acc" data-acc-panel hidden data-od-id="s19-panel-ds1">
+      <label class="field-lab" for="s19-tok-ds1">平台会话令牌（不是 sk- API Key）</label>
+      <div class="field">
+        <input id="s19-tok-ds1" type="password" value="" placeholder="粘贴浏览器 Cookie 里的 session token" autocomplete="off" spellcheck="false" aria-label="DeepSeek 平台会话令牌" data-od-id="s19-input-ds1" />
+        <button class="icon-sq" type="button" aria-pressed="false" aria-label="显示令牌" data-act="reveal" data-od-id="s19-reveal-ds1"><svg viewBox="0 0 24 24" aria-hidden><path d="M2.6 12s3.4-5.4 9.4-5.4S21.4 12 21.4 12s-3.4 5.4-9.4 5.4S2.6 12 2.6 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+      </div>
+      <button class="paste" type="button" aria-label="从剪贴板粘贴 DeepSeek 会话令牌" data-act="paste" data-od-id="s19-paste-ds1"><svg viewBox="0 0 24 24" aria-hidden><rect x="7" y="4.6" width="10" height="16" rx="2.4"/><path d="M9.6 4.6V3.4h4.8v1.2"/><path d="M10 10h4"/><path d="M10 13.6h4"/></svg> 从剪贴板粘贴</button>
+      <span class="paste-hint" data-paste-hint data-od-id="s19-paste-hint3">在 platform.deepseek.com 登录后复制；令牌 30 天过期</span>
+      <button class="save" type="button" data-act="toast" data-toast="已保存 DeepSeek 令牌，正在查询" data-od-id="s19-save-ds1">保存并查询</button>
+    </div>
+
+    <!-- open-design：会话令牌 -->
+    <button class="arow" type="button" aria-expanded="false" aria-label="open-design 工作区 A，已连接，点击展开" data-act="acc" data-od-id="s19-acc-od-a">
+      <span class="av" aria-hidden>D</span>
+      <span class="body">
+        <span class="nm">open-design · 工作区 A <span class="badge is-back">已连接</span></span>
+        <span class="sub">浏览器会话令牌 · 6 分钟前更新 · 12 天后过期</span>
+      </span>
+      <span class="tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+    </button>
+    <div class="acc" data-acc-panel hidden data-od-id="s19-panel-od-a">
+      <label class="field-lab" for="tok-od-a">会话令牌</label>
+      <div class="field">
+        <input id="tok-od-a" type="password" value="eyJhbGciOiJIUzI1NiJ9" autocomplete="off" spellcheck="false" aria-label="open-design 会话令牌" data-od-id="s19-input-od-a" />
+        <button class="icon-sq" type="button" aria-pressed="false" aria-label="显示令牌" data-act="reveal" data-od-id="s19-reveal-od-a"><svg viewBox="0 0 24 24" aria-hidden><path d="M2.6 12s3.4-5.4 9.4-5.4S21.4 12 21.4 12s-3.4 5.4-9.4 5.4S2.6 12 2.6 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+      </div>
+      <button class="paste" type="button" aria-label="从剪贴板粘贴 open-design 会话令牌" data-act="paste" data-od-id="s19-paste-od-a"><svg viewBox="0 0 24 24" aria-hidden><rect x="7" y="4.6" width="10" height="16" rx="2.4"/><path d="M9.6 4.6V3.4h4.8v1.2"/><path d="M10 10h4"/><path d="M10 13.6h4"/></svg> 从剪贴板粘贴</button>
+      <span class="paste-hint" data-paste-hint data-od-id="s19-paste-hint4">DevTools → Application → Cookies 复制 session_token</span>
+      <button class="save" type="button" data-act="toast" data-toast="已保存 open-design 令牌" data-od-id="s19-save-od-a">保存并查询</button>
+      <button class="danger" type="button" data-act="toast" data-toast="确认后断开该工作区" data-od-id="s19-clear-od-a">断开连接</button>
+    </div>
+
+    <button class="addbtn" type="button" data-act="toast" data-toast="新增 open-design 工作区" data-od-id="s19-add-od"><svg viewBox="0 0 24 24" aria-hidden><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加 open-design 工作区</button>
+  </div>
+  <p class="fine" style="margin:6px 2px 0" data-od-id="s19-accounts-foot">添加账号不会改动已有账号的凭据与 ID；只剩一个账号时不显示「删除」。</p>
+</div>
+
+<!-- 2 · 恢复提醒（三态） -->
+<div class="grp" data-od-id="s19-recover">
+  <div class="grp-label"><b>恢复提醒</b><span>本轮只做界面</span></div>
+  <div class="box">
+    <div class="srow">
+      <span class="body"><span class="t">额度耗尽时提醒</span><span class="s">剩余 0% 或被接口标成 rate-limited 时发一条</span></span>
+      <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度耗尽时提醒" data-act="switch" data-od-id="s19-sw-dead"></button>
+    </div>
+    <div class="srow">
+      <span class="body"><span class="t">额度恢复时提醒</span><span class="s">从低于阈值回到阈值以上（通常是重置）时发一条</span></span>
+      <button class="switch" type="button" role="switch" aria-checked="true" aria-label="额度恢复时提醒" data-act="switch" data-od-id="s19-sw-back"></button>
+    </div>
+    <div class="srow">
+      <span class="body"><span class="t">快见底阈值</span><span class="s">剩余低于该值时提醒，每档一次</span></span>
+      <span class="badge">20% · 10% · 5%</span>
+    </div>
+    <div class="tristate" data-od-id="s19-tristate">
+      <span class="ts"><span class="ts-dot" style="background:var(--warn)" aria-hidden></span><span class="ts-t"><b>快见底</b> · 卡片转黄、组件同色；点通知直达该账号</span></span>
+      <span class="ts"><span class="ts-dot" style="background:var(--danger)" aria-hidden></span><span class="ts-t"><b>已耗尽</b> · 卡片转红并给「切主号 / 等重置」两条出路</span></span>
+      <span class="ts"><span class="ts-dot" style="background:var(--success)" aria-hidden></span><span class="ts-t"><b>已恢复</b> · 绿色回弹，附「从 4% → 96%」的变化</span></span>
+    </div>
+    <button class="arow" type="button" data-act="toast" data-toast="已发送一条示例恢复通知" data-od-id="s19-test" aria-label="发送一条示例恢复通知">
+      <span class="body"><span class="t">发送示例通知</span><span class="sub">用当前数据造一条「已恢复」，不消耗真实额度</span></span>
+      <span class="tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
+    </button>
+  </div>
+</div>
+
+<!-- 3 · 刷新节奏 -->
+<div class="grp" data-od-id="s19-refresh">
+  <div class="grp-label"><b>刷新节奏</b><span>决定了「更新于 x 分钟前」</span></div>
+  <div class="box">
+    <div class="chips" role="group" aria-label="后台刷新间隔">
+      <button class="chip" type="button" aria-pressed="true" data-act="seg" data-od-id="s19-int-5">5 分钟</button>
+      <button class="chip" type="button" aria-pressed="false" data-act="seg" data-od-id="s19-int-15">15 分钟</button>
+      <button class="chip" type="button" aria-pressed="false" data-act="seg" data-od-id="s19-int-30">30 分钟</button>
+      <button class="chip" type="button" aria-pressed="false" data-act="seg" data-od-id="s19-int-60">1 小时</button>
+      <button class="chip" type="button" aria-pressed="false" data-act="seg" data-od-id="s19-int-off">关闭</button>
+    </div>
+    <p class="rhythm" data-od-id="s19-rhythm">当前：<b>前台每 5 分钟</b>（Ollama 限流 10 次/分钟，跨设备共享）· <b>后台每 15 分钟</b>，系统 doze 可能推迟到 30 分钟。超过 2 倍间隔仍未更新，额度页会标「数据过期」。</p>
+    <div class="srow">
+      <span class="body"><span class="t">过期阈值</span><span class="s">超过该时长没取到新数据就在页面上标黄</span></span>
+      <span class="badge">2× 刷新间隔</span>
+    </div>
+    <div class="srow">
+      <span class="body"><span class="t">息屏时不刷新</span><span class="s">省电；解锁后立即补一次</span></span>
+      <button class="switch" type="button" role="switch" aria-checked="true" aria-label="息屏时不刷新" data-act="switch" data-od-id="s19-sw-sleep"></button>
+    </div>
+  </div>
+</div>
+
+<p class="fine" data-od-id="s19-foot">额度数据只用于本机展示与通知，不上传；通知开关受系统通知权限约束。</p>
+
+<button class="save s19-save-all" type="button" data-act="toast" data-toast="已保存全部设置" data-od-id="s19-save-all">保存全部</button>
   </div>
 
   <script>
-  /* s19：开关 / 后台刷新 chip / 测试通知 / provider 行反馈。
-     provider 行与刷新 chip 都是真实 button；开关用 role=switch + aria-checked。 */
   (function () {
     var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
     if (!sec) return;
 
+    function setPressed(el) {
+      Array.prototype.forEach.call(el.parentElement.children, function (b) { b.setAttribute('aria-pressed', 'false'); });
+      el.setAttribute('aria-pressed', 'true');
+    }
+    function closeOthers(except) {
+      Array.prototype.forEach.call(sec.querySelectorAll('[data-acc-panel]'), function (p) {
+        if (p !== except) p.hidden = true;
+      });
+      Array.prototype.forEach.call(sec.querySelectorAll('.arow[aria-expanded="true"]'), function (b) {
+        var panel = b.nextElementSibling;
+        if (!panel || panel !== except) b.setAttribute('aria-expanded', 'false');
+      });
+    }
     sec.addEventListener('click', function (e) {
-      var t = e.target;
-      if (!t || !t.closest) return;
+      var el = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!el || !sec.contains(el)) return;
+      var act = el.getAttribute('data-act');
 
-      var sw = t.closest('[data-s19-switch]');
-      if (sw) {
-        var on = sw.getAttribute('aria-checked') === 'true';
-        sw.setAttribute('aria-checked', on ? 'false' : 'true');
-        if (window.App) App.toast(on ? '额度预警已关闭' : '额度预警已开启 · 剩余 5% 起逐档提醒');
+      if (act === 'acc') {
+        var panel = el.nextElementSibling;
+        if (!panel || !panel.hasAttribute("data-acc-panel")) return;
+        var opening = panel.hidden;
+        closeOthers(opening ? panel : null);
+        panel.hidden = !opening;
+        el.setAttribute('aria-expanded', opening ? 'true' : 'false');
         return;
       }
-
-      var chip = t.closest('[data-s19-refresh]');
-      if (chip) {
-        var all = sec.querySelectorAll('[data-s19-refresh]');
-        Array.prototype.forEach.call(all, function (b) {
-          b.classList.remove('is-on');
-          b.setAttribute('aria-pressed', 'false');
-        });
-        chip.classList.add('is-on');
-        chip.setAttribute('aria-pressed', 'true');
-        var label = (chip.textContent || '').replace(/\s+/g, '');
-        if (window.App) App.toast('后台刷新：' + label);
+      if (act === 'reveal') {
+        var field = el.parentElement;
+        var input = field ? field.querySelector("input") : null;
+        if (!input) return;
+        var masked = input.type === 'password';
+        input.type = masked ? 'text' : 'password';
+        el.setAttribute('aria-pressed', masked ? 'true' : 'false');
+        el.setAttribute('aria-label', masked ? '隐藏令牌' : '显示令牌');
+        if (window.App && App.toast) App.toast(masked ? '已显示令牌 · 仅本机可见' : '已隐藏令牌');
         return;
       }
-
-      if (t.closest('[data-s19-test]')) {
-        if (window.App) App.toast('测试通知已发送 · 额度预警渠道');
+      if (act === 'paste') {
+        var hint = el.nextElementSibling;
+        if (el.parentElement) {
+          var inp = el.parentElement.querySelector('input');
+          if (inp && !inp.value) inp.value = 'sk-••••••••••••';
+        }
+        if (hint) {
+          hint.classList.add('is-ok');
+          hint.textContent = '已从剪贴板读到内容 · 可直接保存';
+        }
+        if (window.App && App.toast) App.toast('已粘贴剪贴板内容');
         return;
       }
-
-      var prov = t.closest('[data-s19-provider]');
-      if (prov) {
-        var name = prov.getAttribute('data-s19-provider');
-        var connected = prov.getAttribute('data-connected') === 'true';
-        if (window.App) App.toast(name + (connected ? ' · 已连接，可更新 Key' : ' · 未配置，去填写 API Key'));
+      if (act === 'seg') {
+        setPressed(el);
+        if (window.App && App.toast) App.toast('刷新间隔已设为 ' + (el.textContent || '').trim());
         return;
+      }
+      if (act === 'switch') {
+        var on = el.getAttribute('aria-checked') === 'true';
+        el.setAttribute('aria-checked', on ? 'false' : 'true');
+        if (window.App && App.toast) App.toast(on ? '已关闭' : '已开启');
+        return;
+      }
+      if (act === 'toast' && window.App && App.toast) {
+        App.toast(el.getAttribute('data-toast') || '已执行');
       }
     });
   })();

@@ -1,0 +1,56 @@
+{
+  "file": "tab-quota.html",
+  "steps": [
+    {
+      "step": "open",
+      "ok": true,
+      "detail": "  file:///Users/bsfeng/IdeaProjects/android-monitor/.open-design/tabs/tab-quota.html"
+    },
+    {
+      "step": "首屏 = Tab 首页",
+      "ok": true,
+      "detail": "{\"cur\":\"s18\",\"want\":\"s18\"}"
+    },
+    {
+      "step": "选中 Tab 正确",
+      "ok": true,
+      "detail": "{\"selected\":\"quota\"}"
+    },
+    {
+      "step": "其余 5 个 Tab 是真链接",
+      "ok": true,
+      "detail": "{\"links\":[\"tab-overview.html\",\"tab-live.html\",\"tab-ad.html\",\"tab-finance.html\",\"tab-settings.html\"],\"buttons\":[\"quota\"]}"
+    },
+    {
+      "step": "图表全部渲染",
+      "ok": true,
+      "detail": "0/0 figures=24"
+    },
+    {
+      "step": "子页进入 s19",
+      "ok": true,
+      "detail": "{\"cur\":\"s19\",\"stack\":[\"s18\"]}"
+    },
+    {
+      "step": "子页出现返回页头",
+      "ok": true,
+      "detail": "{\"appbarHidden\":false}"
+    },
+    {
+      "step": "返回栈回到 s18",
+      "ok": true,
+      "detail": "{\"cur\":\"s18\",\"stack\":[]}"
+    },
+    {
+      "step": "跨 Tab 真跳转到 live",
+      "ok": true,
+      "detail": "{\"url\":\"tab-live.html\",\"cur\":\"s02\"}"
+    },
+    {
+      "step": "console 无报错",
+      "ok": true,
+      "detail": "{\"total\":0,\"texts\":[]}"
+    }
+  ],
+  "ok": true
+}

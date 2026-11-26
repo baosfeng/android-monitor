@@ -1,0 +1,206 @@
+[
+  {
+    "file": "tab-overview.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-overview.html",
+      "screen": "s01",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 52,
+      "content": {
+        "top": 44,
+        "bottom": 772,
+        "h": 728
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  },
+  {
+    "file": "tab-live.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-live.html",
+      "screen": "s02",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 52,
+      "content": {
+        "top": 44,
+        "bottom": 772,
+        "h": 728
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  },
+  {
+    "file": "tab-ad.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-ad.html",
+      "screen": "s03",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 52,
+      "content": {
+        "top": 44,
+        "bottom": 772,
+        "h": 728
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  },
+  {
+    "file": "tab-finance.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-finance.html",
+      "screen": "s04",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 52,
+      "content": {
+        "top": 44,
+        "bottom": 772,
+        "h": 728
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  },
+  {
+    "file": "tab-quota.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-quota.html",
+      "screen": "s18",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 44,
+      "content": {
+        "top": 128,
+        "bottom": 772,
+        "h": 644
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  },
+  {
+    "file": "tab-settings.html",
+    "ok": true,
+    "measured": {
+      "file": "tab-settings.html",
+      "screen": "s09",
+      "viewport": {
+        "w": 393,
+        "h": 852
+      },
+      "scrollW": 393,
+      "statusbar": {
+        "top": 0,
+        "bottom": 44,
+        "h": 44
+      },
+      "headTop": 44,
+      "content": {
+        "top": 122,
+        "bottom": 772,
+        "h": 650
+      },
+      "tabbar": {
+        "top": 772,
+        "bottom": 828,
+        "h": 56
+      },
+      "gesture": {
+        "top": 828,
+        "bottom": 852,
+        "h": 24
+      }
+    }
+  }
+]
