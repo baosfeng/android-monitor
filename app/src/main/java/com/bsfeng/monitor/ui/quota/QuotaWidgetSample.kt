@@ -71,7 +71,7 @@ internal fun QuotaWidgetSample(
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
-                "桌面组件 · 4×2 样张",
+                "桌面组件 · 4×2",
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                 color = t.fg,
                 modifier = Modifier.weight(1f),
