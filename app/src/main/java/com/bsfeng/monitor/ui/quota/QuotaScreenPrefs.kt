@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.core.content.edit
 
 /**
- * 重置时刻显示策略（原型 s18-reset-mode 两档）。
+ * 重置时刻显示策略（原型 s19-reset-all / s19-reset-urgent 两档）。
  *
- * 默认 URGENT：原型页面 data-reset="urgent"，首屏就该把「快用完的先被看到」。
+ * 默认 URGENT：只看快见底与已耗尽的行，首屏就该把「快用完的先被看到」。
+ * r5 起这个偏好放在额度设置页「主屏展示」组，不再占额度主屏的首屏高度。
  */
 internal enum class QuotaResetMode(val storageValue: String) {
     ALL("all"),
@@ -20,7 +21,7 @@ internal enum class QuotaResetMode(val storageValue: String) {
 }
 
 /**
- * 额度主屏的展示偏好（唯一一项：重置时刻策略）。
+ * 额度主屏的展示偏好（唯一一项：重置时刻策略），由额度设置页写入、额度主屏读取。
  *
  * 单独成文件而不是塞进 QuotaSettings：那份 prefs 是「刷新 / 提醒 / 计费模式」的运维口径，
  * 这一项只影响主屏怎么排版，重置它不该牵连数据层。

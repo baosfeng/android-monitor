@@ -48,6 +48,7 @@ import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaSettings
 import com.bsfeng.monitor.quota.postQuotaTestNotification
 import com.bsfeng.monitor.ui.components.AppToast
+import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.rememberToastHostState
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
@@ -82,6 +83,8 @@ fun QuotaSettingsScreen(
     // 后台刷新：ViewModel 仍叫 refreshHours，值已是分钟（见 QuotaSettings 的兼容属性）
     val backgroundMinutes by viewModel.refreshHours.collectAsStateWithLifecycle()
     val settings = remember { QuotaSettings(context) }
+    val screenPrefs = remember { QuotaScreenPrefs(context) }
+    var resetMode by remember { mutableStateOf(screenPrefs.resetMode) }
     var sleepSkip by remember { mutableStateOf(settings.skipRefreshWhenScreenOff) }
     // 进页面默认展开第一个账号（原型 s19 主号展开）：加完账号的下一步一定是填凭据
     var expandedId by remember { mutableStateOf(providers.firstOrNull()?.instanceId) }
@@ -220,6 +223,21 @@ fun QuotaSettingsScreen(
                     },
                 )
                 Spacer(Modifier.height(t.space3))
+                DisplayGroup(
+                    resetMode = resetMode,
+                    onResetModeChange = { next ->
+                        resetMode = next
+                        screenPrefs.resetMode = next
+                        toast.show(
+                            if (next == QuotaResetMode.ALL) {
+                                "每行都显示重置时刻"
+                            } else {
+                                "只给即将重置或快见底的行显示重置"
+                            },
+                        )
+                    },
+                )
+                Spacer(Modifier.height(t.space3))
                 FootNote()
                 SaveAllButton(
                     onClick = {
@@ -327,6 +345,47 @@ private fun RecoverGroup(
                 Box(Modifier.padding(horizontal = t.space3)) { AlertTriadLegend() }
             }
             TestNotificationRow(onClick = onTestNotification)
+        }
+    }
+}
+
+/**
+ * 「主屏展示」组（原型 s19-display）：重置时刻策略两档。
+ *
+ * r5 从额度主屏搬到这里：它是排版偏好，不是每次看额度都要调的东西；
+ * 放在主屏会白占 44dp 首屏，而且与「看余额」不是一类操作。
+ */
+@Composable
+private fun DisplayGroup(
+    resetMode: QuotaResetMode,
+    onResetModeChange: (QuotaResetMode) -> Unit,
+) {
+    val t = LocalDesignTokens.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = t.space4).testTag("s19-display")) {
+        GroupLabel(title = "主屏展示", trailing = "只影响额度 Tab 的行")
+        SettingsBox {
+            Box(Modifier.fillMaxWidth().padding(horizontal = t.space3, vertical = t.space2)) {
+                SegmentedControl(
+                    options = listOf("每行都显示重置", "只显示需处理的行"),
+                    selectedIndex = if (resetMode == QuotaResetMode.ALL) 0 else 1,
+                    onSelect = { index ->
+                        val next = if (index == 0) QuotaResetMode.ALL else QuotaResetMode.URGENT
+                        if (next != resetMode) onResetModeChange(next)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    optionTags = listOf("s19-reset-all", "s19-reset-urgent"),
+                )
+            }
+            Text(
+                "「只显示需处理的行」会把正常行的重置时刻折叠；快见底与已耗尽的行照常显示。",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp).quotaTight(),
+                color = t.muted,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = t.space3)
+                    .padding(bottom = t.space2)
+                    .testTag("s19-display-foot"),
+            )
         }
     }
 }

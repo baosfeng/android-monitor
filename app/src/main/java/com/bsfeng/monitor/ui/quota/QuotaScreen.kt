@@ -1,35 +1,14 @@
 package com.bsfeng.monitor.ui.quota
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,44 +19,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.quota.QuotaRange
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.domain.quota.instanceSeq
-import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.ui.components.AppToast
-import com.bsfeng.monitor.ui.components.SegmentedControl
-import com.bsfeng.monitor.ui.components.keyboardFocusRing
-import com.bsfeng.monitor.ui.components.rememberMotionEnabled
 import com.bsfeng.monitor.ui.components.rememberToastHostState
-import com.bsfeng.monitor.ui.foundation.HapticTone
-import com.bsfeng.monitor.ui.foundation.pressFeedback
-import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import kotlinx.coroutines.delay
 
-/** 刷新图标转一圈的时长（原型 720ms 一圈，不是设计 token，按原型取值）。 */
-private const val REFRESH_SPIN_MS = 720
-
-/** 列表里账号之前的固定项数：sticky 结论条 + 重置策略分段。 */
-private const val ACCOUNT_ITEM_OFFSET = 2
+/** 列表里账号之前的固定项数：sticky 结论条。 */
+private const val ACCOUNT_ITEM_OFFSET = 1
 
 /**
- * 「额度」Tab（原型 s18 · r4：账号卡列表 + 点击展开图表）。
+ * 「额度」Tab（原型 s18 · r5：账号卡列表 + 点击展开图表）。
  *
- * 信息架构：页头 → sticky 结论条 → 重置时刻策略 → 账号卡列表（7 行）→ 恢复提醒三态
- * → 桌面组件样张 → 说明。点账号行展开该账号的全部窗口与用量柱图，再点收起。
+ * 信息架构：页头 → sticky 结论条 → 账号卡列表 → 额度提醒（点行定位账号）→ 说明。
+ *
+ * r5 收口（用户反馈「小组件不该出现在页面里 / 排版与点击混乱」）：
+ * - 桌面组件样张整块移除：小组件是桌面上的东西，预览归「设置 → 桌面小组件」；
+ * - 重置时刻显示策略是展示偏好，移到额度设置页「主屏展示」组，不再占首屏；
+ * - 额度提醒的行从「跳设置」改成「定位到对应账号并展开」，与账号行同一个打开路径。
  *
  * 推导全在 [buildQuotaAccounts]（纯函数）：徽标优先级、两列选择、紧急判定都在那里，
  * 组合层只做摆放与交互。
@@ -96,8 +64,6 @@ fun QuotaScreen(
     nowEpochSecond: Long = System.currentTimeMillis() / 1000,
 ) {
     val t = LocalDesignTokens.current
-    val context = LocalContext.current
-    val prefs = remember(context) { QuotaScreenPrefs(context) }
     val providers by viewModel.providers.collectAsStateWithLifecycle()
     val states by viewModel.providerStates.collectAsStateWithLifecycle()
     val triad by viewModel.alertTriad.collectAsStateWithLifecycle()
@@ -105,12 +71,15 @@ fun QuotaScreen(
     val lowUsd by viewModel.lowBalanceUsd.collectAsStateWithLifecycle()
     val refreshMinutes by viewModel.refreshMinutes.collectAsStateWithLifecycle()
     val toast = rememberToastHostState()
+    val context = LocalContext.current
+    val prefs = remember(context) { QuotaScreenPrefs(context) }
 
+    // 重置时刻策略在额度设置页改（原型 s19-display）：主屏只读，进页与从设置返回时各读一次
     var resetMode by remember { mutableStateOf(prefs.resetMode) }
     var expandedId by remember { mutableStateOf<String?>(null) }
     var helpVisible by remember { mutableStateOf(false) }
-    // 原型默认 7 天：数据层缺省是 24 小时，首次展开时切一次；用户手动选过就不再改
-    val autoRangeDone = remember { mutableStateOf(setOf<String>()) }
+    // 同一账号被「额度提醒」再次定位时 expandedId 不变，用计次把滚动重新触发一次
+    var focusTick by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     var stickyHeightPx by remember { mutableIntStateOf(0) }
 
@@ -136,8 +105,24 @@ fun QuotaScreen(
         }
     }
 
+    /**
+     * 打开一个账号：账号行点击与「额度提醒」行定位共用同一条路径。
+     *
+     * 首次展开且还没有用量柱图时，按该账号当前范围补拉一次；范围本身不做任何隐式切换
+     * （r5 之前会偷偷改成 7 天，用户手动选过的范围在下次进页面时被打回）。
+     */
+    val openAccount: (String) -> Unit = open@{ instanceId ->
+        val account = accounts.firstOrNull { it.instanceId == instanceId } ?: return@open
+        val state = states[instanceId]
+        if (account.supportsUsage && state?.usageConfigured == true && state.usage == null) {
+            viewModel.onRangeChangeFor(instanceId, state.range)
+        }
+        expandedId = instanceId
+        focusTick += 1
+    }
+
     // 展开后把该行顶到结论条下沿：sticky 高度在运行期量出来，偏移量取负值（不写死魔法数）
-    LaunchedEffect(expandedId) {
+    LaunchedEffect(expandedId, focusTick) {
         val id = expandedId ?: return@LaunchedEffect
         val index = accounts.indexOfFirst { it.instanceId == id }
         if (index < 0) return@LaunchedEffect
@@ -152,6 +137,8 @@ fun QuotaScreen(
     LaunchedEffect(settingsReturnGeneration) {
         if (quotaReturnFocusPending(settingsReturnGeneration, seenReturnGeneration)) {
             seenReturnGeneration = settingsReturnGeneration
+            // 用户在设置里可能改了「重置时刻」档位
+            resetMode = prefs.resetMode
             runCatching { settingsFocus.requestFocus() }
         }
     }
@@ -175,41 +162,12 @@ fun QuotaScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag("s18-content"),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = t.space8),
+                contentPadding = PaddingValues(bottom = t.space8),
             ) {
                 if (anyConfigured) {
                     stickyHeader(key = "concl") {
                         Box(Modifier.onSizeChanged { stickyHeightPx = it.height }) {
                             QuotaConclBar(leader)
-                        }
-                    }
-                    item(key = "mode") {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = t.space4)
-                                .padding(bottom = 6.dp),
-                        ) {
-                            SegmentedControl(
-                                options = listOf("每行都显示重置", "只显示需处理的行"),
-                                selectedIndex = if (resetMode == QuotaResetMode.ALL) 0 else 1,
-                                onSelect = { index ->
-                                    val next = if (index == 0) QuotaResetMode.ALL else QuotaResetMode.URGENT
-                                    if (next != resetMode) {
-                                        resetMode = next
-                                        prefs.resetMode = next
-                                        toast.show(
-                                            if (next == QuotaResetMode.ALL) {
-                                                "每行都显示重置时刻"
-                                            } else {
-                                                "只给即将重置或快见底的行显示重置"
-                                            },
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.testTag("s18-reset-mode"),
-                                optionTags = listOf("s18-mode-all", "s18-mode-urgent"),
-                            )
                         }
                     }
                     itemsIndexed(accounts, key = { _, account -> account.instanceId }) { index, account ->
@@ -225,44 +183,34 @@ fun QuotaScreen(
                             resetMode = resetMode,
                             nowEpochSecond = now,
                             onToggle = {
-                                val opening = expandedId != account.instanceId
-                                expandedId = if (opening) account.instanceId else null
-                                if (opening) {
-                                    // 第一次展开：没有用量就拉一次；数据层缺省 24 小时，按原型切到 7 天
-                                    if (account.supportsUsage && state?.usageConfigured == true &&
-                                        state.usage == null
-                                    ) {
-                                        viewModel.onRangeChangeFor(account.instanceId, state.range)
-                                    }
-                                    if (account.instanceId !in autoRangeDone.value &&
-                                        state?.range == QuotaRange.LAST_24_HOURS
-                                    ) {
-                                        autoRangeDone.value = autoRangeDone.value + account.instanceId
-                                        viewModel.onRangeChangeFor(account.instanceId, QuotaRange.LAST_7_DAYS)
-                                    }
+                                if (expandedId == account.instanceId) {
+                                    expandedId = null
+                                } else {
+                                    openAccount(account.instanceId)
                                 }
                             },
                             onRangeChange = { range -> viewModel.onRangeChangeFor(account.instanceId, range) },
                         )
                     }
                 } else {
-                    // 空态：没有账号就没有「最低剩余」与「重置策略」，一屏只留一条空信息（页头 + 引导 + foot）
+                    // 空态：没有账号就没有「最低剩余」与「额度提醒」，一屏只留一条空信息（页头 + 引导 + foot）
                     item(key = "empty") {
                         QuotaEmptyAccounts(onOpenSettings = onOpenSettings)
                     }
                 }
                 item(key = "alerts") {
-                    // B 的组件自带「恢复提醒 · 三态」标题与左右 16dp；空态整块不渲染
+                    // 自带组标题与左右 16dp；空态整块不渲染
                     QuotaAlertTriadSection(
                         triad = triad,
-                        onOpenSettings = onOpenSettings,
+                        onFocusAccount = { instanceId ->
+                            if (accounts.any { it.instanceId == instanceId }) {
+                                openAccount(instanceId)
+                            } else {
+                                toast.show("该账号已不在列表里")
+                            }
+                        },
                         modifier = Modifier.padding(top = t.space2),
                     )
-                }
-                if (anyConfigured) {
-                    item(key = "widget") {
-                        QuotaWidgetSample(accounts = accounts, updatedText = updatedText)
-                    }
                 }
                 item(key = "foot") {
                     Text(

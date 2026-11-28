@@ -72,7 +72,7 @@ class QuotaViewModel(
     private val triadStore = QuotaAlertTriadStore(application)
 
     /**
-     * 主屏「恢复提醒 · 三态」（原型 s18-alerts）。
+     * 主屏「额度提醒」（原型 s18-alerts）。
      *
      * 恢复来自事件记录，低 / 耗尽从当前快照实时推导；[repository.states] 每次刷新都会 emit，
      * 所以通知器写完恢复事件后这里自然重算，不需要额外的 tick 源。

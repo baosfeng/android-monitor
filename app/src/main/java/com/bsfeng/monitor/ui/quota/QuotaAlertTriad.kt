@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +39,7 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * 主屏「恢复提醒 · 三态」的数据契约与组件（原型 s18-alerts）。
+ * 主屏「额度提醒」的数据契约与组件（原型 s18-alerts）。
  *
  * 三态口径：
  * - [QuotaAlertTriadKind.RECOVERED] 来自**事件记录**（本周期提醒过又回升，见
@@ -85,7 +88,8 @@ data class QuotaAlertTriad(val rows: List<QuotaAlertTriadRow> = emptyList()) {
 @Composable
 fun QuotaAlertTriadSection(
     triad: QuotaAlertTriad,
-    onOpenSettings: () -> Unit,
+    /** 点一行定位到对应账号（额度主屏展开该行并滚动）：不再是「跳设置」，那与本区语义不符。 */
+    onFocusAccount: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (triad.isEmpty) return
@@ -102,12 +106,12 @@ fun QuotaAlertTriadSection(
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
-                "恢复提醒 · 三态",
+                "额度提醒",
                 style = MaterialTheme.typography.titleSmall,
                 color = t.fg,
                 modifier = Modifier.weight(1f),
             )
-            Text("${triad.rows.size} 条", style = MaterialTheme.typography.labelSmall, color = t.muted)
+            Text("${triad.rows.size} 条 · 点一行定位", style = MaterialTheme.typography.labelSmall, color = t.muted)
         }
         AppCard(padding = 0.dp, modifier = Modifier.testTag("s18-alerts")) {
             triad.rows.forEachIndexed { index, row ->
@@ -115,18 +119,18 @@ fun QuotaAlertTriadSection(
                     // 原型 .arow+.arow{border-top} 通宽，不缩进
                     Box(Modifier.fillMaxWidth().height(1.dp).background(t.borderSoft))
                 }
-                AlertTriadRow(row = row, nowEpochSecond = now, onOpenSettings = onOpenSettings)
+                AlertTriadRow(row = row, nowEpochSecond = now, onFocusAccount = onFocusAccount)
             }
         }
     }
 }
 
-/** 一行：10dp 圆点（原型 .adot）+ 标题 + 副行；整行可点进设置页。 */
+/** 一行：10dp 圆点（原型 .adot）+ 标题 + 副行 + chevron；整行可点，定位到对应账号。 */
 @Composable
 private fun AlertTriadRow(
     row: QuotaAlertTriadRow,
     nowEpochSecond: Long,
-    onOpenSettings: () -> Unit,
+    onFocusAccount: (String) -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
@@ -149,7 +153,7 @@ private fun AlertTriadRow(
                 indication = LocalIndication.current,
             ) {
                 haptic(HapticTone.LIGHT)
-                onOpenSettings()
+                onFocusAccount(row.instanceId)
             }
             .semantics { role = Role.Button }
             .padding(horizontal = t.space3, vertical = t.space1),
@@ -178,6 +182,13 @@ private fun AlertTriadRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // 与账号行同一套 chevron：点一下是「去这条记录对应的账号」，不是跳设置
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = t.muted,
+            modifier = Modifier.width(16.dp),
+        )
     }
 }
 

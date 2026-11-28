@@ -23,7 +23,7 @@ import androidx.glance.layout.width
 import androidx.glance.text.Text
 import com.bsfeng.monitor.MainActivity
 
-// 额度组件：原型 s18 的「桌面组件 · 4×2 样张」语言 ——
+// 额度组件：与额度页账号卡同一套语言（值 + 窗口 + 条），4×2 档 ——
 // 顶栏「▣ 额度 · 更新于 4 分钟前」+ 2 列网格，每格 = 等宽数值 / 「账号 窗口 · 重置时刻」/ 4dp 细横条。
 //
 // 三件不变的事：数据只读落盘快照（组件内不联网，拉取仍由 App 内 QuotaScheduler 负责）；

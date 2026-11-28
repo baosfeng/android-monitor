@@ -139,9 +139,7 @@ s18	s18-alerts	几何	三态行数由数据决定（已恢复 1 + 快见底 2 + 
 s18	s18-alert-back	几何	级联自 s18-row-od-a
 s18	s18-alert-low	几何	级联自 s18-row-od-a
 s18	s18-alert-dead	几何	级联自 s18-alerts 行数（5 行 vs 3 行）
-s18	s18-widget-head	几何	级联自 s18-alerts 行数
-s18	s18-widget	几何	级联自 s18-alerts 行数
-s18	s18-foot	几何	级联自 s18-alerts 行数
+s18	s18-foot	几何	级联自 s18-alerts 行数（r5 起页面不再有组件样张）
 s19	s19-acc-ollama	文案	账号命名走 domain 的「账号 N」（QuotaInstances.accountName）；原型 demo 写「主号 / 备用号」，改 domain 会波及 s18 榜单与通知标题
 s19	s19-acc-ollama2	文案	同上：demo 的「备用号」在实现里是「账号 2」
 s19	s19-acc-ds1	文案	原型 demo 写「账号 1 / 停在 1 小时 12 分钟前」；实现用 domain 名，且首次拉取即失败时没有上次成功时刻（快照为空）
@@ -152,4 +150,3 @@ s19	s19-sw-back	几何	同上：开关宽 56 / 原型 52（y 差 3.4 是组内�
 s19	s19-save-all	几何	原型自身缺陷：.s19-save-all 的 width:calc(100% - var(--space-8)) 因变量未定义整条失效，退回 .save 的 width:100% → x=16/w=393 右溢出 16px；实现按左右 16（361 宽）绘制，不复刻溢出
 s19	s19-int-off	几何	字体字宽：五个 chip 里「关闭」累计 x 差 3.3（其余四个 ≤2.3），12sp 与原型 11px 的中文字宽差
 s18	s18-foot	文案	原型是演示声明（「演示数据：…原型示例值…」），生产界面改成产品文案（数据来自官方接口、只存本机）；leader 要求不把演示声明搬上真实界面
-s18	s18-widget-head	文案	生产界面去掉原型用语「样张」（leader 要求），标题为「桌面组件 · 4×2」；副行与卡片结构不变

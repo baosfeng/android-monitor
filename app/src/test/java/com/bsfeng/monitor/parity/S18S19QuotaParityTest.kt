@@ -43,6 +43,7 @@ import com.bsfeng.monitor.ui.quota.trackPairs
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -466,7 +467,7 @@ class S18S19QuotaParityTest {
         compose.setContent {
             MonitorTheme(themeId = "apple") {
                 Box(Modifier.width(393.dp).background(LocalDesignTokens.current.bg)) {
-                    QuotaAlertTriadSection(triad = triad, onOpenSettings = {})
+                    QuotaAlertTriadSection(triad = triad, onFocusAccount = {})
                 }
             }
         }
@@ -479,8 +480,8 @@ class S18S19QuotaParityTest {
     /**
      * 393×852 视口下取三张图 + 实测数字（交付报告的「实测数字表」来源）。
      *
-     * 与上面的导出用同一份 7 账号数据；视口高改成 852（真实手机），所以三态区与组件样张
-     * 要滚下去才看得到 —— 第三张图就是滚到那里。
+     * 与上面的导出用同一份 7 账号数据；视口高改成 852（真实手机），所以「额度提醒」要滚下去
+     * 才看得到 —— 第三张图就是滚到那里（r5 起页面里不再有桌面组件样张）。
      */
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
@@ -544,11 +545,12 @@ class S18S19QuotaParityTest {
         lines += "柱图描述=" + chartDesc
         lines += "展开态横向溢出锚点数=" + expanded.count { it.x < -0.5f || it.x + it.w > 393.5f }
 
-        // 3) 滚到三态提醒与组件样张
-        compose.onNodeWithTag("s18-content").performScrollToNode(hasTestTag("s18-widget"))
+        // 3) 滚到额度提醒与页尾说明
+        compose.onNodeWithTag("s18-content").performScrollToNode(hasTestTag("s18-foot"))
         compose.waitForIdle()
         shot("impl-s18-scrolled.png")
-        lines += "scrolled 后 s18-widget 可见=" + nodes().any { it.id == "s18-widget" }
+        lines += "scrolled 后 s18-alerts 可见=" + nodes().any { it.id == "s18-alerts" } +
+            "，s18-widget 存在=" + nodes().any { it.id == "s18-widget" }
 
         // sticky 结论条在三个滚动位置都钉在页头下沿（顶不动）
         val content = compose.onNodeWithTag("s18-content")
@@ -585,8 +587,9 @@ class S18S19QuotaParityTest {
         }
         compose.waitForIdle()
         compose.onNodeWithText("还没有配置额度账号").assertExists()
-        // 空态不渲染结论条与重置策略：一屏只留一条空信息（否则「最低剩余 / 暂无额度数据」与引导并列）
+        // 空态不渲染结论条：一屏只留一条空信息（否则「最低剩余 / 暂无额度数据」与引导并列）
         compose.onNodeWithTag("s18-concl").assertDoesNotExist()
+        // 重置策略 r5 已挪到额度设置页，主屏任何状态都不该再出现
         compose.onNodeWithTag("s18-reset-mode").assertDoesNotExist()
         compose.onNodeWithText("额度数据来自各 provider 官方接口，只存在本机，不上传。").assertExists()
         compose.onNodeWithText("去额度设置添加").performClick()
@@ -607,6 +610,40 @@ class S18S19QuotaParityTest {
         compose.onNodeWithTag("s18-concl").assertDoesNotExist()
         compose.onNodeWithTag("s18-reset-mode").assertDoesNotExist()
         shot("impl-s18-empty.png")
+    }
+
+    /**
+     * 额度提醒行 → 定位到对应账号并展开（r5 之前这一行是「跳设置」，点击语义与内容不符）。
+     *
+     * 断言两件事：点之前没有任何展开区；点之后恰好展开一个，且该行被滚到结论条下沿附近。
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun alertRowFocusesAccount() {
+        seedRecovery()
+        val viewModel = quotaViewModel(
+            providers = s18Providers(),
+            configured = listOf(
+                "opencode-go", "opencode-go#2", "ollama", "opendesign", "opendesign#2", "deepseek", "deepseek#2",
+            ),
+            extraInstances = listOf("opencode-go", "opendesign", "deepseek"),
+        )
+        compose.setContent {
+            MonitorTheme(themeId = "apple") {
+                QuotaScreen(onOpenSettings = {}, viewModel = viewModel)
+            }
+        }
+        compose.waitForIdle()
+
+        fun expandedCount() = collectTaggedNodes(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode(), compose.density)
+            .count { it.id.startsWith("s18-detail-") }
+        assertEquals("初始不该有展开区", 0, expandedCount())
+
+        compose.onNodeWithTag("s18-content").performScrollToNode(hasTestTag("s18-alert-back"))
+        compose.onNodeWithTag("s18-alert-back").performClick()
+        compose.waitForIdle()
+
+        assertEquals("点提醒行应展开它对应的账号", 1, expandedCount())
     }
 
     private fun shot(name: String) {

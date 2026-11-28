@@ -57,7 +57,8 @@ class QuotaRepository(
         val stale: Boolean = false,
         val balanceConfigured: Boolean = false,
         val usageConfigured: Boolean = false,
-        val range: QuotaRange = QuotaRange.LAST_24_HOURS,
+        /** 用量范围：缺省 7 天，与原型 s18 的展开图一致（r5 前靠在首次展开时偷偷切一次来凑）。 */
+        val range: QuotaRange = QuotaRange.LAST_7_DAYS,
     )
 
     private val _states = MutableStateFlow<Map<String, ProviderState>>(emptyMap())
@@ -175,11 +176,16 @@ class QuotaRepository(
         }
     }
 
-    /** 切换用量范围：只重拉用量，避免打满限流。 */
+    /**
+     * 切换用量范围：只重拉用量，避免打满限流。
+     *
+     * 同范围不是无条件短路：这条还没拿到用量（首次展开）时要补拉一次，
+     * 否则「展开后柱图空白」永远等不到数据（r5 修；旧实现 request 恒等于 current，直接 return）。
+     */
     suspend fun setRange(instanceId: String, range: QuotaRange) {
         val provider = providerOf(instanceId) ?: return
         val current = state(instanceId)
-        if (current.range == range) return
+        if (current.range == range && (current.usage != null || !provider.supportsUsage)) return
         update(instanceId) { it.copy(range = range) }
         if (!provider.supportsUsage || !current.usageConfigured) return
         val succeeded = fetchUsageOnly(instanceId, provider, range)

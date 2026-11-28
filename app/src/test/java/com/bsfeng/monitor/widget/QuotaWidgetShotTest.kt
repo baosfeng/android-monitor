@@ -68,7 +68,7 @@ class QuotaWidgetShotTest {
     private fun resetAt(month: Int, day: Int, hour: Int): Long =
         LocalDateTime.of(2026, month, day, hour, 0).atZone(zone).toEpochSecond()
 
-    /** 原型 s18-widget 的四行示例数据（账号名已换成演示值）。 */
+    /** 桌面组件 4×2 的四行示例数据（与原型 s18 的账号示例值同源，账号名已换成演示值）。 */
     private fun demoAccounts(): List<QuotaWidgetAccount> = listOf(
         QuotaWidgetAccount(
             instanceId = "oc-main",

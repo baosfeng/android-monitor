@@ -464,10 +464,7 @@ s18-help-close	s18-额度
 s18-help-dialog	s18-额度
 s18-help-scrim	s18-额度
 s18-list	s18-额度
-s18-mode-all	s18-额度
-s18-mode-urgent	s18-额度
 s18-refresh	s18-额度
-s18-reset-mode	s18-额度
 s18-row-ds-1	s18-额度
 s18-row-ds-2	s18-额度
 s18-row-oc-alt	s18-额度
@@ -477,8 +474,6 @@ s18-row-od-b	s18-额度
 s18-row-ol-main	s18-额度
 s18-settings	s18-额度
 s18-updated	s18-额度
-s18-widget	s18-额度
-s18-widget-head	s18-额度
 s19-acc-ds1	s19-额度设置
 s19-acc-od-a	s19-额度设置
 s19-acc-ollama	s19-额度设置
@@ -490,6 +485,8 @@ s19-add-ollama	s19-额度设置
 s19-clear-od-a	s19-额度设置
 s19-clear-ollama	s19-额度设置
 s19-content	s19-额度设置
+s19-display	s19-额度设置
+s19-display-foot	s19-额度设置
 s19-foot	s19-额度设置
 s19-input-ds1	s19-额度设置
 s19-input-od-a	s19-额度设置
@@ -515,6 +512,8 @@ s19-paste-ollama	s19-额度设置
 s19-paste-ollama2	s19-额度设置
 s19-recover	s19-额度设置
 s19-refresh	s19-额度设置
+s19-reset-all	s19-额度设置
+s19-reset-urgent	s19-额度设置
 s19-reveal-ds1	s19-额度设置
 s19-reveal-od-a	s19-额度设置
 s19-reveal-ollama	s19-额度设置
