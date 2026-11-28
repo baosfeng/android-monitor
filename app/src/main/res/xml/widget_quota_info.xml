@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    额度见底：桌面占格以 targetCell* 为请求值、以 minWidth/minHeight 为下限。
+    额度：4×2 样张（与原型 s18-widget 同语言：顶栏 + 2 列格子，一格 = 数值 /「账号 窗口 · 重置时刻」/ 4dp 横条）。
+
+    尺寸口径按 70×n−30 的声明公式校准：
+    - targetCell 4×2、minWidth 250dp = 70×4−30、minHeight 110dp = 70×2−30；
+    - 250×110 正是 4×2 的声明最小箱，四格在那里面必须放得下 —— 实测两行格底 95.3dp（QuotaWidgetShotTest
+      的 SHOT 行），所以矮箱子先砍顶栏、保四格（见 QuotaWidgetLayout 的 HEADER_MIN_HEIGHT_DP）；
+    - minResize 给到 1×1（40dp）：用户缩到最小也允许，具体放几格 / 几列由 quotaWidgetGrid 按占格判定。
+
     initialLayout 用 Glance 自带的 loading 布局：真布局由 Glance 在首次刷新时写入 RemoteViews，
     这里只是组件刚加到桌面、Glance 还没跑完那一刻的占位。
-    minResize 给到 1×1（40dp，= 1×70-30）：用户缩到最小也允许，具体放几行内容由 WidgetLayoutPolicy 判档。
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_quota_description"
