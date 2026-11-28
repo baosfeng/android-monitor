@@ -63,6 +63,7 @@ import com.bsfeng.monitor.ui.foundation.pageBackdrop
 import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.ThemeRepository
+import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.update.ApkDownloader
 import com.bsfeng.monitor.update.InstallResult
 import com.bsfeng.monitor.update.UpdateChecker
@@ -374,6 +375,7 @@ internal fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
             ),
             subtitleColor = if (state.accessibilityEnabled) t.successText else t.dangerText,
             icon = Icons.Outlined.Accessibility,
+            iconTone = t.chartRamp[3],
             trailing = { TailChevron() },
         )
         TokenDivider(first = false)
@@ -381,6 +383,7 @@ internal fun SettingsQuickAccess(rt: SettingsScreenRuntime) {
             title = "前台应用监控",
             subtitle = "今日已记录 " + state.todayEventCount + " 条事件",
             icon = settingsPageIcon(SettingsSubPage.GENERAL),
+            iconTone = t.chartRamp[0],
             trailing = {
                 // 锚点落在开关本身：锚点 s09-monitor 的触发是「拨开关」而不是点整行
                 AppSwitch(
@@ -412,6 +415,8 @@ private fun SettingsGroupIndex(rt: SettingsScreenRuntime, onOpen: (SettingsSubPa
                 title = page.title,
                 subtitle = settingsGroupSummary(page, rt),
                 icon = settingsPageIcon(page),
+                // 六组入口各一个身份色（页面语法 §5）：与原型 s09 的分组图标同序
+                iconTone = t.chartRamp[SETTINGS_TONE_ORDER[index % SETTINGS_TONE_ORDER.size]],
                 onClick = { onOpen(page) },
                 trailing = {
                     SettingsGroupTrailing(page, rt)
@@ -472,3 +477,6 @@ private fun SettingsGroupTrailing(page: SettingsSubPage, rt: SettingsScreenRunti
         else -> Unit
     }
 }
+
+/** 六组入口的图标身份色顺序（chartRamp 下标）：与原型 s09 分组图标同序，循环取用。 */
+private val SETTINGS_TONE_ORDER = listOf(1, 3, 0, 5, 4, 2, 6, 7)

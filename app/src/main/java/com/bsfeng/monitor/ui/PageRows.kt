@@ -79,6 +79,11 @@ internal fun TokenRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    /**
+     * 图标身份色（页面语法 §5）：非 null 时图标底走该色 13% 淡底、图标走 78% 压暗档，
+     * 与原型 `.row-icon` 的 `--k` 同口径；默认 null 保持中性灰底。
+     */
+    iconTone: androidx.compose.ui.graphics.Color? = null,
     titleColor: androidx.compose.ui.graphics.Color? = null,
     subtitleColor: androidx.compose.ui.graphics.Color? = null,
     onClick: (() -> Unit)? = null,
@@ -153,14 +158,18 @@ internal fun TokenRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) {
+                val iconBg = iconTone?.copy(alpha = ICON_TONE_BG_ALPHA) ?: t.surfaceWarm
+                val iconTint = iconTone
+                    ?.let { androidx.compose.ui.graphics.lerp(it, t.fg, ICON_TONE_INK) }
+                    ?: t.fg2
                 Box(
                     Modifier
                         .size(t.space8)
                         .clip(RoundedCornerShape(t.radiusMd))
-                        .background(t.surfaceWarm),
+                        .background(iconBg),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icon, contentDescription = null, tint = t.fg2, modifier = Modifier.size(t.space5))
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(t.space5))
                 }
                 Spacer(Modifier.width(t.space3))
             }
@@ -298,3 +307,9 @@ internal fun ProgressBar(fraction: Float, modifier: Modifier = Modifier, color: 
         )
     }
 }
+
+/** 图标身份色的底色透明度（原型 `.row-icon` 的 12% 在 Compose 叠在卡面上，取 13% 抵消色差）。 */
+private const val ICON_TONE_BG_ALPHA = 0.13f
+
+/** 图标身份色的压暗比例：78% 原色 + 22% 正文色，保证 20dp 图标在淡底上仍清晰。 */
+private const val ICON_TONE_INK = 0.22f
