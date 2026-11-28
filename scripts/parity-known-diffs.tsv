@@ -116,3 +116,29 @@ s16	s16-seg-home-noon	几何	同上
 s16	s16-seg-office	几何	同上
 s16	s16-seg-cafe	几何	同上
 s16	s16-seg-home-am	几何	同上
+s18	s18-updated	文案	失败态口径（leader 拍板）：任一账号查询失败时副行报「更新失败 · 数据 X 分钟前」，原型只写「更新于 4 分钟前」；有失败时旧数字不能冒充新数据
+s18	s18-updated	几何	同上：失败态文案比原型「更新于 4 分钟前」长，锚点宽度差 22
+s18	s18-row-oc-main	文案	徽标规则：快见底 = 最低剩余 ≤20%（帮助弹窗口径），oc-main 12% 出「快见底」；原型示例写「主号」自相矛盾
+s18	s18-row-ol-main	文案	列选择规则：右侧两列取剩余最低的两个可量化窗口（今日 63 / 订阅周期 72）；原型手挑了今日 63 / 本周 96
+s18	s18-row-od-a	文案	快见底阈值 ≤20%：原型的 open-design 34% 标「快见底」自相矛盾，实现按规则不出状态徽标（见 README 特别提醒）
+s18	s18-row-od-a	几何	同上：34% 不算紧急 → 「只显示需处理的行」档折叠重置时刻，行高 64 vs 原型 71.6
+s18	s18-body-od-a	几何	同上：od-a 行容器高度随行高短 8.6
+s18	s18-row-od-b	文案	显示名：实现统一用 provider 显示名「Open Design」（与 s19/通知器同口径），原型行内写小写 id「open-design」
+s18	s18-body-od-b	几何	级联自 s18-row-od-a：od-a 行高短 8dp，其后每行 y 累计偏移
+s18	s18-row-od-b	几何	级联自 s18-row-od-a
+s18	s18-body-ds-1	几何	级联自 s18-row-od-a
+s18	s18-row-ds-1	几何	级联自 s18-row-od-a
+s18	s18-body-ds-2	几何	级联自 s18-row-od-a
+s18	s18-row-ds-2	几何	级联自 s18-row-od-a
+s18	s18-row-ds-2	文案	相对时间：parity 假数据里 ds-2 的 fetchedAt 与基准时刻同分钟（显示「刚刚」），原型写「8 分钟前」；三档相对时间由 QuotaAccountRowsTest 钉住
+s18	s18-alert-back	文案	B 的三态区口径：显示名为「Ollama」（单账号不带「主号」）、恢复行的重置时刻按真实系统时钟格式化（MM-dd）；标题与副行结构与原型一致
+s18	s18-alert-low	文案	三态行由真实快照推导：假数据里最低的是 DeepSeek 余额 ¥8.60，原型示例是 open-design 34%（与 ≤20% 规则冲突）
+s18	s18-alert-dead	文案	同上：显示名「opencode-go 账号 2」，重置时刻按真实系统时钟格式化
+s18	s18-alert-head	几何	级联自 s18-row-od-a（上游行高）
+s18	s18-alerts	几何	三态行数由数据决定（已恢复 1 + 快见底 2 + 已耗尽 2 = 5 行），原型示例 3 行
+s18	s18-alert-back	几何	级联自 s18-row-od-a
+s18	s18-alert-low	几何	级联自 s18-row-od-a
+s18	s18-alert-dead	几何	级联自 s18-alerts 行数（5 行 vs 3 行）
+s18	s18-widget-head	几何	级联自 s18-alerts 行数
+s18	s18-widget	几何	级联自 s18-alerts 行数
+s18	s18-foot	几何	级联自 s18-alerts 行数
