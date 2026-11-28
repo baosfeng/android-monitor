@@ -87,6 +87,31 @@ class QuotaViewModel(
     private val _lowBalanceUsd = MutableStateFlow(alertPrefs.lowBalance(QuotaUnit.USD))
     val lowBalanceUsd: StateFlow<BigDecimal> = _lowBalanceUsd.asStateFlow()
 
+    /** 恢复事件仓库：与提醒通知器共用同一份 prefs（见 [QuotaAlertTriadStore]）。 */
+    private val triadStore = QuotaAlertTriadStore(application)
+
+    /**
+     * 主屏「恢复提醒 · 三态」（原型 s18-alerts）。
+     *
+     * 恢复来自事件记录，低 / 耗尽从当前快照实时推导；[repository.states] 每次刷新都会 emit，
+     * 所以通知器写完恢复事件后这里自然重算，不需要额外的 tick 源。
+     */
+    val alertTriad: StateFlow<QuotaAlertTriad> =
+        combine(repository.states, repository.instances) { _, _ -> currentAlertTriad() }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, currentAlertTriad())
+
+    private fun currentAlertTriad(): QuotaAlertTriad = buildAlertTriad(
+        states = repository.states.value,
+        instances = repository.instances.value,
+        recoveries = triadStore.recent(),
+        lowBalanceThresholds = mapOf(
+            QuotaUnit.CNY to alertPrefs.lowBalance(QuotaUnit.CNY),
+            QuotaUnit.USD to alertPrefs.lowBalance(QuotaUnit.USD),
+        ),
+        providerNameOf = { typeId -> repository.provider(typeId)?.displayName ?: typeId },
+        nowEpochSecond = System.currentTimeMillis() / 1000,
+    )
+
     private val _refreshHours = MutableStateFlow(settings.refreshIntervalHours)
 
     /** 聚合视图（true = 榜单，一实例一行）还是单家视图；偏好落盘，见 [QuotaSettings.aggregateMode]。 */
