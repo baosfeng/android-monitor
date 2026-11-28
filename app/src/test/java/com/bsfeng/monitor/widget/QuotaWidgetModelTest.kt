@@ -5,6 +5,7 @@ import com.bsfeng.monitor.domain.quota.QuotaKind
 import com.bsfeng.monitor.domain.quota.QuotaPeriod
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -185,6 +186,34 @@ class QuotaWidgetModelTest {
         val account = QuotaWidgetAccount("oc", "opencode", listOf(percentItem("h", "5 小时", "12")))
         val cell = quotaWidgetCells(listOf(account), limit = 1, nowEpochSecond = now, zone = zone).single()
         assertEquals("opencode 5 小时", cell.captionText)
+    }
+
+    @Test
+    fun `窄格放不下时整段省掉重置时刻_不留半截分隔符`() {
+        // 250×110 的 4×2：一格 109dp < 120dp 阈值 → 只留「账号 窗口」
+        val narrow = quotaCaptionText("open-design", "本月", "周二 00:00", availableWidthDp = 109f)
+        assertEquals("open-design 本月", narrow)
+        // 宽格（4×2 真机 157dp）保留完整写法
+        assertEquals(
+            "open-design 本月 · 周二 00:00",
+            quotaCaptionText("open-design", "本月", "周二 00:00", availableWidthDp = 157f),
+        )
+        // 阈值边界：120dp 给完整写法，119.9dp 整段省略
+        assertTrue(quotaCaptionText("A", "本周", "周一 00:00", availableWidthDp = 120f).contains("·"))
+        assertFalse(quotaCaptionText("A", "本周", "周一 00:00", availableWidthDp = 119.9f).contains("·"))
+        // 没有重置时刻时不论宽窄都只有「账号 窗口」
+        assertEquals("A 本周", quotaCaptionText("A", "本周", "", availableWidthDp = 157f))
+    }
+
+    @Test
+    fun `窄格里的格子不带重置时刻_宽格带`() {
+        val accounts = listOf(
+            QuotaWidgetAccount("od", "open-design", listOf(percentItem("m", "本月", "34", resetsAt = at(12, 1, 0)))),
+        )
+        val narrow = quotaWidgetCells(accounts, limit = 4, nowEpochSecond = now, captionWidthDp = 109f, zone = zone)
+        assertEquals("open-design 本月", narrow.single().captionText)
+        val wide = quotaWidgetCells(accounts, limit = 4, nowEpochSecond = now, captionWidthDp = 157f, zone = zone)
+        assertEquals("open-design 本月 · 周二 00:00", wide.single().captionText)
     }
 
     @Test

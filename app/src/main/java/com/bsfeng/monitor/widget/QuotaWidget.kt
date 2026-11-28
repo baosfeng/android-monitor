@@ -75,7 +75,8 @@ private fun QuotaCard(feed: QuotaWidgetFeed, box: WidgetBox) {
         limit = grid.cells,
         nowEpochSecond = System.currentTimeMillis() / 1000L,
         hiddenAmounts = WidgetSettings.isAmountHidden(context),
-        compactCaptions = scale.shortReset,
+        // 一格放不放得下「· 重置时刻」按每格可用宽判，不是按箱子宽（见 quotaCaptionText）
+        captionWidthDp = quotaCellWidthDp(widthDp, grid.columns, scale),
     )
     val empty = !feed.configured || cells.isEmpty()
     WidgetCard(

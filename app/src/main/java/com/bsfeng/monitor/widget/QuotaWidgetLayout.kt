@@ -42,7 +42,6 @@ data class QuotaWidgetScale(
     val barGap: Int,
     val rowGap: Int,
     val columnGap: Int,
-    val shortReset: Boolean,
 )
 
 /**
@@ -68,7 +67,6 @@ object QuotaWidgetMetrics {
         barGap = 2,
         rowGap = 6,
         columnGap = 12,
-        shortReset = true,
     )
 
     /** 宽松档：真机 4×2（≈350×170）用原型 .wr b 16px / .wr span 11px / .wtop 13px。 */
@@ -85,7 +83,6 @@ object QuotaWidgetMetrics {
         barGap = 2,
         rowGap = 8,
         columnGap = 12,
-        shortReset = false,
     )
 
     /** 按高度选档：宽松档要 156dp 才能放下「顶栏 + 两行格子」（截图实测 149dp + 余量）。 */
@@ -140,4 +137,16 @@ fun quotaWidgetGrid(widthDp: Float, heightDp: Float): QuotaWidgetGrid {
         heightDp >= ONE_ROW_MIN_HEIGHT_DP -> QuotaWidgetGrid(columns = 2, cells = 2, showHeader = header)
         else -> QuotaWidgetGrid(columns = 1, cells = 1, showHeader = false)
     }
+}
+
+/**
+ * 一格可用宽度（dp）：箱子宽 − 2×内边距 − (列数−1)×列距，再按列数均分。
+ *
+ * 说明行要不要带重置时刻按这个宽度判（见 [quotaCaptionText]），不是按箱子宽：
+ * 250dp 的 4×2 分两列后每格只剩 109dp，这个数才是决定「放不放得下」的那个。
+ */
+fun quotaCellWidthDp(boxWidthDp: Float, columns: Int, scale: QuotaWidgetScale): Float {
+    if (columns <= 0) return 0f
+    val usable = boxWidthDp - 2 * scale.padding - (columns - 1) * scale.columnGap
+    return (usable / columns).coerceAtLeast(0f)
 }

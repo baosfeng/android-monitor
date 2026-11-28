@@ -72,12 +72,12 @@ fun quotaWidgetCells(
     limit: Int,
     nowEpochSecond: Long,
     hiddenAmounts: Boolean = false,
-    compactCaptions: Boolean = false,
+    captionWidthDp: Float = Float.MAX_VALUE,
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<QuotaWidgetCell> {
     if (limit <= 0) return emptyList()
     return accounts
-        .mapNotNull { cellOf(it, nowEpochSecond, hiddenAmounts, compactCaptions, zone) }
+        .mapNotNull { cellOf(it, nowEpochSecond, hiddenAmounts, captionWidthDp, zone) }
         .sortedWith(compareBy({ it.fraction ?: Float.MAX_VALUE }, { it.instanceId }))
         .take(limit)
 }
@@ -122,16 +122,12 @@ fun quotaResetText(
     nowEpochSecond: Long,
     resetsAtEpochSecond: Long,
     zone: ZoneId = ZoneId.systemDefault(),
-    short: Boolean = false,
 ): String {
     if (resetsAtEpochSecond <= 0L) return ""
     val reset = Instant.ofEpochSecond(resetsAtEpochSecond).atZone(zone)
     val today = Instant.ofEpochSecond(nowEpochSecond).atZone(zone).toLocalDate()
     val days = ChronoUnit.DAYS.between(today, reset.toLocalDate())
     val clock = String.format(Locale.US, "%02d:%02d", reset.hour, reset.minute)
-    // 紧凑档（4×2 声明最小箱，一格约 109dp）放不下「今天 17:00」这层前缀，
-    // 实测 10sp 下「账号 窗口 · 今天 17:00」要 129.3dp、「账号 窗口 · 17:00」正好 107dp
-    if (short) return clock
     return when {
         days < 0L -> clock
         days == 0L -> "今天 " + clock
@@ -146,7 +142,7 @@ private fun cellOf(
     account: QuotaWidgetAccount,
     nowEpochSecond: Long,
     hiddenAmounts: Boolean,
-    compactCaptions: Boolean,
+    captionWidthDp: Float,
     zone: ZoneId,
 ): QuotaWidgetCell? {
     val windows = account.items.mapNotNull { item ->
@@ -158,7 +154,7 @@ private fun cellOf(
         return QuotaWidgetCell(
             instanceId = account.instanceId,
             valueText = percent(fraction).toString() + "%",
-            captionText = windowCaption(account.displayName, item, nowEpochSecond, compactCaptions, zone),
+            captionText = windowCaption(account.displayName, item, nowEpochSecond, captionWidthDp, zone),
             fraction = fraction,
         )
     }
@@ -171,18 +167,43 @@ private fun cellOf(
     )
 }
 
-/** 「账号 窗口 · 重置时刻」；没有重置时刻时省掉后半截，不留一个孤零零的「·」。 */
 private fun windowCaption(
     displayName: String,
     item: QuotaItem,
     nowEpochSecond: Long,
-    compactCaptions: Boolean,
+    captionWidthDp: Float,
     zone: ZoneId,
 ): String {
     val resetAt = item.resetsAtEpochSecond ?: item.period?.endEpochSecond ?: 0L
-    val reset = quotaResetText(nowEpochSecond, resetAt, zone, short = compactCaptions)
-    return if (reset.isEmpty()) joinCaption(displayName, item.title) else joinCaption(displayName, item.title) + " · " + reset
+    return quotaCaptionText(
+        displayName = displayName,
+        windowTitle = item.title,
+        resetText = quotaResetText(nowEpochSecond, resetAt, zone),
+        availableWidthDp = captionWidthDp,
+    )
 }
+
+/**
+ * 说明行：「账号 窗口 · 重置时刻」；一格放不下整段时**整段省掉重置时刻**，只留「账号 窗口」。
+ *
+ * 为什么不是让系统按可用宽 ellipsis：截断点正好落在「·」后面，桌面上会出现「open-design 本月 ·」
+ * 这种半截分隔符（250×110 声明最小箱实测就是这样），比不显示时刻更像渲染坏了。
+ * 阈值 120dp：10sp 下「账号 窗口 · HH:mm」实测 107dp、「账号 窗口 · 今天 HH:mm」129dp，
+ * 取中间值，宽箱（4×2 真机 157dp）保留完整写法。
+ */
+fun quotaCaptionText(
+    displayName: String,
+    windowTitle: String,
+    resetText: String,
+    availableWidthDp: Float,
+): String {
+    val base = joinCaption(displayName, windowTitle)
+    if (resetText.isEmpty() || availableWidthDp < CAPTION_FULL_MIN_WIDTH_DP) return base
+    return base + " · " + resetText
+}
+
+/** 完整说明行（带重置时刻）至少需要的格子宽度。 */
+internal const val CAPTION_FULL_MIN_WIDTH_DP = 120f
 
 private fun joinCaption(displayName: String, windowTitle: String): String = when {
     windowTitle.isBlank() -> displayName

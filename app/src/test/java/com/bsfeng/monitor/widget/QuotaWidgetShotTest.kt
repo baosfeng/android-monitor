@@ -1,6 +1,8 @@
 package com.bsfeng.monitor.widget
 
 import android.graphics.Bitmap
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
@@ -110,8 +112,10 @@ class QuotaWidgetShotTest {
     @Test
     fun `4×2 最小箱子_四格与横条`() {
         val grid = quotaWidgetGrid(widthDp = 250f, heightDp = 110f)
-        // 紧凑档的说明行只给钟点：一格 109dp，带「今天/周一」前缀时 129.3dp 会截掉时刻
-        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, compactCaptions = true, zone = zone)
+        // 一格只有 109dp（< 120dp）：说明行整段省掉重置时刻，不留半截「·」
+        val scale = QuotaWidgetMetrics.of(110f)
+        val cellWidth = quotaCellWidthDp(250f, grid.columns, scale)
+        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, captionWidthDp = cellWidth, zone = zone)
         val measured = shot("impl-widget.png", 250.dp, 110.dp, grid, cells)
         assertEquals(4, cells.size)
         // 3 个百分比格有横条、余额格没有
@@ -125,7 +129,9 @@ class QuotaWidgetShotTest {
     @Test
     fun `4×1 降档_两格`() {
         val grid = quotaWidgetGrid(widthDp = 350f, heightDp = 72f)
-        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, compactCaptions = true, zone = zone)
+        val scale = QuotaWidgetMetrics.of(72f)
+        val cellWidth = quotaCellWidthDp(350f, grid.columns, scale)
+        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, captionWidthDp = cellWidth, zone = zone)
         val measured = shot("impl-widget-4x1.png", 350.dp, 72.dp, grid, cells)
         assertEquals(2, cells.size)
         assertEquals(2, measured.cellBottoms.size)
@@ -136,7 +142,9 @@ class QuotaWidgetShotTest {
     @Test
     fun `真机 4×2_带顶栏`() {
         val grid = quotaWidgetGrid(widthDp = 350f, heightDp = 170f)
-        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, zone = zone)
+        val scale = QuotaWidgetMetrics.of(170f)
+        val cellWidth = quotaCellWidthDp(350f, grid.columns, scale)
+        val cells = quotaWidgetCells(demoAccounts(), grid.cells, now, captionWidthDp = cellWidth, zone = zone)
         val measured = shot("impl-widget-4x2-real.png", 350.dp, 170.dp, grid, cells)
         assertTrue(grid.showHeader)
         assertEquals(4, measured.cellBottoms.size)
@@ -194,6 +202,29 @@ class QuotaWidgetShotTest {
                 compose.onNodeWithTag("quota.shot.bar-" + index).fetchSemanticsNode().boundsInRoot.height / density
             }.getOrNull()
         }
+        // 每格实测可用宽 / 说明文字实测宽：说明行整段省略的判据必须让它真的放得下，
+        // 不能出现「省略了半截还是被裁」或「明明放得下却把时刻省掉了」两种情况
+        val cellWidths = cells.indices.map { index ->
+            compose.onNodeWithTag("quota.shot.cell-" + index).fetchSemanticsNode().boundsInRoot.width / density
+        }
+        val captionPaint = Paint().apply { typeface = Typeface.DEFAULT; isAntiAlias = true }
+        val captionWidths = cells.map { cell ->
+            captionPaint.textSize = scale.captionSizeSp * density
+            captionPaint.measureText(cell.captionText) / density
+        }
+        println(
+            "SHOTCAP " + fileName + " cellW=" + cellWidths.joinToString { fmt(it) } +
+                " captionW=" + captionWidths.joinToString { fmt(it) } +
+                " texts=" + cells.joinToString(" | ") { it.captionText },
+        )
+        cellWidths.indices.forEach { index ->
+            assertTrue(
+                "第 " + (index + 1) + " 格说明行 " + fmt(captionWidths[index]) + "dp 超出格宽 " +
+                    fmt(cellWidths[index]) + "dp（会被裁）",
+                captionWidths[index] <= cellWidths[index] + 0.5f,
+            )
+        }
+
         // 横条长度必须 = fraction × 轨道宽（Glance 侧是 LinearProgressIndicator(progress = fraction)）：
         // 镜像曾经把填充画成满宽，截图好看但不是真机效果 —— 这条断言就是防它再漂回去
         val barRatios = cells.mapIndexedNotNull { index, cell ->
