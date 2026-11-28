@@ -1,7 +1,6 @@
 package com.bsfeng.monitor.ui.quota
 
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -10,11 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -28,15 +24,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.notificationsAllowed
@@ -54,10 +51,24 @@ import java.math.BigDecimal
  * 额度设置页「恢复提醒」组内的行（原型 s19-recover）。
  *
  * 组标题 / 卡片底 / 组尾说明由设置页的 wrapper 提供（锚点 s19-recover 与 s19-test 在那层）；
- * 本文件只画行，左右 16dp 缩进由 [SettingsGroup] 统一给，行内不再叠加。
+ * 本文件只画行，左右 12dp 缩进由 wrapper 的 RecoverRow 给，行内不再叠加。
  *
  * 三态口径与主屏三态区同源（[QuotaAlertTriadSection]）：这里只解释颜色与出路，不重复算数据。
  */
+
+// ── 原型 .srow 的行盒 ────────────────────────────────────────────────────
+// 实测原型（agent-browser 量 .screen.s19 .srow）：padding 6/12、标题 12px·600·line-height 15、
+// 副行 11px·400·line-height 14.3、两行 gap 4。开关行由 44 高的开关撑成 56（第二行 +1px 描边 = 57），
+// 无开关的阈值行取 min-height 48。字阶里没有 11/12 这两档，按 checkUiStyle 的 copy 特例就地取
+// （与 9sp 类型角标同一处理）。
+
+/** 行标题：原型 .srow .t（--text-xs 12px / 600 / 1.25）。 */
+@Composable
+private fun alertRowTitleStyle(): TextStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, lineHeight = 15.sp)
+
+/** 行副行：原型 .srow .s（11px / 400 / 1.3）。 */
+@Composable
+private fun alertRowSubtitleStyle(): TextStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal, lineHeight = 14.3.sp)
 
 /**
  * 「额度耗尽时提醒」（原型 s19-sw-dead）。
@@ -102,7 +113,11 @@ internal fun RecoverAlertSwitchRow(onChange: ((Boolean) -> Unit)? = null) {
     )
 }
 
-/** 开关行共用骨架：标题 + 副行 + 右侧开关（原型 .srow，min-height 48）。 */
+/**
+ * 开关行共用骨架：标题 + 副行 + 右侧开关。
+ *
+ * 行高不写死：开关 44 + 上下 6 = 56，与原型实测一致（原型 .srow 也是被开关撑到 56/57）。
+ */
 @Composable
 private fun AlertSwitchLayout(
     title: String,
@@ -115,14 +130,14 @@ private fun AlertSwitchLayout(
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusPill)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = t.space1),
+        // 原型 .srow 实测 56（44 高的开关 + 上下 6）；第二行原型 57 是它自带 1px 描边，
+        // 实现侧描边由 wrapper 绘制不占位，差 1 在容差内。
+        // 钉 56 而不是靠内容撑：AppSwitch 的 minimumInteractiveComponentSize 触达高是 48，
+        // 48 + 12 会变成 60（多 4）。
+        Modifier.fillMaxWidth().height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, color = t.fg)
-            Spacer(Modifier.height(t.space1))
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = t.muted)
-        }
+        AlertRowText(title = title, subtitle = subtitle, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(t.space3))
         AppSwitch(
             checked = checked,
@@ -133,11 +148,24 @@ private fun AlertSwitchLayout(
     }
 }
 
+/** 标题 + 副行两段（原型 .body：column + gap 4）。 */
+@Composable
+private fun AlertRowText(title: String, subtitle: String, modifier: Modifier = Modifier) {
+    val t = LocalDesignTokens.current
+    Column(modifier) {
+        Text(title, style = alertRowTitleStyle(), color = t.fg, maxLines = 1)
+        Spacer(Modifier.height(4.dp)) // 原型 .srow .body{gap:var(--space-1)}
+        Text(subtitle, style = alertRowSubtitleStyle(), color = t.muted, maxLines = 2)
+    }
+}
+
 /**
  * 「快见底阈值」行（原型 s19-recover 第三行）。
  *
  * 原型只展示 badge「20% · 10% · 5%」；本项目还有余额型额度（DeepSeek），
  * 那一档的真实阈值是金额、可配置 —— 展示金额并点开弹窗，比照抄一个不可改的 badge 有用。
+ *
+ * 行高钉 48（原型该行无开关，min-height 48 即最终值）：内容 38 居中，多出的部分不再撑高。
  */
 @Composable
 internal fun LowBalanceRow(
@@ -153,7 +181,8 @@ internal fun LowBalanceRow(
         Modifier
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .heightIn(min = 48.dp)
+            // 原型 .srow{min-height:48}：这一行没有 44 高的开关，48 就是最终高度
+            .height(48.dp)
             .rowPressFeedback(interaction)
             .testTag("row.alert")
             .clickable(
@@ -162,23 +191,19 @@ internal fun LowBalanceRow(
             ) {
                 haptic(HapticTone.LIGHT)
                 onClick()
-            }
-            .padding(vertical = t.space1),
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("快见底阈值", style = MaterialTheme.typography.labelLarge, color = t.fg)
-            Spacer(Modifier.height(t.space1))
-            Text(
-                "余额型低于该值提醒一次；百分比型按 5% / 4% / 3% / 2% / 1% 各一次",
-                style = MaterialTheme.typography.labelSmall,
-                color = t.muted,
-            )
-        }
+        // 副行必须单行：折成两行会把 48 撑到 66（原型同位置就是单行 13 字）
+        AlertRowText(
+            title = "快见底阈值",
+            subtitle = "余额型低于该值提醒一次",
+            modifier = Modifier.weight(1f),
+        )
         Spacer(Modifier.width(t.space2))
         Text(
             QuotaFormat.amount(cny, QuotaUnit.CNY) + " / " + QuotaFormat.amount(usd, QuotaUnit.USD),
-            style = MaterialTheme.typography.labelSmall,
+            style = alertRowSubtitleStyle(),
             color = t.fg2,
         )
         Icon(
@@ -186,40 +211,6 @@ internal fun LowBalanceRow(
             contentDescription = "修改阈值",
             tint = t.muted,
         )
-    }
-}
-
-/**
- * 三态说明（原型 s19-tristate）：解释三种颜色的含义与「点通知去哪」。
- *
- * 纯展示、不可点，所以不给 testTag 之外的交互语义；三态数据的真值在主屏 [QuotaAlertTriadSection]。
- */
-@Composable
-internal fun AlertTriadLegend() {
-    val t = LocalDesignTokens.current
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = t.space2)
-            .testTag("s19-tristate"),
-    ) {
-        TriadLegendLine(t.warn, "快见底", "卡片转黄、组件同色；点通知直达该账号")
-        Spacer(Modifier.height(t.space1))
-        TriadLegendLine(t.danger, "已耗尽", "卡片转红并给「切主号 / 等重置」两条出路")
-        Spacer(Modifier.height(t.space1))
-        TriadLegendLine(t.success, "已恢复", "绿色回弹，附「从 4% → 96%」的变化")
-    }
-}
-
-/** 一行图例：8dp 圆点 + 加粗状态名 + 说明（原型 .ts）。 */
-@Composable
-private fun TriadLegendLine(color: Color, title: String, detail: String) {
-    val t = LocalDesignTokens.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(t.space2))
-        Text(title, style = MaterialTheme.typography.labelSmall, color = t.fg)
-        Text(" · " + detail, style = MaterialTheme.typography.labelSmall, color = t.muted)
     }
 }
 
@@ -242,7 +233,7 @@ internal fun NotificationPermissionRow() {
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .height(48.dp)
             .rowPressFeedback(interaction)
             .testTag("row.permission")
             .clickable(
@@ -257,15 +248,14 @@ internal fun NotificationPermissionRow() {
                             .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName),
                     )
                 }
-            }
-            .padding(vertical = t.space1),
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("通知权限", style = MaterialTheme.typography.labelLarge, color = t.fg)
-            Spacer(Modifier.height(t.space1))
-            Text("点通知可直接进入额度页", style = MaterialTheme.typography.labelSmall, color = t.muted)
-        }
+        AlertRowText(
+            title = "通知权限",
+            subtitle = "点通知可直接进入额度页",
+            modifier = Modifier.weight(1f),
+        )
         Badge(
             if (allowed) "已允许" else "未允许",
             tone = if (allowed) BadgeTone.Success else BadgeTone.Warn,

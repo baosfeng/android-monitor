@@ -1,5 +1,6 @@
 package com.bsfeng.monitor.ui.quota
 
+import com.bsfeng.monitor.domain.quota.QuotaAlertEvaluator
 import com.bsfeng.monitor.domain.quota.QuotaInstance
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaKind
@@ -10,8 +11,19 @@ import java.math.BigDecimal
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
-/** 三态推导的口径：恢复行来自事件、低/耗尽来自快照、两行互斥、空态不占位。 */
+/**
+ * 三态推导的口径：恢复行来自事件、低/耗尽来自快照、两行互斥、空态不占位。
+ *
+ * 走 Robolectric 是因为恢复事件仓库 [QuotaAlertTriadStore] 读写 SharedPreferences；
+ * 纯函数用例本身不依赖沙箱，放在同一个类里免得再引一层。
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class QuotaAlertTriadTest {
 
     private val now = 1_766_000_000L
@@ -199,5 +211,60 @@ class QuotaAlertTriadTest {
         assertEquals("Ollama 主号 · 本周已恢复", alertTriadTitle(row(QuotaAlertTriadKind.RECOVERED)))
         assertEquals("Ollama 主号 · 快见底 34%", alertTriadTitle(row(QuotaAlertTriadKind.LOW)))
         assertEquals("Ollama 主号 · 本周已耗尽", alertTriadTitle(row(QuotaAlertTriadKind.DEAD)))
+    }
+
+    // ───────────────────────────── 恢复事件仓库 ─────────────────────────────
+
+    @Test
+    fun `恢复事件落盘后按时间倒序读回并截断到十二条`() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("quota_alerts", android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val store = QuotaAlertTriadStore(context) { 1_000L }
+        store.append(
+            listOf(
+                QuotaAlertEvaluator.Recovery(
+                    key = "ollama.session",
+                    instanceId = "ollama",
+                    itemTitle = "会话",
+                    fromPercent = 4,
+                    toPercent = 96,
+                ),
+            ),
+        )
+        val first = store.recent()
+        assertEquals(1, first.size)
+        assertEquals("session", first.first().itemId)
+        assertEquals(4, first.first().fromPercent)
+        assertEquals(96, first.first().toPercent)
+        assertEquals(1_000L, first.first().occurredAtEpochSecond)
+
+        // 余额型：金额与币种要一起留住，否则主屏只能显示「余额回升到」
+        val later = QuotaAlertTriadStore(context) { 2_000L }
+        later.append(
+            listOf(
+                QuotaAlertEvaluator.Recovery(
+                    key = "deepseek.balance:cny",
+                    instanceId = "deepseek",
+                    itemTitle = "余额",
+                    fromPercent = 0,
+                    toPercent = 0,
+                    remainingAmount = BigDecimal("200.00"),
+                    unit = QuotaUnit.CNY,
+                ),
+            ),
+        )
+        val merged = later.recent()
+        assertEquals(2, merged.size)
+        assertEquals("¥200.00", merged.first().amountText)
+        assertEquals(2_000L, merged.first().occurredAtEpochSecond)
+
+        // 超过 12 条只留最近的（旧事件对「本轮恢复」没有意义）
+        repeat(14) { index ->
+            QuotaAlertTriadStore(context) { 3_000L + index }.append(
+                listOf(QuotaAlertEvaluator.Recovery("ollama.s" + index, "ollama", "会话", 5, 90)),
+            )
+        }
+        assertEquals(12, store.recent().size)
     }
 }
