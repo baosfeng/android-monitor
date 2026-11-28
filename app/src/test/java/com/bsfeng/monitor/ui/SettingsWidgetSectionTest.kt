@@ -21,14 +21,17 @@ class SettingsWidgetSectionTest {
 
     @Test
     fun `数量没变时回落到手动添加路径`() {
-        assertEquals("请在桌面长按 → 小组件 里手动添加", PIN_MANUAL_TOAST)
+        // 路径必须指到「安卓小部件」那一层：小米把第三方 AppWidget 收在这里，
+        // 只说「长按桌面 → 小组件」会让用户在小部件中心里白找一遍
+        assertEquals(MANUAL_ADD_HINT, PIN_MANUAL_TOAST)
+        assertTrue(PIN_MANUAL_TOAST, PIN_MANUAL_TOAST.contains("安卓小部件"))
         assertEquals(PIN_MANUAL_TOAST, pinVerdictToast(added = false))
     }
 
     @Test
-    fun `不支持一键添加时给出长按桌面的手动路径`() {
+    fun `不支持一键添加时给出手动路径`() {
         assertTrue(PIN_UNSUPPORTED_TOAST, PIN_UNSUPPORTED_TOAST.contains("不支持一键添加"))
-        assertTrue(PIN_UNSUPPORTED_TOAST, PIN_UNSUPPORTED_TOAST.contains("长按桌面"))
+        assertTrue(PIN_UNSUPPORTED_TOAST, PIN_UNSUPPORTED_TOAST.contains("安卓小部件"))
     }
 
     @Test

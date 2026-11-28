@@ -12,6 +12,7 @@
     android:minResizeHeight="40dp"
     android:minResizeWidth="40dp"
     android:minWidth="250dp"
+    android:previewImage="@drawable/widget_finance_preview"
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="2"
     android:targetCellWidth="4"

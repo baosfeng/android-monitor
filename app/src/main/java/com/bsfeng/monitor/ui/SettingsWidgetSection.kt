@@ -48,11 +48,17 @@ import kotlinx.coroutines.launch
 /** 发出 pin 请求后等多久再核对桌面上的数量（小米 / 红米桌面不回调，只能延时后看数量差）。 */
 private const val PIN_VERIFY_DELAY_MS = 1_500L
 
-/** 桌面（Launcher）不支持一键添加：只能引导去长按桌面手动加。 */
-internal const val PIN_UNSUPPORTED_TOAST = "当前桌面不支持一键添加，请长按桌面 → 小组件 手动添加"
+/**
+ * 小米 / HyperOS 的桌面把第三方 AppWidget 收进「安卓小部件」分类，长按桌面直接看是找不到的。
+ * 手动路径统一指向那一层：捏合桌面 → 添加小部件 → 底部「安卓小部件」→ 搜应用名。
+ */
+internal const val MANUAL_ADD_HINT = "请在桌面长按 → 添加小部件 → 底部「安卓小部件」里找「监控」"
+
+/** 桌面（Launcher）不支持一键添加：只能引导去手动路径。 */
+internal const val PIN_UNSUPPORTED_TOAST = "当前桌面不支持一键添加。" + MANUAL_ADD_HINT
 
 /** 判不了或请求落空时的兜底提示（手动路径两处共用同一句，避免两种说法）。 */
-internal const val PIN_MANUAL_TOAST = "请在桌面长按 → 小组件 里手动添加"
+internal const val PIN_MANUAL_TOAST = MANUAL_ADD_HINT
 
 /** 数量增加了：确认已经落到桌面。 */
 internal const val PIN_ADDED_TOAST = "已添加到桌面"
@@ -156,6 +162,13 @@ internal fun SettingsWidgetSection(
                 },
             )
         }
+        TokenDivider(first = false)
+        Text(
+            "小米 / HyperOS 桌面会把这些组件归到「安卓小部件」分类，不在「小部件中心」里",
+            style = MaterialTheme.typography.bodySmall,
+            color = t.muted,
+            modifier = Modifier.padding(horizontal = t.space4, vertical = t.space3),
+        )
         Spacer(Modifier.height(t.space1))
     }
 }

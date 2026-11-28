@@ -12,6 +12,7 @@
     android:minResizeHeight="40dp"
     android:minResizeWidth="40dp"
     android:minWidth="40dp"
+    android:previewImage="@drawable/widget_quickadd_preview"
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="1"
     android:targetCellWidth="1"
