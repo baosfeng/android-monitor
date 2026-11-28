@@ -1,8 +1,8 @@
 <!doctype html>
 <!--
   tab-settings.html · 由 scripts/split-prototype-tabs.mjs 从 .open-design/src/ 自动生成，请勿直接编辑。
-  Tab：设置（settings） · 本文件屏：s09 / s10 / s11 / s12 / s13 / s17 / s22 / s23 / s24 / s25 / s26 / s27
-  源分片：screens/s09-设置.html、screens/s10-开屏跳过规则.html、screens/s11-应用白名单.html、screens/s12-组件与状态.html、screens/s13-外观.html、screens/s17-页面记录粒度.html、screens/s22-totp-list.html、screens/s23-totp-add.html、screens/s24-totp-scan.html、screens/s25-totp-manual.html、screens/s26-totp-detail.html、screens/s27-totp-backup.html
+  Tab：设置（settings） · 本文件屏：s09 / s10 / s11 / s12 / s13 / s22 / s23 / s24 / s25 / s26 / s27
+  源分片：screens/s09-设置.html、screens/s10-开屏跳过规则.html、screens/s11-应用白名单.html、screens/s12-组件与状态.html、screens/s13-外观.html、screens/s22-totp-list.html、screens/s23-totp-add.html、screens/s24-totp-scan.html、screens/s25-totp-manual.html、screens/s26-totp-detail.html、screens/s27-totp-backup.html
   改界面改 src/screens/ 下对应分片，改完全局骨架跑 node scripts/split-prototype-tabs.mjs 重新生成。
 -->
 <!--
@@ -1339,6 +1339,18 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   padding:var(--space-3);
   background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md);
 }
+/* 指标瓦片的语义色（页面语法 §5「每屏一处数据色面积」）：显式 data-tone 才上色条。
+   色条用原色（图形），数字用 -ink 压暗档（文字要过 4.5:1）。 */
+.kpi[data-tone]{box-shadow:inset 0 3px 0 var(--k);background:color-mix(in srgb,var(--k) 7%,var(--surface))}
+/* 与实现侧同一口径：数值 78% 原色 + 22% 墨色（28px Bold，AA 3:1），标签 52%（14px，AA 4.5:1） */
+.kpi[data-tone] .kpi-value{color:color-mix(in srgb,var(--k) 78%,var(--fg))}
+.kpi[data-tone] .kpi-label{color:color-mix(in srgb,var(--k) 52%,var(--fg))}
+.kpi[data-tone="events"]{--k:var(--chart-1);--k-ink:var(--chart-1-ink)}
+.kpi[data-tone="active"]{--k:var(--chart-2);--k-ink:var(--chart-2-ink)}
+.kpi[data-tone="skip"]{--k:var(--chart-3);--k-ink:var(--chart-3-ink)}
+.kpi[data-tone="spend"]{--k:var(--chart-5);--k-ink:var(--chart-5-ink)}
+.kpi[data-tone="income"]{--k:var(--chart-4);--k-ink:var(--chart-4-ink)}
+.kpi[data-tone="balance"]{--k:var(--chart-6);--k-ink:var(--chart-6-ink)}
 .kpi-label{font-size:var(--text-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi-value{font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .kpi-unit{font-size:var(--text-sm);font-weight:500;color:var(--muted);margin-left:4px}
@@ -1346,6 +1358,20 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .kpi-delta.is-up{color:var(--income-text)}
 .kpi-delta.is-down{color:var(--expense-text)}
 .kpi-spark{width:100%;height:var(--spark-h);margin-top:var(--space-1)}
+
+/* 横条组（页面语法 §5「数据色面积」）：s02 事件构成 / s03 命中方式 / s16 停留时长 / s18 余量共用。
+   用 div 而非 svg：条宽随容器自适应，颜色走 --k（数据色）与 --chart-seq 兜底。 */
+.barrows{display:grid;gap:var(--space-2);min-width:0}
+.barrows>.bar-row{
+  display:grid;grid-template-columns:auto minmax(48px,1fr) auto;
+  align-items:center;gap:var(--space-2);
+  font-size:var(--text-sm);min-width:0;
+}
+.barrows .bar-k{color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.barrows .bar-t{display:block;height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 9%,transparent);overflow:hidden}
+.barrows .bar-t>i{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--k,var(--chart-seq))}
+.barrows .bar-v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.barrows .bar-v b{color:var(--fg);font-weight:600}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
@@ -1799,7 +1825,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
 }
 .screen.s10 .rule-main:active{opacity:.62}
-.screen.s10 .rule-main.has-icon{display:grid;grid-template-columns:25px minmax(0,1fr);gap:5px;align-items:center;flex-direction:row}
+.screen.s10 .rule-main.has-icon{display:grid;grid-template-columns:25px minmax(0,1fr);gap:4px;align-items:center;flex-direction:row}
 .screen.s10 .rule-main.has-icon .app-icon{width:25px;height:25px;border-radius:7px;font-size:12px}
 .screen.s10 .rule-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .screen.s10 .rule-main:focus-visible{outline:var(--focus-ring);outline-offset:2px;border-radius:var(--radius-sm)}
@@ -1896,7 +1922,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 }
 .screen.s13 .theme-swatch .ts-accent{height:48%;background:var(--accent)}
 .screen.s13 .theme-swatch .ts-body{
-  flex:1;display:flex;flex-direction:column;justify-content:center;gap:3px;
+  flex:1;display:flex;flex-direction:column;justify-content:center;gap:4px;
   padding:0 6px;background:var(--surface);
 }
 .screen.s13 .theme-swatch .ts-body i{display:block;height:3px;border-radius:2px;width:100%;background:color-mix(in srgb,var(--fg) 22%,transparent)}
@@ -1912,55 +1938,6 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   padding:var(--space-3);border:1px solid var(--border-soft);border-radius:var(--radius-md);
   background:color-mix(in srgb,var(--fg) 4%,transparent);
 }
-</style>
-
-<style data-for="s17">
-/* ── s17 页面记录粒度 ───────────────────────────────────────────── */
-#s17 .od-ctl{display:none}
-#s17 .s17-in{opacity:0}
-#s17.is-active .s17-in{animation:od-rise var(--dur-page) var(--ease-out) both}
-#s17.is-active .od-d1{animation-delay:calc(var(--stagger) * 1)}
-#s17.is-active .od-d2{animation-delay:calc(var(--stagger) * 3)}
-#s17.is-active .od-d3{animation-delay:calc(var(--stagger) * 5)}
-.device-screen:has(#odSplash:not([hidden])) #s17 *{animation:none}
-
-#s17 .badge{white-space:nowrap}
-#s17 .s17-global-v{font-size:var(--text-lg);font-weight:700;letter-spacing:-0.012em;margin:var(--space-2) 0 0}
-
-/* App 行：右侧当前档位 + 进入选择 */
-#s17 .s17-app{width:100%;cursor:pointer;border-left:0;border-right:0;border-bottom:0}
-#s17 .s17-app:active{opacity:.9}
-#s17 .s17-app .s17-level{min-width:52px;justify-content:center}
-#s17 .s17-app .row-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* 敏感页黑名单 */
-#s17 .s17-black-row{
-  display:flex;align-items:center;gap:var(--space-3);
-  min-height:var(--row-min-h);padding:var(--space-2) 0;
-  border-top:1px solid var(--border-soft);
-}
-#s17 .s17-black-row:first-child{border-top:0}
-#s17 .s17-black-row .icon-btn{width:var(--icon-size);height:var(--icon-size);min-height:var(--icon-size)}
-
-/* 粒度选择抽屉 */
-#s17 .s17-sheet{display:none}
-#s17 .od-ctl:checked + .s17-sheet{display:grid}
-#s17 .s17-veil{position:absolute;inset:0}
-#s17 .s17-sheet .sheet{position:relative;z-index:1;max-height:100%;overflow-y:auto}
-#s17 .s17-sheet-title{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
-#s17 .s17-opts{display:flex;flex-direction:column;gap:var(--space-2)}
-#s17 .s17-opt{
-  width:100%;cursor:pointer;padding:var(--space-2) var(--space-3);
-  border:1px solid var(--border-soft);border-top:1px solid var(--border-soft);
-  border-radius:var(--radius-md);background:transparent;
-}
-#s17 .s17-opt[aria-checked="true"]{
-  background:color-mix(in srgb,var(--fg) 5%,transparent);
-  border-color:color-mix(in srgb,var(--fg) 22%,transparent);
-}
-#s17 .s17-opt:active{transform:scale(.99)}
-#s17 .s17-check{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0}
-#s17 .s17-opt[aria-checked="true"] .s17-check{opacity:1}
 </style>
 
 <style data-for="s22">
@@ -2322,7 +2299,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">无障碍服务</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-4)">
               <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="5.4" r="1.9"/><path d="M4.8 8.6h14.4M12 10.2v4.6M12 14.8 9 19.4M12 14.8l3 4.6"/></svg>
             </span>
             <span class="row-body">
@@ -2338,7 +2315,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">监控开关</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-1)">
               <svg viewBox="0 0 24 24" aria-hidden><path d="M3 12h3.6l2-6.2 3 12.4 2.4-8.4 1.4 2.2H21"/></svg>
             </span>
             <span class="row-body">
@@ -2348,7 +2325,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             <button class="switch" type="button" role="switch" aria-checked="true" aria-label="前台应用监控" data-toggle data-on-msg="已恢复前台应用监控" data-off-msg="已暂停前台应用监控"></button>
           </div>
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-1)">
               <svg viewBox="0 0 24 24" aria-hidden><path d="M4 17V9.5M9.3 17V5.5M14.7 17v-5M20 17V7.5"/><path d="M2.5 20.5h19"/></svg>
             </span>
             <span class="row-body">
@@ -2358,7 +2335,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             <button class="switch" type="button" role="switch" aria-checked="true" aria-label="使用时长统计" data-toggle data-on-msg="已开启使用时长统计" data-off-msg="已关闭使用时长统计"></button>
           </div>
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-1)">
               <svg viewBox="0 0 24 24" aria-hidden><path d="M12 4.5c4.2 0 7.2 2.6 8.5 6-1.3 3.4-4.3 6-8.5 6s-7.2-2.6-8.5-6c1.3-3.4 4.3-6 8.5-6z"/><circle cx="12" cy="10.5" r="2.4"/></svg>
             </span>
             <span class="row-body">
@@ -2374,7 +2351,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">电池优化</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-6)">
               <svg viewBox="0 0 24 24" aria-hidden><rect x="2.8" y="7" width="15.4" height="10" rx="3"/><path d="M21 10.6v2.8"/><path d="M10.6 9.2 8.2 12.4h3l-1.4 2.6 3.6-4h-3z"/></svg>
             </span>
             <span class="row-body">
@@ -2390,7 +2367,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">定位与每日行程</p>
         <details class="card s09-loc" data-od-id="location-guide" open>
           <summary class="s09-loc-sum" data-od-id="s09-loc-summary">
-            <span class="row-icon" aria-hidden>
+            <span class="row-icon" style="--k:var(--chart-5)" aria-hidden>
               <svg viewBox="0 0 24 24"><path d="M12 21.5s7-6.4 7-11.5a7 7 0 1 0-14 0c0 5.1 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></svg>
             </span>
             <span class="row-body">
@@ -2448,7 +2425,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">额度监控</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-3)">
               <svg viewBox="0 0 24 24" aria-hidden><ellipse cx="12" cy="6.6" rx="6.6" ry="2.9"/><path d="M5.4 6.6v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9V6.6"/><path d="M5.4 11.8v5.2c0 1.6 3 2.9 6.6 2.9s6.6-1.3 6.6-2.9v-5.2"/></svg>
             </span>
             <span class="row-body">
@@ -2459,7 +2436,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </div>
           <div class="s09-quota-body" data-quota-body data-od-id="s09-quota-body">
             <button class="row" type="button" data-goto="s19" data-od-id="s09-goto-quota">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-3)">
                 <svg viewBox="0 0 24 24" aria-hidden><circle cx="8" cy="12" r="3.4"/><path d="M11.4 12H21"/><path d="M18 12v3"/><path d="M14.8 12v2.2"/></svg>
               </span>
               <span class="row-body">
@@ -2469,7 +2446,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <span class="row-tail"><span class="badge s09-badge-ok" data-od-min-fs>已连接 2 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
             </button>
             <div class="row">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-3)">
                 <svg viewBox="0 0 24 24" aria-hidden><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></svg>
               </span>
               <span class="row-body">
@@ -2479,7 +2456,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <button class="switch" type="button" role="switch" aria-checked="true" aria-label="预警通知" data-toggle data-on-msg="预警通知已开启" data-off-msg="预警通知已关闭 · 额度仍会刷新"></button>
             </div>
             <div class="row" data-od-id="s09-quota-refresh">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-3)">
                 <svg viewBox="0 0 24 24" aria-hidden><path d="M20 11.5a8 8 0 1 0-2.6 6.3"/><path d="M20 4.5v6h-6"/></svg>
               </span>
               <span class="row-body">
@@ -2496,7 +2473,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">验证器</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-7)">
               <svg viewBox="0 0 24 24" aria-hidden><rect x="4.4" y="2.6" width="15.2" height="18.8" rx="3"/><path d="M9.4 17.4h5.2"/><path d="M12 7.4v5.2"/><path d="M9.4 10h5.2"/></svg>
             </span>
             <span class="row-body">
@@ -2508,7 +2485,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           </div>
           <div class="s09-totp" data-od-id="s09-totp-body">
             <button class="row" type="button" data-goto="s22" data-od-id="s09-goto-totp">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-7)">
                 <svg viewBox="0 0 24 24" aria-hidden><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3 7h.5"/><path d="M3 12h.5"/><path d="M3 17h.5"/></svg>
               </span>
               <span class="row-body">
@@ -2518,7 +2495,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <span class="row-tail"><span class="num">5 个</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
             </button>
             <button class="row" type="button" data-goto="s27" data-od-id="s09-goto-totp-backup">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-7)">
                 <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.6 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/></svg>
               </span>
               <span class="row-body">
@@ -2528,7 +2505,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
             </button>
             <div class="row">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-7)">
                 <svg viewBox="0 0 24 24" aria-hidden><rect x="6" y="2.6" width="12" height="18.8" rx="2.6"/><path d="M9.4 17.6h5.2"/><path d="M9.4 8.2l2 2 3.2-3.4"/></svg>
               </span>
               <span class="row-body">
@@ -2539,7 +2516,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
                       data-on-msg="已禁止截屏 · 验证码页不可截图" data-off-msg="已允许截屏 · 验证码可能出现在截图里" data-od-id="s09-totp-flag-secure"></button>
             </div>
             <div class="row">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-7)">
                 <svg viewBox="0 0 24 24" aria-hidden><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M12 4V2.4"/><path d="M6.4 8.6 4 7.2"/><path d="M6.4 15.4 4 16.8"/><path d="M17.6 8.6 20 7.2"/><path d="M17.6 15.4 20 16.8"/><path d="M10.6 12h2.8"/></svg>
               </span>
               <span class="row-body">
@@ -2550,7 +2527,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
                       data-on-msg="已开启 · 30 秒后自动清空剪贴板" data-off-msg="已关闭 · 复制的验证码会留在剪贴板" data-od-id="s09-totp-clip-clear"></button>
             </div>
             <div class="row">
-              <span class="row-icon">
+              <span class="row-icon" style="--k:var(--chart-7)">
                 <svg viewBox="0 0 24 24" aria-hidden><path d="M2.4 12s3.6-6.4 9.6-6.4S21.6 12 21.6 12s-3.6 6.4-9.6 6.4S2.4 12 2.4 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>
               </span>
               <span class="row-body">
@@ -2565,27 +2542,11 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="fine mt-2 s09-totp-note" data-od-min-fs>三项安全开关默认全开且关闭不放行；密钥用 Android Keystore 加密，只存本机、不进日志、不上传。</p>
       </div>
 
-      <div class="set-group" data-od-id="s09-granularity">
-        <p class="group-label">页面记录</p>
-        <div class="group">
-          <button class="row" type="button" data-goto="s17" data-od-id="s09-goto-granularity">
-            <span class="row-icon">
-              <svg viewBox="0 0 24 24"><path d="M12 3.4 21 8l-9 4.6L3 8z"/><path d="M3 12.4 12 17l9-4.6"/><path d="M3 16.8 12 21.4l9-4.6"/></svg>
-            </span>
-            <span class="row-body">
-              <span class="row-title">页面记录粒度</span>
-              <span class="row-sub">按 App 单独设置 · 敏感页只留包名</span>
-            </span>
-            <span class="row-tail"><span class="num set-count" data-od-id="s09-granularity-level">标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-          </button>
-        </div>
-      </div>
-
       <div class="set-group" data-od-id="s09-skip">
         <p class="group-label">开屏广告跳过</p>
         <div class="group">
           <button class="row" type="button" data-goto="s10" data-od-id="s09-goto-rules">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-8)">
               <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M10 8.6v6.8l5.4-3.4z"/></svg>
             </span>
             <span class="row-body">
@@ -2595,7 +2556,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             <span class="row-tail"><span class="num">42 条</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
           </button>
           <button class="row" type="button" data-goto="s11" data-od-id="s09-goto-white">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-8)">
               <svg viewBox="0 0 24 24" aria-hidden><path d="M12 3.4 19.2 6v5.4c0 4-2.9 7.5-7.2 9.2-4.3-1.7-7.2-5.2-7.2-9.2V6z"/><path d="M8.8 12.2l2.2 2.2 4.2-4.4"/></svg>
             </span>
             <span class="row-body">
@@ -2611,22 +2572,22 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label" data-od-id="s09-finance-grouphead">记账功能（可按需开启）</p>
         <div class="group" data-od-id="s09-finance-list">
           <div class="row" data-od-id="s09-finance-budget">
-            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+            <span class="row-icon" style="--k:var(--chart-4)"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
             <span class="row-body"><span class="row-title">预算与预警</span><span class="row-sub">默认关闭；开启后在记账页显示预算进度与预警</span></span>
             <button class="switch" type="button" role="switch" aria-checked="false" aria-label="预算与预警" data-toggle data-on-msg="预算与预警已开启" data-off-msg="预算与预警已关闭" data-od-id="s09-finance-budget-switch"></button>
           </div>
           <div class="row" data-od-id="s09-finance-homecard">
-            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
+            <span class="row-icon" style="--k:var(--chart-4)"><svg viewBox="0 0 24 24" aria-hidden><path d="M4 19.5h16"/><path d="M7.5 16V9.5"/><path d="M12 16V4.5"/><path d="M16.5 16v-4"/></svg></span>
             <span class="row-body"><span class="row-title">首页记账卡</span><span class="row-sub">概览页显示分类支出环图与近 7 天趋势</span></span>
             <button class="switch" type="button" role="switch" aria-checked="true" aria-label="首页记账卡" data-toggle data-on-msg="首页记账卡已开启" data-off-msg="首页记账卡已关闭" data-od-id="s09-finance-homecard-switch"></button>
           </div>
           <div class="row" data-od-id="s09-finance-multiperiod">
-            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><path d="M3 6.5h18M7 12h10M10 17.5h4"/></svg></span>
+            <span class="row-icon" style="--k:var(--chart-4)"><svg viewBox="0 0 24 24" aria-hidden><path d="M3 6.5h18M7 12h10M10 17.5h4"/></svg></span>
             <span class="row-body"><span class="row-title">多周期查询入口</span><span class="row-sub">记账页顶部显示 日 / 周 / 月 / 年 / 全部</span></span>
             <button class="switch" type="button" role="switch" aria-checked="true" aria-label="多周期查询入口" data-toggle data-on-msg="多周期查询入口已开启" data-off-msg="多周期查询入口已关闭" data-od-id="s09-finance-multiperiod-switch"></button>
           </div>
           <button class="row" type="button" data-goto="s06" data-od-id="s09-finance-budgetentry">
-            <span class="row-icon"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
+            <span class="row-icon" style="--k:var(--chart-4)"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3.1 2"/></svg></span>
             <span class="row-body"><span class="row-title">预算设置</span><span class="row-sub">按需进入，不再占用记账首页</span></span>
             <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
           </button>
@@ -2637,7 +2598,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">外观</p>
         <div class="group">
           <button class="row" type="button" data-goto="s13" data-od-id="s09-goto-theme">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-5)">
               <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6v16.8"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8" fill="currentColor" stroke="none" opacity="0.28"/></svg>
             </span>
             <span class="row-body">
@@ -2653,7 +2614,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
         <p class="group-label">调试模式</p>
         <div class="group">
           <div class="row">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-8)">
               <svg viewBox="0 0 24 24" aria-hidden><path d="M9 4.8h6M10.4 4.8v2.4M12 7.4c-3.1 0-5.2 2.3-5.2 5.4 0 3.4 2.2 5.6 5.2 5.6s5.2-2.2 5.2-5.6c0-3.1-2.1-5.4-5.2-5.4z"/><path d="M6.8 11.4H3.6M6.8 15.6l-2.6 1.8M17.2 11.4h3.2M17.2 15.6l2.6 1.8"/></svg>
             </span>
             <span class="row-body">
@@ -2663,7 +2624,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             <button class="switch" type="button" role="switch" aria-checked="false" aria-label="调试模式" data-toggle data-on-msg="调试模式已开启，日志级别 DEBUG" data-off-msg="调试模式已关闭"></button>
           </div>
           <button class="row" type="button" data-goto="s12" data-od-id="s09-goto-demo">
-            <span class="row-icon">
+            <span class="row-icon" style="--k:var(--chart-8)">
               <svg viewBox="0 0 24 24" aria-hidden><rect x="3.4" y="4.2" width="17.2" height="15.6" rx="3"/><path d="M3.4 9.2h17.2M9 9.2v10.6"/></svg>
             </span>
             <span class="row-body">
@@ -3649,7 +3610,7 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   <div class="screen-head" data-od-id="s13-head">
     <div>
       <h2 class="h2">外观</h2>
-      <p class="meta mt-2">切换即时生效，原型与 App 行为一致</p>
+      <p class="meta mt-2">切换后立即生效</p>
     </div>
   </div>
 
@@ -3823,217 +3784,6 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
       }
       sync();
       if (sec.classList.contains('is-active')) countUp();
-    });
-  })();
-  </script>
-</section>
-
-<section class="screen" data-screen="s17" data-title="页面记录粒度" id="s17" data-od-id="screen-s17">
-  <div class="content" data-od-id="s17-content">
-
-    <header class="screen-head" data-od-id="s17-head">
-      <div>
-        <p class="meta">按 App 覆盖全局默认</p>
-        <h1 class="h1 mt-2">页面记录粒度</h1>
-      </div>
-    </header>
-
-    <div class="pad s17-in od-d1" data-od-id="s17-global">
-      <div class="card">
-        <div class="row-between">
-          <span class="meta">全局默认</span>
-          <span class="badge" data-od-min-fs data-od-id="s17-global-badge">档 A · 默认</span>
-        </div>
-        <p class="s17-global-v">标题</p>
-        <p class="meta mt-2">页面记到「应用 › 页面标题」这一层；单个 App 可单独调高或调低。</p>
-      </div>
-    </div>
-
-    <div class="pad mt-3 s17-in od-d2" data-od-id="s17-apps">
-      <p class="group-label">按 App 设置</p>
-      <div class="group">
-        <button class="row s17-app" type="button" data-app="微信" data-level="a" data-od-id="s17-app-wechat">
-          <span class="app-icon" style="--app:var(--chart-2-ink)" aria-hidden>微</span>
-          <span class="row-body">
-            <span class="row-title">微信</span>
-            <span class="row-sub">页面 42 条 / 日 · 覆盖 6 个页面</span>
-          </span>
-          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-        </button>
-        <button class="row s17-app" type="button" data-app="小红书" data-level="c" data-od-id="s17-app-xhs">
-          <span class="app-icon" style="--app:var(--chart-8-ink)" aria-hidden>小</span>
-          <span class="row-body">
-            <span class="row-title">小红书</span>
-            <span class="row-sub">页面 18 条 / 日 · 覆盖 4 个页面</span>
-          </span>
-          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>全文</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-        </button>
-        <button class="row s17-app" type="button" data-app="抖音" data-level="b" data-od-id="s17-app-douyin">
-          <span class="app-icon" style="--app:var(--chart-5-ink)" aria-hidden>抖</span>
-          <span class="row-body">
-            <span class="row-title">抖音</span>
-            <span class="row-sub">页面 31 条 / 日 · 覆盖 3 个页面</span>
-          </span>
-          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>指纹</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-        </button>
-        <button class="row s17-app" type="button" data-app="支付宝" data-level="a" data-od-id="s17-app-alipay">
-          <span class="app-icon" style="--app:var(--chart-7-ink)" aria-hidden>支</span>
-          <span class="row-body">
-            <span class="row-title">支付宝</span>
-            <span class="row-sub">敏感页只留包名 · 其余按档位</span>
-          </span>
-          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>标题</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-        </button>
-        <button class="row s17-app" type="button" data-app="浏览器" data-level="b" data-od-id="s17-app-browser">
-          <span class="app-icon" style="--app:var(--chart-6-ink)" aria-hidden>浏</span>
-          <span class="row-body">
-            <span class="row-title">浏览器</span>
-            <span class="row-sub">页面 9 条 / 日 · 覆盖 5 个页面</span>
-          </span>
-          <span class="row-tail"><span class="badge s17-level" data-od-min-fs>指纹</span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
-        </button>
-      </div>
-    </div>
-
-    <div class="pad mt-3 s17-in od-d3" data-od-id="s17-blacklist">
-      <div class="card">
-        <div class="sec-head">
-          <h2 class="h3">敏感页黑名单</h2>
-          <span class="badge" data-od-min-fs>3 条</span>
-        </div>
-        <div class="s17-black-row" data-od-id="s17-black-pay">
-          <span class="row-icon s5" aria-hidden><svg viewBox="0 0 24 24"><rect x="2.8" y="5.5" width="18.4" height="13" rx="2.5"/><path d="M2.8 10h18.4"/><path d="M6.5 14.5h3"/></svg></span>
-          <span class="row-body"><span class="row-title">支付页</span><span class="row-sub">收银台 / 付款码 · 只留包名</span></span>
-          <button class="icon-btn" type="button" aria-label="从黑名单移除支付页" data-s17-remove data-od-id="s17-black-pay-remove">
-            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        </div>
-        <div class="s17-black-row" data-od-id="s17-black-code">
-          <span class="row-icon s6" aria-hidden><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v2.5"/></svg></span>
-          <span class="row-body"><span class="row-title">验证码页</span><span class="row-sub">短信验证 / 动态口令 · 只留包名</span></span>
-          <button class="icon-btn" type="button" aria-label="从黑名单移除验证码页" data-s17-remove data-od-id="s17-black-code-remove">
-            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        </div>
-        <div class="s17-black-row" data-od-id="s17-black-pwd">
-          <span class="row-icon s7" aria-hidden><svg viewBox="0 0 24 24"><circle cx="8.5" cy="12" r="3.5"/><path d="M12 12h9M18 12v3"/></svg></span>
-          <span class="row-body"><span class="row-title">密码页</span><span class="row-sub">登录 / 改密 · 只留包名</span></span>
-          <button class="icon-btn" type="button" aria-label="从黑名单移除密码页" data-s17-remove data-od-id="s17-black-pwd-remove">
-            <svg viewBox="0 0 24 24" aria-hidden><path d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        </div>
-        <button class="btn btn-ghost btn-block mt-3" type="button" data-s17-add data-od-id="s17-black-add">添加敏感页</button>
-        <p class="fine mt-2">敏感页无论档位如何，只保留包名，不记录标题与文本。</p>
-      </div>
-    </div>
-
-  </div>
-
-  <input class="od-ctl" type="checkbox" id="s17-sheet-cb" />
-  <div class="scrim is-bottom s17-sheet" data-od-id="s17-sheet">
-    <label class="s17-veil" for="s17-sheet-cb" aria-label="关闭粒度选择"></label>
-    <div class="sheet" data-od-min-fs>
-      <span class="sheet-grip" aria-hidden></span>
-      <div class="s17-sheet-title">
-        <h3 class="h3" data-od-id="s17-sheet-title">记录粒度</h3>
-        <span class="badge" data-od-id="s17-sheet-badge">当前 标题</span>
-      </div>
-      <p class="meta">单 App 设置覆盖全局默认</p>
-      <div class="s17-opts mt-3">
-        <button class="row s17-opt" type="button" role="radio" aria-checked="true" data-level="a" data-od-id="s17-opt-a">
-          <span class="row-body"><span class="row-title">标题</span><span class="row-sub">应用 › 页面标题 · 默认档</span></span>
-          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
-        </button>
-        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="b" data-od-id="s17-opt-b">
-          <span class="row-body"><span class="row-title">指纹</span><span class="row-sub">只留页面指纹，标题不落库</span></span>
-          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
-        </button>
-        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="c" data-od-id="s17-opt-c">
-          <span class="row-body"><span class="row-title">全文</span><span class="row-sub">标题之外再存整页文本，可展开</span></span>
-          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
-        </button>
-        <button class="row s17-opt" type="button" role="radio" aria-checked="false" data-level="d" data-od-id="s17-opt-d">
-          <span class="row-body"><span class="row-title">控件级</span><span class="row-sub">全文 + 本页可操作项清单</span></span>
-          <svg class="s17-check" viewBox="0 0 24 24" aria-hidden><path d="M5 12.5 10 17.5 19 7.5"/></svg>
-        </button>
-      </div>
-      <button class="btn btn-ghost btn-block mt-3" type="button" data-s17-close data-od-id="s17-sheet-close">关闭</button>
-    </div>
-  </div>
-
-  <script>
-  /* s17：点 App 行 → 抽屉选四档 → 写回该行「当前档位」。
-     抽屉沿用外壳的 input + scrim 配对，选项是真实 button（role=radio + aria-checked）。 */
-  (function () {
-    var sec = document.currentScript ? document.currentScript.closest('.screen') : null;
-    if (!sec) return;
-    var cb = document.getElementById('s17-sheet-cb');
-    var titleEl = sec.querySelector('[data-od-id="s17-sheet-title"]');
-    var badgeEl = sec.querySelector('[data-od-id="s17-sheet-badge"]');
-    var LABEL = { a: '标题', b: '指纹', c: '全文', d: '控件级' };
-    var currentRow = null;
-
-    function syncOpts(level) {
-      var opts = sec.querySelectorAll('.s17-opt');
-      for (var i = 0; i < opts.length; i++) {
-        opts[i].setAttribute('aria-checked', opts[i].getAttribute('data-level') === level ? 'true' : 'false');
-      }
-    }
-    function openSheet(row) {
-      currentRow = row;
-      var level = row.getAttribute('data-level');
-      var name = row.getAttribute('data-app');
-      if (titleEl) titleEl.textContent = name + ' · 记录粒度';
-      if (badgeEl) badgeEl.textContent = '当前 ' + (LABEL[level] || '');
-      syncOpts(level);
-      if (cb) cb.checked = true;
-      var on = sec.querySelector('.s17-opt[aria-checked="true"]');
-      if (on) on.focus();
-    }
-
-    sec.addEventListener('click', function (e) {
-      var n = e.target;
-      if (!n || !n.closest) return;
-
-      var row = n.closest('.s17-app');
-      if (row) { openSheet(row); return; }
-
-      var opt = n.closest('.s17-opt');
-      if (opt) {
-        if (!currentRow) return;
-        var level = opt.getAttribute('data-level');
-        currentRow.setAttribute('data-level', level);
-        var tail = currentRow.querySelector('.s17-level');
-        if (tail) tail.textContent = LABEL[level] || '';
-        syncOpts(level);
-        if (cb) cb.checked = false;
-        if (window.App && App.toast) {
-          App.toast(currentRow.getAttribute('data-app') + ' · 记录粒度：' + (LABEL[level] || ''));
-        }
-        currentRow.focus();
-        return;
-      }
-
-      if (n.closest('[data-s17-close]')) {
-        if (cb) cb.checked = false;
-        if (currentRow) currentRow.focus();
-        return;
-      }
-      if (n.closest('[data-s17-remove]')) {
-        var blackRow = n.closest('.s17-black-row');
-        if (blackRow) {
-          var list = blackRow.parentNode;
-          list.removeChild(blackRow);
-          var cnt = list.querySelectorAll('.s17-black-row').length;
-          var cntBadge = sec.querySelector('[data-od-id="s17-blacklist"] .badge');
-          if (cntBadge) cntBadge.textContent = cnt + ' 条';
-          if (window.App && App.toast) App.toast('已从敏感页黑名单移除');
-        }
-        return;
-      }
-      if (n.closest('[data-s17-add]')) {
-        if (window.App && App.toast) App.toast('添加敏感页 · 演示态');
-      }
     });
   })();
   </script>
@@ -5259,8 +5009,8 @@ function splashWanted() {
   } catch (err) { return true; }
 }
 window.__OD_TAB_FILE = {"overview":"tab-overview.html","live":"tab-live.html","ad":"tab-ad.html","finance":"tab-finance.html","quota":"tab-quota.html","settings":"tab-settings.html"};
-window.__OD_TAB_OF_SCREEN = {"s01":"overview","s16":"overview","s02":"live","s03":"ad","s04":"finance","s05":"finance","s06":"finance","s07":"finance","s08":"finance","s14a":"finance","s15":"finance","s18":"quota","s19":"quota","s09":"settings","s10":"settings","s11":"settings","s12":"settings","s13":"settings","s17":"settings","s22":"settings","s23":"settings","s24":"settings","s25":"settings","s26":"settings","s27":"settings"};
-window.__OD_FILE_OF_SCREEN = {"s01":"tab-overview.html","s16":"tab-overview.html","s02":"tab-live.html","s03":"tab-ad.html","s04":"tab-finance.html","s05":"tab-finance.html","s06":"tab-finance.html","s07":"tab-finance.html","s08":"tab-finance.html","s14a":"tab-finance.html","s15":"tab-finance.html","s18":"tab-quota.html","s19":"tab-quota.html","s09":"tab-settings.html","s10":"tab-settings.html","s11":"tab-settings.html","s12":"tab-settings.html","s13":"tab-settings.html","s17":"tab-settings.html","s22":"tab-settings.html","s23":"tab-settings.html","s24":"tab-settings.html","s25":"tab-settings.html","s26":"tab-settings.html","s27":"tab-settings.html"};
+window.__OD_TAB_OF_SCREEN = {"s01":"overview","s16":"overview","s02":"live","s03":"ad","s04":"finance","s06":"finance","s07":"finance","s08":"finance","s14a":"finance","s15":"finance","s18":"quota","s19":"quota","s09":"settings","s10":"settings","s11":"settings","s12":"settings","s13":"settings","s22":"settings","s23":"settings","s24":"settings","s25":"settings","s26":"settings","s27":"settings"};
+window.__OD_FILE_OF_SCREEN = {"s01":"tab-overview.html","s16":"tab-overview.html","s02":"tab-live.html","s03":"tab-ad.html","s04":"tab-finance.html","s06":"tab-finance.html","s07":"tab-finance.html","s08":"tab-finance.html","s14a":"tab-finance.html","s15":"tab-finance.html","s18":"tab-quota.html","s19":"tab-quota.html","s09":"tab-settings.html","s10":"tab-settings.html","s11":"tab-settings.html","s12":"tab-settings.html","s13":"tab-settings.html","s22":"tab-settings.html","s23":"tab-settings.html","s24":"tab-settings.html","s25":"tab-settings.html","s26":"tab-settings.html","s27":"tab-settings.html"};
 window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.html' }, { id: 'live', screen: 's02', file: 'tab-live.html' }, { id: 'ad', screen: 's03', file: 'tab-ad.html' }, { id: 'finance', screen: 's04', file: 'tab-finance.html' }, { id: 'quota', screen: 's18', file: 'tab-quota.html' }, { id: 'settings', screen: 's09', file: 'tab-settings.html' }];
 (function () {
   try {
@@ -5366,7 +5116,7 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
     return true;
   }
 
-  /* ── 两级分类选择器（结构冻结，s15 / s05 / s14a 共用，交互只此一份） ──
+  /* ── 两级分类选择器（结构冻结，s15 / s14a 共用，交互只此一份） ──
      <div class="cat-picker" data-kind="expense" data-recognized="居住·家政">
        .cat-l1[data-l1]  →  .cat-l2-panel[data-l1]  →  .cat-l2[data-l2][data-l1]
      点一级展开 / 收起对应面板；点二级选中该二级并把父一级置为展开；
@@ -5425,16 +5175,16 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
     if (!silent) haptic('light');
     return true;
   }
-  /* s04 的共用表单脚本（editTx / setS05 / 保存）仍在读 .s05-cat / .s14-cat；
+  /* s04 的共用表单脚本（editTx / 保存）仍在读 .s14-cat；
      把新结构的当前选中项映射过去，s04 脚本迁到 .cat-picker 后这一段可整段删掉。 */
   function pkLegacySync(pk) {
     var screen = pk.closest ? pk.closest('.screen') : null;
     if (!screen) return;
     var sid = screen.getAttribute('data-screen');
-    var cls = sid === 's05' ? 's05-cat' : (sid === 's14a' ? 's14-cat' : '');
+    var cls = sid === 's14a' ? 's14-cat' : '';
     if (!cls) return;
     Array.prototype.forEach.call(screen.querySelectorAll('.cat-l1, .cat-l2'), function (b) {
-      b.classList.remove('s05-cat', 's14-cat');
+      b.classList.remove('s14-cat');
       b.removeAttribute('data-cat');
     });
     var pickers = screen.querySelectorAll('.cat-picker');
@@ -5459,14 +5209,12 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
   }
   /* s04 的共用脚本把「任何带 data-kind 的点击」都当成收支切换 —— .cat-picker 自身也带
      data-kind，所以点分类会把它写成「支出 / 无选中」。这里在它跑完后把分段控件与
-     picker 可见性拉回正确状态（s05 的 #s05-kind-label 一并修）。 */
+     picker 可见性拉回正确状态。 */
   function pkKindRestore(screen, kind) {
     if (!screen || !kind) return;
     Array.prototype.forEach.call(screen.querySelectorAll('button[data-kind]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kind ? 'true' : 'false');
     });
-    var label = screen.querySelector('#s05-kind-label');
-    if (label) label.textContent = kind === 'income' ? '收入' : '支出';
     pkKindSync(screen, kind);
   }
 

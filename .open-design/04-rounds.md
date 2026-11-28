@@ -136,3 +136,17 @@
 **遗留（下一阶段 = 实现）**：
 - 旧 s18/s19 锚点在 Kotlin 里仍「已落地」，实现期删旧界面时要同步迁到 anchor-retired
 - 恢复提醒、15 分钟刷新档、粘贴、组件（Glance）都还没做进 App
+
+## r5 · 额度页去掉「组件样张」、重排点击语义（2026-11-28）
+
+**触发**：用户三问——额度 Tab 的原型与实践是不是有问题、小组件为什么被实现进页面、排版与点击很乱。
+
+**根因**：r10 把「桌面组件 · 4×2 样张」画进 s18 当示例，实现期照抄成 `QuotaWidgetSample.kt`，且另写了一份 `quotaWidgetCells`（按 provider 去重、不排序、不处理隐藏金额与裁字），与桌面组件真正用的 `widget/QuotaWidgetModel.quotaWidgetCells`（按紧张度排序、跨账号、裁字）是两套口径——页面里的「样张」展示的不是桌面上的样子，等于在页面里伪造了一个小组件。
+
+**改动**：
+- s18：删组件样张整块与 `--w-*` 变量；「恢复提醒 · 三态」改名「额度提醒」并改成可点行（定位到账号并展开，不再跳设置）；重置时刻策略移出本屏；结构收敛为「结论条 → 账号卡 → 额度提醒 → 说明」。
+- s19：新增「主屏展示」组（重置时刻两档，锚点 s19-display / s19-display-foot / s19-reset-all / s19-reset-urgent）。
+- 实现：删 `ui/quota/QuotaWidgetSample.kt`（副本留 impl-notes/quota-r5-removed/）；`QuotaScreen` 去掉策略分段与样张 item、`ACCOUNT_ITEM_OFFSET` 2→1；`ProviderState.range` 缺省改 7 天并去掉「首次展开偷偷切范围」；`setRange` 同范围但无用量时不再短路（旧代码展开后柱图永远等不到数据）。
+
+**门禁**：assemble/split/anchors/rules/docs 全 exit 0；split 脚本顺带修掉归属表里已删除的 s05/s17（此前跑不通）。
+

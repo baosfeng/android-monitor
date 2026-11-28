@@ -5,8 +5,9 @@
        取消「账号 × 窗口矩阵」与「聚合 / 单家」分段 —— 8 个账号 × 5 个窗口
        行列对齐会逼着缩字号，糊成一片。现在每行一个账号，右侧最多两个数位列，
        每个数值自带窗口名与重置时刻；点行展开看全部窗口 + 柱图。
-     结构：sticky 结论条 → 重置时刻策略 → 账号列表（7 行 × 72px）→ 恢复提醒三态
-        → 桌面组件样张 → 演示数据声明。
+     结构：sticky 结论条 → 账号列表（7 行 × 72px）→ 额度提醒（点行定位账号）→ 演示数据声明。
+       重置时刻策略（每行都显示 / 只显示需处理的行）是展示偏好，r5 移到 s19「主屏展示」组。
+       桌面组件（小组件）不在本页出现：组件预览与添加入口归设置页「桌面小组件」。
      品牌标用各家官网 logo（内联 data URI，零外链、零第三方库）。
      入口：底部 Tab「额度」；齿轮 data-goto 到 s19-额度设置。
      改界面改本文件，改完全局骨架跑 node scripts/assemble-prototype.mjs。
@@ -21,9 +22,6 @@
   --fill-1:color-mix(in srgb,var(--fg) 5%,transparent);
   --fill-2:color-mix(in srgb,var(--fg) 9%,transparent);
   --track:color-mix(in srgb,var(--fg) 12%,transparent);
-  --w-tint:color-mix(in srgb,var(--chart-8) 8%,var(--surface-warm));
-  --w-line:color-mix(in srgb,var(--chart-8) 24%,transparent);
-  --w-ink:var(--chart-8-ink);
   --logo-oc: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZD0iTTMyMCAyMjRWMzUySDE5MlYyMjRIMzIwWiIgZmlsbD0iIzVBNTg1OCIvPjxwYXRoIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiBkPSJNMzg0IDQxNkgxMjhWOTZIMzg0VjQxNlpNMzIwIDE2MEgxOTJWMzUySDMyMFYxNjBaIiBmaWxsPSIjMTMxMDEwIi8+PC9zdmc+Cg==");
   --logo-ol: url("data:image/png;base64,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");
   --logo-od: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODIiIGhlaWdodD0iODIiIHZpZXdCb3g9IjAgMC43MjY1NjIgODIgODIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik00MSAwLjcyNjU2MkM3Ni41NzUzIDAuNzI2NTYyIDgyIDYuMTUxMjEgODIgNDEuNzI2NkM4MiA3Ny4zMDE5IDc2LjU3NTMgODIuNzI2NiA0MSA4Mi43MjY2QzUuNDI0NjUgODIuNzI2NiAwIDc3LjMwMTkgMCA0MS43MjY2QzAgNi4xNTEyMSA1LjQyNDY1IDAuNzI2NTYyIDQxIDAuNzI2NTYyWk00MC44OTA2IDE2LjQyNThDMjYuOTE2NCAxNi40MjU4IDE1LjU4NzkgMjcuNzU0MyAxNS41ODc5IDQxLjcyODVDMTUuNTg3OSA0Ni43NzU3IDE1LjU4NzkgNTguMDIxOSAxNS41ODc5IDYzLjY2NUMxNS41ODggNjUuNTI4MSAxNy4wOTEgNjcuMDMxMiAxOC45NTQxIDY3LjAzMTJINDAuODkwNkM1NC44NjQ3IDY3LjAzMTEgNjYuMTkzMiA1NS43MDI2IDY2LjE5MzQgNDEuNzI4NUM2Ni4xOTM0IDI3Ljc1NDQgNTQuODY0NyAxNi40MjU5IDQwLjg5MDYgMTYuNDI1OFpNNDAuODkwNiAyMS40ODYzQzUyLjA2OTkgMjEuNDg2NCA2MS4xMzI4IDMwLjU0OTIgNjEuMTMyOCA0MS43Mjg1QzYxLjEzMjcgNTIuOTA3OCA1Mi4wNjk5IDYxLjk3MDYgNDAuODkwNiA2MS45NzA3QzI5LjcxMTMgNjEuOTcwNyAyMC42NDg1IDUyLjkwNzggMjAuNjQ4NCA0MS43Mjg1QzIwLjY0ODQgMzAuNTQ5MSAyOS43MTEzIDIxLjQ4NjMgNDAuODkwNiAyMS40ODYzWk0zMi42NDQ1IDMyLjI1NDlDMzEuOTkyMSAzMi4wMDI3IDMxLjM1MDMgMzIuNjQ2OSAzMS41OTk2IDMzLjMwMzdMMzkuMzE0NSA1My42MDQ1QzM5LjYzNDUgNTQuNDQ2OCA0MC44NzcgNTQuMjE2MiA0MC44NzcgNTMuMzE0NVY0MS42ODM2SDUyLjY2NUM1My41NjA1IDQxLjY4MzYgNTMuNzkwOCA0MC40MzY4IDUyLjk1NTEgNDAuMTEzM0wzMi42NDQ1IDMyLjI1NDlaIiBmaWxsPSIjMjYyNTFFIi8+Cjwvc3ZnPgo=");
@@ -56,13 +54,6 @@
 .screen.s18 .concl-v{flex:0 0 auto;text-align:right}
 .screen.s18 .concl-big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:28px;font-weight:700;line-height:1;letter-spacing:-0.03em}
 
-/* 重置时刻策略 */
-.screen.s18 .modeseg{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin:0 var(--space-4) 6px;padding:4px;
-  border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:var(--fill-1)}
-.screen.s18 .modeseg>button{min-height:44px;border:0;border-radius:var(--radius-pill);background:transparent;color:var(--muted);
-  font-size:13px;font-weight:600;cursor:pointer}
-.screen.s18 .modeseg>button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:var(--elev-1)}
-
 /* 账号列表：卡片，无列头、无表格线 */
 .screen.s18 .list{margin:0 var(--space-4);background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);overflow:visible}
 .screen.s18 .acct+.acct{border-top:1px solid var(--border-soft)}
@@ -92,7 +83,6 @@
 .screen.s18 .ncol.is-back .track>i{background:var(--success)}
 .screen.s18 .ncol .w{font-size:13px;color:var(--fg-2);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .screen.s18 .ncol .when{font-size:var(--text-xs);color:var(--muted);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.screen.s18[data-reset="urgent"] .acct:not(.is-urgent) .acct-hd .when{display:none}
 .screen.s18 .chev{flex:0 0 auto;width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .screen.s18 .acct.is-open .chev{transform:rotate(90deg)}
 
@@ -130,10 +120,13 @@
 .screen.s18 .sect-t{font-size:16px;font-weight:700}
 .screen.s18 .sect-n{font-size:var(--text-xs);color:var(--muted)}
 
-/* 恢复提醒三态 */
+/* 额度提醒（点行定位到账号） */
 .screen.s18 .alerts{margin:0 var(--space-4);background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);overflow:hidden}
-.screen.s18 .arow{display:flex;align-items:center;gap:var(--space-2);min-height:48px;padding:8px var(--space-3)}
+.screen.s18 .arow{display:flex;align-items:center;gap:var(--space-2);min-height:48px;width:100%;padding:8px var(--space-3);
+  border:0;background:transparent;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.screen.s18 .arow:active{background:var(--fill-1)}
 .screen.s18 .arow+.arow{border-top:1px solid var(--border-soft)}
+.screen.s18 .arow .chev{width:16px;height:16px;flex:0 0 auto}
 .screen.s18 .adot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--fg-2)}
 .screen.s18 .adot.is-low{background:var(--warn)}
 .screen.s18 .adot.is-dead{background:var(--danger)}
@@ -141,17 +134,6 @@
 .screen.s18 .arow .at{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
 .screen.s18 .arow .at b{font-size:13px;font-weight:700;line-height:1.2}
 .screen.s18 .arow .at span{font-size:var(--text-xs);color:var(--muted);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* 桌面组件样张 */
-.screen.s18 .wcard{margin:0 var(--space-4);padding:var(--space-3);border-radius:var(--radius-lg);background:var(--w-tint);border:1px solid var(--w-line)}
-.screen.s18 .wtop{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--w-ink)}
-.screen.s18 .wdot{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--w-ink);color:var(--surface-warm);font-size:11px;font-weight:700}
-.screen.s18 .wrows{display:grid;grid-template-columns:1fr 1fr;gap:8px var(--space-3);margin-top:var(--space-2)}
-.screen.s18 .wr{display:flex;flex-direction:column;gap:2px;min-width:0}
-.screen.s18 .wr b{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:16px;font-weight:700;color:var(--w-ink);line-height:1.1}
-.screen.s18 .wr span{font-size:var(--text-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.screen.s18 .wr .track{height:4px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--w-ink) 20%,transparent);overflow:hidden}
-.screen.s18 .wr .track>i{display:block;height:100%;width:var(--p);border-radius:inherit;background:var(--w-ink)}
 
 .screen.s18 .s18-fine{margin:var(--space-2) var(--space-4) 0;font-size:var(--text-xs);color:var(--muted);line-height:1.4}
 
@@ -163,7 +145,7 @@
 .screen.s18 .dialog .btn{width:100%;min-height:44px;margin-top:var(--space-2);border:0;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-on);font-size:13px;font-weight:600;cursor:pointer}
 </style>
 <!--@od:section-->
-<section class="screen s18" data-screen="s18" data-title="额度" id="s18" data-od-id="screen-s18" data-reset="urgent">
+<section class="screen s18" data-screen="s18" data-title="额度" id="s18" data-od-id="screen-s18">
   <header class="screen-head s18-head" data-od-id="s18-head">
     <div class="s18-head-l">
       <h1>额度</h1>
@@ -195,34 +177,21 @@
       </section>
     </div>
 
-    <div class="modeseg" role="group" aria-label="重置时刻显示策略" data-od-id="s18-reset-mode">
-      <button type="button" aria-pressed="false" data-act="reset-mode" data-reset-mode="all" data-od-id="s18-mode-all">每行都显示重置</button>
-      <button type="button" aria-pressed="true" data-act="reset-mode" data-reset-mode="urgent" data-od-id="s18-mode-urgent">只显示需处理的行</button>
-    </div>
-
 <section class="list" data-od-id="s18-list">
 <div class="acct is-urgent" data-acct="oc-main" data-od-id="s18-body-oc-main"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-oc-main" aria-label="展开 opencode-go 主号 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-oc)"></i></span><span class="acct-id"><span class="acct-name">opencode-go</span><span class="badge">主号</span></span><span class="cols"><span class="ncol is-low" data-cell><span class="n">12%</span><span class="track"><i style="--p:12%"></i></span><span class="w">5 小时</span><span class="when">今天 17:00</span></span><span class="ncol " data-cell><span class="n">46%</span><span class="track"><i style="--p:46%"></i></span><span class="w">本周</span><span class="when">周一 00:00</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-oc-main"><div class="d-hd"><b>opencode-go 的窗口</b><span>3 个窗口</span></div><div class="wrow is-low"><span class="wk">5 小时<span class="when">今天 17:00</span></span><span class="track"><i style="--p:12%"></i></span><span class="wv">12%</span></div><div class="wrow "><span class="wk">本周<span class="when">周一 00:00</span></span><span class="track"><i style="--p:46%"></i></span><span class="wv">46%</span></div><div class="wrow "><span class="wk">本月<span class="when">12-01 00:00</span></span><span class="track"><i style="--p:71%"></i></span><span class="wv">71%</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="oc-main" data-od-id="s18-chart-oc-main"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="opencode-go 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct is-urgent" data-acct="oc-alt" data-od-id="s18-body-oc-alt"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-oc-alt" aria-label="展开 opencode-go 备用 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-oc)"></i></span><span class="acct-id"><span class="acct-name">opencode-go</span><span class="badge is-dead">耗尽</span></span><span class="cols"><span class="ncol is-dead" data-cell><span class="n">0%</span><span class="track"><i style="--p:0%"></i></span><span class="w">5 小时</span><span class="when">今天 17:00</span></span><span class="ncol " data-cell><span class="n">62%</span><span class="track"><i style="--p:62%"></i></span><span class="w">本周</span><span class="when">周一 00:00</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-oc-alt"><div class="d-hd"><b>opencode-go 的窗口</b><span>3 个窗口</span></div><div class="wrow is-dead"><span class="wk">5 小时<span class="when">今天 17:00</span></span><span class="track"><i style="--p:0%"></i></span><span class="wv">0%</span></div><div class="wrow "><span class="wk">本周<span class="when">周一 00:00</span></span><span class="track"><i style="--p:62%"></i></span><span class="wv">62%</span></div><div class="wrow "><span class="wk">本月<span class="when">12-01 00:00</span></span><span class="track"><i style="--p:88%"></i></span><span class="wv">88%</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="oc-alt"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="opencode-go 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct" data-acct="ol-main" data-od-id="s18-body-ol-main"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-ol-main" aria-label="展开 Ollama 主号 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-ol)"></i></span><span class="acct-id"><span class="acct-name">Ollama</span><span class="badge">已恢复</span></span><span class="cols"><span class="ncol " data-cell><span class="n">63%</span><span class="track"><i style="--p:63%"></i></span><span class="w">今日</span><span class="when">明天 00:00</span></span><span class="ncol " data-cell><span class="n">96%</span><span class="track"><i style="--p:96%"></i></span><span class="w">本周</span><span class="when">周一 00:00</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-ol-main"><div class="d-hd"><b>Ollama 的窗口</b><span>3 个窗口</span></div><div class="wrow "><span class="wk">今日<span class="when">明天 00:00</span></span><span class="track"><i style="--p:63%"></i></span><span class="wv">63%</span></div><div class="wrow "><span class="wk">本周<span class="when">周一 00:00</span></span><span class="track"><i style="--p:96%"></i></span><span class="wv">96%</span></div><div class="wrow "><span class="wk">订阅周期<span class="when">12-15 15:00</span></span><span class="track"><i style="--p:72%"></i></span><span class="wv">72%</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="ol-main"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="Ollama 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct is-urgent" data-acct="od-a" data-od-id="s18-body-od-a"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-od-a" aria-label="展开 open-design 工作区 A 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-od)"></i></span><span class="acct-id"><span class="acct-name">open-design</span><span class="badge">快见底</span></span><span class="cols"><span class="ncol " data-cell><span class="n">34%</span><span class="track"><i style="--p:34%"></i></span><span class="w">本月</span><span class="when">12-01 00:00</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-od-a"><div class="d-hd"><b>open-design 的窗口</b><span>1 个窗口</span></div><div class="wrow "><span class="wk">本月<span class="when">12-01 00:00</span></span><span class="track"><i style="--p:34%"></i></span><span class="wv">34%</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="od-a"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="open-design 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct is-urgent" data-acct="od-b" data-od-id="s18-body-od-b"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-od-b" aria-label="展开 open-design 工作区 B 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-od)"></i></span><span class="acct-id"><span class="acct-name">open-design</span><span class="badge is-dead">耗尽</span></span><span class="cols"><span class="ncol is-dead" data-cell><span class="n">0%</span><span class="track"><i style="--p:0%"></i></span><span class="w">本月</span><span class="when">12-01 00:00</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-od-b"><div class="d-hd"><b>open-design 的窗口</b><span>1 个窗口</span></div><div class="wrow is-dead"><span class="wk">本月<span class="when">12-01 00:00</span></span><span class="track"><i style="--p:0%"></i></span><span class="wv">0%</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="od-b"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="open-design 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct is-urgent" data-acct="ds-1" data-od-id="s18-body-ds-1"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-ds-1" aria-label="展开 DeepSeek 账号 1 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-ds)"></i></span><span class="acct-id"><span class="acct-name">DeepSeek</span><span class="badge">令牌过期</span></span><span class="cols"><span class="ncol is-dead" data-cell><span class="n">¥110.00</span><span class="track"><i style="--p:8%"></i></span><span class="w">余额</span><span class="when">1 小时前</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-ds-1"><div class="d-hd"><b>DeepSeek 的窗口</b><span>1 个窗口</span></div><div class="wrow"><span class="wk">余额型<span class="when">无周期窗口</span></span><span class="track"><i style="--p:8%"></i></span><span class="wv">—</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="ds-1"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="DeepSeek 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div><div class="acct is-urgent" data-acct="ds-2" data-od-id="s18-body-ds-2"><button class="acct-hd" type="button" aria-expanded="false" data-act="expand" data-od-id="s18-row-ds-2" aria-label="展开 DeepSeek 账号 2 的用量"><span class="pav" aria-hidden><i class="pav-img" style="--logo:var(--logo-ds)"></i></span><span class="acct-id"><span class="acct-name">DeepSeek</span><span class="badge is-dead">低于阈值</span></span><span class="cols"><span class="ncol is-dead" data-cell><span class="n">¥8.60</span><span class="track"><i style="--p:8%"></i></span><span class="w">余额</span><span class="when">8 分钟前</span></span></span><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button><div class="detail" hidden data-od-id="s18-detail-ds-2"><div class="d-hd"><b>DeepSeek 的窗口</b><span>1 个窗口</span></div><div class="wrow"><span class="wk">余额型<span class="when">无周期窗口</span></span><span class="track"><i style="--p:8%"></i></span><span class="wv">—</span></div><div class="ranges" role="group" aria-label="用量范围"><button type="button" aria-pressed="false" data-act="range" data-range="h">24 小时</button><button type="button" aria-pressed="true" data-act="range" data-range="d">7 天</button><button type="button" aria-pressed="false" data-act="range" data-range="m">30 天</button></div><div class="chart-l"><span>请求数</span><span data-chart-label>近 7 天</span></div><div class="chartwrap" data-chart-for="ds-2"><div class="yaxis" data-yaxis aria-hidden></div><div class="plot" role="img" data-plot aria-label="DeepSeek 近 7 天请求数"><span class="grid" style="top:0"></span><span class="grid" style="top:50%"></span><span class="grid" style="top:100%"></span><div class="chart"></div></div></div></div></div>
 </section>
 
-    <div class="sect" data-od-id="s18-alert-head"><span class="sect-t">恢复提醒 · 三态</span><span class="sect-n">本轮只做界面</span></div>
+    <div class="sect" data-od-id="s18-alert-head"><span class="sect-t">额度提醒</span><span class="sect-n">点一行定位到账号</span></div>
     <div class="alerts" data-od-id="s18-alerts">
-      <div class="arow" data-od-id="s18-alert-back"><span class="adot is-back" aria-hidden></span>
-        <span class="at"><b>Ollama 主号 · 本周已恢复</b><span>22 分钟前 4% → 96% · 周一 00:00 重置 · 已发「已恢复」</span></span></div>
-      <div class="arow" data-od-id="s18-alert-low"><span class="adot is-low" aria-hidden></span>
-        <span class="at"><b>open-design 工作区 A · 快见底 34%</b><span>12-01 00:00 重置 · 按当前速率约 4 天耗尽</span></span></div>
-      <div class="arow" data-od-id="s18-alert-dead"><span class="adot is-dead" aria-hidden></span>
-        <span class="at"><b>opencode-go 备用 · 5 小时已耗尽</b><span>今天 17:00 自动恢复 · 期间可切主号</span></span></div>
-    </div>
-
-    <div class="sect" data-od-id="s18-widget-head"><span class="sect-t">桌面组件 · 4×2 样张</span><span class="sect-n">与列表同一套语言</span></div>
-    <div class="wcard" data-od-id="s18-widget">
-      <div class="wtop"><span class="wdot" aria-hidden>%</span>额度 · 更新于 4 分钟前</div>
-      <div class="wrows">
-        <div class="wr"><b>12%</b><span>opencode 5 小时 · 今天 17:00</span><span class="track"><i style="--p:12%"></i></span></div>
-        <div class="wr"><b>96%</b><span>Ollama 本周 · 周一 00:00</span><span class="track"><i style="--p:96%"></i></span></div>
-        <div class="wr"><b>34%</b><span>open-design 本月 · 12-01</span><span class="track"><i style="--p:34%"></i></span></div>
-        <div class="wr"><b>¥8.60</b><span>DeepSeek 账号 2 · 低于阈值</span><span class="track"><i style="--p:8%"></i></span></div>
-      </div>
+      <button class="arow" type="button" data-act="focus" data-acct="ol-main" data-od-id="s18-alert-back"><span class="adot is-back" aria-hidden></span>
+        <span class="at"><b>Ollama 主号 · 本周已恢复</b><span>22 分钟前 4% → 96% · 周一 00:00 重置 · 已发「已恢复」</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button>
+      <button class="arow" type="button" data-act="focus" data-acct="od-a" data-od-id="s18-alert-low"><span class="adot is-low" aria-hidden></span>
+        <span class="at"><b>open-design 工作区 A · 快见底 34%</b><span>12-01 00:00 重置 · 按当前速率约 4 天耗尽</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button>
+      <button class="arow" type="button" data-act="focus" data-acct="oc-alt" data-od-id="s18-alert-dead"><span class="adot is-dead" aria-hidden></span>
+        <span class="at"><b>opencode-go 备用 · 5 小时已耗尽</b><span>今天 17:00 自动恢复 · 期间可切主号</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></button>
     </div>
 
     <p class="s18-fine" data-od-id="s18-foot">演示数据：账号、窗口与用量柱图均为原型示例值，不含真实凭据。点账号行可展开全部窗口与用量图。</p>
@@ -233,7 +202,7 @@
       <h2 id="s18-help-title">这张表怎么读</h2>
       <p><b>一行 = 一个账号</b>，右侧最多两个数位列，每列都写着窗口名（5 小时 / 今日 / 本周 / 本月 / 周期）与重置时刻。</p>
       <p>数字 = <b>剩余</b>百分比，下面的横条同源；红色 = 已耗尽，黄色 = 快见底（≤20%），绿色 = 本轮已恢复。</p>
-      <p>顶部结论条永远显示<b>最低的那一个</b>；「只显示需处理的行」会把正常行的重置时刻折叠起来，让快用完的先被看到。</p>
+      <p>顶部结论条永远显示<b>最低的那一个</b>；下面「额度提醒」按已恢复 / 快见底 / 已耗尽列最近发生的事，点一行直接定位到对应账号并展开。</p>
       <p>点整行展开：该账号的全部窗口 + 24 小时 / 7 天 / 30 天用量柱图（默认 7 天，带 Y 轴）。</p>
       <button class="btn" type="button" data-act="close-help" data-od-id="s18-help-close">知道了</button>
     </div>
@@ -284,6 +253,26 @@
       });
     }
 
+    /* 展开一个账号卡并把它顶到 sticky 结论条下方（行点击与「额度提醒」行共用） */
+    function openAcct(acct) {
+      var det = acct.querySelector('.detail');
+      if (!det) return;
+      closeAllDetail();
+      det.hidden = false;
+      acct.classList.add('is-open');
+      var hd = acct.querySelector('.acct-hd');
+      if (hd) hd.setAttribute('aria-expanded', 'true');
+      var pressed = det.querySelector('[data-act=range][aria-pressed=true]');
+      drawChart(det.querySelector('.chartwrap'), acct.getAttribute('data-acct'),
+        pressed ? pressed.getAttribute('data-range') : 'd');
+      /* 只滚本屏的 .content，不碰 body */
+      var scroller = sec.querySelector('.content');
+      var wrapEl = sec.querySelector('.conclwrap');
+      var stickH = wrapEl ? wrapEl.getBoundingClientRect().height : 0;
+      var rowTop = acct.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTop = Math.max(0, rowTop - stickH);
+    }
+
     var scrim = sec.querySelector('.s18-help');
 
     sec.addEventListener('click', function (e) {
@@ -294,21 +283,13 @@
       if (act === 'expand') {
         var acct = el.closest('.acct');
         var det = acct.querySelector('.detail');
-        var opening = det.hidden;
-        closeAllDetail();
-        if (!opening) return;
-        det.hidden = false;
-        acct.classList.add('is-open');
-        el.setAttribute('aria-expanded', 'true');
-        var pressed = det.querySelector('[data-act=range][aria-pressed=true]');
-        drawChart(det.querySelector('.chartwrap'), acct.getAttribute('data-acct'),
-          pressed ? pressed.getAttribute('data-range') : 'd');
-        /* 把被点的行顶到 sticky 结论条下方：只滚本屏的 .content，不碰 body */
-        var scroller = sec.querySelector('.content');
-        var wrapEl = sec.querySelector('.conclwrap');
-        var stickH = wrapEl ? wrapEl.getBoundingClientRect().height : 0;
-        var rowTop = acct.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-        scroller.scrollTop = Math.max(0, rowTop - stickH);
+        if (det.hidden) openAcct(acct); else closeAllDetail();
+        return;
+      }
+
+      if (act === 'focus') {
+        var target = sec.querySelector('.acct[data-acct="' + el.getAttribute('data-acct') + '"]');
+        if (target) openAcct(target); else toast('该账号已不在列表里');
         return;
       }
 
@@ -320,15 +301,6 @@
         var rng = el.getAttribute('data-range');
         drawChart(det2.querySelector('.chartwrap'), acct2.getAttribute('data-acct'), rng);
         det2.querySelector('[data-chart-label]').textContent = RANGE_LABEL[rng];
-        return;
-      }
-
-      if (act === 'reset-mode') {
-        var mode = el.getAttribute('data-reset-mode');
-        sec.setAttribute('data-reset', mode);
-        Array.prototype.forEach.call(el.parentElement.children, function (b) { b.setAttribute('aria-pressed', 'false'); });
-        el.setAttribute('aria-pressed', 'true');
-        toast(mode === 'all' ? '每行都显示重置时刻' : '只给即将重置或快见底的行显示重置');
         return;
       }
 

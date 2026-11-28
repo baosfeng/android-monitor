@@ -243,6 +243,18 @@
   </div>
 </div>
 
+<!-- 4 · 主屏展示 -->
+<div class="grp" data-od-id="s19-display">
+  <div class="grp-label"><b>主屏展示</b><span>只影响额度 Tab 的行</span></div>
+  <div class="box">
+    <div class="segmented" role="group" aria-label="重置时刻显示策略" style="margin:var(--space-2) var(--space-3) var(--space-3)">
+      <button type="button" aria-pressed="false" data-act="seg" data-od-id="s19-reset-all">每行都显示重置</button>
+      <button type="button" aria-pressed="true" data-act="seg" data-od-id="s19-reset-urgent">只显示需处理的行</button>
+    </div>
+    <p class="fine" style="margin:8px 2px 0" data-od-id="s19-display-foot">「只显示需处理的行」会把正常行的重置时刻折叠；快见底与已耗尽的行照常显示。</p>
+  </div>
+</div>
+
 <p class="fine" data-od-id="s19-foot">额度数据只用于本机展示与通知，不上传；通知开关受系统通知权限约束。</p>
 
 <button class="save s19-save-all" type="button" data-act="toast" data-toast="已保存全部设置" data-od-id="s19-save-all">保存全部</button>

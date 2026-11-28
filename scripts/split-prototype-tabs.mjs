@@ -44,11 +44,11 @@ const TABS = [
   { id: 'live', label: '实时', screen: 's02', file: 'tab-live.html', screens: ['s02'] },
   { id: 'ad', label: '广告', screen: 's03', file: 'tab-ad.html', screens: ['s03'] },
   { id: 'finance', label: '记账', screen: 's04', file: 'tab-finance.html',
-    screens: ['s04', 's05', 's06', 's07', 's08', 's14a', 's15'] },
+    screens: ['s04', 's06', 's07', 's08', 's14a', 's15'] },
   { id: 'quota', label: '额度', screen: 's18', file: 'tab-quota.html',
     screens: ['s18', 's19'] },
   { id: 'settings', label: '设置', screen: 's09', file: 'tab-settings.html',
-    screens: ['s09', 's10', 's11', 's12', 's13', 's17', 's22', 's23', 's24', 's25', 's26', 's27'] },
+    screens: ['s09', 's10', 's11', 's12', 's13', 's22', 's23', 's24', 's25', 's26', 's27'] },
 ];
 
 const read = (rel) => fs.readFileSync(path.join(SRC, rel), 'utf8').replace(/\s+$/, '');

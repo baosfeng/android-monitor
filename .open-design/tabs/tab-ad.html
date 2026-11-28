@@ -1339,6 +1339,18 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   padding:var(--space-3);
   background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md);
 }
+/* 指标瓦片的语义色（页面语法 §5「每屏一处数据色面积」）：显式 data-tone 才上色条。
+   色条用原色（图形），数字用 -ink 压暗档（文字要过 4.5:1）。 */
+.kpi[data-tone]{box-shadow:inset 0 3px 0 var(--k);background:color-mix(in srgb,var(--k) 7%,var(--surface))}
+/* 与实现侧同一口径：数值 78% 原色 + 22% 墨色（28px Bold，AA 3:1），标签 52%（14px，AA 4.5:1） */
+.kpi[data-tone] .kpi-value{color:color-mix(in srgb,var(--k) 78%,var(--fg))}
+.kpi[data-tone] .kpi-label{color:color-mix(in srgb,var(--k) 52%,var(--fg))}
+.kpi[data-tone="events"]{--k:var(--chart-1);--k-ink:var(--chart-1-ink)}
+.kpi[data-tone="active"]{--k:var(--chart-2);--k-ink:var(--chart-2-ink)}
+.kpi[data-tone="skip"]{--k:var(--chart-3);--k-ink:var(--chart-3-ink)}
+.kpi[data-tone="spend"]{--k:var(--chart-5);--k-ink:var(--chart-5-ink)}
+.kpi[data-tone="income"]{--k:var(--chart-4);--k-ink:var(--chart-4-ink)}
+.kpi[data-tone="balance"]{--k:var(--chart-6);--k-ink:var(--chart-6-ink)}
 .kpi-label{font-size:var(--text-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi-value{font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .kpi-unit{font-size:var(--text-sm);font-weight:500;color:var(--muted);margin-left:4px}
@@ -1346,6 +1358,20 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .kpi-delta.is-up{color:var(--income-text)}
 .kpi-delta.is-down{color:var(--expense-text)}
 .kpi-spark{width:100%;height:var(--spark-h);margin-top:var(--space-1)}
+
+/* 横条组（页面语法 §5「数据色面积」）：s02 事件构成 / s03 命中方式 / s16 停留时长 / s18 余量共用。
+   用 div 而非 svg：条宽随容器自适应，颜色走 --k（数据色）与 --chart-seq 兜底。 */
+.barrows{display:grid;gap:var(--space-2);min-width:0}
+.barrows>.bar-row{
+  display:grid;grid-template-columns:auto minmax(48px,1fr) auto;
+  align-items:center;gap:var(--space-2);
+  font-size:var(--text-sm);min-width:0;
+}
+.barrows .bar-k{color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.barrows .bar-t{display:block;height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 9%,transparent);overflow:hidden}
+.barrows .bar-t>i{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--k,var(--chart-seq))}
+.barrows .bar-v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.barrows .bar-v b{color:var(--fg);font-weight:600}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
@@ -1897,7 +1923,6 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
           <span class="meta">累计上限</span>
         </div>
         <p class="row-title mt-2">哔哩哔哩（tv.danmaku.bili）· 开屏与贴片广告 · 累计跳过 3,128 次</p>
-        <p class="meta mt-2">超长应用名与万级计数用于验证截断；缺失字段以「—」占位。</p>
         <div class="row mt-2">
           <span class="row-body"><span class="row-title">命中规则</span><span class="row-sub">字段缺失</span></span>
           <span class="row-tail">—</span>
@@ -1930,6 +1955,28 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
               <svg viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg>
             </button>
           </div>
+        </div>
+      </div>
+
+      <div class="pad mt-3" data-od-id="s03-breakdown">
+        <div class="card stg od-d2">
+          <div class="sec-head">
+            <h2 class="h3">命中方式</h2>
+            <span class="meta">近 7 天 · 10 次</span>
+          </div>
+          <div class="barrows mt-2">
+            <div class="bar-row"><span class="bar-k">规则匹配</span><span class="bar-t"><i style="--p:70%;--k:var(--chart-2)"></i></span><span class="bar-v"><b>7</b> 次</span></div>
+            <div class="bar-row"><span class="bar-k">坐标兜底</span><span class="bar-t"><i style="--p:20%;--k:var(--chart-1)"></i></span><span class="bar-v"><b>2</b> 次</span></div>
+            <div class="bar-row"><span class="bar-k">无障碍</span><span class="bar-t"><i style="--p:10%;--k:var(--chart-3)"></i></span><span class="bar-v"><b>1</b> 次</span></div>
+          </div>
+          <div class="row-between mt-3">
+            <span class="meta">跳过耗时</span>
+            <span class="meta">中位 128 ms · 最慢 512 ms</span>
+          </div>
+          <div class="mt-2" data-chart="bars"
+               data-chart-values="4,3,2,1"
+               data-chart-labels="&lt;100,100-200,200-400,&gt;400"
+               data-chart-label="跳过耗时分布直方图"></div>
         </div>
       </div>
 
@@ -2224,8 +2271,8 @@ function splashWanted() {
   } catch (err) { return true; }
 }
 window.__OD_TAB_FILE = {"overview":"tab-overview.html","live":"tab-live.html","ad":"tab-ad.html","finance":"tab-finance.html","quota":"tab-quota.html","settings":"tab-settings.html"};
-window.__OD_TAB_OF_SCREEN = {"s01":"overview","s16":"overview","s02":"live","s03":"ad","s04":"finance","s05":"finance","s06":"finance","s07":"finance","s08":"finance","s14a":"finance","s15":"finance","s18":"quota","s19":"quota","s09":"settings","s10":"settings","s11":"settings","s12":"settings","s13":"settings","s17":"settings","s22":"settings","s23":"settings","s24":"settings","s25":"settings","s26":"settings","s27":"settings"};
-window.__OD_FILE_OF_SCREEN = {"s01":"tab-overview.html","s16":"tab-overview.html","s02":"tab-live.html","s03":"tab-ad.html","s04":"tab-finance.html","s05":"tab-finance.html","s06":"tab-finance.html","s07":"tab-finance.html","s08":"tab-finance.html","s14a":"tab-finance.html","s15":"tab-finance.html","s18":"tab-quota.html","s19":"tab-quota.html","s09":"tab-settings.html","s10":"tab-settings.html","s11":"tab-settings.html","s12":"tab-settings.html","s13":"tab-settings.html","s17":"tab-settings.html","s22":"tab-settings.html","s23":"tab-settings.html","s24":"tab-settings.html","s25":"tab-settings.html","s26":"tab-settings.html","s27":"tab-settings.html"};
+window.__OD_TAB_OF_SCREEN = {"s01":"overview","s16":"overview","s02":"live","s03":"ad","s04":"finance","s06":"finance","s07":"finance","s08":"finance","s14a":"finance","s15":"finance","s18":"quota","s19":"quota","s09":"settings","s10":"settings","s11":"settings","s12":"settings","s13":"settings","s22":"settings","s23":"settings","s24":"settings","s25":"settings","s26":"settings","s27":"settings"};
+window.__OD_FILE_OF_SCREEN = {"s01":"tab-overview.html","s16":"tab-overview.html","s02":"tab-live.html","s03":"tab-ad.html","s04":"tab-finance.html","s06":"tab-finance.html","s07":"tab-finance.html","s08":"tab-finance.html","s14a":"tab-finance.html","s15":"tab-finance.html","s18":"tab-quota.html","s19":"tab-quota.html","s09":"tab-settings.html","s10":"tab-settings.html","s11":"tab-settings.html","s12":"tab-settings.html","s13":"tab-settings.html","s22":"tab-settings.html","s23":"tab-settings.html","s24":"tab-settings.html","s25":"tab-settings.html","s26":"tab-settings.html","s27":"tab-settings.html"};
 window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.html' }, { id: 'live', screen: 's02', file: 'tab-live.html' }, { id: 'ad', screen: 's03', file: 'tab-ad.html' }, { id: 'finance', screen: 's04', file: 'tab-finance.html' }, { id: 'quota', screen: 's18', file: 'tab-quota.html' }, { id: 'settings', screen: 's09', file: 'tab-settings.html' }];
 (function () {
   try {
@@ -2331,7 +2378,7 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
     return true;
   }
 
-  /* ── 两级分类选择器（结构冻结，s15 / s05 / s14a 共用，交互只此一份） ──
+  /* ── 两级分类选择器（结构冻结，s15 / s14a 共用，交互只此一份） ──
      <div class="cat-picker" data-kind="expense" data-recognized="居住·家政">
        .cat-l1[data-l1]  →  .cat-l2-panel[data-l1]  →  .cat-l2[data-l2][data-l1]
      点一级展开 / 收起对应面板；点二级选中该二级并把父一级置为展开；
@@ -2390,16 +2437,16 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
     if (!silent) haptic('light');
     return true;
   }
-  /* s04 的共用表单脚本（editTx / setS05 / 保存）仍在读 .s05-cat / .s14-cat；
+  /* s04 的共用表单脚本（editTx / 保存）仍在读 .s14-cat；
      把新结构的当前选中项映射过去，s04 脚本迁到 .cat-picker 后这一段可整段删掉。 */
   function pkLegacySync(pk) {
     var screen = pk.closest ? pk.closest('.screen') : null;
     if (!screen) return;
     var sid = screen.getAttribute('data-screen');
-    var cls = sid === 's05' ? 's05-cat' : (sid === 's14a' ? 's14-cat' : '');
+    var cls = sid === 's14a' ? 's14-cat' : '';
     if (!cls) return;
     Array.prototype.forEach.call(screen.querySelectorAll('.cat-l1, .cat-l2'), function (b) {
-      b.classList.remove('s05-cat', 's14-cat');
+      b.classList.remove('s14-cat');
       b.removeAttribute('data-cat');
     });
     var pickers = screen.querySelectorAll('.cat-picker');
@@ -2424,14 +2471,12 @@ window.__OD_TAB_ORDER = [{ id: 'overview', screen: 's01', file: 'tab-overview.ht
   }
   /* s04 的共用脚本把「任何带 data-kind 的点击」都当成收支切换 —— .cat-picker 自身也带
      data-kind，所以点分类会把它写成「支出 / 无选中」。这里在它跑完后把分段控件与
-     picker 可见性拉回正确状态（s05 的 #s05-kind-label 一并修）。 */
+     picker 可见性拉回正确状态。 */
   function pkKindRestore(screen, kind) {
     if (!screen || !kind) return;
     Array.prototype.forEach.call(screen.querySelectorAll('button[data-kind]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kind ? 'true' : 'false');
     });
-    var label = screen.querySelector('#s05-kind-label');
-    if (label) label.textContent = kind === 'income' ? '收入' : '支出';
     pkKindSync(screen, kind);
   }
 
