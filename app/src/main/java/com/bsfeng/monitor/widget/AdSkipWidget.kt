@@ -36,6 +36,9 @@ private const val EMPTY_TODAY = "今天还没跳过"
 private const val NO_RATE = "—"
 private const val TOTAL_PREFIX = "累计 "
 
+/** 系统字体放大到这个倍数以上时，Compact 的三列读数换成一行摘要（同 HealthWidget 的口径）。 */
+private const val LARGE_FONT_SCALE = 1.2f
+
 /**
  * 确认率：confirmed / total 四舍五入成整数百分比；total = 0 时给「—」。
  *
@@ -83,9 +86,11 @@ private fun AdSkipCard(data: AdWidgetData, box: WidgetBox) {
         verticalAlignment = tierAlignment(tier),
         padding = if (tier == WidgetTier.TINY) 12.dp else 16.dp,
     ) {
+        val largeText = LocalContext.current.resources.configuration.fontScale >= LARGE_FONT_SCALE
         when {
             tier == WidgetTier.TINY -> AdTiny(data)
             todayEmpty -> AdEmpty(data)
+            largeText -> AdCompactOneLine(data)
             tier == WidgetTier.WIDE -> AdWide(data)
             else -> AdCompact(data)
         }
@@ -140,6 +145,26 @@ private fun AdCompact(data: AdWidgetData) {
             valueSize = 20.sp,
             modifier = GlanceModifier.defaultWeight(),
         )
+    }
+}
+
+/**
+ * 大字体下的一行摘要：图标 + 标题 + 今日跳过数。
+ *
+ * 为什么只留今日：2×1 在 177×98dp 的箱子里减掉内边距只剩 66dp，
+ * 130% 字体下三列读数（标签 + 值）要 87dp，会整段被裁 —— 只留最该看的那一个数。
+ */
+@Composable
+private fun AdCompactOneLine(data: AdWidgetData) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+    ) {
+        IconBadge(face = FACE_ADSKIP, symbol = "»", size = 20.dp)
+        Spacer(GlanceModifier.width(6.dp))
+        Text(text = LABEL_TITLE, style = valueStyle(), maxLines = 1)
+        Spacer(GlanceModifier.defaultWeight())
+        Text(text = LABEL_TODAY + " " + count(data.todayCount), style = labelStyle(), maxLines = 1)
     }
 }
 

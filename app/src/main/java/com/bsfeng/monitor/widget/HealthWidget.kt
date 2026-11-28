@@ -51,6 +51,15 @@ class HealthWidgetReceiver : GlanceAppWidgetReceiver() {
 private enum class HealthState { RUNNING, STALE, STOPPED }
 
 /**
+ * 系统字体放大到这个倍数以上时，Compact 档改成一行摘要。
+ *
+ * 为什么：2×1 在 Pixel 上实测 177×98dp，减掉 32dp 内边距只剩 66dp。
+ * 「顶行 22 + 间距 8 + 读数（标签 ≈20 + 值 ≈37）」在 130% 字体下要 90dp ——
+ * 实测读数数字会被整段裁掉（模拟器 font_scale=1.3 复现）。宁可少一列也不裁字。
+ */
+private const val LARGE_FONT_SCALE = 1.2f
+
+/**
  * 三态判定。
  *
  * [HealthWidgetData.serviceRunning] 已把「心跳停更」并入 false（见 [WidgetDataProvider.health]），
@@ -86,36 +95,63 @@ private fun HealthCard(data: HealthWidgetData, box: WidgetBox) {
                 }
             }
             WidgetTier.COMPACT -> {
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
-                ) {
-                    IconBadge(face = FACE_HEALTH, symbol = "♥", size = 22.dp)
-                    Spacer(GlanceModifier.width(8.dp))
-                    StatusDot(dotColor(state))
-                    Spacer(GlanceModifier.width(5.dp))
-                    Text(text = titleOf(state), style = valueStyle(), maxLines = 1)
-                }
-                Spacer(GlanceModifier.height(8.dp))
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Stat(
-                        label = "今日事件",
-                        value = count(data.todayEvents),
-                        valueSize = 22.sp,
-                        modifier = GlanceModifier.defaultWeight(),
-                    )
-                    VDivider()
-                    Spacer(GlanceModifier.width(10.dp))
-                    Stat(
-                        label = "跳过",
-                        value = count(data.todaySkips),
-                        valueSize = 22.sp,
-                        modifier = GlanceModifier.defaultWeight(),
-                    )
+                val largeText = LocalContext.current.resources.configuration.fontScale >= LARGE_FONT_SCALE
+                if (largeText) {
+                    HealthCompactOneLine(state, data)
+                } else {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically,
+                    ) {
+                        IconBadge(face = FACE_HEALTH, symbol = "♥", size = 22.dp)
+                        Spacer(GlanceModifier.width(8.dp))
+                        StatusDot(dotColor(state))
+                        Spacer(GlanceModifier.width(5.dp))
+                        Text(text = titleOf(state), style = valueStyle(), maxLines = 1)
+                    }
+                    Spacer(GlanceModifier.height(8.dp))
+                    Row(modifier = GlanceModifier.fillMaxWidth()) {
+                        Stat(
+                            label = "今日事件",
+                            value = count(data.todayEvents),
+                            valueSize = 22.sp,
+                            modifier = GlanceModifier.defaultWeight(),
+                        )
+                        VDivider()
+                        Spacer(GlanceModifier.width(10.dp))
+                        Stat(
+                            label = "跳过",
+                            value = count(data.todaySkips),
+                            valueSize = 22.sp,
+                            modifier = GlanceModifier.defaultWeight(),
+                        )
+                    }
                 }
             }
             WidgetTier.WIDE -> Unit
         }
+    }
+}
+
+/**
+ * 大字体下的一行摘要：图标 + 状态 + 今日事件数。
+ *
+ * 为什么只留事件数不留跳过：一行在 145dp 可用宽里只塞得下「图标 + 状态词 + 一个计数」，
+ * 硬塞第二个会把状态词挤成省略号 —— 状态才是这块组件的主题。
+ */
+@Composable
+private fun HealthCompactOneLine(state: HealthState, data: HealthWidgetData) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+    ) {
+        IconBadge(face = FACE_HEALTH, symbol = "♥", size = 20.dp)
+        Spacer(GlanceModifier.width(6.dp))
+        StatusDot(dotColor(state))
+        Spacer(GlanceModifier.width(4.dp))
+        Text(text = titleOf(state), style = valueStyle(), maxLines = 1)
+        Spacer(GlanceModifier.defaultWeight())
+        Text(text = "事件 " + count(data.todayEvents), style = labelStyle(), maxLines = 1)
     }
 }
 
