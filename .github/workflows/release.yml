@@ -102,9 +102,19 @@ jobs:
           [ -f "${APK}" ] || { echo "缺少 APK：${APK}" >&2; exit 1; }
           APKSIGNER="$(ls -d "${ANDROID_HOME}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
           [ -x "${APKSIGNER}" ] || { echo "找不到 apksigner（应位于 ${ANDROID_HOME}/build-tools/*/）" >&2; exit 1; }
-          apk_cert="$("${APKSIGNER}" verify --print-certs "${APK}" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr 'A-F' 'a-f')"
-          [ -n "${apk_cert}" ] || { echo "APK 未签名或取不到证书摘要" >&2; exit 1; }
-          ks_cert="$(keytool -list -v -keystore "${RUNNER_TEMP}/release.jks" -storepass "${RELEASE_STORE_PASSWORD}" -alias "${RELEASE_KEY_ALIAS}" | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+          # 解析不依赖某一版 apksigner 的行首与空格：grep 关键词后统一去掉前缀 / 冒号 / 空白，
+          # 并把 stderr 一起接上（新 build-tools 的 WARNING 走 stderr，证书行位置也可能变）。
+          apk_cert="$("${APKSIGNER}" verify --print-certs "${APK}" 2>&1 \
+            | grep -i 'certificate SHA-256 digest' | head -1 \
+            | sed -E 's/.*digest:[[:space:]]*//' | tr -d ':' | tr -d '[:space:]' | tr 'A-F' 'a-f')"
+          if [ -z "${apk_cert}" ]; then
+            echo "读不到 APK 证书摘要，apksigner 原始输出（调试）：" >&2
+            "${APKSIGNER}" verify --print-certs "${APK}" 2>&1 | head -30 >&2
+            exit 1
+          fi
+          ks_cert="$(keytool -list -v -keystore "${RUNNER_TEMP}/release.jks" -storepass "${RELEASE_STORE_PASSWORD}" -alias "${RELEASE_KEY_ALIAS}" 2>/dev/null \
+            | grep -i 'SHA256:' | head -1 \
+            | sed -E 's/.*SHA256:[[:space:]]*//' | tr -d ':' | tr -d '[:space:]' | tr 'A-F' 'a-f')"
           [ -n "${ks_cert}" ] || { echo "读不到 keystore 里的证书摘要（密码 / alias 不对？）" >&2; exit 1; }
           if [ "${apk_cert}" != "${ks_cert}" ]; then
             echo "APK 签名证书与 release keystore 不一致：" >&2
