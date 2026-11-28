@@ -85,8 +85,10 @@ fun QuotaScreen(
 
     val now = nowEpochSecond
     val thresholds = remember(lowCny, lowUsd) { mapOf(QuotaUnit.CNY to lowCny, QuotaUnit.USD to lowUsd) }
+    // 未配置凭据的实例不上主屏：QuotaInstances.normalize 会给每个注册 provider 补一个默认实例，
+    // 照单全列就是一堆「未配置 / —」的占位卡（用户反馈：没配置的 provider 也在列表里）
     val accounts = remember(providers, states, triad, thresholds, now) {
-        buildQuotaAccounts(providers, states, triad, thresholds, now)
+        buildQuotaAccounts(providers, states, triad, thresholds, now).filter { it.configured }
     }
     val leader = remember(accounts) { quotaLeader(accounts) }
     val (accountCount, providerCount) = remember(accounts) { quotaHeadCounts(accounts) }
@@ -94,7 +96,7 @@ fun QuotaScreen(
         quotaUpdatedText(quotaLatestFetch(states), now, failed = quotaHasFailure(states))
     }
     // 一个 Key 都没配：列表位置换成最轻的引导（原型没有这一屏，见 QuotaEmptyAccounts 注释）
-    val anyConfigured = remember(accounts) { accounts.any { it.configured } }
+    val anyConfigured = accounts.isNotEmpty()
 
     // 进页面拉一次（节流在数据层）；定时器按最短的账号间隔刷全部
     LaunchedEffect(Unit) { viewModel.onVisible() }
@@ -206,7 +208,7 @@ fun QuotaScreen(
                             if (accounts.any { it.instanceId == instanceId }) {
                                 openAccount(instanceId)
                             } else {
-                                toast.show("该账号已不在列表里")
+                                toast.show("该账号已不在额度列表里")
                             }
                         },
                         modifier = Modifier.padding(top = t.space2),

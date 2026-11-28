@@ -147,6 +147,7 @@
 - s18：删组件样张整块与 `--w-*` 变量；「恢复提醒 · 三态」改名「额度提醒」并改成可点行（定位到账号并展开，不再跳设置）；重置时刻策略移出本屏；结构收敛为「结论条 → 账号卡 → 额度提醒 → 说明」。
 - s19：新增「主屏展示」组（重置时刻两档，锚点 s19-display / s19-display-foot / s19-reset-all / s19-reset-urgent）。
 - 实现：删 `ui/quota/QuotaWidgetSample.kt`（副本留 impl-notes/quota-r5-removed/）；`QuotaScreen` 去掉策略分段与样张 item、`ACCOUNT_ITEM_OFFSET` 2→1；`ProviderState.range` 缺省改 7 天并去掉「首次展开偷偷切范围」；`setRange` 同范围但无用量时不再短路（旧代码展开后柱图永远等不到数据）。
+- 补充（同日）：主屏只列已配置凭据的账号——`QuotaInstances.normalize` 给每家补默认实例，旧实现照单全列，用户没配的 provider 也会出现一张「未配置 / —」卡，页头计数跟着虚高。
 
 **门禁**：assemble/split/anchors/rules/docs 全 exit 0；split 脚本顺带修掉归属表里已删除的 s05/s17（此前跑不通）。
 

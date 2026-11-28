@@ -613,6 +613,30 @@ class S18S19QuotaParityTest {
     }
 
     /**
+     * 没配凭据的 provider 不占主屏（用户反馈：没配置的 provider 也在列表里）。
+     *
+     * QuotaInstances.normalize 会给每个注册 provider 补一个默认实例，旧实现照单全列，
+     * 于是「4 家都注册、只配 1 家」时主屏出现 3 张「未配置 / —」的占位卡，页头计数也虚高。
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun unconfiguredInstancesStayOffMainScreen() {
+        val viewModel = quotaViewModel(providers = s19Providers(), configured = listOf("ollama"))
+        compose.setContent {
+            MonitorTheme(themeId = "apple") {
+                QuotaScreen(onOpenSettings = {}, viewModel = viewModel)
+            }
+        }
+        compose.waitForIdle()
+
+        val rows = collectTaggedNodes(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode(), compose.density)
+            .filter { it.id.startsWith("s18-row-") }
+            .map { it.id }
+        assertEquals("只配了 Ollama，主屏就该只有它一行", listOf("s18-row-ol-main"), rows)
+        compose.onNodeWithText("1 个账号 · 1 家 · ", substring = true).assertExists()
+    }
+
+    /**
      * 额度提醒行 → 定位到对应账号并展开（r5 之前这一行是「跳设置」，点击语义与内容不符）。
      *
      * 断言两件事：点之前没有任何展开区；点之后恰好展开一个，且该行被滚到结论条下沿附近。

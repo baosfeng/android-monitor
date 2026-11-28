@@ -64,7 +64,12 @@ internal data class QuotaAccountUi(
     val usageConfigured: Boolean,
 )
 
-/** 由实例清单 + 状态 + 三态区 + 阈值算出账号行（顺序 = 入参顺序 = 注册顺序 + 组内序号）。 */
+/**
+ * 由实例清单 + 状态 + 三态区 + 阈值算出账号行（顺序 = 入参顺序 = 注册顺序 + 组内序号）。
+ *
+ * 返回的是**全部实例**（含未配置）；额度主屏只消费 configured 的行 —— 注册表会给每个
+ * provider 补默认实例，全列出来就是一堆「未配置 / —」的占位卡。
+ */
 internal fun buildQuotaAccounts(
     providers: List<QuotaProviderInfo>,
     states: Map<String, QuotaRepository.ProviderState>,
