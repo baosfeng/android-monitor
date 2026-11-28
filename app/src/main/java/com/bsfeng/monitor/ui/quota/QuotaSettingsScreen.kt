@@ -1,11 +1,12 @@
 package com.bsfeng.monitor.ui.quota
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,11 +14,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,23 +39,20 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaSettings
 import com.bsfeng.monitor.quota.postQuotaTestNotification
-import com.bsfeng.monitor.ui.AppButton
-import com.bsfeng.monitor.ui.AppButtonVariant
 import com.bsfeng.monitor.ui.components.AppToast
-import com.bsfeng.monitor.ui.components.Chip
-import com.bsfeng.monitor.ui.components.SectionHeader
-import com.bsfeng.monitor.ui.components.SegmentedControl
 import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pageBackdrop
-import com.bsfeng.monitor.ui.theme.IOSDivider
+import com.bsfeng.monitor.ui.foundation.pressFeedback
+import com.bsfeng.monitor.ui.foundation.rememberHaptic
 import com.bsfeng.monitor.ui.theme.IOSNavigationBar
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import java.math.BigDecimal
@@ -57,49 +60,40 @@ import java.math.BigDecimal
 /**
  * 额度设置（push 屏，原型 s19）。
  *
- * 三组：Provider（凭据）→ 预警（开关 / 阈值 / 通知权限）→ 刷新（后台频率）；
- * Ollama 计费模式是源码独有的第二组以外设置，排在「刷新」之后，保持口径分组顺序不被插入。
+ * 三组：账号（同家可多账号）→ 恢复提醒 → 刷新节奏。
+ * 开关 / 阈值 / 频率全部落在数据层已有的偏好上（QuotaSettings / 预警 prefs），页面不持默认值。
  *
- * 开关、阈值、频率全部落在数据层已有的偏好上（`QuotaSettings` / 预警 prefs），
- * 页面本身不持有任何默认值：默认值写在数据层，后台调度与通知读到的才是同一份。
+ * @param nowSeconds 当前时间（epoch 秒），只用于「X 分钟前更新」这类副行；测试注入固定时钟。
  */
 @Composable
 fun QuotaSettingsScreen(
     onBack: () -> Unit,
-    modifier: Modifier = Modifier,
     viewModel: QuotaViewModel = viewModel(factory = QuotaViewModelFactory),
+    nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
+    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val context = LocalContext.current
     val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val states by viewModel.providerStates.collectAsStateWithLifecycle()
     val alertEnabled by viewModel.alertEnabled.collectAsStateWithLifecycle()
     val lowCny by viewModel.lowBalanceCny.collectAsStateWithLifecycle()
     val lowUsd by viewModel.lowBalanceUsd.collectAsStateWithLifecycle()
-    val refreshHours by viewModel.refreshHours.collectAsStateWithLifecycle()
-    val plan by viewModel.ollamaPlan.collectAsStateWithLifecycle()
-    var expandedId by remember { mutableStateOf<String?>(null) }
-    // 每个账号的刷新间隔（分钟）：进入页面读一次，改动就地更新并落盘。
-    // 键是实例键（第一实例 == 类型 id），所以老用户的 refresh_minutes 偏好天然命中。
-    var intervals by remember {
-        mutableStateOf(providers.associate { it.instanceId to viewModel.refreshMinutesFor(it.instanceId) })
-    }
-    // 新增账号时补一条默认值：不补的话 intervalOf 会退回类型默认值（行为相同，但选中态会闪一次）
-    LaunchedEffect(providers) {
-        val missing = providers.filter { it.instanceId !in intervals }
-        if (missing.isNotEmpty()) {
-            intervals = intervals + missing.associate { it.instanceId to viewModel.refreshMinutesFor(it.instanceId) }
-        }
-    }
-    fun intervalOf(instanceId: String): Int = intervals[instanceId] ?: viewModel.refreshMinutesFor(instanceId)
-    fun setInterval(instanceId: String, minutes: Int) {
-        intervals = intervals + (instanceId to minutes)
-    }
+    // 后台刷新：ViewModel 仍叫 refreshHours，值已是分钟（见 QuotaSettings 的兼容属性）
+    val backgroundMinutes by viewModel.refreshHours.collectAsStateWithLifecycle()
+    val settings = remember { QuotaSettings(context) }
+    var sleepSkip by remember { mutableStateOf(settings.skipRefreshWhenScreenOff) }
+    // 进页面默认展开第一个账号（原型 s19 主号展开）：加完账号的下一步一定是填凭据
+    var expandedId by remember { mutableStateOf(providers.firstOrNull()?.instanceId) }
     var thresholdOpen by remember { mutableStateOf(false) }
-    // 弹窗关闭后焦点回「低余额提醒」行（口径「弹窗关闭后焦点回本行」）
     var returnFocusToList by remember { mutableStateOf(false) }
     val lowBalanceFocus = remember { FocusRequester() }
     val titleFocus = remember { FocusRequester() }
     val toast = rememberToastHostState()
+    val savingProviderId by viewModel.savingProviderId.collectAsStateWithLifecycle()
+    val saveErrors by viewModel.saveErrors.collectAsStateWithLifecycle()
+    var pendingCollapseId by remember { mutableStateOf<String?>(null) }
+    var pendingClearId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(thresholdOpen) {
         if (!thresholdOpen && returnFocusToList) {
@@ -107,35 +101,21 @@ fun QuotaSettingsScreen(
             lowBalanceFocus.requestFocus()
         }
     }
+    // 进入子页焦点落标题（覆盖层里每次打开都会重新组合，正好一次）
+    LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
 
-    // 进入子页焦点落标题（锚点 s18-settings · 键盘「进入子页后焦点落在子页标题」）；
-    // 覆盖层里本页每次打开都会重新组合，LaunchedEffect(Unit) 正好一次
-    LaunchedEffect(Unit) {
-        runCatching { titleFocus.requestFocus() }
-    }
-
-    /**
-     * 退出额度设置：先登记「焦点回额度页齿轮」的一次性信号，再退页。
-     * 返回键 / 系统返回 / 手势都走这里（覆盖层里的 BackHandler 也交给同一条路径）。
-     */
+    /** 退出额度设置：先登记「焦点回额度页齿轮」的一次性信号，再退页。 */
     val requestBack: () -> Unit = {
         QuotaSettingsFocusReturn.request()
         onBack()
     }
-    // 覆盖层里本页先于 AnimatedScreenOverlay 的 BackHandler 接管返回（与 AppearanceScreen 同口径）
     BackHandler { requestBack() }
 
-    // 保存结果决定这一行收不收起：在途等、失败留展开（就地提示 + 保留输入）、成功收起
-    val savingProviderId by viewModel.savingProviderId.collectAsStateWithLifecycle()
-    val saveErrors by viewModel.saveErrors.collectAsStateWithLifecycle()
-    var pendingCollapseId by remember { mutableStateOf<String?>(null) }
-    // 收行的两个来源：保存（成功收起 / 失败留展开）与清除（成功后收起并 toast）
-    var pendingClearId by remember { mutableStateOf<String?>(null) }
+    // 保存 / 清除结束后这一行的处置：等 → 失败留展开 → 成功收起
     LaunchedEffect(savingProviderId, saveErrors, pendingCollapseId) {
         val id = pendingCollapseId ?: return@LaunchedEffect
         when (saveRowState(savingProviderId, id, saveErrors[id])) {
             QuotaSaveRowState.WAIT -> Unit
-            // 失败：留展开 + 保留输入，就地提示由行本体显示
             QuotaSaveRowState.KEEP_OPEN -> pendingCollapseId = null
             QuotaSaveRowState.COLLAPSE -> {
                 pendingCollapseId = null
@@ -143,7 +123,6 @@ fun QuotaSettingsScreen(
             }
         }
     }
-    // 清除沿用同一套收行判据：在途等、失败留展开就地提示、成功收起 + 一次 toast
     LaunchedEffect(savingProviderId, saveErrors, pendingClearId) {
         val id = pendingClearId ?: return@LaunchedEffect
         when (saveRowState(savingProviderId, id, saveErrors[id])) {
@@ -157,164 +136,96 @@ fun QuotaSettingsScreen(
         }
     }
 
+    val frontMinutes = viewModel.refreshMinutesFor(expandedId ?: providers.firstOrNull()?.instanceId.orEmpty())
+
     Box(modifier.fillMaxSize().pageBackdrop()) {
         Column(Modifier.fillMaxSize().testTag("screen-s19")) {
-            IOSNavigationBar(
-                title = "额度设置",
-                onBack = requestBack,
-                // 标题接住进入子页的焦点（IOSNavigationBar 的唯一调用点，见其形参说明）
-                modifier = Modifier.focusRequester(titleFocus).focusable(),
-            )
+            // 覆盖层整屏：状态栏避让只能页头自己来（与 ScreenHead 的 consumeTopInset 同一写法）
+            Column(Modifier.statusBarsPadding()) {
+                IOSNavigationBar(
+                    title = "额度设置",
+                    onBack = requestBack,
+                    modifier = Modifier.focusRequester(titleFocus).focusable(),
+                )
+            }
             Column(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .testTag("s19-content")
-                    .verticalScroll(rememberScrollState())
-                    .padding(bottom = t.space8),
-                // 原型 s19 的纵向节奏写在各段自己的 padding / margin 上（.s19-group + .s19-group = 16），
-                // 统一 item 间距会与它重复叠加
-                verticalArrangement = Arrangement.spacedBy(0.dp),
+                    .verticalScroll(rememberScrollState()),
             ) {
-                // 原型 .s19-intro：内容区顶 8，下方 12 由 padding 承担（Column 的 item 间距已归 0，
-                // 纵向节奏全按原型写在各段自己的 padding 上）
-                Text(
-                    "凭据只保存在本机 · 设置随时可改",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(start = t.space4, end = t.space4, top = t.space2, bottom = t.space3),
-                )
-                AccountGroups(
+                IntroBlock()
+                AccountsGroup(
                     providers = providers,
+                    states = states,
+                    nowEpochSecond = nowSeconds(),
                     expandedId = expandedId,
                     savingProviderId = savingProviderId,
                     saveErrors = saveErrors,
-                    intervalOf = ::intervalOf,
                     onToggle = { instanceId ->
                         expandedId = if (expandedId == instanceId) null else instanceId
                     },
                     onAdd = { providerTypeId ->
                         val created = viewModel.onAddAccount(providerTypeId)
                         if (created != null) {
-                            // 新账号默认展开：加完账号的下一步一定是填凭据
                             expandedId = created
                             toast.show("已添加账号 · 填写凭据后开始查询")
                         } else {
                             toast.show("添加失败 · 该 provider 未接入或账号已达上限")
                         }
                     },
-                    onSave = { instanceId, balance, usage ->
-                        // 不在这里立即收行：等保存 + 查询有结果再决定（失败要留展开就地提示）
+                    onSave = { instanceId, value ->
                         pendingCollapseId = instanceId
-                        viewModel.onSaveCredentialsFor(instanceId, balance, usage)
+                        viewModel.onSaveCredentialsFor(instanceId, value, value)
                     },
                     onClear = { instanceId ->
                         pendingClearId = instanceId
                         viewModel.onClearCredentialsFor(instanceId)
                     },
-                    onRename = { instanceId, label ->
-                        viewModel.onRenameAccount(instanceId, label)
-                        toast.show(if (label.isBlank()) "已恢复默认名称" else "已改名为「$label」")
+                    onToast = toast::show,
+                )
+                Spacer(Modifier.height(t.space3))
+                RecoverGroup(
+                    alertEnabled = alertEnabled,
+                    lowCny = lowCny,
+                    lowUsd = lowUsd,
+                    lowBalanceFocus = lowBalanceFocus,
+                    onAlertChange = { enabled ->
+                        viewModel.onAlertEnabledChange(enabled)
+                        toast.show(if (enabled) "额度预警已开启" else "额度预警已关闭")
                     },
-                    onDelete = { instanceId ->
-                        viewModel.onDeleteAccount(instanceId) { removed ->
-                            toast.show(if (removed) "账号已删除" else "至少要保留一个账号")
-                        }
-                    },
-                    onIntervalChange = { instanceId, minutes ->
-                        setInterval(instanceId, minutes)
-                        viewModel.onRefreshIntervalChange(instanceId, minutes)
+                    onThresholdClick = { thresholdOpen = true },
+                    onTestNotification = {
+                        postQuotaTestNotification(context)
+                        toast.show("已发送一条示例恢复通知")
                     },
                 )
-                Text(
-                    "API Key 与平台令牌都加密后只存本机，不写日志、不导出；卸载 App 即随之删除。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
+                Spacer(Modifier.height(t.space3))
+                RefreshRhythmGroup(
+                    backgroundMinutes = backgroundMinutes,
+                    frontMinutes = frontMinutes,
+                    sleepSkip = sleepSkip,
+                    onSelect = { minutes ->
+                        // 点已选中项不重复写盘、不重排闹钟
+                        if (minutes != backgroundMinutes) viewModel.onRefreshHoursChange(minutes)
+                    },
+                    onSleepChange = { checked ->
+                        sleepSkip = checked
+                        settings.skipRefreshWhenScreenOff = checked
+                        toast.show(if (checked) "息屏后不再后台刷新" else "息屏后仍按后台间隔刷新")
+                    },
                 )
-                TitledSettingsGroup(title = "预警", modifier = Modifier.testTag("s19-alerts")) {
-                    AlertSwitchRow(
-                        enabled = alertEnabled,
-                        onChange = { enabled ->
-                            viewModel.onAlertEnabledChange(enabled)
-                            toast.show(
-                                if (enabled) {
-                                    "额度预警已开启 · 剩余 5% 起逐档提醒"
-                                } else {
-                                    "额度预警已关闭"
-                                },
-                            )
-                        },
-                    )
-                    IOSDivider()
-                    LowBalanceRow(
-                        cny = lowCny,
-                        usd = lowUsd,
-                        onClick = { thresholdOpen = true },
-                        focusRequester = lowBalanceFocus,
-                    )
-                    IOSDivider()
-                    NotificationPermissionRow()
-                    IOSDivider()
-                    // 原型 .s19-actions：按钮与卡片同列（卡片内 16 已由 .group 给出），
-                    // 上下再各留 --space-3 与 --space-2
-                    Box(Modifier.fillMaxWidth().padding(vertical = t.space2)) {
-                        AppButton(
-                            text = "发送测试通知",
-                            variant = AppButtonVariant.Ghost,
-                            block = true,
-                            modifier = Modifier.testTag("s19-test"),
-                            onClick = {
-                                // 不写任何 prefs：只往系统额度预警渠道投递一条测试通知
-                                postQuotaTestNotification(context)
-                                toast.show("测试通知已发送 · 额度预警渠道")
-                            },
-                        )
-                    }
-                }
-                Text(
-                    "一次刷新命中多档只合并成一条通知；总开关关闭时仍刷新额度，但不评估预警。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
+                Spacer(Modifier.height(t.space3))
+                FootNote()
+                SaveAllButton(
+                    onClick = {
+                        // 各档位已即时落盘；这里再显式重排一次，保证「保存全部」不是空动作
+                        viewModel.onRefreshHoursChange(backgroundMinutes)
+                        toast.show("已保存全部设置")
+                    },
                 )
-                // 原型 s19-refresh 是「组标题 + 组卡 + 组尾说明」一整块：说明要放进同一锚点，
-                // 否则锚点高度少一行（对照判据里是 P1 几何差）
-                // 原型 s19-refresh 是「组标题 + 卡片 + 组尾说明」一整块，锚点宽度 = 卡片宽 361（x=16）：
-                // 与 s18-mode（锚点包住 padding）相反，这里 padding 在前、testTag 在后，
-                // 量到的才是内缩后的块，而不是整屏 393
-                Column(Modifier.padding(horizontal = LocalDesignTokens.current.space4).testTag("s19-refresh")) {
-                    TitledSettingsGroup(title = "刷新", inset = false) {
-                        RefreshRow(
-                            selectedHours = refreshHours,
-                            onSelect = { hours ->
-                                // 点已选中项不重复写盘、不重排闹钟（口径边界）
-                                if (hours != refreshHours) viewModel.onRefreshHoursChange(hours)
-                            },
-                        )
-                    }
-                    Text(
-                        "关闭后台刷新后，只在打开 App 时刷新与评估额度。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = t.muted,
-                        modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
-                    )
-                }
-                TitledSettingsGroup(title = "Ollama 计费模式") {
-                    PlanModeRow(selected = plan, onSelect = viewModel::onOllamaPlanChange)
-                }
-                Text(
-                    "按你账户实际的计费方式选；与 Ollama 返回的结构不一致时，额度卡里会用「?」提示。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
-                )
-                Text(
-                    "额度数据只用于本机展示与预警通知，不上传。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space3),
-                )
+                Spacer(Modifier.height(t.space6))
             }
         }
         AppToast(
@@ -342,69 +253,162 @@ fun QuotaSettingsScreen(
     }
 }
 
-
-/** 分组容器：分组小标题 + 卡片底 + 行间分割线（与设置页 iOS 分组一致）。 */
+/** 组间说明：三句都在讲「凭据/数据去哪了」（原型 s19-intro）。 */
 @Composable
-private fun TitledSettingsGroup(
-    title: String,
-    modifier: Modifier = Modifier,
-    /** 左右 16 由本组提供（默认）；外层已经给过内边距时传 false，避免叠加成 32。 */
-    inset: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    SectionHeader(title = title)
-    // 原型 .content 的左右 --space-4 落在这里：分组卡宽 361（x=16），
-    // 内边距必须先于锚点 modifier 应用，锚点才量到卡片本体而不是整屏
-    val pad = if (inset) Modifier.padding(horizontal = LocalDesignTokens.current.space4) else Modifier
-    SettingsGroup(modifier = pad.then(modifier), content = content)
-}
-
-/** 后台刷新频率（chip 组；0 = 关闭）。选中态互斥由数据层保证，这里只负责把选择交出去。 */
-@Composable
-private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
+private fun IntroBlock() {
     val t = LocalDesignTokens.current
-    // 原型 .s19-chips{padding: var(--space-3) 0}：左右不再内缩（卡片内 16 已由 .group 提供），
-    // 否则 chip 与下方说明会整体右移 12、可点宽度少 24
-    Column(Modifier.fillMaxWidth().padding(vertical = t.space3)) {
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(t.space2),
-        ) {
-            QuotaSettings.REFRESH_OPTIONS.forEach { hours ->
-                Chip(
-                    label = QuotaSettings.labelOf(hours),
-                    selected = hours == selectedHours,
-                    onClick = { onSelect(hours) },
-                    modifier = Modifier.refreshChipTagOf(hours),
-                )
-            }
-        }
-        // 原型 .s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3)}：
-        // 细线 + 上留 12 是它比两行文字高出 12dp 的来源，缺了这段说明块会矮 13.9dp
-        // 原型 .s19-refresh-note{border-top:1px solid var(--border-soft);padding-top:var(--space-3);
-        // line-height:1.45}：整块高 = 1 + 12 + 两行 40.6 = 53.6，与原型一致。
-        // 早先只写了 Spacer(12) + 默认行盒，少 1px 细线且行盒矮 1.2dp/行 → 整块矮 13.9
-        HorizontalDivider(thickness = 1.dp, color = t.borderSoft)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = t.space2, bottom = 10.dp), // 原型 .settings-intro: margin-bottom 10
+    ) {
         Text(
-            "前台自动刷新 60 秒一次（Ollama 限流 10 次/分钟）；息屏与锁屏不触发后台请求，解锁后不补跑。",
-            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.3.sp),
+            "同一家可以挂多个账号：每行独立刷新、独立预警，榜单里也会分开展示。凭据只存本机。",
+            // 原型 .settings-intro：11px / line-height 1.4（两行 30.8）
+            // 目标两行 30.8：11sp × 1.4 = 15.4 会多 1.2 的行盒余量，收到 14.8
+            style = MaterialTheme.typography.labelSmall
+                .copy(fontSize = 11.sp, lineHeight = 14.8.sp)
+                .quotaTight(),
             color = t.muted,
-            modifier = Modifier.testTag("s19-foreground-note").padding(top = t.space3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = t.space4)
+                .testTag("s19-intro"),
         )
     }
 }
 
-
-/** Ollama 计费模式：用户手选、持久化；页面只负责把选择交给 ViewModel。 */
+/**
+ * 恢复提醒组。
+ *
+ * 本轮（C 分支）只有 B 任务已交付的三件：总开关行 / 阈值行 / 示例通知行；
+ * 恢复时提醒与三态图例（s19-sw-back / s19-tristate）由 B 的 QuotaSettingsAlerts 系列在合并时接入。
+ */
 @Composable
-private fun PlanModeRow(selected: OllamaPlanMode, onSelect: (OllamaPlanMode) -> Unit) {
+private fun RecoverGroup(
+    alertEnabled: Boolean,
+    lowCny: BigDecimal,
+    lowUsd: BigDecimal,
+    lowBalanceFocus: FocusRequester,
+    onAlertChange: (Boolean) -> Unit,
+    onThresholdClick: () -> Unit,
+    onTestNotification: () -> Unit,
+) {
     val t = LocalDesignTokens.current
-    val modes = OllamaPlanMode.entries
-    Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
-        SegmentedControl(
-            options = modes.map { it.title },
-            selectedIndex = modes.indexOf(selected),
-            onSelect = { index -> onSelect(modes[index]) },
+    Column(Modifier.fillMaxWidth().padding(horizontal = t.space4).testTag("s19-recover")) {
+        GroupLabel(title = "恢复提醒", trailing = "")
+        SettingsBox {
+            AlertSwitchRow(enabled = alertEnabled, onChange = onAlertChange)
+            SettingsHairline()
+            LowBalanceRow(
+                cny = lowCny,
+                usd = lowUsd,
+                onClick = onThresholdClick,
+                focusRequester = lowBalanceFocus,
+            )
+            SettingsHairline()
+            TestNotificationRow(onClick = onTestNotification)
+        }
+    }
+}
+
+/** 「发送示例通知」行（原型 s19-test）：整行可点，按当前数据造一条「已恢复」。 */
+@Composable
+private fun TestNotificationRow(onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag("s19-test")
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+            ) {
+                haptic(HapticTone.LIGHT)
+                onClick()
+            }
+            .padding(horizontal = t.space3, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "发送示例通知",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                color = t.fg,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(t.space1))
+            Text(
+                "用当前数据造一条「已恢复」，不消耗真实额度",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = t.muted,
+            )
+        }
+        Spacer(Modifier.width(t.space2))
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null, // decorative：整行文本已是可读名
+            tint = t.muted,
+            modifier = Modifier.width(16.dp),
         )
+    }
+}
+
+/** 页尾说明（原型 s19-foot）：锚点打在整块 p 上（x=0、w=393），文字左右缩进 16。 */
+@Composable
+private fun FootNote() {
+    val t = LocalDesignTokens.current
+    Text(
+        "额度数据只用于本机展示与通知，不上传；通知开关受系统通知权限约束。",
+        style = MaterialTheme.typography.labelSmall
+            .copy(fontSize = 12.sp, lineHeight = (12 * t.leadingBody).sp)
+            .quotaTight(),
+        color = t.muted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("s19-foot")
+            .padding(horizontal = t.space4),
+    )
+}
+
+/** 「保存全部」（原型 s19-save-all）：整宽主色按钮，左右 16、上下 12/16。 */
+@Composable
+private fun SaveAllButton(onClick: () -> Unit) {
+    val t = LocalDesignTokens.current
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(t.radiusMd)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = t.space4, end = t.space4, top = 8.dp, bottom = t.space4),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(t.tapMin)
+                .testTag("s19-save-all")
+                .clip(shape)
+                .background(t.accent)
+                .pressFeedback(interaction)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                ) {
+                    haptic(HapticTone.SUCCESS)
+                    onClick()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "保存全部",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp),
+                color = t.accentOn,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }

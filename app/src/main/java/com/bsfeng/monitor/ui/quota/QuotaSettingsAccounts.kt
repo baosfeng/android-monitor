@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.ui.quota
 
-// 额度设置页的账号分组：每个 provider 类型一个分组标题，组内一行一个账号，组尾「+ 添加账号」。
+// s19 账号分组：一组「账号」卡（同 provider 多账号并列），组尾每组一个「添加 X 账号」行。
+// 与旧版「每个 provider 一张卡 + 组头」不同：原型是一张卡里按 provider 连续排，加号行属于该组。
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,98 +28,151 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bsfeng.monitor.ui.components.SectionHeader
+import androidx.compose.ui.unit.sp
+import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
-import com.bsfeng.monitor.ui.theme.IOSDivider
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 
-/** 「+ 添加账号」那一行的文案（组尾，也用于无障碍读名）。 */
-internal const val ADD_ACCOUNT_LABEL: String = "添加账号"
-
-/**
- * 账号分组：**一个 provider 类型一个分组**，组内一行一个账号。
- *
- * 为什么不把多账号塞进同一张卡片做 tab：任务口径是「同一 provider 下挂多行账号」，
- * 每行都要能独立改名、独立填凭据、独立删；tab 会把「谁是谁」藏进点击层级，
- * 而聚合榜单与 chip 上恰恰要一眼分清。
- *
- * 分组顺序跟随 [providers]（= 注册表顺序），组内顺序跟随实例清单（= 创建顺序）。
- */
+/** 分组小标题：左侧 11sp 700 标题，右侧 11sp muted 摘要（原型 .grp-label）。 */
 @Composable
-internal fun AccountGroups(
-    providers: List<QuotaProviderInfo>,
-    expandedId: String?,
-    savingProviderId: String?,
-    saveErrors: Map<String, String>,
-    intervalOf: (String) -> Int,
-    onToggle: (String) -> Unit,
-    onAdd: (String) -> Unit,
-    onSave: (instanceId: String, balance: String, usage: String) -> Unit,
-    onClear: (String) -> Unit,
-    onRename: (instanceId: String, label: String) -> Unit,
-    onDelete: (String) -> Unit,
-    onIntervalChange: (instanceId: String, minutes: Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // linkedMapOf：保持分组首次出现的顺序（providers 已按注册顺序排好）
-    val groups = linkedMapOf<String, MutableList<QuotaProviderInfo>>()
-    providers.forEach { info -> groups.getOrPut(info.providerTypeId) { mutableListOf() } += info }
-
-    // 原型 .content 的左右 --space-4 落在这一层：锚点 s19-providers 量的是 16..377 的卡片列
-    Column(
-        modifier
+internal fun GroupLabel(title: String, trailing: String = "") {
+    val t = LocalDesignTokens.current
+    Row(
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LocalDesignTokens.current.space4)
-            .testTag("s19-providers"),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
+            .padding(horizontal = t.space1, vertical = 0.dp)
+            .padding(bottom = t.space1),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
     ) {
-        groups.forEach { (providerTypeId, accounts) ->
-            val title = accounts.first().typeDisplayName
-            SectionHeader(title = title)
-            SettingsGroup {
-                accounts.forEachIndexed { index, info ->
-                    if (index > 0) IOSDivider()
-                    // 行本体在 QuotaProviderRows.kt：锚点只能由本屏包一层承载，
-                    // 逐字沿用老锚点（第一实例 id 恒等于类型 id，老锚点天然命中）
-                    Box(Modifier.fillMaxWidth().then(Modifier.providerRowTagOf(info.instanceId, providerTypeId))) {
-                        ProviderSettingsRow(
-                            info = info,
-                            expanded = expandedId == info.instanceId,
-                            onToggle = { onToggle(info.instanceId) },
-                            onSave = { balance, usage -> onSave(info.instanceId, balance, usage) },
-                            onClear = { onClear(info.instanceId) },
-                            onRename = { label -> onRename(info.instanceId, label) },
-                            onDelete = { onDelete(info.instanceId) },
-                            saving = savingProviderId == info.instanceId,
-                            saveError = saveErrors[info.instanceId],
-                            intervalMinutes = intervalOf(info.instanceId),
-                            onIntervalChange = { minutes -> onIntervalChange(info.instanceId, minutes) },
-                        )
-                    }
-                }
-                IOSDivider()
-                AddAccountRow(label = title, onAdd = { onAdd(providerTypeId) })
-            }
+        Text(
+            title,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = ((11 * t.leadingBody)).sp),
+            color = t.fg,
+            fontWeight = FontWeight.Bold,
+        )
+        if (trailing.isNotEmpty()) {
+            Text(
+                trailing,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = ((11 * t.leadingBody)).sp),
+                color = t.muted,
+            )
         }
     }
 }
 
-/** 组尾的「+ 添加账号」行：整行可点、触达 ≥44dp、成功后由数据层补一个空账号。 */
+/** iOS 分组卡底：1dp 描边 + radiusLg + surface；行内自己撑内边距（原型 .box）。 */
 @Composable
-private fun AddAccountRow(label: String, onAdd: () -> Unit) {
+internal fun SettingsBox(content: @Composable () -> Unit) {
+    val t = LocalDesignTokens.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(t.radiusLg))
+            .background(t.surface)
+            .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg)),
+    ) {
+        content()
+    }
+}
+
+/**
+ * 账号组：一张卡内按 provider 连续排列，组尾各有一条「添加 X 账号」。
+ *
+ * @param providers 实例清单（顺序 = 注册顺序 + 组内创建顺序，见 QuotaInstances.normalize）
+ * @param states 每个实例的拉取状态（副行的时间/窗口/错误都从这里来）
+ */
+@Composable
+internal fun AccountsGroup(
+    providers: List<QuotaProviderInfo>,
+    states: Map<String, QuotaRepository.ProviderState>,
+    nowEpochSecond: Long,
+    expandedId: String?,
+    savingProviderId: String?,
+    saveErrors: Map<String, String>,
+    onToggle: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onSave: (instanceId: String, value: String) -> Unit,
+    onClear: (String) -> Unit,
+    onToast: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val groups = linkedMapOf<String, MutableList<QuotaProviderInfo>>()
+    providers.forEach { groups.getOrPut(it.providerTypeId) { mutableListOf() } += it }
+    val statuses = providers.associateWith { accountStatusText(it, states[it.instanceId], nowEpochSecond) }
+    Column(modifier.fillMaxWidth().padding(horizontal = t.space4).testTag("s19-accounts")) {
+        GroupLabel(
+            title = "账号",
+            trailing = accountsGroupSummary(
+                providers.size,
+                statuses.values.count(::accountNeedsAttention),
+            ),
+        )
+        SettingsBox {
+            var first = true
+            groups.forEach { (typeId, accounts) ->
+                accounts.forEachIndexed { index, info ->
+                    val suffix = accountAnchorSuffix(typeId, index)
+                    AccountRow(
+                        info = info,
+                        suffix = suffix,
+                        topBorder = !first,
+                        status = statuses.getValue(info),
+                        expanded = expandedId == info.instanceId,
+                        configured = info.connected,
+                        saving = savingProviderId == info.instanceId,
+                        saveError = saveErrors[info.instanceId],
+                        onToggle = { onToggle(info.instanceId) },
+                        onSave = { value -> onSave(info.instanceId, value) },
+                        onClear = { onClear(info.instanceId) },
+                        onToast = onToast,
+                    )
+                }
+                // 该组有账号处于错误态时不放「添加账号」：先把当前凭据修好，别叠一个新账号
+                // （原型 s19 的 DeepSeek 组也没有这一行，与它的令牌过期态对应）
+                first = false
+                val hasError = accounts.any { states[it.instanceId]?.errorMessage != null }
+                if (!hasError) {
+                    AddAccountRow(
+                        label = "添加 " + accounts.first().typeDisplayName + " 账号",
+                        anchor = addAccountAnchorOf(typeId),
+                        onAdd = { onAdd(typeId) },
+                    )
+                }
+            }
+        }
+        Text(
+            "添加账号不会改动已有账号的凭据与 ID；只剩一个账号时不显示「删除」。",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = ((12 * t.leadingBody)).sp),
+            color = t.muted,
+            modifier = Modifier
+                .padding(horizontal = 2.dp) // 原型 .fine 的 margin:6px 2px 0
+                .padding(top = 6.dp)
+                .testTag("s19-accounts-foot"),
+        )
+    }
+}
+
+/** 组尾「+ 添加 X 账号」：44dp 高、整宽可点；成功与否由屏层 toast。 */
+@Composable
+private fun AddAccountRow(label: String, anchor: String, onAdd: () -> Unit) {
     val t = LocalDesignTokens.current
     val haptic = rememberHaptic()
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = t.tapMin)
+            .height(t.tapMin)
             .pressFeedback(interaction)
-            .testTag("row.addAccount")
+            .testTag(anchor)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -127,47 +180,48 @@ private fun AddAccountRow(label: String, onAdd: () -> Unit) {
                 haptic(HapticTone.LIGHT)
                 onAdd()
             }
-            .padding(horizontal = t.space3, vertical = t.space2),
+            .padding(horizontal = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             Icons.Outlined.Add,
-            contentDescription = null,
-            tint = t.accent,
-            modifier = Modifier.width(t.space4),
+            contentDescription = null, // decorative：行文本「添加 X 账号」已是可读名
+            tint = t.accentText,
+            modifier = Modifier.width(16.dp),
         )
         Spacer(Modifier.width(t.space2))
         Text(
-            ADD_ACCOUNT_LABEL,
-            style = MaterialTheme.typography.labelLarge,
-            color = t.accent,
-        )
-        Spacer(Modifier.weight(1f))
-        Text(
-            label + " · 另一个账号",
-            style = MaterialTheme.typography.bodySmall,
-            color = t.muted,
+            label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+            color = t.accentText,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
 
-/** 分组容器：卡片底 + 圆角 + 描边（与设置页 iOS 分组一致），行内自己撑内边距。 */
+/** 通用分割线（组内行间）：1dp、borderSoft。 */
 @Composable
-internal fun SettingsGroup(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    val t = LocalDesignTokens.current
-    Column(
-        modifier = modifier
+internal fun SettingsHairline() {
+    Box(
+        Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(t.radiusLg))
-            .background(t.surface)
-            .border(1.dp, t.borderSoft, RoundedCornerShape(t.radiusLg))
-            // 原型 .group{padding:0 var(--space-4)}：左右 16 在卡片**内部**，
-            // 行与「+ 添加账号」都靠它缩进（卡片本身与 .content 同宽 361）
-            .padding(horizontal = t.space4),
-    ) {
-        content()
+            .height(1.dp)
+            .background(LocalDesignTokens.current.borderSoft),
+    )
+}
+
+/**
+ * 行顶边线：原型 .arow/.acc/.srow 的 border-top 画在**行自己的盒子里**（不额外占高）。
+ *
+ * 用 drawBehind 而不是再插一个 1dp 分割线：后者会把每个边界累计推高 1dp，
+ * 六七个边界之后整页偏低 6–7dp（s19 实测）。
+ */
+@Composable
+internal fun Modifier.topHairline(enabled: Boolean = true): Modifier {
+    if (!enabled) return this
+    val color = LocalDesignTokens.current.borderSoft
+    return drawBehind {
+        val y = 0.5.dp.toPx()
+        drawLine(color = color, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
     }
 }
