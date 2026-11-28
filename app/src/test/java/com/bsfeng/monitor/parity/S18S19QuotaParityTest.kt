@@ -1,8 +1,13 @@
 package com.bsfeng.monitor.parity
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -21,9 +26,11 @@ import com.bsfeng.monitor.quota.NoQuotaSnapshotCache
 import com.bsfeng.monitor.quota.QuotaCredentialStore
 import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.quota.QuotaSecretCipher
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriadSection
 import com.bsfeng.monitor.ui.quota.QuotaScreen
 import com.bsfeng.monitor.ui.quota.QuotaSettingsScreen
 import com.bsfeng.monitor.ui.quota.QuotaViewModel
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -265,5 +272,28 @@ class S18S19QuotaParityTest {
         FileOutputStream(png).use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
         println("PARITY(s19) tags=" + items.size + " " + items.joinToString { it.id })
         println("SHOT(s19) " + png.absolutePath + " " + scaled.width + "x" + scaled.height)
+    }
+
+    /**
+     * 三态区截图（393dp 宽，原型 s18-alerts 三行）。
+     *
+     * 与 s18/s19 导出同一个类：原生渲染只在**已有的** NATIVE 类里初始化一次，
+     * 不再为一张图新开 @GraphicsMode(NATIVE) 测试类（并行 fork 下多一个初始化点，
+     * 就多一处 RenderNodeNatives 偶发）。假数据见 alertTriadShotFixture。
+     */
+    @Test
+    fun exportAlertTriadShot() {
+        val triad = alertTriadShotFixture(System.currentTimeMillis() / 1000)
+        compose.setContent {
+            MonitorTheme(themeId = "apple") {
+                Box(Modifier.width(393.dp).background(LocalDesignTokens.current.bg)) {
+                    QuotaAlertTriadSection(triad = triad, onOpenSettings = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val png = saveShotPng(image, "../.open-design/impl-notes/quota-redesign/shots/impl-alerts.png")
+        println("SHOT(alert-triad) " + png.absolutePath + " " + image.width + "x" + image.height)
     }
 }
