@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bsfeng.monitor.quota.QuotaSettings
@@ -61,12 +62,15 @@ internal fun RefreshRhythmGroup(
         Column(Modifier.fillMaxWidth().testTag("s19-refresh")) {
             GroupLabel(title = "刷新节奏", trailing = "决定了「更新于 x 分钟前」")
             SettingsBox {
+                // 原型 .chips{border-top:1px;padding:10px 12px}：这 1px 占位（agent-browser 实测），
+                // 少了它 chip 行整体高 1、且首个 chip 的 y 差 2
+                SettingsHairline()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        // 原型 .chips padding: 10px 12px（左 12 决定首个 chip 的 x=29）
-                        .padding(horizontal = t.space3, vertical = 10.dp),
+                        // 原型 .chips padding-top 10；这里 11 = 10 + 补回 Compose 不占位的边框
+                        .padding(start = t.space3, end = t.space3, top = 11.dp, bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(t.space2),
                 ) {
                     QuotaSettings.REFRESH_OPTIONS.forEach { minutes ->
@@ -78,20 +82,20 @@ internal fun RefreshRhythmGroup(
                         )
                     }
                 }
-                // 原型 chip 行与节奏块之间实际空 12（.rhythm 自身的上边距）
-                Spacer(Modifier.height(t.space3))
-                // 锚点打在整块 p（x=17、w=359、h=59.8），文字左右缩进 12、下留 10
-                // 原型 .rhythm 实测高 59.8（三行 11px + 下留 10）
-                Box(Modifier.fillMaxWidth().testTag("s19-rhythm")) {
+                // 原型 .rhythm{margin:11px 0}：chip 行底 → rhythm 顶、rhythm 底 → 阈值行顶各 11
+                Spacer(Modifier.height(11.dp))
+                // 锚点打在整块 p（x=17、w=359、h=59.8）；文字左右 12、下留 10，三行 15.95
+                Box(Modifier.fillMaxWidth().height(59.8.dp).testTag("s19-rhythm")) {
                     Text(
                         rhythmText(frontMinutes = frontMinutes, backgroundMinutes = backgroundMinutes),
                         style = MaterialTheme.typography.labelSmall
                             .copy(fontSize = 11.sp, lineHeight = (11 * 1.45f).sp)
                             .quotaTight(),
                         color = t.muted,
-                        modifier = Modifier.padding(start = t.space3, end = t.space3, bottom = 11.dp),
+                        modifier = Modifier.padding(start = t.space3, end = t.space3, bottom = 10.dp),
                     )
                 }
+                Spacer(Modifier.height(11.dp))
                 SettingsInfoRow(
                     title = "过期阈值",
                     subtitle = "超过该时长没取到新数据就在页面上标黄",
@@ -163,7 +167,10 @@ private fun SettingsInfoRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space3, vertical = 6.dp),
+            // 原型 .srow{min-height:48;border-top:1;padding:6px 12px}（agent-browser 实测 48）
+            .height(48.dp)
+            .topHairline()
+            .padding(horizontal = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -178,6 +185,8 @@ private fun SettingsInfoRow(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = ((11 * 1.3f)).sp),
                 color = t.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(t.space2))
@@ -198,7 +207,11 @@ private fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = t.space3, vertical = 6.dp),
+            // 原型 .srow 实测 57（border-top 1 + padding 6+6 + 开关 44）；+1 补 Compose 不占位的
+            // box 下边框，refresh 组总高才 = 原型 274
+            .height(58.dp)
+            .topHairline()
+            .padding(horizontal = t.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -213,6 +226,8 @@ private fun SettingsSwitchRow(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = ((11 * 1.3f)).sp),
                 color = t.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(t.space2))
