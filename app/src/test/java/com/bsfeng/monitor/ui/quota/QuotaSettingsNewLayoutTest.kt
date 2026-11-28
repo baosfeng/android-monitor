@@ -25,10 +25,11 @@ class QuotaSettingsNewLayoutTest {
         typeId: String = "ollama",
         multi: Boolean = false,
         balanceKind: QuotaCredentialKind = QuotaCredentialKind.API_KEY,
+        displayName: String? = null,
     ): QuotaProviderInfo = QuotaProviderInfo(
         instanceId = instanceId,
         providerTypeId = typeId,
-        displayName = if (multi) "Ollama · 账号 2" else "Ollama",
+        displayName = displayName ?: if (multi) "账号 2" else "Ollama",
         typeDisplayName = "Ollama",
         multiAccount = multi,
         connected = false,
@@ -113,13 +114,52 @@ class QuotaSettingsNewLayoutTest {
         val text = accountStatusText(info = info(multi = true), state = null, nowEpochSecond = NOW)
         assertEquals("未配置", text.badge)
         assertEquals("添加后与主号并列，不覆盖主号凭据", text.subtitle)
-        assertTrue(accountNeedsAttention(text))
+        // 未配置只是还没填 Key，不算「需处理」（leader 口径 2026-11-28）
+        assertFalse(accountNeedsAttention(info(multi = true), null))
     }
 
     @Test
     fun group_summary_counts_only_attention_rows() {
         assertEquals("4 个 · 2 个需处理", accountsGroupSummary(4, 2))
-        assertEquals("3 个", accountsGroupSummary(3, 0))
+        // 0 也要写出来：用户才知道这个数在算（全未配置时是「5 个 · 0 个需处理」）
+        assertEquals("5 个 · 0 个需处理", accountsGroupSummary(5, 0))
+    }
+
+    @Test
+    fun account_row_title_always_carries_provider_name() {
+        // 多账号：domain 只给「账号 N」，显示层补 provider
+        assertEquals("Ollama · 账号 2", accountRowTitle(info(multi = true)))
+        // 单账号：两者相同，不重复
+        assertEquals("Ollama", accountRowTitle(info()))
+        // 用户改过的名字已带 provider → 原样用
+        assertEquals("Ollama · 主号", accountRowTitle(info(displayName = "Ollama · 主号")))
+        // 用户改了不带 provider 的名字 → 补上
+        assertEquals("Ollama · 工作区 A", accountRowTitle(info(displayName = "工作区 A")))
+    }
+
+    @Test
+    fun needs_attention_counts_only_low_balance_or_failed_configured_accounts() {
+        assertFalse(
+            "剩余 96% 不算需处理",
+            accountNeedsAttention(info(), state(items = listOf(percent("每周", "96", primary = true)))),
+        )
+        assertTrue(
+            "剩余恰好 20% 需要处理（≤20）",
+            accountNeedsAttention(info(), state(items = listOf(percent("每周", "20")))),
+        )
+        assertTrue("0% 需要处理", accountNeedsAttention(info(), state(items = listOf(percent("每周", "0")))))
+        assertTrue("凭据失效 / 拉取失败需要处理", accountNeedsAttention(info(), state(error = "凭据无效或已过期")))
+        // 未配置（state 存在但没有凭据）不算
+        assertFalse(accountNeedsAttention(info(), state(configured = false)))
+        // 纯余额型没有百分比，不按该口径判定
+        val money = QuotaItem(
+            id = "余额",
+            title = "余额",
+            kind = QuotaKind.MONEY,
+            remaining = BigDecimal("3"),
+            unit = QuotaUnit.CNY,
+        )
+        assertFalse(accountNeedsAttention(info(), state(items = listOf(money))))
     }
 
     @Test
