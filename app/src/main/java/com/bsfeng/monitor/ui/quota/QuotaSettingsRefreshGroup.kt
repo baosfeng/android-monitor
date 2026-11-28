@@ -65,9 +65,8 @@ internal fun RefreshRhythmGroup(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        // 原型 chip 实测宽 57.2/63.3；12sp 文本 + 24 左右内边距会宽 1–2dp，
-                        // 收到 22 后五个 chip 的 x 累计误差 < 3
-                        .padding(horizontal = 11.dp, vertical = 10.dp),
+                        // 原型 .chips padding: 10px 12px（左 12 决定首个 chip 的 x=29）
+                        .padding(horizontal = t.space3, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(t.space2),
                 ) {
                     QuotaSettings.REFRESH_OPTIONS.forEach { minutes ->
@@ -139,7 +138,9 @@ private fun RefreshChip(
                 haptic(HapticTone.LIGHT)
                 onClick()
             }
-            .padding(horizontal = t.space3),
+            // 原型 chip padding 0 12；12sp 文本比 11px 宽 1–2dp，左右各收 1 让五个 chip 的
+            // x/宽累计误差都 < 3（实测 56.3/63.3/63.3/56.3/46.7 vs 57.2/63.3/63.3/57.2/48）
+            .padding(horizontal = 11.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

@@ -1,15 +1,20 @@
 package com.bsfeng.monitor.ui.quota
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -23,15 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.bsfeng.monitor.domain.quota.QuotaUnit
@@ -47,52 +51,93 @@ import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import java.math.BigDecimal
 
 /**
- * 额度预警总开关行。
+ * 额度设置页「恢复提醒」组内的行（原型 s19-recover）。
  *
- * 开关本身是共享件（`AppSwitch`），交互口径要求的两件额外语义落在这一层：
- * 键盘焦点环 2dp（[keyboardFocusRing]，与行内 chip 同口径）与读屏报读「额度预警 + 已开启/已关闭」。
- * 开关切换后的 toast 由调用方（本屏）负责，避免共享件反向依赖页面文案。
+ * 组标题 / 卡片底 / 组尾说明由设置页的 wrapper 提供（锚点 s19-recover 与 s19-test 在那层）；
+ * 本文件只画行，左右 16dp 缩进由 [SettingsGroup] 统一给，行内不再叠加。
+ *
+ * 三态口径与主屏三态区同源（[QuotaAlertTriadSection]）：这里只解释颜色与出路，不重复算数据。
+ */
+
+/**
+ * 「额度耗尽时提醒」（原型 s19-sw-dead）。
+ *
+ * 这是总开关：[com.bsfeng.monitor.quota.QuotaAlertNotifier.enabled] 关掉后只刷新不评估，
+ * 恢复事件也不会产生。开关本身的语义（角色 / 开或关）由 [AppSwitch] 的 toggleable 承担。
  */
 @Composable
 internal fun AlertSwitchRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    AlertSwitchLayout(
+        title = "额度耗尽时提醒",
+        subtitle = "剩余 0% 或被接口标成 rate-limited 时发一条",
+        checked = enabled,
+        onCheckedChange = onChange,
+        switchModifier = Modifier.testTag("s19-sw-dead"),
+        contentDescription = "额度耗尽时提醒",
+    )
+}
+
+/**
+ * 「额度恢复时提醒」（原型 s19-sw-back）。
+ *
+ * 自包含读写的理由：这个开关的消费方只有通知器，为一个布尔值给 QuotaViewModel 加字段会让
+ * 每个调用方都得透传一遍；这里直接读写通知器同一份 prefs，[onChange] 只用于设置页弹 toast。
+ */
+@Composable
+internal fun RecoverAlertSwitchRow(onChange: ((Boolean) -> Unit)? = null) {
+    val context = LocalContext.current
+    val prefs = remember(context) { QuotaAlertPrefs(context) }
+    var checked by remember { mutableStateOf(prefs.recoverEnabled) }
+    AlertSwitchLayout(
+        title = "额度恢复时提醒",
+        subtitle = "从低于阈值回到阈值以上（通常是重置）时发一条",
+        checked = checked,
+        onCheckedChange = { on ->
+            checked = on
+            prefs.recoverEnabled = on
+            onChange?.invoke(on)
+        },
+        switchModifier = Modifier.testTag("s19-sw-back"),
+        contentDescription = "额度恢复时提醒",
+    )
+}
+
+/** 开关行共用骨架：标题 + 副行 + 右侧开关（原型 .srow，min-height 48）。 */
+@Composable
+private fun AlertSwitchLayout(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    switchModifier: Modifier,
+    contentDescription: String,
+) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusPill)
     Row(
-        // 原型 .row{padding: var(--space-2) 0}：左右缩进由 .group 的 16 提供，行内不再叠加，
-        // 否则开关与行尾角标整体左移 12（锚点 s19-alert-switch x 差 30）
-        Modifier.fillMaxWidth().padding(vertical = t.space3),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = t.space1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("额度预警", style = MaterialTheme.typography.titleSmall, color = t.fg)
+            Text(title, style = MaterialTheme.typography.labelLarge, color = t.fg)
             Spacer(Modifier.height(t.space1))
-            Text(
-                "剩余 5% / 4% / 3% / 2% / 1% 各提醒一次，周期重置后重新计数",
-                style = MaterialTheme.typography.bodySmall,
-                color = t.muted,
-            )
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = t.muted)
         }
         Spacer(Modifier.width(t.space3))
         AppSwitch(
-            checked = enabled,
-            onCheckedChange = onChange,
-            modifier = Modifier
-                .testTag("s19-alert-switch")
-                .keyboardFocusRing(shape)
-                .semantics {
-                    contentDescription = "额度预警"
-                    stateDescription = if (enabled) "已开启" else "已关闭"
-                    role = Role.Switch
-                },
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            contentDescription = contentDescription,
+            modifier = switchModifier.keyboardFocusRing(shape),
         )
     }
 }
 
 /**
- * 低余额阈值行：行尾显示当前两个币种的阈值，点击开阈值弹窗。
+ * 「快见底阈值」行（原型 s19-recover 第三行）。
  *
- * [focusRequester] 由本屏传入，弹窗收起后把焦点送回本行（口径「弹窗关闭后焦点回本行」）；
- * 按压反馈走列表行的 0.99 + alpha .9（`RowPress.kt`），与开关的位移反馈区分。
+ * 原型只展示 badge「20% · 10% · 5%」；本项目还有余额型额度（DeepSeek），
+ * 那一档的真实阈值是金额、可配置 —— 展示金额并点开弹窗，比照抄一个不可改的 badge 有用。
  */
 @Composable
 internal fun LowBalanceRow(
@@ -108,6 +153,7 @@ internal fun LowBalanceRow(
         Modifier
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .heightIn(min = 48.dp)
             .rowPressFeedback(interaction)
             .testTag("row.alert")
             .clickable(
@@ -117,24 +163,22 @@ internal fun LowBalanceRow(
                 haptic(HapticTone.LIGHT)
                 onClick()
             }
-            // 与开关行同一条口径：左右缩进由 .group 提供
-            .padding(vertical = t.space3),
+            .padding(vertical = t.space1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("低余额提醒", style = MaterialTheme.typography.titleSmall, color = t.fg)
+            Text("快见底阈值", style = MaterialTheme.typography.labelLarge, color = t.fg)
             Spacer(Modifier.height(t.space1))
             Text(
-                "仅余额型 provider · 低于阈值提醒一次，充值回升后重新计数",
-                style = MaterialTheme.typography.bodySmall,
+                "余额型低于该值提醒一次；百分比型按 5% / 4% / 3% / 2% / 1% 各一次",
+                style = MaterialTheme.typography.labelSmall,
                 color = t.muted,
             )
         }
         Spacer(Modifier.width(t.space2))
         Text(
-            "${QuotaFormat.amount(cny, QuotaUnit.CNY)} / " +
-                QuotaFormat.amount(usd, QuotaUnit.USD),
-            style = MaterialTheme.typography.bodySmall,
+            QuotaFormat.amount(cny, QuotaUnit.CNY) + " / " + QuotaFormat.amount(usd, QuotaUnit.USD),
+            style = MaterialTheme.typography.labelSmall,
             color = t.fg2,
         )
         Icon(
@@ -142,6 +186,40 @@ internal fun LowBalanceRow(
             contentDescription = "修改阈值",
             tint = t.muted,
         )
+    }
+}
+
+/**
+ * 三态说明（原型 s19-tristate）：解释三种颜色的含义与「点通知去哪」。
+ *
+ * 纯展示、不可点，所以不给 testTag 之外的交互语义；三态数据的真值在主屏 [QuotaAlertTriadSection]。
+ */
+@Composable
+internal fun AlertTriadLegend() {
+    val t = LocalDesignTokens.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = t.space2)
+            .testTag("s19-tristate"),
+    ) {
+        TriadLegendLine(t.warn, "快见底", "卡片转黄、组件同色；点通知直达该账号")
+        Spacer(Modifier.height(t.space1))
+        TriadLegendLine(t.danger, "已耗尽", "卡片转红并给「切主号 / 等重置」两条出路")
+        Spacer(Modifier.height(t.space1))
+        TriadLegendLine(t.success, "已恢复", "绿色回弹，附「从 4% → 96%」的变化")
+    }
+}
+
+/** 一行图例：8dp 圆点 + 加粗状态名 + 说明（原型 .ts）。 */
+@Composable
+private fun TriadLegendLine(color: Color, title: String, detail: String) {
+    val t = LocalDesignTokens.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(t.space2))
+        Text(title, style = MaterialTheme.typography.labelSmall, color = t.fg)
+        Text(" · " + detail, style = MaterialTheme.typography.labelSmall, color = t.muted)
     }
 }
 
@@ -164,6 +242,7 @@ internal fun NotificationPermissionRow() {
     Row(
         Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .rowPressFeedback(interaction)
             .testTag("row.permission")
             .clickable(
@@ -179,14 +258,13 @@ internal fun NotificationPermissionRow() {
                     )
                 }
             }
-            // 与开关行同一条口径：左右缩进由 .group 提供
-            .padding(vertical = t.space3),
+            .padding(vertical = t.space1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("通知权限", style = MaterialTheme.typography.titleSmall, color = t.fg)
+            Text("通知权限", style = MaterialTheme.typography.labelLarge, color = t.fg)
             Spacer(Modifier.height(t.space1))
-            Text("点通知可直接进入额度页", style = MaterialTheme.typography.bodySmall, color = t.muted)
+            Text("点通知可直接进入额度页", style = MaterialTheme.typography.labelSmall, color = t.muted)
         }
         Badge(
             if (allowed) "已允许" else "未允许",

@@ -252,9 +252,14 @@ class S18S19QuotaParityTest {
             collectMergedTexts(compose),
         )
         writeScreens(mapOf("s19" to items), File("build/parity/impl-s19.json"))
-        // 交付截图：393 宽整页（xxhdpi 截图按 393dp 等比缩回 1x 供人眼比对）
+        // 交付截图：393 宽整页（视口高 6000dp，按最后一个锚点的底 + 24 裁掉空白）
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
-        val scaled = Bitmap.createScaledBitmap(image, 393, image.height * 393 / image.width, true)
+        val contentBottomDp = items
+            .filter { it.id != "s19-content" && it.id != "screen-s19" }
+            .maxOf { it.y + it.h } + 24f
+        val cropHeight = (contentBottomDp * compose.density.density).toInt().coerceIn(1, image.height)
+        val cropped = Bitmap.createBitmap(image, 0, 0, image.width, cropHeight)
+        val scaled = Bitmap.createScaledBitmap(cropped, 393, cropHeight * 393 / image.width, true)
         val png = File("../.open-design/impl-notes/quota-redesign/shots/impl-s19.png")
         png.parentFile?.mkdirs()
         FileOutputStream(png).use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }

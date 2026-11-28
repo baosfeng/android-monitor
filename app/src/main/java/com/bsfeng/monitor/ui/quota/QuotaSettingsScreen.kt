@@ -195,6 +195,9 @@ fun QuotaSettingsScreen(
                         viewModel.onAlertEnabledChange(enabled)
                         toast.show(if (enabled) "额度预警已开启" else "额度预警已关闭")
                     },
+                    onRecoverChange = { enabled ->
+                        toast.show(if (enabled) "额度恢复提醒已开启" else "额度恢复提醒已关闭")
+                    },
                     onThresholdClick = { thresholdOpen = true },
                     onTestNotification = {
                         postQuotaTestNotification(context)
@@ -279,10 +282,10 @@ private fun IntroBlock() {
 }
 
 /**
- * 恢复提醒组。
+ * 恢复提醒组（原型 s19-recover）：耗尽提醒 → 恢复提醒 → 快见底阈值 → 三态图例 → 示例通知。
  *
- * 本轮（C 分支）只有 B 任务已交付的三件：总开关行 / 阈值行 / 示例通知行；
- * 恢复时提醒与三态图例（s19-sw-back / s19-tristate）由 B 的 QuotaSettingsAlerts 系列在合并时接入。
+ * 五行的本体在 [QuotaSettingsAlerts]（B 任务的文件，本屏只负责组壳与顺序）；
+ * 每行左右 12 由这里给（原型 .srow padding 6 12），行顶边线画进行自己的盒子里。
  */
 @Composable
 private fun RecoverGroup(
@@ -291,6 +294,7 @@ private fun RecoverGroup(
     lowUsd: BigDecimal,
     lowBalanceFocus: FocusRequester,
     onAlertChange: (Boolean) -> Unit,
+    onRecoverChange: (Boolean) -> Unit,
     onThresholdClick: () -> Unit,
     onTestNotification: () -> Unit,
 ) {
@@ -298,17 +302,41 @@ private fun RecoverGroup(
     Column(Modifier.fillMaxWidth().padding(horizontal = t.space4).testTag("s19-recover")) {
         GroupLabel(title = "恢复提醒", trailing = "")
         SettingsBox {
-            AlertSwitchRow(enabled = alertEnabled, onChange = onAlertChange)
-            SettingsHairline()
-            LowBalanceRow(
-                cny = lowCny,
-                usd = lowUsd,
-                onClick = onThresholdClick,
-                focusRequester = lowBalanceFocus,
-            )
-            SettingsHairline()
+            RecoverRow(topBorder = false) {
+                AlertSwitchRow(enabled = alertEnabled, onChange = onAlertChange)
+            }
+            RecoverRow { RecoverAlertSwitchRow(onChange = onRecoverChange) }
+            RecoverRow {
+                LowBalanceRow(
+                    cny = lowCny,
+                    usd = lowUsd,
+                    onClick = onThresholdClick,
+                    focusRequester = lowBalanceFocus,
+                )
+            }
+            // 原型 .tristate：锚点挂整块（x=17、w=359、h=71.9），文字左右 12；图例本体自带上下 8
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(t.surfaceWarm)
+                    .topHairline()
+                    // 原型 .tristate 上下 10（图例本体自带 8，这里补 2 才到 71.9）
+                    .padding(vertical = 2.dp)
+                    .testTag("s19-tristate"),
+            ) {
+                Box(Modifier.padding(horizontal = t.space3)) { AlertTriadLegend() }
+            }
             TestNotificationRow(onClick = onTestNotification)
         }
+    }
+}
+
+/** 恢复提醒组的一行：行顶 1px（第一行不画）+ 左右 12（原型 .srow padding 6 12）。 */
+@Composable
+private fun RecoverRow(topBorder: Boolean = true, content: @Composable () -> Unit) {
+    val t = LocalDesignTokens.current
+    Box(Modifier.fillMaxWidth().topHairline(topBorder)) {
+        Box(Modifier.padding(horizontal = t.space3)) { content() }
     }
 }
 
@@ -322,6 +350,7 @@ private fun TestNotificationRow(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
+            .topHairline()
             .testTag("s19-test")
             .clickable(
                 interactionSource = interaction,

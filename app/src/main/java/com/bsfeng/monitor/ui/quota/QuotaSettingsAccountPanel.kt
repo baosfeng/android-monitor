@@ -98,19 +98,23 @@ internal fun CredentialPanel(
             .topHairline()
             // 锚点先于左右内边距：量到的是整块面板（359dp），与原型 .acc 一致
             .accountPanelTagOf(suffix)
-            .padding(start = t.space3, end = t.space3, bottom = t.space3),
+            // 原型 .acc padding-bottom 12；Compose 的 CJK 行盒比 CSS 高 ~4，
+            // 收到 8 让面板总高回到 294.4（实测 12 → 298.3）
+            .padding(start = t.space3, end = t.space3, bottom = 8.dp),
     ) {
-        // 原型 .acc 的 field-lab 上边距 8；Compose 11sp 的 CJK 行盒比 CSS 高 ~1.5，
-        // 收到 6 才能让输入框 y 落进容差（8 → 实测 y 差 3.8）
-        Spacer(Modifier.height(6.dp))
-        Text(
-            credentialFieldLabel(info),
-            style = MaterialTheme.typography.labelSmall
-                .copy(fontSize = 11.sp, lineHeight = (11 * t.leadingBody).sp)
-                .quotaTight(),
-            color = t.fg2,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Spacer(Modifier.height(t.space2))
+        // 原型 .field-lab：margin 8 0 4 + 行盒 16.17；Compose 11sp 的 CJK 行盒量不准，
+        // 用固定盒钉 16.2（「固定盒 + unbounded」解法，见原型实现对齐台账）
+        Box(Modifier.height(16.2.dp)) {
+            Text(
+                credentialFieldLabel(info),
+                style = MaterialTheme.typography.labelSmall
+                    .copy(fontSize = 11.sp, lineHeight = (11 * t.leadingBody).sp)
+                    .quotaTight(),
+                color = t.fg2,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         Spacer(Modifier.height(t.space1))
         Row(verticalAlignment = Alignment.CenterVertically) {
             CredentialField(
@@ -150,7 +154,7 @@ internal fun CredentialPanel(
         Spacer(Modifier.height(t.space1))
         Text(
             hint,
-            // 目标高 14.8（原型 .paste-hint）；Compose 单行会多 ~1.2 的行盒余量 → 13.6
+                // 目标高 14.8（原型 .paste-hint）；Compose 单行会多 ~1.2 的行盒余量 → 13.6
             style = MaterialTheme.typography.labelSmall
                 .copy(fontSize = 11.sp, lineHeight = 13.6.sp)
                 .quotaTight(),
@@ -158,7 +162,7 @@ internal fun CredentialPanel(
             // 原型 .paste-hint 是整块宽（335）；不 fillMaxWidth 会被文字宽量成 188.7
             modifier = Modifier.fillMaxWidth().accountPasteHintTagOf(suffix),
         )
-        Spacer(Modifier.height(t.space2))
+        Spacer(Modifier.height(6.dp))
         PanelButton(
             label = "保存并查询",
             enabled = !saving && draft.isNotBlank(),
@@ -170,7 +174,7 @@ internal fun CredentialPanel(
             modifier = Modifier.accountSaveTagOf(suffix),
         )
         if (configured) {
-            Spacer(Modifier.height(t.space2))
+            Spacer(Modifier.height(8.dp))
             PanelButton(
                 label = "断开连接",
                 enabled = !saving,
@@ -191,12 +195,13 @@ internal fun CredentialPanel(
                 color = t.dangerText,
             )
         }
-        Spacer(Modifier.height(t.space2))
+        Spacer(Modifier.height(7.dp))
         Text(
-            // 原型 .acc-note 实测两行 26.4（line-height 13.2）；显式断行避免 CJK 度量差异导致单行
+            // 原型 .acc-note 两行；Compose 的 CJK 行盒是 16.3/行，显式断行并按 16.3 给够高度
+            // （保存/清除间隙各收 2dp 换这 6dp，面板总高仍 ≈294.4）
             "Key 用 Android Keystore 加密存本机；\n清空后不再显示上次余额。",
             style = MaterialTheme.typography.labelSmall
-                .copy(fontSize = 11.sp, lineHeight = (11 * 1.2f).sp)
+                .copy(fontSize = 11.sp, lineHeight = 16.3.sp)
                 .quotaTight(),
             color = t.muted,
         )
