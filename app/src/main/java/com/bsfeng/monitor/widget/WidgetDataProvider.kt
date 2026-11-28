@@ -6,8 +6,6 @@ import android.util.Log
 import com.bsfeng.monitor.core.di.serviceContainer
 import com.bsfeng.monitor.data.DatabaseHelper
 import com.bsfeng.monitor.domain.model.RecordType
-import com.bsfeng.monitor.domain.quota.ProviderAggregateInput
-import com.bsfeng.monitor.domain.quota.QuotaAggregator
 import com.bsfeng.monitor.domain.quota.QuotaInstances
 import com.bsfeng.monitor.quota.QuotaSnapshotStore
 import com.bsfeng.monitor.record.RecordStore
@@ -119,46 +117,43 @@ object WidgetDataProvider {
     }
 
     /**
-     * 额度见底榜单。
+     * 额度账号快照（含纯余额型）。
      *
-     * 数据来自 [QuotaSnapshotStore] 的落盘快照（**不联网**）：没有快照说明这次进程还没拉过额度，
-     * 组件显示「未配置 / 尚未更新」，等 `QuotaScheduler` 在 App 内刷新完成后再推一次。
+     * 为什么不复用 [QuotaAggregator]：它按语义只收「能算出百分比」的行，纯余额型（DeepSeek 余额）被丢掉，
+     * 而桌面组件样张里余额行是一等公民（金额 + 账号，没有横条）。组件要的是「一个账号一格」，
+     * 选行与文案留给 [QuotaWidgetModel] 的纯函数，这里只负责读库与兜底。
+     *
+     * 数据只读 [QuotaSnapshotStore] 的落盘快照（**不联网**）：没有快照说明这次进程还没拉过额度，
+     * 组件显示「尚未更新」，等 `QuotaScheduler` 在 App 内刷新完成后再推一次。
      */
-    suspend fun quota(context: Context): QuotaWidgetData = withContext(Dispatchers.IO) {
+    suspend fun quota(context: Context): QuotaWidgetFeed = withContext(Dispatchers.IO) {
         runCatching {
             val container = context.serviceContainer
             val snapshots = QuotaSnapshotStore(context)
             val registry = container.quotaRegistry
             val instances = runCatching { container.quotaInstances.instances() }.getOrDefault(emptyList())
-            val inputs = instances.mapNotNull { instance ->
+            val accounts = instances.mapNotNull { instance ->
                 // 类型实现没装配（被 R8 裁掉 / 未来新增）时跳过这一行，不让整块白屏
                 val provider = registry.byId(instance.providerTypeId) ?: return@mapNotNull null
+                // 凭据是判断「用户到底配了没有」的唯一依据：断开凭据后残留的旧快照不能继续占格
+                val configured = runCatching {
+                    container.quotaCredentials.has(instance.instanceId, provider.balanceCredentialKind)
+                }.getOrDefault(false)
+                if (!configured) return@mapNotNull null
                 val snapshot = runCatching { snapshots.load(instance.instanceId) }.getOrNull()
                 val multi = instances.count { it.providerTypeId == instance.providerTypeId } > 1
-                ProviderAggregateInput(
+                QuotaWidgetAccount(
                     instanceId = instance.instanceId,
-                    providerTypeId = instance.providerTypeId,
                     displayName = QuotaInstances.displayName(instance, provider.displayName, multi),
                     items = snapshot?.items.orEmpty(),
-                    // 凭据是判断「用户到底配了没有」的唯一依据：残留的旧快照不代表还在用
-                    balanceConfigured = runCatching {
-                        container.quotaCredentials.has(instance.instanceId, provider.balanceCredentialKind)
-                    }.getOrDefault(false),
                     stale = snapshot?.stale ?: false,
                     fetchedAtEpochSecond = snapshot?.fetchedAtEpochSecond ?: 0L,
                 )
             }
-            val latestFetchedAt = inputs.maxOfOrNull { it.fetchedAtEpochSecond } ?: 0L
-            QuotaWidgetData(
-                configured = inputs.any { it.balanceConfigured },
-                // 同类型多账号时行数会变多：组件已有 rowCount 上限截断（见 QuotaWidget），这里不再二次截
-                rows = QuotaAggregator.aggregate(inputs).map { row ->
-                    QuotaRow(
-                        providerId = row.instanceId,
-                        label = row.displayName,
-                        remainingPercent = percent(row.primaryFraction),
-                    )
-                },
+            val latestFetchedAt = accounts.maxOfOrNull { it.fetchedAtEpochSecond } ?: 0L
+            QuotaWidgetFeed(
+                configured = accounts.isNotEmpty(),
+                accounts = accounts,
                 fetchedAtText = if (latestFetchedAt > 0L) {
                     "更新于 " + ageText(System.currentTimeMillis(), latestFetchedAt * 1000L)
                 } else {
@@ -167,7 +162,7 @@ object WidgetDataProvider {
             )
         }.getOrElse { error ->
             Log.w(TAG, "读取额度快照失败，组件显示未配置", error)
-            QuotaWidgetData(configured = false, rows = emptyList(), fetchedAtText = null)
+            QuotaWidgetFeed.EMPTY
         }
     }
 

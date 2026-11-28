@@ -2,6 +2,10 @@ package com.bsfeng.monitor.parity
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.captureToImage
@@ -14,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.domain.quota.QuotaBucket
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
 import com.bsfeng.monitor.domain.quota.QuotaGranularity
@@ -30,9 +35,12 @@ import com.bsfeng.monitor.quota.NoQuotaSnapshotCache
 import com.bsfeng.monitor.quota.QuotaCredentialStore
 import com.bsfeng.monitor.quota.QuotaRepository
 import com.bsfeng.monitor.quota.QuotaSecretCipher
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriadSection
 import com.bsfeng.monitor.ui.quota.QuotaScreen
 import com.bsfeng.monitor.ui.quota.QuotaSettingsScreen
 import com.bsfeng.monitor.ui.quota.QuotaViewModel
+import com.bsfeng.monitor.ui.quota.trackPairs
+import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.MonitorTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -279,28 +287,53 @@ class S18S19QuotaParityTest {
         )
     }
 
-    /** 原型 s19：四家 provider 各一个默认账号。 */
+    /**
+     * 原型 s19 的三家（不含 opencode-go）：Ollama 每周 96%、DeepSeek 鉴权失败、open-design 月度 34%。
+     *
+     * 多账号 = `quotaViewModel(secondOllama = true)` 再 add 一个 Ollama 实例（原型「备用号」）。
+     */
     private fun s19Providers(): List<QuotaProvider> = listOf(
         FakeProvider("ollama", "Ollama", QuotaCredentialKind.API_KEY, QuotaCredentialKind.API_KEY, 2) {
             listOf(
                 percent("ollama.session", "会话", "75"),
-                percent("ollama.weekly", "每周", "40", primary = true),
+                percent("ollama.weekly", "每周", "96", primary = true),
             )
         },
         FakeProvider(
             "deepseek", "DeepSeek",
             QuotaCredentialKind.PLATFORM_TOKEN, QuotaCredentialKind.PLATFORM_TOKEN, 4,
-        ) { listOf(balance("deepseek.balance", "余额", "110")) },
-        FakeProvider("opencode-go", "opencode-go", QuotaCredentialKind.API_KEY, QuotaCredentialKind.API_KEY, 1) {
-            listOf(
-                percent("oc.session", "5 小时", "12", primary = true),
-                percent("oc.weekly", "每周", "46"),
-            )
-        },
-        FakeProvider("opendesign", "Open Design", QuotaCredentialKind.SESSION_COOKIE, QuotaCredentialKind.SESSION_COOKIE, 3) {
-            listOf(percent("od.monthly", "月度", "34", primary = true))
-        },
+        ) { throw com.bsfeng.monitor.domain.quota.QuotaError(com.bsfeng.monitor.domain.quota.QuotaErrorKind.UNAUTHORIZED) },
+        FakeProvider(
+            "opendesign", "Open Design",
+            QuotaCredentialKind.SESSION_COOKIE, QuotaCredentialKind.SESSION_COOKIE, 3,
+        ) { listOf(percent("od.monthly", "月度", "34", primary = true)) },
     )
+
+    /**
+     * s19 专用的仓库装配：数据层时钟 9:36（页面 9:41 → 「5 分钟前更新」），并追加 Ollama 备用号。
+     *
+     * 与 s18 的 [quotaViewModel] 分开：s19 不铺 7 个账号，也不做「令牌过期」的时间线。
+     */
+    private fun s19ViewModel(): QuotaViewModel {
+        val app = RuntimeEnvironment.getApplication()
+        val providers = s19Providers()
+        val credentials = QuotaCredentialStore(app, PlainCipher())
+        listOf("ollama", "deepseek", "opendesign").forEach { id ->
+            credentials.save(id, providers.first { it.id == id }.balanceCredentialKind, "test-key-" + id)
+        }
+        val repository = QuotaRepository(
+            registry = QuotaProviderRegistry(providers),
+            credentials = credentials,
+            nowSeconds = { at(9, 36) },
+            cache = NoQuotaSnapshotCache,
+            catalog = InMemoryQuotaInstanceCatalog(providers.map { it.id }),
+        )
+        repository.addInstance("ollama")
+        runBlocking {
+            listOf("ollama", "deepseek", "opendesign").forEach { repository.refresh(it, force = true) }
+        }
+        return QuotaViewModel(app, repository)
+    }
 
     /** 三态区的「已恢复」：写恢复事件 prefs（与 QuotaAlertNotifier 同一份）。 */
     private fun seedRecovery() {
@@ -392,11 +425,11 @@ class S18S19QuotaParityTest {
 
     @Test
     fun exportQuotaSettingsS19() {
-        // 原型 s19：Ollama 已连接，其余三家未配置
-        val viewModel = quotaViewModel(providers = s19Providers(), configured = listOf("ollama"))
+        // 原型 s19：Ollama 主号（5 分钟前拉过）+ 备用号（未配置）、DeepSeek 令牌过期、open-design 已连接
+        val viewModel = s19ViewModel()
         compose.setContent {
             MonitorTheme(themeId = "apple") {
-                QuotaSettingsScreen(onBack = {}, viewModel = viewModel)
+                QuotaSettingsScreen(onBack = {}, viewModel = viewModel, nowSeconds = { at(9, 41) })
             }
         }
         compose.waitForIdle()
@@ -405,7 +438,42 @@ class S18S19QuotaParityTest {
             collectMergedTexts(compose),
         )
         writeScreens(mapOf("s19" to items), File("build/parity/impl-s19.json"))
+        // 交付截图：393 宽整页（视口高 6000dp，按最后一个锚点的底 + 24 裁掉空白）
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val contentBottomDp = items
+            .filter { it.id != "s19-content" && it.id != "screen-s19" }
+            .maxOf { it.y + it.h } + 24f
+        val cropHeight = (contentBottomDp * compose.density.density).toInt().coerceIn(1, image.height)
+        val cropped = Bitmap.createBitmap(image, 0, 0, image.width, cropHeight)
+        val scaled = Bitmap.createScaledBitmap(cropped, 393, cropHeight * 393 / image.width, true)
+        val png = File("../.open-design/impl-notes/quota-redesign/shots/impl-s19.png")
+        png.parentFile?.mkdirs()
+        FileOutputStream(png).use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
         println("PARITY(s19) tags=" + items.size + " " + items.joinToString { it.id })
+        println("SHOT(s19) " + png.absolutePath + " " + scaled.width + "x" + scaled.height)
+    }
+
+    /**
+     * 三态区截图（393dp 宽，原型 s18-alerts 三行）。
+     *
+     * 与 s18/s19 导出同一个类：原生渲染只在**已有的** NATIVE 类里初始化一次，
+     * 不再为一张图新开 @GraphicsMode(NATIVE) 测试类（并行 fork 下多一个初始化点，
+     * 就多一处 RenderNodeNatives 偶发）。假数据见 alertTriadShotFixture。
+     */
+    @Test
+    fun exportAlertTriadShot() {
+        val triad = alertTriadShotFixture(System.currentTimeMillis() / 1000)
+        compose.setContent {
+            MonitorTheme(themeId = "apple") {
+                Box(Modifier.width(393.dp).background(LocalDesignTokens.current.bg)) {
+                    QuotaAlertTriadSection(triad = triad, onOpenSettings = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val png = saveShotPng(image, "../.open-design/impl-notes/quota-redesign/shots/impl-alerts.png")
+        println("SHOT(alert-triad) " + png.absolutePath + " " + image.width + "x" + image.height)
     }
 
     /**
@@ -450,6 +518,10 @@ class S18S19QuotaParityTest {
         lines += "小于48dp可点元素数=" + smallClickableCount(root(), density)
         lines += "小于44dp可点元素数=" + smallClickableCount(root(), density, limit = 44f)
         lines += "可点元素尺寸清单=" + clickableSizes(root(), density)
+        // 横条宽度（判据：fill / track = fraction ±0.02，断言见 QuotaMeterTrackTest）
+        lines += "账号行横条 fill/track=" + trackPairs(root(), density).joinToString(",") { (track, fill) ->
+            "%.1f/%.1f=%.3f".format(fill, track, if (track > 0f) fill / track else 0f)
+        }
 
         // 2) 展开第一行（含柱图）
         compose.onNodeWithTag("s18-content").performScrollToNode(hasTestTag("s18-row-oc-main"))
@@ -459,6 +531,9 @@ class S18S19QuotaParityTest {
         shot("impl-s18-expanded.png")
         val expanded = nodes()
         val chartH = expanded.firstOrNull { it.id == "s18-chart-oc-main" }?.h
+        lines += "展开区横条 fill/track=" + trackPairs(root(), density).joinToString(",") { (track, fill) ->
+            "%.1f/%.1f=%.3f".format(fill, track, if (track > 0f) fill / track else 0f)
+        }
         lines += "展开后柱图高dp=" + chartH
         // 柱图的读屏描述里带「共 N 根，峰值 X」：纯绘制图没有可数节点，从这里取真值
         val chartNode = compose.onNodeWithTag("s18-chart-oc-main").fetchSemanticsNode()

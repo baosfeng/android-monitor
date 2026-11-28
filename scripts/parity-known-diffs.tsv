@@ -116,7 +116,7 @@ s16	s16-seg-home-noon	几何	同上
 s16	s16-seg-office	几何	同上
 s16	s16-seg-cafe	几何	同上
 s16	s16-seg-home-am	几何	同上
-s18	s18-updated	文案	失败态口径（leader 拍板）：任一账号查询失败时副行报「更新失败 · 数据 X 分钟前」，原型只写「更新于 4 分钟前」；有失败时旧数字不能冒充新数据
+s18	s18-updated	文案	失败态口径（leader 拍板）：任一账号查询失败时副行报「更新失败 · 上次成功 X 分钟前」，原型只写「更新于 4 分钟前」；有失败时旧数字不能冒充新数据
 s18	s18-updated	几何	同上：失败态文案比原型「更新于 4 分钟前」长，锚点宽度差 22
 s18	s18-row-oc-main	文案	徽标规则：快见底 = 最低剩余 ≤20%（帮助弹窗口径），oc-main 12% 出「快见底」；原型示例写「主号」自相矛盾
 s18	s18-row-ol-main	文案	列选择规则：右侧两列取剩余最低的两个可量化窗口（今日 63 / 订阅周期 72）；原型手挑了今日 63 / 本周 96
@@ -142,3 +142,13 @@ s18	s18-alert-dead	几何	级联自 s18-alerts 行数（5 行 vs 3 行）
 s18	s18-widget-head	几何	级联自 s18-alerts 行数
 s18	s18-widget	几何	级联自 s18-alerts 行数
 s18	s18-foot	几何	级联自 s18-alerts 行数
+s19	s19-acc-ollama	文案	账号命名走 domain 的「账号 N」（QuotaInstances.accountName）；原型 demo 写「主号 / 备用号」，改 domain 会波及 s18 榜单与通知标题
+s19	s19-acc-ollama2	文案	同上：demo 的「备用号」在实现里是「账号 2」
+s19	s19-acc-ds1	文案	原型 demo 写「账号 1 / 停在 1 小时 12 分钟前」；实现用 domain 名，且首次拉取即失败时没有上次成功时刻（快照为空）
+s19	s19-acc-od-a	文案	原型 demo 写「工作区 A / 浏览器会话令牌 / 12 天后过期」；QuotaProvider 契约不含令牌过期时间，凭据类型文案统一走 kindLabel（网页 Cookie）
+s19	s19-add-od	文案	显示名统一用 provider.displayName（Open Design）；原型写 provider id（open-design），与 s18-agg-row-2 同一口径
+s19	s19-sw-dead	几何	AppSwitch 触达域按 --switch-w 56 绘制（轨道 52），原型 s19 .switch 声明 52；共享组件不为单屏改宽
+s19	s19-sw-back	几何	同上：开关宽 56 / 原型 52（y 差 3.4 是组内行盒累计，同一处）
+s19	s19-save-all	几何	原型自身缺陷：.s19-save-all 的 width:calc(100% - var(--space-8)) 因变量未定义整条失效，退回 .save 的 width:100% → x=16/w=393 右溢出 16px；实现按左右 16（361 宽）绘制，不复刻溢出
+s19	s19-int-off	几何	字体字宽：五个 chip 里「关闭」累计 x 差 3.3（其余四个 ≤2.3），12sp 与原型 11px 的中文字宽差
+s18	s18-foot	文案	原型是演示声明（「演示数据：…原型示例值…」），生产界面改成产品文案（数据来自官方接口、只存本机）；leader 要求不把演示声明搬上真实界面

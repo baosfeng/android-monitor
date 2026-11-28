@@ -35,30 +35,6 @@ data class HealthWidgetData(
 )
 
 /**
- * 额度榜单。
- *
- * @param configured 是否至少配了一家 provider 的额度凭据；false = 组件该显示「未配置额度」
- * @param rows 按剩余百分比升序，第一行 = 最先见底的那家
- * @param fetchedAtText 最近一次成功拉取的相对时间文案（如「更新于 5 分钟前」）；从未拉取过为 null
- */
-data class QuotaWidgetData(
-    val configured: Boolean,
-    val rows: List<QuotaRow>,
-    val fetchedAtText: String?,
-)
-
-/**
- * 额度榜单一行（一家 provider）。
- *
- * @param remainingPercent 主指标剩余百分比 0..100，越低越紧急
- */
-data class QuotaRow(
-    val providerId: String,
-    val label: String,
-    val remainingPercent: Int,
-)
-
-/**
  * 广告跳过战报：今日 / 近 7 天 / 累计的 AD_SKIPPED 条数，外加已确认条数。
  *
  * @param confirmedCount 累计跳过里「点击后复核确认广告已消失」的条数（detail 的 `confirmed=true`）；

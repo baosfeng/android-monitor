@@ -135,23 +135,12 @@ private fun DetailWindowRow(item: QuotaItem, nowEpochSecond: Long) {
             )
         }
         Spacer(Modifier.width(t.space2))
-        Box(
-            Modifier
-                .weight(1f)
-                .height(6.dp)
-                .clip(RoundedCornerShape(t.radiusPill))
-                .background(t.fgFade(12)),
-        ) {
-            if (fraction != null && fraction > 0f) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(fraction)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(t.radiusPill))
-                        .background(barColor),
-                )
-            }
-        }
+        QuotaMeterTrack(
+            fraction = fraction,
+            color = barColor,
+            height = 6.dp,
+            modifier = Modifier.weight(1f),
+        )
         Spacer(Modifier.width(t.space2))
         Text(
             text = fraction?.let { (it * 100f).toInt().toString() + "%" } ?: "—",

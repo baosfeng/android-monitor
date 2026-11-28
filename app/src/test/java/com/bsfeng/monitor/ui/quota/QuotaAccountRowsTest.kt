@@ -315,7 +315,7 @@ class QuotaAccountRowsTest {
         assertEquals("更新于 4 分钟前", quotaUpdatedText(now - 4 * 60, now))
         assertEquals("更新于 9:41", quotaUpdatedText(at(9, 41) - 86_400, now))
         assertEquals("更新失败", quotaUpdatedText(0L, now, failed = true))
-        assertEquals("更新失败 · 数据 4 分钟前", quotaUpdatedText(now - 4 * 60, now, failed = true))
+        assertEquals("更新失败 · 上次成功 4 分钟前", quotaUpdatedText(now - 4 * 60, now, failed = true))
     }
 
     @Test

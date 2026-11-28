@@ -265,7 +265,7 @@ fun QuotaScreen(
                 }
                 item(key = "foot") {
                     Text(
-                        "演示数据：账号、窗口与用量柱图均为原型示例值，不含真实凭据。点账号行可展开全部窗口与用量图。",
+                        "点账号行可展开全部窗口与用量图；额度数据来自各 provider 官方接口，只存在本机，不上传。",
                         style = quotaTextSmall,
                         color = t.muted,
                         modifier = Modifier

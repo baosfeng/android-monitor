@@ -270,7 +270,7 @@ internal fun quotaUpdatedText(
         else -> QuotaFormat.clockShortOf(fetchedAtEpochSecond)
     }
     if (failed) {
-        return if (ago == null) "更新失败" else "更新失败 · 数据 " + ago
+        return if (ago == null) "更新失败" else "更新失败 · 上次成功 " + ago
     }
     return if (ago == null) "尚未更新" else "更新于" + if (ago == "刚刚") "刚刚" else " " + ago
 }

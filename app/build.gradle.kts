@@ -414,6 +414,7 @@ val pureComposableSources = listOf(
     "com/bsfeng/monitor/ui/quota/QuotaAccountDetail",
     "com/bsfeng/monitor/ui/quota/QuotaAccountItem",
     "com/bsfeng/monitor/ui/quota/QuotaEmptyAccounts",
+    "com/bsfeng/monitor/ui/quota/QuotaMeterTrack",
     "com/bsfeng/monitor/ui/quota/QuotaBrandMark",
     "com/bsfeng/monitor/ui/quota/QuotaHelpDialog",
     "com/bsfeng/monitor/ui/quota/QuotaSettingsAlerts",

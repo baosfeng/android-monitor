@@ -129,23 +129,7 @@ private fun RowScope.WidgetCell(cell: QuotaWidgetCell, ink: androidx.compose.ui.
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(2.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(t.radiusPill))
-                .background(ink.copy(alpha = 0.20f)),
-        ) {
-            val fraction = cell.fraction
-            if (fraction != null && fraction > 0f) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(fraction)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(t.radiusPill))
-                        .background(ink),
-                )
-            }
-        }
+        // 与 D 的小组件同一套语言：纯余额格（fraction = null）不画横条，只留占位保高度
+        QuotaMeterTrack(fraction = cell.fraction, color = ink, height = 4.dp)
     }
 }

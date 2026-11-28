@@ -24,16 +24,16 @@ object QuotaScheduler {
 
     private const val REQUEST_CODE = 7401
 
-    /** 按小时数重排；0 = 取消。 */
-    fun apply(context: Context, intervalHours: Int) {
+    /** 按**分钟**数重排；0 = 取消。 */
+    fun apply(context: Context, intervalMinutes: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = pendingIntent(
             context,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         alarmManager.cancel(pendingIntent)
-        if (intervalHours <= 0) return
-        val interval = intervalHours * 60L * 60L * 1000L
+        if (intervalMinutes <= 0) return
+        val interval = intervalMinutes * 60L * 1000L
         alarmManager.setInexactRepeating(
             AlarmManager.RTC_WAKEUP,
             System.currentTimeMillis() + interval,
@@ -49,8 +49,8 @@ object QuotaScheduler {
      */
     fun ensureScheduled(context: Context) {
         if (!FeatureFlags.get().isEnabled(Feature.QUOTA)) return
-        val hours = QuotaSettings(context).refreshIntervalHours
-        if (hours <= 0) return
+        val minutes = QuotaSettings(context).backgroundRefreshMinutes
+        if (minutes <= 0) return
         val existing = PendingIntent.getBroadcast(
             context,
             REQUEST_CODE,
@@ -58,17 +58,17 @@ object QuotaScheduler {
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
         )
         if (existing != null) return
-        apply(context, hours)
+        apply(context, minutes)
     }
 
     /** 设置变化后立即生效。 */
     fun reschedule(context: Context) {
-        val hours = if (FeatureFlags.get().isEnabled(Feature.QUOTA)) {
-            QuotaSettings(context).refreshIntervalHours
+        val minutes = if (FeatureFlags.get().isEnabled(Feature.QUOTA)) {
+            QuotaSettings(context).backgroundRefreshMinutes
         } else {
             0
         }
-        apply(context, hours)
+        apply(context, minutes)
     }
 
     private fun pendingIntent(context: Context, flags: Int): PendingIntent =
@@ -90,6 +90,10 @@ class QuotaRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (!acceptsAction(intent?.action)) return
         if (!FeatureFlags.get().isEnabled(Feature.QUOTA)) return
+        // 息屏策略的真实消费点：设置页「息屏时不刷新」开启且屏幕已熄 → 这一轮不拉取。
+        // 拿不到屏幕状态时按「亮屏」处理（fail-open），省电不能变成停更。
+        val settings = QuotaSettings(context)
+        if (shouldSkipBackgroundRefresh(settings.skipRefreshWhenScreenOff, isScreenInteractive(context))) return
         val app = context.applicationContext as? MonitorApp ?: return
         val pending = goAsync()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -100,6 +104,12 @@ class QuotaRefreshReceiver : BroadcastReceiver() {
             pending.finish()
         }
     }
+
+    /** 屏幕是否处于交互态；服务缺失时按 true（fail-open）。 */
+    private fun isScreenInteractive(context: Context): Boolean =
+        runCatching {
+            (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isInteractive
+        }.getOrNull() ?: true
 
     companion object {
         /**

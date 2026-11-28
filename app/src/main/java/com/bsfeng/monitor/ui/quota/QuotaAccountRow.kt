@@ -191,24 +191,7 @@ private fun AccountColumn(column: QuotaAccountColumn, showWhen: Boolean) {
             )
         }
         Spacer(Modifier.height(2.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(t.radiusPill))
-                .background(t.fgFade(12)),
-        ) {
-            val fraction = column.fraction
-            if (fraction != null && fraction > 0f) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(fraction)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(t.radiusPill))
-                        .background(barColor),
-                )
-            }
-        }
+        QuotaMeterTrack(fraction = column.fraction, color = barColor, height = 5.dp)
         Spacer(Modifier.height(2.dp))
         FixedLine(14.9.dp, quotaLabel13, column.title, t.fg2)
         if (showWhen && column.resetText != null) {

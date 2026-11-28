@@ -1,6 +1,7 @@
 package com.bsfeng.monitor.parity
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsNode
@@ -10,12 +11,16 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Density
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriad
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriadKind
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriadRow
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import java.io.File
+import java.io.FileOutputStream
 
 /**
  * 原型 ↔ 实现 对照的测试侧支撑。
@@ -158,3 +163,56 @@ fun collectMergedTexts(rule: androidx.compose.ui.test.junit4.ComposeContentTestR
 /** 把 merged 树里的合并文案补回 unmerged 结果（只补空文案，不覆盖已有）。 */
 fun withMergedTexts(nodes: List<TaggedNode>, merged: Map<String, String>): List<TaggedNode> =
     nodes.map { if (it.text.isBlank()) merged[it.id]?.let { t -> it.copy(text = t) } ?: it else it }
+
+/**
+ * 主屏三态区的截图假数据（原型 s18-alerts 三行）。
+ *
+ * 放在支撑文件里而不是某个 @Test 内：三态区截图与 s18/s19 导出共用同一个
+ * @GraphicsMode(NATIVE) 测试类（见 S18S19QuotaParityTest#exportAlertTriadShot），
+ * 渲染数据单独成形才能让那个用例只剩十行。
+ *
+ * @param nowEpochSecond 恢复行的 occurredAt 要贴这个时刻，组件按系统时钟算「22 分钟前」
+ */
+fun alertTriadShotFixture(nowEpochSecond: Long): QuotaAlertTriad = QuotaAlertTriad(
+    rows = listOf(
+        QuotaAlertTriadRow(
+            kind = QuotaAlertTriadKind.RECOVERED,
+            instanceId = "ollama",
+            displayName = "Ollama 主号",
+            itemTitle = "本周",
+            fraction = 0.96f,
+            fractionText = "96%",
+            detailText = "4% → 96% · 周一 00:00 重置 · 已发「已恢复」",
+            occurredAtEpochSecond = nowEpochSecond - 22 * 60,
+            recoveredFrom = 0.04f,
+        ),
+        QuotaAlertTriadRow(
+            kind = QuotaAlertTriadKind.LOW,
+            instanceId = "opendesign",
+            displayName = "open-design 工作区 A",
+            itemTitle = "本月",
+            fraction = 0.34f,
+            fractionText = "34%",
+            detailText = "12-01 00:00 重置 · 按当前速率约 4 天耗尽",
+            occurredAtEpochSecond = nowEpochSecond,
+        ),
+        QuotaAlertTriadRow(
+            kind = QuotaAlertTriadKind.DEAD,
+            instanceId = "opencode-go#2",
+            displayName = "opencode-go 备用",
+            itemTitle = "5 小时",
+            fraction = 0f,
+            fractionText = "0%",
+            detailText = "今天 17:00 自动恢复 · 期间可切主号",
+            occurredAtEpochSecond = nowEpochSecond,
+        ),
+    ),
+)
+
+/** 把 captureToImage 的结果原尺寸存成 PNG（目录自动建）。 */
+fun saveShotPng(image: Bitmap, path: String): File {
+    val png = File(path)
+    png.parentFile?.mkdirs()
+    FileOutputStream(png).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    return png
+}
