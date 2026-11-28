@@ -21,6 +21,15 @@ internal class QuotaAlertPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLED, true)
         set(value) = prefs.edit { putBoolean(KEY_ENABLED, value) }
 
+    /**
+     * 「额度恢复时提醒」开关（原型 s19-sw-back）。
+     *
+     * 与总开关分开：有人只想被叫去续费、不想被「又恢复了」打扰。通知器读同一个键。
+     */
+    var recoverEnabled: Boolean
+        get() = prefs.getBoolean(KEY_RECOVER_ENABLED, true)
+        set(value) = prefs.edit { putBoolean(KEY_RECOVER_ENABLED, value) }
+
     fun lowBalance(unit: QuotaUnit): BigDecimal {
         val fallback = if (unit == QuotaUnit.USD) DEFAULT_USD else DEFAULT_CNY
         val raw = prefs.getString(keyOf(unit), fallback) ?: fallback
@@ -37,6 +46,7 @@ internal class QuotaAlertPrefs(context: Context) {
     private companion object {
         const val PREFS_NAME = "quota_alerts"
         const val KEY_ENABLED = "alerts_enabled"
+        const val KEY_RECOVER_ENABLED = "recover_alerts_enabled"
         const val KEY_LOW_CNY = "low_balance_cny"
         const val KEY_LOW_USD = "low_balance_usd"
         const val DEFAULT_CNY = "50"

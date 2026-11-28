@@ -12,6 +12,7 @@ import androidx.core.content.edit
 import com.bsfeng.monitor.domain.quota.QuotaAlertEvaluator
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaUnit
+import com.bsfeng.monitor.ui.quota.QuotaAlertTriadStore
 import org.json.JSONObject
 import java.math.BigDecimal
 import kotlin.math.absoluteValue
@@ -22,6 +23,9 @@ import kotlin.math.absoluteValue
  * 阈值 5 / 4 / 3 / 2 / 1 %：每条额度项（内含额度 / 会话 / 每周）独立计数，
  * 同一周期同一档只提醒一次；余额回升或周期重置后可再次提醒。
  * 余额型（金额且无总额）走「低于设定金额提醒一次」的单档。
+ *
+ * 「额度恢复时提醒」走同一条渠道、另一个通知 ID 槽位：恢复通知不能覆盖掉
+ * 另一个窗口的低额度提醒（多窗口时两者可能同时成立）。
  */
 class QuotaAlertNotifier(
     private val context: Context,
@@ -37,6 +41,19 @@ class QuotaAlertNotifier(
     var enabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, true)
         set(value) = prefs.edit { putBoolean(KEY_ENABLED, value) }
+
+    /**
+     * 「额度恢复时提醒」开关（原型 s19-sw-back）。
+     *
+     * 只在有真实消费点时才加：关闭后仍记录恢复事件（主屏三态要展示「已恢复」），
+     * 只是不投递通知。
+     */
+    var recoverEnabled: Boolean
+        get() = prefs.getBoolean(KEY_RECOVER_ENABLED, true)
+        set(value) = prefs.edit { putBoolean(KEY_RECOVER_ENABLED, value) }
+
+    /** 恢复事件仓库：与主屏三态区共用同一份 prefs，见 [QuotaAlertTriadStore]。 */
+    private val triadStore = QuotaAlertTriadStore(context)
 
     /** 低余额阈值（各币种；默认 CNY 50）。 */
     fun lowBalanceThreshold(unit: QuotaUnit): BigDecimal? = when (unit) {
@@ -68,7 +85,14 @@ class QuotaAlertNotifier(
             lowBalanceThresholds = thresholds,
         )
         if (result.state != state) saveState(result.state)
-        if (result.alerts.isEmpty()) return 0
+        // 恢复事件先落盘：主屏三态区要能展示「已恢复」，这一条与恢复通知开关无关
+        triadStore.append(result.recoveries)
+        var sentRecoveries = 0
+        if (result.recoveries.isNotEmpty() && recoverEnabled) {
+            postRecoveries(instanceId, providerName, result.recoveries)
+            sentRecoveries = result.recoveries.size
+        }
+        if (result.alerts.isEmpty()) return sentRecoveries
 
         // 同一次刷新多条命中合并成一条，避免连发轰炸
         val first = result.alerts.first()
@@ -82,7 +106,31 @@ class QuotaAlertNotifier(
             alert.bodyText(unitOf[alert.key.substringAfterLast('.')] ?: QuotaUnit.PERCENT)
         }
         post(notificationIdOf(instanceId), title, body)
-        return result.alerts.size
+        return sentRecoveries + result.alerts.size
+    }
+
+    /** 恢复通知：同一次刷新多条恢复合并成一条，正文逐项写「4% → 96%」。 */
+    private fun postRecoveries(
+        instanceId: String,
+        providerName: String,
+        recoveries: List<QuotaAlertEvaluator.Recovery>,
+    ) {
+        val title = if (recoveries.size == 1) {
+            val one = recoveries.first()
+            "${providerName} · ${one.itemTitle}额度已恢复"
+        } else {
+            "${providerName} · ${recoveries.size} 项额度已恢复"
+        }
+        val body = recoveries.joinToString("；") { recovery ->
+            val amount = recovery.remainingAmount
+            val unit = recovery.unit
+            if (amount != null && unit != null) {
+                "余额回升到 ${unit.symbol}${amount.stripTrailingZeros().toPlainString()}"
+            } else {
+                "${recovery.fromPercent}% → ${recovery.toPercent}%"
+            }
+        }
+        post(recoveryNotificationIdOf(instanceId), title, body)
     }
 
     // MARK: - 通知
@@ -173,6 +221,9 @@ class QuotaAlertNotifier(
         const val PREFS_NAME = "quota_alerts"
         const val KEY_STATE = "alert_state"
         const val KEY_ENABLED = "alerts_enabled"
+
+        /** 「额度恢复时提醒」（原型 s19-sw-back）；与 [com.bsfeng.monitor.ui.quota.QuotaAlertPrefs] 同键。 */
+        const val KEY_RECOVER_ENABLED = "recover_alerts_enabled"
         const val KEY_LOW_CNY = "low_balance_cny"
         const val KEY_LOW_USD = "low_balance_usd"
 
@@ -204,5 +255,12 @@ class QuotaAlertNotifier(
          */
         fun notificationIdOf(instanceId: String): Int =
             NOTIFICATION_ID + instanceId.hashCode().absoluteValue % NOTIFICATION_SPAN
+
+        /** 恢复通知的第一个槽位：与低额度提醒区间错开 1000，两者同时成立时互不覆盖。 */
+        private const val RECOVERY_NOTIFICATION_ID = 8301
+
+        /** 恢复通知 ID：同账号稳定派生，不同账号不互相覆盖。 */
+        fun recoveryNotificationIdOf(instanceId: String): Int =
+            RECOVERY_NOTIFICATION_ID + instanceId.hashCode().absoluteValue % NOTIFICATION_SPAN
     }
 }
