@@ -1,7 +1,7 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/MainScreen.kt 拆出：实时事件流的「今日活跃强度」热力区块。
-// 只接收值与回调，状态仍由 MainScreen 持有。锚点：s02-heatwrap。
+// 从 ui/MainScreen.kt 拆出：实时事件流的「今日活跃强度」热力区块与「今日事件构成」横条组。
+// 只接收值与回调，状态仍由 MainScreen 持有。锚点：s02-heatwrap / s02-compose。
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,11 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.bsfeng.monitor.domain.model.RecordType
+import com.bsfeng.monitor.ui.components.AppCard
+import com.bsfeng.monitor.ui.components.BarRow
+import com.bsfeng.monitor.ui.components.BarRows
 import com.bsfeng.monitor.ui.components.HeatBar
+import com.bsfeng.monitor.ui.live.CardHead
 import com.bsfeng.monitor.ui.live.MetaText
+import com.bsfeng.monitor.ui.live.eventComposeRows
 import com.bsfeng.monitor.ui.live.peakOf
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.heatHeight
@@ -84,6 +91,41 @@ internal fun LiveIntensityPanel(hourlyIntensity: List<Float>, modifier: Modifier
                     .height(EMPTY_TRACK_HEIGHT)
                     .background(t.borderSoft, RoundedCornerShape(EMPTY_TRACK_RADIUS)),
             )
+        }
+    }
+}
+
+/**
+ * 今日事件构成（锚点 s02-compose）：卡头 + 6 行横条。
+ *
+ * 数据来自 MainViewModel 的 typeCounts（每轮刷新按记录类型分组计数），不在前端写死样例数；
+ * 行序与条色按原型固定，条长 = 条数 / 今日总数（分母即页头与 chip 的同一个 todayEventCount）。
+ */
+@Composable
+internal fun LiveComposeCard(
+    typeCounts: Map<RecordType, Int>,
+    total: Int,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val counts = remember(typeCounts, total) { eventComposeRows(typeCounts, total) }
+    // 原型 s02-实时事件流.html:204-212 的条色：应用 chart-2 / 屏幕 chart-1 / 网络 chart-4 /
+    // 充电 chart-3 / 音频 chart-6 / 其他 chart-8。分类色板跨主题固定，不跟强调色走。
+    val colors = listOf(t.chart2, t.chart1, t.chart4, t.chart3, t.chart6, t.chart8)
+    val rows = counts.mapIndexed { index, row ->
+        BarRow(label = row.label, value = row.count, color = colors[index % colors.size])
+    }
+    // 锚点挂在 .pad 满宽外层（同 s03-stat 的处置）：卡片本身在内层吃 16 内边距。
+    Box(modifier.fillMaxWidth()) {
+        Box(Modifier.padding(horizontal = t.space4)) {
+            AppCard {
+                CardHead(
+                    "今日事件构成",
+                    total.toString() + " 条 · " + rows.count { it.value > 0 } + " 类",
+                )
+                Spacer(Modifier.height(t.space2))
+                BarRows(rows = rows, unit = "条", total = total)
+            }
         }
     }
 }

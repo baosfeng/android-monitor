@@ -23,11 +23,11 @@ import com.bsfeng.monitor.ui.theme.chartRamp
 import com.bsfeng.monitor.ui.theme.heatHeight
 
 /**
- * s01 今日概览的占位实现（骨架已可用，正式内容由 W1 接手）。
+ * s01 今日概览的旧占位实现与两个转发函数。
  *
- * s12 组件与五态展厅 / s13 外观已由 W1 交付为正式屏（ui/ComponentGalleryScreen.kt、ui/AppearanceScreen.kt），
- * 本文件末尾保留两个同名转发函数，只为了让 MainActivity 现有的 ui.components.* import 继续成立
- * （MainActivity 属导航任务的写 scope，W1 不改它）。导航任务接线后可直接删掉这两个转发。
+ * s12 / s13 的正式屏在 ui/ComponentGalleryScreen.kt、ui/AppearanceScreen.kt；
+ * 本文件末尾的同名转发函数仍被 MainActivity / MainContent / MainOverlays / SettingsScreen
+ * 通过 ui.components.* 导入，故整文件保留，导航改指向 ui 包后即可删除。
  */
 
 @Composable
@@ -79,7 +79,7 @@ private val HOURS_24 = listOf(
     36f, 30f, 24f, 32f, 44f, 52f, 46f, 38f, 30f, 22f, 14f, 7f,
 )
 
-/** s01 今日概览（占位，W1 接手正式内容）。 */
+/** s01 今日概览（旧占位，无调用方；正式屏在 ui/OverviewScreen.kt）。 */
 @Composable
 fun OverviewScreen(
     onOpenGallery: () -> Unit,
@@ -89,7 +89,8 @@ fun OverviewScreen(
     val t = LocalDesignTokens.current
     ScreenShell(
         title = "今日概览",
-        subtitle = "占位屏 · s01 由 W1 实现",
+        // 副标题原为开发占位说明，已清空；该屏无调用方，正式概览在 ui/OverviewScreen.kt
+        subtitle = "",
         onBack = null,
         modifier = modifier,
     ) {
@@ -149,15 +150,10 @@ fun OverviewScreen(
             Chip("组件展厅 s12", selected = false, onClick = onOpenGallery, modifier = Modifier.weight(1f))
             Chip("外观 s13", selected = false, onClick = onOpenAppearance, modifier = Modifier.weight(1f))
         }
-        Text(
-            "说明：s01 正式内容（真实数据接入、快捷入口）由 W1 补齐；本轮只交付设计地基与外壳。",
-            style = MaterialTheme.typography.labelSmall,
-            color = t.meta,
-        )
     }
 }
 
-// ── s12 / s13 转发（真实屏在 ui/ 包；导航任务接线后可直接删除本段）──────────────
+// ── s12 / s13 转发（真实屏在 ui/ 包；调用方改指向 ui 包后可删除本段）──────────────
 
 /** s12 组件与五态展示厅（转发到 com.bsfeng.monitor.ui.ComponentGalleryScreen）。 */
 @Composable

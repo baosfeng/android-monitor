@@ -1,6 +1,6 @@
 package com.bsfeng.monitor.ui
 
-// 从 ui/MainScreen.kt 拆出：实时页的事件详情抽屉 —— 标题 + 类型徽标 + 口径字段行 + 关闭/复制 JSON。
+// 从 ui/MainScreen.kt 拆出：实时页的事件详情抽屉 —— 标题 + 类型徽标 + 口径字段行 + 关闭/复制详情。
 // 锚点：s02-drawer-page / s02-drawer-notification。遮罩由 BottomSheet 的窗口级全屏浮层承担。
 
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +33,7 @@ import com.bsfeng.monitor.ui.live.recordSubtitle
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import org.json.JSONObject
 
-private const val TOAST_COPIED = "已复制事件 JSON"
+private const val TOAST_COPIED = "已复制事件详情"
 
 /** 通知事件的敏感字段：原文永不展示、也不进剪贴板，只给长度。 */
 private val NOTIFICATION_PRIVATE_KEYS = setOf(
@@ -124,7 +124,7 @@ fun EventDetailSheet(
                         modifier = Modifier.weight(1f),
                     )
                     LiveActionButton(
-                        label = "复制 JSON",
+                        label = "复制详情",
                         onClick = {
                             clipboard.setText(AnnotatedString(recordJson(record, redact = isNotification)))
                             toast.show(TOAST_COPIED)

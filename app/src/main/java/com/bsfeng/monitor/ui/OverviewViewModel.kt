@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
  *
  * 异常原文（含 SQLite 错误码 / 表名）只进日志，上屏一律这句。
  */
-internal const val LOAD_ERROR_DESC = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
+internal const val LOAD_ERROR_DESC = "本地数据库暂时不可用。稍后重试即可，已采集的事件不会丢失。"
 
 /** 一种事件类型 + 条数（环图 / 图例 / 排行用）。 */
 data class TypeSlice(val label: String, val count: Int)

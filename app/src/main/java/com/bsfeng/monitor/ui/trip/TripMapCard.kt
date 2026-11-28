@@ -398,8 +398,8 @@ private fun TraceConfidenceKey() {
 private fun TraceCoarseDayNote() {
     val t = LocalDesignTokens.current
     Text(
-        text = "坐标只存 3 位小数（≈${TracePrecision.COARSE_RESOLUTION_METERS}m），这天不做平滑：" +
-            "阶梯是量化造成的",
+        text = "这天的定位精度约 ${TracePrecision.COARSE_RESOLUTION_METERS} 米，轨迹按原始采样显示，" +
+            "可能出现台阶。",
         modifier = Modifier.fillMaxWidth().padding(top = t.space1),
         style = MaterialTheme.typography.labelSmall,
         color = t.muted,

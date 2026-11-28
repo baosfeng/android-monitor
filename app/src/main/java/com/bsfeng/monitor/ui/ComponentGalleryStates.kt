@@ -118,7 +118,7 @@ private fun GalleryErrorState(toast: ToastHostState) {
     // 不引第三方计时器；点一次加一，effect 到点后清空 → 空 = 可重试。
     var retryLock by remember { mutableIntStateOf(0) }
     ErrorState(
-        text = "数据库连接已断开（SQLITE_BUSY），未返回任何记录。",
+        text = "数据库连接已断开，未返回任何记录。",
         title = "数据加载失败",
         onRetry = {
             if (retryLock == 0) {

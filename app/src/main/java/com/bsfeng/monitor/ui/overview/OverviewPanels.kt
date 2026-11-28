@@ -150,20 +150,22 @@ internal fun LazyListScope.todayPanelS01(
                     delta = "较昨日 " + signedDelta(eventDelta),
                     deltaTone = toneOf(eventDelta),
                     spark = state.dailyEventCounts7,
+                    tone = KpiTone.EVENTS,
                     modifier = Modifier.testTag("s01-kpi-events").weight(1f).fillMaxHeight().staggerEnterAt(0),
                     onHaptic = onHaptic,
-                ) { replay ->
-                    RollingInt(state.todayEventCount, replay, t0Fg = LocalDesignTokens.current.fg)
+                ) { replay, valueColor ->
+                    RollingInt(state.todayEventCount, replay, valueColor)
                 }
                 OverviewKpiCard(
                     label = "活跃",
                     delta = "较昨日 " + signedMinutes(activeDelta),
                     deltaTone = toneOf(activeDelta),
                     spark = state.dailyActiveMinutes7,
+                    tone = KpiTone.ACTIVE,
                     modifier = Modifier.testTag("s01-kpi-active").weight(1f).fillMaxHeight().staggerEnterAt(1),
                     onHaptic = onHaptic,
-                ) { replay ->
-                    RollingActive(state.todayActiveMinutes, replay)
+                ) { replay, valueColor ->
+                    RollingActive(state.todayActiveMinutes, replay, valueColor)
                 }
             }
             Row(
@@ -176,19 +178,21 @@ internal fun LazyListScope.todayPanelS01(
                     delta = "较昨日 " + signedDelta(skipDelta),
                     deltaTone = toneOf(skipDelta),
                     spark = state.dailySkipCounts7,
+                    tone = KpiTone.SKIP,
                     modifier = Modifier.testTag("s01-kpi-skip").weight(1f).fillMaxHeight().staggerEnterAt(2),
                     onHaptic = onHaptic,
-                ) { replay ->
-                    RollingInt(state.todaySkipCount, replay, t0Fg = LocalDesignTokens.current.fg)
+                ) { replay, valueColor ->
+                    RollingInt(state.todaySkipCount, replay, valueColor)
                 }
                 OverviewKpiCard(
                     label = "今日支出",
                     delta = "收入 ¥" + money(state.todayIncome) + " · 结余 ¥" + money(state.todayIncome - state.todayExpense),
                     deltaTone = toneOf(state.todayIncome - state.todayExpense),
+                    tone = KpiTone.SPEND,
                     modifier = Modifier.testTag("s01-kpi-spend").weight(1f).fillMaxHeight().staggerEnterAt(3),
                     onHaptic = onHaptic,
-                ) { replay ->
-                    RollingMoney(state.todayExpense, replay)
+                ) { replay, valueColor ->
+                    RollingMoney(state.todayExpense, replay, valueColor)
                 }
             }
         }

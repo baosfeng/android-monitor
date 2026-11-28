@@ -358,7 +358,7 @@ fun TripScreen(
 }
 
 /** 错态兜底文案（VM 已给可读文案，这里只防 null）。 */
-private const val DEFAULT_ERROR_TEXT = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
+private const val DEFAULT_ERROR_TEXT = "本地数据库暂时不可用。稍后重试即可，已采集的事件不会丢失。"
 
 // 页头（TripHead）与「开启定位后可显示距离与地址」提示行（TripLocationHint，在口径说明卡内）
 // 已按职责拆到 ui/trip/TripHead.kt 与 ui/trip/TripRulesCard.kt。

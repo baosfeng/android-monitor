@@ -149,9 +149,9 @@ class HomeWindowRefreshTest {
                 assertTrue("上屏文案不得携带异常原文痕迹 $leak：$text", !text.contains(leak))
             }
         }
-        // 锚点 s03-error 逐字（本次只改来源、不改文案）
+        // 锚点 s03-error 逐字（文案已去掉 SQLite 错误码，仍保持 VM/常量单一来源）
         assertEquals(
-            "跳过事件表暂时被占用（SQLITE_BUSY）。已跳过的广告不会重复出现。",
+            "跳过记录暂时读不到。已跳过的广告不会重复出现。",
             AD_LOAD_ERROR_DESC,
         )
     }

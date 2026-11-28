@@ -47,7 +47,11 @@ import androidx.compose.ui.unit.dp
 import com.bsfeng.monitor.ui.components.AnimatedNumber
 import com.bsfeng.monitor.ui.components.AppCard
 import com.bsfeng.monitor.ui.components.BarChart
+import com.bsfeng.monitor.ui.components.BarRow
+import com.bsfeng.monitor.ui.components.BarRows
 import com.bsfeng.monitor.ui.components.ChartAxisLabels
+import com.bsfeng.monitor.ui.components.ChartFrame
+import com.bsfeng.monitor.ui.components.ChartFrameKind
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
@@ -248,6 +252,55 @@ internal fun AdTrendBlock(
         if (extras.isNotEmpty()) {
             Spacer(Modifier.height(t.space1))
             MetaText(extras)
+        }
+    }
+}
+
+/**
+ * 命中方式 + 跳过耗时（锚点 s03-breakdown）：三行横条 + 4 桶耗时柱图。
+ *
+ * 数据全部来自近 7 天真实记录：[SkipMethodCounts] 由 [SkipRecord.method] 计数，
+ * 耗时取 cost_ms 分桶。没有任何 cost_ms 样本时，耗时段（说明行 + 柱图）整段不渲染 ——
+ * 与趋势卡 [reviewExtras]「缺项不出现」同一口径，不留「中位 — ms」占位。
+ */
+@Composable
+internal fun AdBreakdownBlock(
+    records: List<SkipRecord>,
+    totalCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val t = LocalDesignTokens.current
+    val methodCounts = remember(records) { skipMethodCounts(records) }
+    val costBuckets = remember(records) { skipCostBuckets(records) }
+    val cost = remember(records) { skipCostSummary(records) }
+    AppCard(modifier = modifier) {
+        CardHead("命中方式", "近 " + AD_WINDOW_DAYS + " 天 · " + totalCount + " 次")
+        Spacer(Modifier.height(t.space2))
+        // 原型 s03-广告跳过记录.html:191-195 的条色：规则匹配 chart-2 / 坐标兜底 chart-1 /
+        // 无障碍 chart-3；分母是近 7 天总次数（与卡头 meta 同源）。
+        BarRows(
+            rows = listOf(
+                BarRow("规则匹配", methodCounts.rule, t.chart2),
+                BarRow("坐标兜底", methodCounts.coord, t.chart1),
+                BarRow("无障碍", methodCounts.a11y, t.chart3),
+            ),
+            unit = "次",
+            total = totalCount,
+        )
+        if (cost != null) {
+            Spacer(Modifier.height(t.space3))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MetaText("跳过耗时")
+                MetaText("中位 " + cost.medianMs + " ms · 最慢 " + cost.maxMs + " ms")
+            }
+            Spacer(Modifier.height(t.space2))
+            // 与趋势卡同口径：图高扣掉一个 space-4，让位给 ChartFrame 自带的 X 轴刻度行。
+            ChartFrame(
+                values = costBuckets.map { it.toFloat() },
+                xLabels = SKIP_COST_BUCKET_LABELS,
+                kind = ChartFrameKind.Bars,
+                height = t.chartH - t.space4,
+            )
         }
     }
 }

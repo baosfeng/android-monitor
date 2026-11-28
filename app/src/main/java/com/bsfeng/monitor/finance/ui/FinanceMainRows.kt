@@ -556,7 +556,7 @@ internal fun S04EdgeBlock() {
         }
         Spacer(Modifier.height(t.space3))
         Text(
-            "超长分类名与超长备注（单行截断）",
+            "超长分类名与超长备注",
             style = MaterialTheme.typography.labelMedium,
             color = t.muted,
             modifier = Modifier
@@ -568,7 +568,7 @@ internal fun S04EdgeBlock() {
                 categoryName = "电商",
                 iconColor = categoryColorOf("电商"),
                 title = "购物 · 双十一预售定金与尾款合并自动分期",
-                subtitle = "备注相当长：用于验证单行截断与省略号在超长文本下不撑破布局",
+                subtitle = "双十一预售的定金和尾款分两笔扣的，银行短信只合并显示一条，先按分期记着，等账单出来再核一遍金额",
                 amountText = "-¥1,234,567.89",
                 amountColor = t.expenseText,
                 modifier = Modifier.testTag("s04-edge-tx"),

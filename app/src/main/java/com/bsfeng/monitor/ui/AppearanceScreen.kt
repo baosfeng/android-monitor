@@ -196,7 +196,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
                     // 本态只有 44dp 图标 + 标题 + 描述 + 一个按钮；不渲染网格与预览
                     FiveState.EMPTY -> EmptyState(
-                        text = "未在本地找到任何主题 token，将回退到默认 " +
+                        text = "未找到可用的主题配置，已回退到默认 " +
                             ThemeRepository.displayName(ThemeRepository.DEFAULT_THEME) + "。",
                         title = "主题列表为空",
                         modifier = Modifier.testTag("s13-st-empty"),
@@ -209,7 +209,7 @@ fun AppearanceScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             AppearanceLoadingBlock(Modifier.testTag("s13-st-loading"))
                         } else {
                             ErrorState(
-                                text = "token 解析异常：--accent 缺失，已保留上一个生效主题（" +
+                                text = "主题配置读取失败，已保留上一个生效的主题（" +
                                     ThemeRepository.displayName(current) + "）。",
                                 title = "主题应用失败",
                                 modifier = Modifier.testTag("s13-st-error"),
@@ -423,7 +423,7 @@ private fun AppearanceNoteCard(currentId: String, modifier: Modifier = Modifier)
         // 原型 .note 内：.meta 三段共 61.73（3 × 20.58，14px × 1.47）+ .fine 17.63（mt 8，12px × 1.47）
         Box(Modifier.height(NOTE_META_LINE * 3)) {
             Text(
-                "8 套主题的差异全部由 token 承载（底色、文字、描边、圆角、字号、图表灰阶），没有一屏写死颜色，也没有按主题分支的样式。",
+                "8 套主题只换颜色与字阶，卡片、间距、版式完全一致；没有一屏写死颜色，也没有按主题分支的样式。",
                 style = MaterialTheme.typography.bodySmall,
                 color = t.fg2,
                 modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
@@ -458,7 +458,7 @@ private fun AppearanceEdgeBlock(modifier: Modifier = Modifier) {
     AppCard(modifier = modifier, padding = 0.dp) {
         EdgeSampleRow(
             title = "超长主题名：墨青 · Kami（含中日韩字形回退与等宽数字变体）",
-            subtitle = "含 10,286 个 token 覆盖测试",
+            subtitle = "覆盖 10,286 个设计变量",
             trailing = "10,286",
         )
         TokenDivider(first = false)

@@ -71,6 +71,7 @@ import com.bsfeng.monitor.ui.components.FiveState
 import com.bsfeng.monitor.ui.components.StateSkeleton
 import com.bsfeng.monitor.ui.components.keyboardFocusRing
 import com.bsfeng.monitor.ui.components.rememberToastHostState
+import com.bsfeng.monitor.ui.components.staggerEnterAt
 import com.bsfeng.monitor.ui.foundation.HapticTone
 import com.bsfeng.monitor.ui.foundation.pressFeedback
 import com.bsfeng.monitor.ui.foundation.rememberHaptic
@@ -98,14 +99,14 @@ private const val EMPTY_ACTION = "刷新试试"
 private const val EMPTY_DESC_READY = "无障碍服务已就绪。屏幕、应用、网络与充电一旦变化，就会按小时汇总到这里。"
 private const val EMPTY_DESC_DENIED = "无障碍服务未授权（设置 → 无障碍服务 → 去开启）。开启后，屏幕、应用、网络与充电事件会自动汇总到这里。"
 private const val ERROR_TITLE = "事件流读取失败"
-private const val ERROR_DESC = "采集服务无响应（AccessibilityService 未连接）。已落库的事件仍可查看。"
+private const val ERROR_DESC = "无障碍服务未连接，暂时收不到新事件。已记录的事件仍可查看。"
 private const val ERROR_ACTION = "重新连接"
 private const val EDGE_BADGE = "11,342 条"
 /** 边界态超长行样例：仅调试演示可达（batch1.md §5 T2），产品页不会渲染。 */
 private const val EDGE_SAMPLE =
-    "微信（com.tencent.mm）· 前台使用 128 分钟 32 秒 · 这是一条刻意超长的应用名用来验证单行省略"
+    "微信 · 前台使用 128 分钟 32 秒 · 应用名很长时这一行会省略尾部，右侧箭头保持可见"
 private const val EDGE_TEXT = "今日窗口已满"
-private const val FILTER_TIP = "已按类型筛选 · 组头的「条数」仅在全部视图下显示"
+private const val FILTER_TIP = "已按类型筛选"
 
 /**
  * s02 实时事件流（原型 .open-design/src/screens/s02-实时事件流.html）。
@@ -221,6 +222,17 @@ fun MainScreen(
 
             if (filter != LiveFilter.ALL) {
                 LiveFilterTip()
+            }
+
+            // 原型 s02-compose（今日事件构成）在 filter-tip 之后、时间线之前，且属于
+            // data-state-hide="loading empty error" 的内容区：只在有数据时出现。
+            if (shownState == FiveState.POPULATED) {
+                Spacer(Modifier.height(t.space3))
+                LiveComposeCard(
+                    typeCounts = state.typeCounts,
+                    total = state.todayEventCount,
+                    modifier = Modifier.testTag("s02-compose").staggerEnterAt(1),
+                )
             }
 
             // 原型时间线容器是 .pad.stack.mt-3（上外边距 12）

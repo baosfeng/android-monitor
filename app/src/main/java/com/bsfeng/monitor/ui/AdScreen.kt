@@ -314,7 +314,7 @@ fun AdScreen(
 
                     FiveState.EDGE -> EdgeState(
                         // 该态真实数据不可达（只有调试演示条能强制，batch1.md §5 T2）
-                        text = "超长应用名与万级计数用于验证截断；缺失字段以「—」占位。",
+                        text = "应用名很长时的显示效果；缺失信息用「—」占位。",
                         modifier = Modifier.testTag("s03-edge"),
                     ) {
                         AdEdgeContent()
@@ -322,6 +322,7 @@ fun AdScreen(
 
                     FiveState.POPULATED -> AdRecordList(
                         visible = visible,
+                        allRecords = records,
                         methodIndex = methodIndex,
                         chipItems = chipItems,
                         totalCount = totalCount,
@@ -469,6 +470,11 @@ private fun AdRefreshButton(
 @Composable
 internal fun AdRecordList(
     visible: List<SkipRecord>,
+    /**
+     * 近 7 天全量记录（命中方式分布的分母与来源）。默认取 [visible]：
+     * 生产调用点显式传全量，避免「命中方式」被当前 chip 筛选截断；单测只构造一档时不必重写。
+     */
+    allRecords: List<SkipRecord> = visible,
     methodIndex: Int,
     chipItems: List<String>,
     totalCount: Int,
@@ -507,6 +513,18 @@ internal fun AdRecordList(
                         onReplay = onReplay,
                         onOpenRules = onOpenRules,
                     )
+                }
+            }
+        }
+
+        item(key = "gap-before-breakdown") { Spacer(Modifier.height(t.space3)) }
+
+        // 原型 s03-breakdown（命中方式 + 跳过耗时）在摘要条与记录区之间；
+        // 锚点同样挂满宽外层（x=0 / w=393），卡片在内层吃 16 内边距。
+        item(key = "breakdown") {
+            Box(Modifier.fillMaxWidth().testTag("s03-breakdown").staggerEnterAt(1)) {
+                Box(Modifier.padding(horizontal = t.space4)) {
+                    AdBreakdownBlock(records = allRecords, totalCount = totalCount)
                 }
             }
         }
@@ -593,7 +611,7 @@ internal fun AdRecordList(
 
         item(key = "trend") {
             // 原型锚点 s03-bars 挂在 .pad 外层（x=0 / w=393），趋势卡在内层吃 16 内边距。
-            Box(Modifier.fillMaxWidth().testTag("s03-bars").staggerEnterAt(1)) {
+            Box(Modifier.fillMaxWidth().testTag("s03-bars").staggerEnterAt(2)) {
                 Box(Modifier.padding(horizontal = t.space4)) {
                     AdTrendBlock(
                         dailyCounts7 = dailyCounts7,

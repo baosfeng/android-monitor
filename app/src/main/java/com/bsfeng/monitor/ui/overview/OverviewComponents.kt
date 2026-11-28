@@ -47,11 +47,14 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -104,6 +107,7 @@ import com.bsfeng.monitor.ui.live.peakOf
 import com.bsfeng.monitor.ui.live.rollingHourAxisLabels
 import com.bsfeng.monitor.ui.live.rollingHourStartAt
 import com.bsfeng.monitor.ui.live.weekdayLabel
+import com.bsfeng.monitor.ui.theme.DesignTokens
 import com.bsfeng.monitor.ui.theme.LocalDesignTokens
 import com.bsfeng.monitor.ui.theme.categoryDot
 import com.bsfeng.monitor.ui.theme.fgFade
@@ -362,7 +366,40 @@ internal fun DeltaText(text: String, tone: DeltaTone, modifier: Modifier = Modif
     )
 }
 
-/** 可点 KPI 卡：0.96 按下 + LIGHT 触感 + 键盘焦点环；点击只重播数字滚动（锚点 s01-kpi-* click）。 */
+/**
+ * 原型 .kpi[data-tone] 的六档语义色（.open-design/src/styles/20-base.html:275-286）。
+ *
+ * 只有显式指定 tone 的瓦片才上色条与淡彩，默认 null 的卡片与改动前完全一致。
+ * 色值全部取数据色 token、不新增色板：events→chart-1 / active→chart-2 / skip→chart-3 /
+ * spend→chart-5；income→chart-4、balance→chart-6 为记账页同款口径预留。
+ */
+internal enum class KpiTone {
+    EVENTS, ACTIVE, SKIP, SPEND, INCOME, BALANCE;
+
+    fun baseColor(t: DesignTokens): Color = when (this) {
+        EVENTS -> t.chart1
+        ACTIVE -> t.chart2
+        SKIP -> t.chart3
+        SPEND -> t.chart5
+        INCOME -> t.chart4
+        BALANCE -> t.chart6
+    }
+}
+
+/** 原型 color-mix 比例：卡底 7% 原色 / 主数值 78% 原色 + 22% fg / 标签 52% 原色 + 48% fg。 */
+private const val KPI_BG_MIX = 0.07f
+private const val KPI_VALUE_MIX = 0.78f
+private const val KPI_LABEL_MIX = 0.52f
+
+/** 原型 `box-shadow: inset 0 3px 0 var(--k)` 的色条高度。 */
+private val KPI_TONE_BAR_H = 3.dp
+
+/**
+ * 可点 KPI 卡：0.96 按下 + LIGHT 触感 + 键盘焦点环；点击只重播数字滚动（锚点 s01-kpi-* click）。
+ *
+ * [tone] 对应原型 data-tone：给出时顶部加 3dp 色条、卡底 7% 语义淡彩，主数值与标签走
+ * color-mix 混色（78% / 52% 原色）；不传即改动前的中性卡，其他调用点无需改动。
+ */
 @Composable
 internal fun OverviewKpiCard(
     label: String,
@@ -371,17 +408,31 @@ internal fun OverviewKpiCard(
     delta: String? = null,
     deltaTone: DeltaTone = DeltaTone.MUTED,
     spark: List<Float>? = null,
+    tone: KpiTone? = null,
     onHaptic: (HapticTone) -> Unit,
-    value: @Composable (Int) -> Unit,
+    value: @Composable (replay: Int, valueColor: Color) -> Unit,
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusLg)
+    val toneColor = tone?.baseColor(t)
+    // 文字色按原型 color-mix 混 fg：78% 原色保色相（28sp 大号文本 AA 3:1 之上），
+    // 标签 52% 原色 + 48% fg 保证 14sp 小字仍过 4.5:1；不传 tone 时沿用原中性色。
+    val valueColor = if (toneColor != null) lerp(t.fg, toneColor, KPI_VALUE_MIX) else t.fg
+    val labelColor = if (toneColor != null) lerp(t.fg, toneColor, KPI_LABEL_MIX) else t.meta
+    val cardBg = if (toneColor != null) lerp(t.surface, toneColor, KPI_BG_MIX) else t.surface
     val interaction = remember { MutableInteractionSource() }
     var replay by remember { mutableIntStateOf(0) }
     Column(
         modifier = modifier
             .clip(shape)
-            .background(t.surface)
+            .background(cardBg)
+            // 原型 inset 色条画在背景之上、1dp 描边之下：与 CSS inset box-shadow 同层，
+            // 顶边仍保留边框色，色条看起来从边框内侧开始。
+            .drawBehind {
+                if (toneColor != null) {
+                    drawRect(toneColor, size = Size(size.width, KPI_TONE_BAR_H.toPx()))
+                }
+            }
             .border(1.dp, t.borderSoft, shape)
             .pressFeedback(interaction)
             .keyboardFocusRing(shape)
@@ -398,7 +449,7 @@ internal fun OverviewKpiCard(
             label,
             // 原型 .kpi-label 是 14px（labelSmall 的 12sp 会小一档，字号对照会报 P0）
             style = MaterialTheme.typography.bodySmall,
-            color = t.meta,
+            color = labelColor,
             modifier = Modifier.testTag("kpi.card"),
         )
         // 原型 .kpi-value 的盒高就是 30.8（line-height 1.1）；不钉住的话 CJK 字体的自然行盒
@@ -407,7 +458,7 @@ internal fun OverviewKpiCard(
             modifier = Modifier.height(KpiValueLineHeight.value.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            value(replay)
+            value(replay, valueColor)
             if (unit != null) {
                 Spacer(Modifier.width(t.space1))
                 Text(unit, style = MaterialTheme.typography.labelMedium, color = t.muted)
@@ -478,20 +529,20 @@ private val KpiValueLineHeight = 30.8.sp
 
 /** 整数滚动 + 千分位；replay 变化即从 0 重播（600ms 取组件内 t.durChart）。 */
 @Composable
-internal fun RollingInt(value: Int, replay: Int, t0Fg: Color) {
+internal fun RollingInt(value: Int, replay: Int, valueColor: Color) {
     val style = MaterialTheme.typography.headlineMedium.copy(
         fontFamily = FontFamily.Monospace,
         lineHeight = KpiValueLineHeight,
     )
     key(replay) {
         val shown = com.bsfeng.monitor.ui.components.animatedCount(value)
-        Text(thousands(shown), style = style, color = t0Fg)
+        Text(thousands(shown), style = style, color = valueColor)
     }
 }
 
 /** h 与 m 两段同步从 0 滚入（锚点 s01-kpi-active）。 */
 @Composable
-internal fun RollingActive(minutes: Long, replay: Int) {
+internal fun RollingActive(minutes: Long, replay: Int, valueColor: Color) {
     val t = LocalDesignTokens.current
     val style = MaterialTheme.typography.headlineMedium.copy(
         fontFamily = FontFamily.Monospace,
@@ -502,7 +553,7 @@ internal fun RollingActive(minutes: Long, replay: Int) {
             Text(
                 com.bsfeng.monitor.ui.components.animatedCount((minutes / 60).toInt()).toString(),
                 style = style,
-                color = t.fg,
+                color = valueColor,
             )
         }
         Text("h", style = MaterialTheme.typography.labelMedium, color = t.muted)
@@ -511,7 +562,7 @@ internal fun RollingActive(minutes: Long, replay: Int) {
             Text(
                 com.bsfeng.monitor.ui.components.animatedCount((minutes % 60).toInt()).toString(),
                 style = style,
-                color = t.fg,
+                color = valueColor,
             )
         }
         Text("m", style = MaterialTheme.typography.labelMedium, color = t.muted)
@@ -520,15 +571,14 @@ internal fun RollingActive(minutes: Long, replay: Int) {
 
 /** 带 ¥ 前缀的金额滚动（千分位，锚点 s01-kpi-spend / 「¥0」）。 */
 @Composable
-internal fun RollingMoney(value: Double, replay: Int) {
-    val t = LocalDesignTokens.current
+internal fun RollingMoney(value: Double, replay: Int, valueColor: Color) {
     val style = MaterialTheme.typography.headlineMedium.copy(
         fontFamily = FontFamily.Monospace,
         lineHeight = KpiValueLineHeight,
     )
     key(replay) {
         val shown = com.bsfeng.monitor.ui.components.animatedAmount(value.toFloat())
-        Text("¥" + money(shown.toDouble()), style = style, color = t.fg)
+        Text("¥" + money(shown.toDouble()), style = style, color = valueColor)
     }
 }
 

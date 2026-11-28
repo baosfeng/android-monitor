@@ -28,7 +28,7 @@ import java.util.LinkedHashMap
  * 措辞逐字等于 TripScreen 的 DEFAULT_ERROR_TEXT：VM 已给文案时页面原样展示，
  * 只有 error 为 null（不该发生）才回落那句；两处必须同字，否则同一次失败会有两种说法。
  */
-internal const val TRIP_LOAD_ERROR_DESC = "本地数据库暂时不可用（SQLITE_BUSY）。稍后重试即可，已采集的事件不会丢失。"
+internal const val TRIP_LOAD_ERROR_DESC = "本地数据库暂时不可用。稍后重试即可，已采集的事件不会丢失。"
 
 data class TripState(
     val isLoading: Boolean = true,

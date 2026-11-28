@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  * 唯一来源：ViewModel 只置 [AdViewModel.loadError] 标记，文案从这里取。
  * 异常原文（SQLite 错误码 / 表名 / 路径）只进 Log.w，不上屏。
  */
-internal const val AD_LOAD_ERROR_DESC = "跳过事件表暂时被占用（SQLITE_BUSY）。已跳过的广告不会重复出现。"
+internal const val AD_LOAD_ERROR_DESC = "跳过记录暂时读不到。已跳过的广告不会重复出现。"
 
 /** 跳过方式（s03 筛选 chip）。 */
 enum class SkipMethod(val label: String) {

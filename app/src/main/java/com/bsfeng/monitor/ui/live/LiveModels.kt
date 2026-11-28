@@ -29,6 +29,33 @@ enum class LiveFilter(val label: String, val types: Set<RecordType>) {
 /** 按筛选条件过滤（保留原顺序）。 */
 fun List<Record>.matching(f: LiveFilter): List<Record> = this.filter { f.matches(it) }
 
+/** 「今日事件构成」的一行（锚点 s02-compose）：标签 + 条数。 */
+data class EventComposeRow(val label: String, val count: Int)
+
+/** 构成卡的行序：与原型 s02-实时事件流.html:204-212 一致（应用 / 屏幕 / 网络 / 充电 / 音频 / 其他）。 */
+private val COMPOSE_FILTERS = listOf(
+    LiveFilter.APP_USAGE,
+    LiveFilter.SCREEN,
+    LiveFilter.WIFI,
+    LiveFilter.CHARGING,
+    LiveFilter.AUDIO,
+)
+
+/**
+ * s02「今日事件构成」6 行：五类按 [LiveFilter] 的口径合计（与筛选 chip 的计数同源），
+ * 末行「其他」= 总数减去五类之和（不为负）。
+ *
+ * 不按条数重排：行序与条色是原型固定的，重排会让同一类型在两次刷新之间换行换色，
+ * 读者要重新找位置；条长本身已经表达了大小关系。
+ */
+fun eventComposeRows(typeCounts: Map<RecordType, Int>, total: Int): List<EventComposeRow> {
+    val rows = COMPOSE_FILTERS.map { f ->
+        EventComposeRow(f.label, f.types.sumOf { typeCounts[it] ?: 0 })
+    }
+    val rest = (total - rows.sumOf { it.count }).coerceAtLeast(0)
+    return rows + EventComposeRow("其他", rest)
+}
+
 /** 小时分组：组按小时倒序，组内按时间倒序。 */
 data class HourGroup(val hour: Int, val label: String, val events: List<Record>)
 
