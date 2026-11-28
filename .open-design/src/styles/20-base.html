@@ -274,10 +274,10 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 }
 /* 指标瓦片的语义色（页面语法 §5「每屏一处数据色面积」）：显式 data-tone 才上色条。
    色条用原色（图形），数字用 -ink 压暗档（文字要过 4.5:1）。 */
-.kpi[data-tone]{box-shadow:inset 0 3px 0 var(--k)}
-/* 数字与标签走 -ink 压暗档（:root 里的十六进制，verify 能解析；color-mix 会产出 color(srgb …) 让对比度检查失真） */
-.kpi[data-tone] .kpi-value{color:var(--k-ink,var(--fg))}
-.kpi[data-tone] .kpi-label{color:var(--k-ink,var(--muted))}
+.kpi[data-tone]{box-shadow:inset 0 3px 0 var(--k);background:color-mix(in srgb,var(--k) 7%,var(--surface))}
+/* 与实现侧同一口径：数值 78% 原色 + 22% 墨色（28px Bold，AA 3:1），标签 52%（14px，AA 4.5:1） */
+.kpi[data-tone] .kpi-value{color:color-mix(in srgb,var(--k) 78%,var(--fg))}
+.kpi[data-tone] .kpi-label{color:color-mix(in srgb,var(--k) 52%,var(--fg))}
 .kpi[data-tone="events"]{--k:var(--chart-1);--k-ink:var(--chart-1-ink)}
 .kpi[data-tone="active"]{--k:var(--chart-2);--k-ink:var(--chart-2-ink)}
 .kpi[data-tone="skip"]{--k:var(--chart-3);--k-ink:var(--chart-3-ink)}
