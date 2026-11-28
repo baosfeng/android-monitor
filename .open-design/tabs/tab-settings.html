@@ -1790,6 +1790,25 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .screen.s09 .s09-totp > .row:first-child{border-top:1px solid var(--border-soft)}
 .screen.s09 .s09-totp .badge{flex:0 0 auto;white-space:nowrap}
 .screen.s09 .s09-totp-note{display:block;line-height:1.45}
+
+/* ── 更新弹窗（s09-update）：更新记录按类型分组，长列表在框内滚动 ── */
+.screen.s09 .s09-upd-scrim{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:var(--scrim);padding:var(--space-4)}
+.screen.s09 .s09-upd{max-width:340px}
+.screen.s09 .s09-upd-h{font-size:var(--text-lg);font-weight:700;line-height:1.25}
+.screen.s09 .s09-upd-sub{font-size:var(--text-xs);color:var(--muted);line-height:1.35;margin-top:var(--space-1)}
+.screen.s09 .s09-upd-scrollwrap{position:relative;margin-top:var(--space-3)}
+.screen.s09 .s09-upd-scroll{max-height:300px;overflow-y:auto;padding-bottom:var(--space-2);margin-top:0}
+/* 底部渐隐：列表被截断时给「下面还有」的信号，不然用户以为只有这几条 */
+.screen.s09 .s09-upd-scrollwrap::after{content:"";position:absolute;left:0;right:0;bottom:0;height:32px;
+  background:linear-gradient(to bottom,transparent,var(--surface-warm));pointer-events:none}
+.screen.s09 .s09-upd-grp+.s09-upd-grp{margin-top:var(--space-3)}
+.screen.s09 .s09-upd-grp h3{display:flex;align-items:baseline;gap:var(--space-2);font-size:var(--text-sm);font-weight:700;color:var(--accent-text)}
+.screen.s09 .s09-upd-grp h3 span{font-size:var(--text-xs);font-weight:500;color:var(--muted)}
+.screen.s09 .s09-upd-list{list-style:none;margin:var(--space-1) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.screen.s09 .s09-upd-list li{display:grid;grid-template-columns:10px minmax(0,1fr);gap:var(--space-1);font-size:var(--text-sm);color:var(--fg-2);line-height:1.4}
+.screen.s09 .s09-upd-list li::before{content:"·";color:var(--muted)}
+.screen.s09 .s09-upd-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-4)}
+.screen.s09 .s09-upd-actions .btn,.screen.s09 .s09-upd-actions .btn-ghost{width:100%;min-height:var(--tap-min)}
 </style>
 
 <style data-for="s10">
@@ -2646,7 +2665,8 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             </span>
             <span class="row-tail"><span class="num set-count">1.0.0</span></span>
           </div>
-          <button class="row" type="button" onclick="App.toast('已是最新版本 1.0.0')">
+          <button class="row" type="button" data-act="open-update"
+            onclick="document.getElementById('s09-upd-scrim').hidden=false">
             <span class="row-body"><span class="row-title">检查更新</span></span>
             <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
           </button>
@@ -2654,6 +2674,57 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
             <span class="row-body"><span class="row-title">开源许可</span></span>
             <span class="row-tail"><svg class="chev" viewBox="0 0 24 24" aria-hidden><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scrim s09-upd-scrim" id="s09-upd-scrim" hidden data-od-id="s09-update">
+      <div class="dialog s09-upd" role="dialog" aria-modal="true" aria-labelledby="s09-upd-title">
+        <h2 class="s09-upd-h" id="s09-upd-title">发现新版本 1.4.0</h2>
+        <p class="s09-upd-sub">当前 1.0.0 → 1.4.0 · 11-28 发布 · 20 项更新</p>
+        <div class="s09-upd-scrollwrap">
+        <div class="s09-upd-scroll" data-od-id="s09-update-list">
+          <section class="s09-upd-grp">
+            <h3>新增 <span>5 项</span></h3>
+            <ul class="s09-upd-list">
+              <li>每日行程时间轴改为倒序显示（最新段在最上）</li>
+              <li>轨迹线按精度分档：低置信段画虚线</li>
+              <li>跨天边界的未记录并入同一地点停留</li>
+              <li>未记录段按成因分文案（采集中断 / 定位不足）</li>
+              <li>全站可交互元素补齐稳定标识</li>
+            </ul>
+          </section>
+          <section class="s09-upd-grp">
+            <h3>修复 <span>4 项</span></h3>
+            <ul class="s09-upd-list">
+              <li>更新弹窗的更新记录放进有限高度滚动区</li>
+              <li>时间轴标题改用地名短名，一行放得下「A → B」</li>
+              <li>轨迹把原地定位漂移画成竖线</li>
+              <li>SLEEPING 兜底的断档不升级满预算</li>
+            </ul>
+          </section>
+          <section class="s09-upd-grp">
+            <h3>优化 <span>2 项</span></h3>
+            <ul class="s09-upd-list">
+              <li>平滑窗口按局部是否在动自适应</li>
+              <li>门禁 ticker 按门禁态调频</li>
+            </ul>
+          </section>
+          <section class="s09-upd-grp">
+            <h3>文档 <span>3 项</span></h3>
+            <ul class="s09-upd-list">
+              <li>补跨天边界归并口径</li>
+              <li>每日行程补跨天边界归并口径（80m / 2h / 仅 LOCATION 参照）</li>
+              <li>定位能力基线补充精度表达与平滑口径</li>
+            </ul>
+          </section>
+        </div>
+        </div>
+        <div class="s09-upd-actions">
+          <button class="btn-ghost" type="button" data-act="close-update" data-od-id="s09-update-later"
+            onclick="document.getElementById('s09-upd-scrim').hidden=true">稍后</button>
+          <button class="btn" type="button" data-act="download-update" data-od-id="s09-update-download"
+            onclick="document.getElementById('s09-upd-scrim').hidden=true;App.toast('已开始下载 1.4.0')">下载更新</button>
         </div>
       </div>
     </div>
