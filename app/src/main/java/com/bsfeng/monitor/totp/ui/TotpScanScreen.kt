@@ -147,7 +147,7 @@ fun TotpScanScreen(
 
 /** 取景框（原型 .s24-lens）：88% 前景底 + 四角括号 + 中央扫描线。 */
 @Composable
-private fun ScanLens(torchOn: Boolean, preview: (@Composable () -> Unit)? = null, modifier: Modifier = Modifier) {
+private fun ScanLens(torchOn: Boolean, modifier: Modifier = Modifier, preview: (@Composable () -> Unit)? = null) {
     val t = LocalDesignTokens.current
     val lensBg = t.fg.copy(alpha = if (torchOn) 0.62f else 0.88f)
     val markColor = Color.White.copy(alpha = 0.82f)

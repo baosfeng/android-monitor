@@ -199,11 +199,12 @@ internal fun PreviewVDivider(color: Color = PREVIEW_BORDER, height: Dp = 36.dp) 
 internal fun PreviewBar(
     progress: Float,
     face: PreviewFace,
+    modifier: Modifier = Modifier,
     thickness: Dp = 8.dp,
-    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Box(
         modifier = modifier
+            .fillMaxWidth()
             .height(thickness)
             .background(face.track, RoundedCornerShape(999.dp)),
     ) {

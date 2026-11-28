@@ -145,6 +145,8 @@ android {
             // 可升级的依赖版本（需人工评估，不阻塞编译）
             "GradleDependency",
             "NewerVersionAvailable",
+            // Gradle wrapper 有新版提示：升级由 Dependabot 负责，不该阻断发版
+            "AndroidGradlePluginVersion",
             // mipmap v26 对 minSdk 29 冗余但无关紧要
             "ObsoleteSdkInt",
         )

@@ -83,7 +83,7 @@ internal fun AlertSwitchRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
         subtitle = "剩余 0% 或被接口标成 rate-limited 时发一条",
         checked = enabled,
         onCheckedChange = onChange,
-        switchModifier = Modifier.testTag("s19-sw-dead"),
+        modifier = Modifier.testTag("s19-sw-dead"),
         contentDescription = "额度耗尽时提醒",
     )
 }
@@ -108,7 +108,7 @@ internal fun RecoverAlertSwitchRow(onChange: ((Boolean) -> Unit)? = null) {
             prefs.recoverEnabled = on
             onChange?.invoke(on)
         },
-        switchModifier = Modifier.testTag("s19-sw-back"),
+        modifier = Modifier.testTag("s19-sw-back"),
         contentDescription = "额度恢复时提醒",
     )
 }
@@ -124,7 +124,7 @@ private fun AlertSwitchLayout(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    switchModifier: Modifier,
+    modifier: Modifier,
     contentDescription: String,
 ) {
     val t = LocalDesignTokens.current
@@ -143,7 +143,7 @@ private fun AlertSwitchLayout(
             checked = checked,
             onCheckedChange = onCheckedChange,
             contentDescription = contentDescription,
-            modifier = switchModifier.keyboardFocusRing(shape),
+            modifier = modifier.keyboardFocusRing(shape),
         )
     }
 }

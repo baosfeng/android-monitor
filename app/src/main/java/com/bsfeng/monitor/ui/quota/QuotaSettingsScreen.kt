@@ -69,9 +69,9 @@ import java.math.BigDecimal
 @Composable
 fun QuotaSettingsScreen(
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: QuotaViewModel = viewModel(factory = QuotaViewModelFactory),
     nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 },
-    modifier: Modifier = Modifier,
 ) {
     val t = LocalDesignTokens.current
     val context = LocalContext.current

@@ -199,7 +199,7 @@ private fun TotpListBody(
                                 },
                                 // 锚点要量到行本体（原型 .row x=33/w=327，卡内 16 缩进之后）：
                                 // 挂在 padding 之内的一层，而不是调制链最前面的 modifier
-                                innerModifier = totpRowAnchor(account),
+                                innerModifier = Modifier.totpRowAnchor(account),
                                 // 原型 .group{padding:0 16px}：卡内水平 16，行锚点落在 16 之内（x=33）
                                 modifier = Modifier.padding(horizontal = t.space4),
                             )
@@ -234,13 +234,13 @@ private fun TotpListBody(
  * 原型把五条账户行各写了一个锚点，实现里账户是数据驱动的，所以按 issuer 映射；
  * 其余账户（自定义条目）不套锚点，避免凭空造出页面层锚点。
  */
-private fun totpRowAnchor(account: TotpAccount): Modifier = when (account.issuer) {
-    "腾讯云" -> Modifier.testTag("s22-row-tencent")
-    "阿里云" -> Modifier.testTag("s22-row-aliyun")
-    "AWS" -> Modifier.testTag("s22-row-aws")
-    "GitHub" -> Modifier.testTag("s22-row-github")
-    "Google" -> Modifier.testTag("s22-row-google")
-    else -> Modifier
+private fun Modifier.totpRowAnchor(account: TotpAccount): Modifier = when (account.issuer) {
+    "腾讯云" -> testTag("s22-row-tencent")
+    "阿里云" -> testTag("s22-row-aliyun")
+    "AWS" -> testTag("s22-row-aws")
+    "GitHub" -> testTag("s22-row-github")
+    "Google" -> testTag("s22-row-google")
+    else -> this
 }
 
 /** 搜索框（原型 .s22-searchbox）：18dp 放大镜 + 无边框输入。 */
