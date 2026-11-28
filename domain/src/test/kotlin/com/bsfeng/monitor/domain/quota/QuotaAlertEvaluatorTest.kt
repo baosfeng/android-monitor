@@ -275,4 +275,117 @@ class QuotaAlertEvaluatorTest {
         )
         assertTrue(second.alerts.isEmpty())
     }
+
+    // ───────────────────── 已恢复（本轮新增） ─────────────────────
+
+    @Test
+    fun `同一周期回升到阈值以上产出一条已恢复`() {
+        val low = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 3.0)),
+            state = emptyMap(),
+        )
+        val back = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 96.0)),
+            state = low.state,
+        )
+        assertEquals("本轮不降档", 0, back.alerts.size)
+        assertEquals(1, back.recoveries.size)
+        val recovery = back.recoveries.first()
+        assertEquals("ollama.session", recovery.key)
+        assertEquals("ollama", recovery.instanceId)
+        assertEquals(3, recovery.fromPercent)
+        assertEquals(96, recovery.toPercent)
+        assertEquals(0, back.state.getValue("ollama.session").notifiedThreshold)
+    }
+
+    @Test
+    fun `周期切换不报已恢复`() {
+        // 新周期天然 100%：报「已恢复」是噪音，只静默清零
+        val low = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 3.0, resetAt = 1_000L)),
+            state = emptyMap(),
+        )
+        val next = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 100.0, resetAt = 2_000L)),
+            state = low.state,
+        )
+        assertEquals(0, next.recoveries.size)
+        // 新周期的旧状态不被继承：再降到 3% 时必须重新提醒（否则等于「上一周期的档位还在生效」）
+        val lowAgain = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 3.0, resetAt = 2_000L)),
+            state = next.state,
+        )
+        assertEquals(1, lowAgain.alerts.size)
+    }
+
+    @Test
+    fun `从未提醒过时回升不报已恢复`() {
+        val result = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 80.0)),
+            state = emptyMap(),
+        )
+        assertEquals(0, result.alerts.size)
+        assertEquals(0, result.recoveries.size)
+    }
+
+    @Test
+    fun `刚好卡在五档上沿不算恢复`() {
+        // 5.0% 仍命中 5 档（与 reachedThreshold 同一口径），只有 >5% 才算恢复
+        val low = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 3.0)),
+            state = emptyMap(),
+        )
+        val atEdge = QuotaAlertEvaluator.evaluate(
+            instanceId = "ollama",
+            items = listOf(percentItem(remaining = 5.0)),
+            state = low.state,
+        )
+        assertEquals(0, atEdge.recoveries.size)
+    }
+
+    @Test
+    fun `余额型回升也产出已恢复并带上金额与币种`() {
+        val low = QuotaAlertEvaluator.evaluate(
+            instanceId = "deepseek",
+            items = listOf(balanceItem(remaining = "42.00")),
+            state = emptyMap(),
+            lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
+        )
+        val topUp = QuotaAlertEvaluator.evaluate(
+            instanceId = "deepseek",
+            items = listOf(balanceItem(remaining = "200.00")),
+            state = low.state,
+            lowBalanceThresholds = mapOf(QuotaUnit.CNY to BigDecimal("50")),
+        )
+        assertEquals(0, topUp.alerts.size)
+        assertEquals(1, topUp.recoveries.size)
+        val recovery = topUp.recoveries.first()
+        assertEquals(0, recovery.fromPercent)
+        assertEquals("200.00", recovery.remainingAmount?.toPlainString())
+        assertEquals(QuotaUnit.CNY, recovery.unit)
+        assertEquals(false, topUp.state.getValue("deepseek.balance:cny").lowBalanceNotified)
+    }
+
+    @Test
+    fun `多账号的已恢复事件互不串号`() {
+        // A、B 各提醒过一次，随后各自回升：两条恢复各带自己的实例键
+        val aLow = QuotaAlertEvaluator.evaluate("ollama", listOf(percentItem(remaining = 3.0)), emptyMap())
+        val bLow = QuotaAlertEvaluator.evaluate("ollama#2", listOf(percentItem(remaining = 3.0)), aLow.state)
+        val aBack = QuotaAlertEvaluator.evaluate("ollama", listOf(percentItem(remaining = 96.0)), bLow.state)
+        val bBack = QuotaAlertEvaluator.evaluate("ollama#2", listOf(percentItem(remaining = 80.0)), aBack.state)
+
+        assertEquals(1, aBack.recoveries.size)
+        assertEquals("ollama.session", aBack.recoveries.first().key)
+        assertEquals(1, bBack.recoveries.size)
+        assertEquals("ollama#2.session", bBack.recoveries.first().key)
+        assertEquals("ollama#2", bBack.recoveries.first().instanceId)
+    }
 }
+
