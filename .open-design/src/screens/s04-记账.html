@@ -251,8 +251,7 @@
           <div class="kpi"><span class="kpi-label">本年</span><span class="s04-amt is-exp num">¥18,420</span></div>
           <div class="kpi"><span class="kpi-label">全部</span><span class="s04-amt is-exp num">¥42,180</span></div>
         </div>
-        <p class="meta mt-3">对应「总花费 / 周 / 年 / 月 / 全部」查询，收入与结余同口径。</p>
-<p class="meta mt-3">支持按日 / 周 / 月 / 年 / 全部统计，不再只限制查看单月。</p>
+        <p class="meta mt-3">按日 / 周 / 月 / 年 / 全部统计，收入与结余同口径。</p>
       </div>
     </div>
 
@@ -325,7 +324,7 @@
           <span class="cat-icon s3"><svg viewBox="0 0 24 24" aria-hidden><path d="M3.4,4.8h2.2l3,10.2h9.6l2.4-7.4H7.4"/><path d="M8.2,18.6a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0M15.6,18.6a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0"/></svg></span>
           <span class="row-body">
             <span class="row-title">购物 · 双十一预售定金与尾款合并自动分期</span>
-            <span class="row-sub">备注相当长：用于验证单行截断与省略号在超长文本下不撑破布局</span>
+            <span class="row-sub">备注可以写很长：写明聚餐人数、结算方式与后续分摊安排，月底对账好找</span>
           </span>
           <span class="row-tail num s04-amt is-exp">-¥1,234,567.89</span>
         </button>
@@ -352,7 +351,7 @@
     'use strict';
     if (window.__odFin) return;
     window.__odFin = true;
-    var MINE = { s04: 1, s05: 1, s06: 1, s07: 1, s08: 1 };
+    var MINE = { s04: 1, s06: 1, s07: 1, s08: 1 };
     function $(s, r) { return (r || document).querySelector(s); }
     function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
     function A() { return window.App || null; }
@@ -496,23 +495,6 @@
       }
     }
 
-    /* ── s05 表单 ── */
-    function setS05(o) {
-      var s = scr('s05'); if (!s) return;
-      if (o.amount != null) { var ai = $('#s05-amount', s); if (ai) ai.value = o.amount; }
-      if (o.note != null) { var ni = $('#s05-note', s); if (ni) ni.value = o.note; }
-      if (o.kind) {
-        $$('.s05-kind', s).forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-kind') === o.kind ? 'true' : 'false'); });
-        var kl = $('#s05-kind-label', s); if (kl) kl.textContent = o.kind === 'income' ? '收入' : '支出';
-        var aw = $('#s05-amount-wrap', s); if (aw) aw.classList.toggle('is-inc', o.kind === 'income');
-      }
-      if (o.cat) {
-        $$('.s05-cat', s).forEach(function (b) {
-          var on = b.getAttribute('data-cat') === o.cat || (o.cat === '收入' && b.getAttribute('data-cat') === '其他');
-          b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        });
-      }
-    }
     /* 定版：记一笔 = s14a（全抽屉版，2026-10-16 用户选定 A）。
        新增 / 编辑共用这份回填；分类与账户的值都写在行的 data-value-for 上。 */
     function setS14a(o) {
@@ -711,49 +693,6 @@
       if ((n = t.closest('[data-month]'))) { setMonth(sid, Number(n.getAttribute('data-month')) || 1); return; }
       if (t.closest('[data-newtx]')) { newTx(); return; }
       if ((n = t.closest('[data-tx]')) && n.getAttribute('data-tx') !== null) { editTx(n); return; }
-      if ((n = t.closest('[data-kind]'))) {
-        $$('.s05-kind', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
-        var kl = $('#s05-kind-label', s); if (kl) kl.textContent = n.getAttribute('data-kind') === 'income' ? '收入' : '支出';
-        var aw = $('#s05-amount-wrap', s); if (aw) aw.classList.toggle('is-inc', n.getAttribute('data-kind') === 'income');
-        haptic('light');
-        return;
-      }
-      if ((n = t.closest('.s05-cat'))) {
-        $$('.s05-cat', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
-        return;
-      }
-      if ((n = t.closest('[data-acct]'))) {
-        $$('[data-acct]', s).forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
-        return;
-      }
-      if (t.closest('[data-date-open]')) { var a0 = A(); if (a0) a0.open('#s05-date-sheet'); return; }
-      if ((n = t.closest('[data-date-pick]'))) {
-        var dd = $('#s05-date', s); if (dd) dd.textContent = n.getAttribute('data-date-pick');
-        var a1 = A(); if (a1) { a1.close('#s05-date-sheet'); a1.toast('日期已改为 ' + n.getAttribute('data-date-pick')); }
-        return;
-      }
-      if (t.closest('[data-save]')) {
-        var ai = $('#s05-amount', s);
-        var v = parseFloat(String(ai && ai.value || '').replace(/[^\d.]/g, ''));
-        if (isNaN(v) || v <= 0) {
-          if (ai) { ai.classList.remove('is-bad'); void ai.offsetWidth; ai.classList.add('is-bad'); }
-          toast('请输入大于 0 的金额');
-          return;
-        }
-        var on = $('.s05-cat[aria-pressed="true"]', s);
-        var kindEl = $('.s05-kind[aria-pressed="true"]', s);
-        var kind = kindEl && kindEl.getAttribute('data-kind') === 'income' ? '收入' : '支出';
-        haptic('medium');
-        toast('已保存 · ' + kind + ' ' + ((on && on.getAttribute('data-cat')) || '未分类') + ' ¥' + fmt(v, 2));
-        var a2 = A(); if (a2) window.setTimeout(function () { a2.back(); }, 260);
-        return;
-      }
-      if (t.closest('[data-del]')) { var a3 = A(); if (a3) a3.open('#s05-del-dialog'); return; }
-      if (t.closest('[data-confirm-del]')) {
-        var a4 = A();
-        if (a4) { a4.close('#s05-del-dialog'); a4.toast('已删除这笔交易'); a4.haptic('medium'); window.setTimeout(function () { a4.back(); }, 260); }
-        return;
-      }
       if ((n = t.closest('[data-brow]')) && sid === 's06') { openBudget(n); return; }
       if (t.closest('[data-budget-save]')) { saveBudget(); return; }
       if (t.closest('[data-file-pick]')) { importPick(); return; }

@@ -40,6 +40,7 @@
 @keyframes s06-in{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
 .s06-dlg-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .s06-input{flex:1 1 auto;min-width:0;border:0;background:transparent;padding:8px 0;outline:none;font-family:var(--font-mono);font-size:var(--text-xl);font-weight:700;color:var(--fg)}
+.s06-cur{font-family:var(--font-mono);font-size:var(--text-xl);font-weight:600;color:var(--muted)}
 @media (prefers-reduced-motion: reduce){
   .s06-in,.s06-mlabel.is-bump,.s06-bar i{animation:none!important}
   .s06-bar i{transform:scaleX(var(--p,.5))}
@@ -158,7 +159,7 @@
       <p class="h3" id="s06-dlg-title">修改预算</p>
       <p class="meta mt-2" id="s06-dlg-name">餐饮</p>
       <div class="card mt-3" style="display:flex;align-items:center;gap:var(--space-2)">
-        <span class="s05-cur">¥</span>
+        <span class="s06-cur">¥</span>
         <input class="s06-input" id="s06-dlg-input" type="text" inputmode="decimal" autocomplete="off" value="1200" aria-label="预算金额">
       </div>
       <div class="s06-dlg-actions mt-4">

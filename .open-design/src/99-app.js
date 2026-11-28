@@ -97,7 +97,7 @@
     return true;
   }
 
-  /* ── 两级分类选择器（结构冻结，s15 / s05 / s14a 共用，交互只此一份） ──
+  /* ── 两级分类选择器（结构冻结，s15 / s14a 共用，交互只此一份） ──
      <div class="cat-picker" data-kind="expense" data-recognized="居住·家政">
        .cat-l1[data-l1]  →  .cat-l2-panel[data-l1]  →  .cat-l2[data-l2][data-l1]
      点一级展开 / 收起对应面板；点二级选中该二级并把父一级置为展开；
@@ -156,16 +156,16 @@
     if (!silent) haptic('light');
     return true;
   }
-  /* s04 的共用表单脚本（editTx / setS05 / 保存）仍在读 .s05-cat / .s14-cat；
+  /* s04 的共用表单脚本（editTx / 保存）仍在读 .s14-cat；
      把新结构的当前选中项映射过去，s04 脚本迁到 .cat-picker 后这一段可整段删掉。 */
   function pkLegacySync(pk) {
     var screen = pk.closest ? pk.closest('.screen') : null;
     if (!screen) return;
     var sid = screen.getAttribute('data-screen');
-    var cls = sid === 's05' ? 's05-cat' : (sid === 's14a' ? 's14-cat' : '');
+    var cls = sid === 's14a' ? 's14-cat' : '';
     if (!cls) return;
     Array.prototype.forEach.call(screen.querySelectorAll('.cat-l1, .cat-l2'), function (b) {
-      b.classList.remove('s05-cat', 's14-cat');
+      b.classList.remove('s14-cat');
       b.removeAttribute('data-cat');
     });
     var pickers = screen.querySelectorAll('.cat-picker');
@@ -190,14 +190,12 @@
   }
   /* s04 的共用脚本把「任何带 data-kind 的点击」都当成收支切换 —— .cat-picker 自身也带
      data-kind，所以点分类会把它写成「支出 / 无选中」。这里在它跑完后把分段控件与
-     picker 可见性拉回正确状态（s05 的 #s05-kind-label 一并修）。 */
+     picker 可见性拉回正确状态。 */
   function pkKindRestore(screen, kind) {
     if (!screen || !kind) return;
     Array.prototype.forEach.call(screen.querySelectorAll('button[data-kind]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kind ? 'true' : 'false');
     });
-    var label = screen.querySelector('#s05-kind-label');
-    if (label) label.textContent = kind === 'income' ? '收入' : '支出';
     pkKindSync(screen, kind);
   }
 

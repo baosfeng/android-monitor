@@ -6,33 +6,14 @@
 #           理由写清屏名与所属功能）；两处都没有即「原型未登记」，脚本 exit 1。
 # 反方向也有约束：清单里的锚点一旦落地（代码出现 testTag）就必须删掉本行，否则脚本判红。
 锚点	来源页面	状态	理由
-s05-accounts	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-acct-alipay	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-acct-cash	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-acct-wechat	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-actions	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-amount	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-cats	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-content	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-before	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-cancel	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-row	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-sheet	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-today	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-date-yesterday	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-kind	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-kind-expense	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-kind-income	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-s05-save	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
-screen-s05	s05-新增交易	作废	旧版整页表单已被 s14a-记一笔全抽屉取代（页面仍以 s05-del/empty/error/loading/retry 在用）
+# 2026-11-27 整屏清理：s05-新增交易（表单由 s14a 记一笔抽屉承接）与 s17-页面记录粒度（粒度改由 s11 应用白名单承担）
+# 已从原型分片删除。对应锚点连同 screen-s05 / screen-s17、s09-granularity*（s17 的入口）、s15-content（原型说明块）
+# 一并从账本与本清单移除：本清单只登记「仍缺失」或「原型里仍存在」的锚点，两边都不存在的登记会被 check-anchors 判为清单失效。
+# 历史口径见 docs/UI设计/原型实现对齐台账.md 的「当前基线」。
 s09-totp-body	s09-设置	待实现	s09-设置 · 验证器卡容器：实现里已打 s09-totp，容器级锚点未打
 s09-goto-totp	s09-设置	待实现	s09-设置 · 验证器卡「管理账户」入口行（push 到 s22）：行已实现，锚点未打
 s09-goto-totp-backup	s09-设置	待实现	s09-设置 · 验证器卡「备份与导入」入口行（push 到 s27）：行已实现，锚点未打
-s09-granularity	s09-设置	待实现	s09-设置 · 「页面记录」分组容器：所属 s17-页面记录粒度整页已作废（粒度改由 s11-应用白名单承担），设置页入口未实现，去留待设计确认
-s09-goto-granularity	s09-设置	待实现	s09-设置 · 「页面记录粒度」入口行（push 到已作废的 s17）：设置页入口未实现，去留待设计确认
-s09-granularity-level	s09-设置	待实现	s09-设置 · 「页面记录粒度」行尾档位值：随入口一起未实现，去留待设计确认
 s10-all	s10-开屏跳过规则	作废	原型里的「查看全部规则」入口；App 内规则列表本身就是全量，没有这个入口
-s15-content	s15-自动记账浮窗	作废	原型占位说明块（一段文案），不是界面元素
 clicklog-hint	s16-每日行程	待实现	点击日志行的说明文字，随 clicklog-switch 一起待实现
 clicklog-row	s16-每日行程	待实现	点击日志开关行，随 clicklog-switch 一起待实现
 clicklog-switch	s16-每日行程	待实现	原型「记录点击与输入」开关：产品无点击日志能力，且涉及隐私红线，需设计拍板
@@ -52,33 +33,6 @@ s16-ops-1	s16-每日行程	作废	旧版运营位（页面底部推荐卡），�
 s16-ops-2	s16-每日行程	作废	旧版运营位，重做后移除
 s16-ops-3	s16-每日行程	作废	旧版运营位，重做后移除
 s16-pg-douyin	s16-每日行程	作废	旧版按 app 分页列表；重做后按时间轴分段展示，无逐 app 分页
-s17-app-alipay	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-app-browser	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-app-douyin	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-app-wechat	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-app-xhs	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-apps	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-add	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-code	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-code-remove	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-pay	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-pay-remove	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-pwd	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-black-pwd-remove	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-blacklist	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-content	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-global	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-global-badge	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-head	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-opt-a	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-opt-b	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-opt-c	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-opt-d	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-sheet	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-sheet-badge	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-sheet-close	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-s17-sheet-title	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
-screen-s17	s17-页面记录粒度	作废	整页作废：页面记录粒度未做，粒度控制改由应用白名单 s11 承担
 gesture-bar	s21-全额度聚合	原型外壳	原型外壳装饰（手势条），不可点、无需锚点
 punch	s21-全额度聚合	原型外壳	原型外壳装饰（挖孔相机），不可点、无需锚点
 splash	s21-全额度聚合	原型外壳	原型外壳的开屏层；App 用真实 launch screen，无对应可点元素

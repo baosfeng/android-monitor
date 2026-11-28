@@ -5,7 +5,10 @@
      点遮罩只吞点击（轻震 + 每笔一次 Toast）；切到任何 App（含本 App）都不关闭；
      忽略写 7 天记忆；记一笔 / 忽略各写 10 分钟去重。
      分类清单来自 finance/model/CategoryCatalog.kt（浮窗只确认支出，故只放 18 个支出一级）；
-     两级分类的交互由 99-app.js 的 App.initCategoryPickers() 统一实现，s05/s14a 复用同一份。
+     两级分类的交互由 99-app.js 的 App.initCategoryPickers() 统一实现，s14a 复用同一份。
+
+     demo-only，不参与导航：屏内没有 data-goto 或按钮指向本屏，只有右下角调试条
+     「自动记账浮窗」按钮（App.openAutoBook）触发演示；实现侧 AutoBookOverlay 已落地。
      ============================================================ -->
 <!--@od:style-->
 <style data-for="s15">
@@ -395,8 +398,5 @@
     </div>
   </div>
 
-  <div class="content" data-od-id="s15-content">
-    <p class="fine pad">自动记账确认浮窗：浮层在脚本启动时挂到设备屏上，覆盖全屏显示（#s15 直达即可看到）。</p>
-  </div>
 </section>
 <!--@od:end-->

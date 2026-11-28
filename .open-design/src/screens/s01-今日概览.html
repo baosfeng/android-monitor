@@ -164,7 +164,6 @@
           <span class="meta">已达单日展示上限</span>
         </div>
         <p class="row-title mt-2">微信（com.tencent.mm）· 前台使用 128 分钟 32 秒 · 累计 1,024 次前台切换</p>
-        <p class="meta mt-2">超长标题与万级计数用于验证单行截断与折行表现；缺失字段以「—」占位。</p>
         <div class="row mt-2">
           <span class="row-body"><span class="row-title">开始时间</span><span class="row-sub">字段缺失</span></span>
           <span class="row-tail">—</span>
@@ -202,7 +201,7 @@
         <div class="grid-2 stg od-d1" data-od-id="s01-kpi"
              onanimationstart="if(event.target===this&&event.animationName==='od-rise'){['s01-k1v','s01-k2h','s01-k2m','s01-k3v','s01-k4v'].forEach(function(i){document.getElementById(i).textContent='0'})}"
              onanimationend="if(event.target===this&&event.animationName==='od-rise'){App.count('#s01-k1v',128);App.count('#s01-k2h',6,{suffix:'h'});App.count('#s01-k2m',12,{suffix:'m'});App.count('#s01-k3v',34);App.count('#s01-k4v',268,{prefix:'¥'})}">
-          <button class="kpi" type="button" data-od-id="s01-kpi-events" onclick="document.getElementById('s01-k1v').textContent='0';App.count('#s01-k1v',128)">
+          <button class="kpi" type="button" data-tone="events" data-od-id="s01-kpi-events" onclick="document.getElementById('s01-k1v').textContent='0';App.count('#s01-k1v',128)">
             <span class="kpi-label">事件</span>
             <span class="kpi-value"><span class="num" id="s01-k1v">128</span><span class="kpi-unit">条</span></span>
             <span class="s01-foot">
@@ -211,7 +210,7 @@
             </span>
           </button>
 
-          <button class="kpi" type="button" data-od-id="s01-kpi-active"
+          <button class="kpi" type="button" data-tone="active" data-od-id="s01-kpi-active"
                   onclick="['s01-k2h','s01-k2m'].forEach(function(i){document.getElementById(i).textContent='0'});App.count('#s01-k2h',6,{suffix:'h'});App.count('#s01-k2m',12,{suffix:'m'})">
             <span class="kpi-label">活跃</span>
             <span class="kpi-value"><span class="num" id="s01-k2h">6h</span><span class="num" id="s01-k2m">12m</span></span>
@@ -221,7 +220,7 @@
             </span>
           </button>
 
-          <button class="kpi" type="button" data-od-id="s01-kpi-skip" onclick="document.getElementById('s01-k3v').textContent='0';App.count('#s01-k3v',34)">
+          <button class="kpi" type="button" data-tone="skip" data-od-id="s01-kpi-skip" onclick="document.getElementById('s01-k3v').textContent='0';App.count('#s01-k3v',34)">
             <span class="kpi-label">跳过广告</span>
             <span class="kpi-value"><span class="num" id="s01-k3v">34</span><span class="kpi-unit">次</span></span>
             <span class="s01-foot">
@@ -230,7 +229,7 @@
             </span>
           </button>
 
-          <button class="kpi" type="button" data-od-id="s01-kpi-spend" onclick="document.getElementById('s01-k4v').textContent='0';App.count('#s01-k4v',268,{prefix:'¥'})">
+          <button class="kpi" type="button" data-tone="spend" data-od-id="s01-kpi-spend" onclick="document.getElementById('s01-k4v').textContent='0';App.count('#s01-k4v',268,{prefix:'¥'})">
             <span class="kpi-label">今日支出</span>
             <span class="kpi-value"><span class="num" id="s01-k4v">¥268</span></span>
             <span class="s01-foot">

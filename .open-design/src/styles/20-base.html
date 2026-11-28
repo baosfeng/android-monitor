@@ -272,6 +272,18 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
   padding:var(--space-3);
   background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md);
 }
+/* 指标瓦片的语义色（页面语法 §5「每屏一处数据色面积」）：显式 data-tone 才上色条。
+   色条用原色（图形），数字用 -ink 压暗档（文字要过 4.5:1）。 */
+.kpi[data-tone]{box-shadow:inset 0 3px 0 var(--k)}
+/* 数字与标签走 -ink 压暗档（:root 里的十六进制，verify 能解析；color-mix 会产出 color(srgb …) 让对比度检查失真） */
+.kpi[data-tone] .kpi-value{color:var(--k-ink,var(--fg))}
+.kpi[data-tone] .kpi-label{color:var(--k-ink,var(--muted))}
+.kpi[data-tone="events"]{--k:var(--chart-1);--k-ink:var(--chart-1-ink)}
+.kpi[data-tone="active"]{--k:var(--chart-2);--k-ink:var(--chart-2-ink)}
+.kpi[data-tone="skip"]{--k:var(--chart-3);--k-ink:var(--chart-3-ink)}
+.kpi[data-tone="spend"]{--k:var(--chart-5);--k-ink:var(--chart-5-ink)}
+.kpi[data-tone="income"]{--k:var(--chart-4);--k-ink:var(--chart-4-ink)}
+.kpi[data-tone="balance"]{--k:var(--chart-6);--k-ink:var(--chart-6-ink)}
 .kpi-label{font-size:var(--text-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi-value{font-size:var(--text-xl);font-weight:700;letter-spacing:var(--tracking-display);line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .kpi-unit{font-size:var(--text-sm);font-weight:500;color:var(--muted);margin-left:4px}
@@ -279,6 +291,20 @@ button.row,button.list-row,a.row,a.list-row{font:inherit;font-size:var(--text-ba
 .kpi-delta.is-up{color:var(--income-text)}
 .kpi-delta.is-down{color:var(--expense-text)}
 .kpi-spark{width:100%;height:var(--spark-h);margin-top:var(--space-1)}
+
+/* 横条组（页面语法 §5「数据色面积」）：s02 事件构成 / s03 命中方式 / s16 停留时长 / s18 余量共用。
+   用 div 而非 svg：条宽随容器自适应，颜色走 --k（数据色）与 --chart-seq 兜底。 */
+.barrows{display:grid;gap:var(--space-2);min-width:0}
+.barrows>.bar-row{
+  display:grid;grid-template-columns:auto minmax(48px,1fr) auto;
+  align-items:center;gap:var(--space-2);
+  font-size:var(--text-sm);min-width:0;
+}
+.barrows .bar-k{color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.barrows .bar-t{display:block;height:8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--fg) 9%,transparent);overflow:hidden}
+.barrows .bar-t>i{display:block;height:100%;width:var(--p,0%);border-radius:inherit;background:var(--k,var(--chart-seq))}
+.barrows .bar-v{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.barrows .bar-v b{color:var(--fg);font-weight:600}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);

@@ -164,7 +164,6 @@
           <span class="meta">今日窗口已满</span>
         </div>
         <p class="row-title mt-2">微信（com.tencent.mm）· 前台使用 128 分钟 32 秒 · 累计 1,024 次前台切换</p>
-        <p class="meta mt-2">超长应用名与万级计数用于验证单行截断；缺失字段以「—」占位。</p>
         <div class="row mt-2">
           <span class="row-body"><span class="row-title">持续时长</span><span class="row-sub">字段缺失</span></span>
           <span class="row-tail">—</span>
@@ -197,7 +196,24 @@
         <div class="mt-2" data-chart="heat"
              data-chart-values="0,0,0,0,0,0,6,18,34,54,33,22,38,27,15,20,31,25,14,10,7,11,5,2"
              data-chart-label="今日逐时活跃强度热力条"></div>
-        <p class="meta s02-tip mt-2" data-od-id="s02-filter-tip">已按类型筛选 · 组头的「条数」仅在全部视图下显示</p>
+        <p class="meta s02-tip mt-2" data-od-id="s02-filter-tip">已按类型筛选</p>
+      </div>
+
+      <div class="pad mt-3" data-od-id="s02-compose">
+        <div class="card stg od-d2">
+          <div class="sec-head">
+            <h2 class="h3">今日事件构成</h2>
+            <span class="meta">128 条 · 6 类</span>
+          </div>
+          <div class="barrows mt-2">
+            <div class="bar-row"><span class="bar-k">应用</span><span class="bar-t"><i style="--p:41%;--k:var(--chart-2)"></i></span><span class="bar-v"><b>52</b> 条</span></div>
+            <div class="bar-row"><span class="bar-k">屏幕</span><span class="bar-t"><i style="--p:24%;--k:var(--chart-1)"></i></span><span class="bar-v"><b>31</b> 条</span></div>
+            <div class="bar-row"><span class="bar-k">网络</span><span class="bar-t"><i style="--p:14%;--k:var(--chart-4)"></i></span><span class="bar-v"><b>18</b> 条</span></div>
+            <div class="bar-row"><span class="bar-k">充电</span><span class="bar-t"><i style="--p:9%;--k:var(--chart-3)"></i></span><span class="bar-v"><b>11</b> 条</span></div>
+            <div class="bar-row"><span class="bar-k">音频</span><span class="bar-t"><i style="--p:6%;--k:var(--chart-6)"></i></span><span class="bar-v"><b>8</b> 条</span></div>
+            <div class="bar-row"><span class="bar-k">其他</span><span class="bar-t"><i style="--p:6%;--k:var(--chart-8)"></i></span><span class="bar-v"><b>8</b> 条</span></div>
+          </div>
+        </div>
       </div>
 
       <div class="pad stack mt-3" data-od-id="s02-timeline">
@@ -319,7 +335,7 @@
   </div>
 
   <input class="od-ctl" type="checkbox" id="s02-x14" />
-  <div class="scrim is-bottom s02-drawer" data-od-id="s02-drawer-page"><label class="s02-veil" for="s02-x14" aria-label="关闭事件详情"></label><div class="sheet" data-od-min-fs><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 › 朋友圈</h3><span class="badge">PAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:38</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面标题</span></span><span class="row-tail"><span class="num">朋友圈</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面指纹</span></span><span class="row-tail"><span class="num">a3f2</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">4 分 12 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">页内点击 / 滑动</span></span><span class="row-tail"><span class="num">7 / 3</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">窗口状态 + 标题 + 文本指纹</span></span></div></div><p class="fine mt-2">同一页面按指纹去重；标题按当前隐私口径落库。</p><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x14">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
+  <div class="scrim is-bottom s02-drawer" data-od-id="s02-drawer-page"><label class="s02-veil" for="s02-x14" aria-label="关闭事件详情"></label><div class="sheet" data-od-min-fs><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">微信 › 朋友圈</h3><span class="badge">PAGE</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">09:38</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面标题</span></span><span class="row-tail"><span class="num">朋友圈</span></span></div><div class="row"><span class="row-body"><span class="row-title">页面指纹</span></span><span class="row-tail"><span class="num">a3f2</span></span></div><div class="row"><span class="row-body"><span class="row-title">持续时长</span></span><span class="row-tail"><span class="num">4 分 12 秒</span></span></div><div class="row"><span class="row-body"><span class="row-title">页内点击 / 滑动</span></span><span class="row-tail"><span class="num">7 / 3</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">窗口状态 + 标题 + 文本指纹</span></span></div></div><p class="fine mt-2">同一页面只记一次；页面标题按隐私设置决定是否保存。</p><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x14">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
   <input class="od-ctl" type="checkbox" id="s02-x15" />
   <div class="scrim is-bottom s02-drawer" data-od-id="s02-drawer-notification"><label class="s02-veil" for="s02-x15" aria-label="关闭事件详情"></label><div class="sheet" data-od-min-fs><span class="sheet-grip" aria-hidden></span><div class="sec-head" data-od-min-fs><h3 class="h3">通知摘要</h3><span class="badge">NOTIFICATION</span></div><div class="s02-fields"><div class="row"><span class="row-body"><span class="row-title">发生时间</span></span><span class="row-tail"><span class="num">08:44</span></span></div><div class="row"><span class="row-body"><span class="row-title">渠道</span></span><span class="row-tail"><span class="num">即时通讯频道</span></span></div><div class="row"><span class="row-body"><span class="row-title">分类</span></span><span class="row-tail"><span class="num">MSG</span></span></div><div class="row"><span class="row-body"><span class="row-title">标题 / 正文长度</span></span><span class="row-tail"><span class="num">24 字 / 86 字</span></span></div><div class="row"><span class="row-body"><span class="row-title">常驻通知</span></span><span class="row-tail"><span class="num">否</span></span></div><div class="row"><span class="row-body"><span class="row-title">来源</span></span><span class="row-tail"><span class="num">通知使用权</span></span></div></div><p class="fine mt-2">正文与标题文本不入库，只留渠道、分类与长度。</p><div class="grid-2 mt-3"><button class="btn btn-ghost" type="button" data-ctl-off="s02-x15">关闭</button><button class="btn btn-ghost" type="button" onclick="App.toast('已复制事件 JSON')">复制 JSON</button></div></div></div>
   <input class="od-ctl" type="checkbox" id="s02-x1" />
