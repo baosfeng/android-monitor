@@ -45,31 +45,6 @@ class WidgetTextTest {
         assertEquals("已超支", remainingText(progress = 1.2f, remaining = 0.0, hasBudget = true, hidden = false))
     }
 
-    // ===== 额度 =====
-
-    @Test
-    fun `额度百分比带百分号`() {
-        assertEquals("18%", quotaPercentText(QuotaRow(providerId = "ollama", label = "Ollama", remainingPercent = 18)))
-    }
-
-    @Test
-    fun `额度行数按可用高度递减`() {
-        // 4×2（~170dp）放三家；被压扁到 4×1 时只留一行，绝不裁字
-        assertEquals(3, wideRowCount(170f))
-        assertEquals(2, wideRowCount(163f))
-        assertEquals(2, wideRowCount(130f))
-        assertEquals(1, wideRowCount(129f))
-    }
-
-    @Test
-    fun `额度颜色按剩余分级`() {
-        // ≤20% 红、≤50% 橙、其余蓝：阈值差 1 就换色，必须钉住
-        assertEquals(WIDGET_EXPENSE, quotaPercentColor(20))
-        assertEquals(WIDGET_WARN, quotaPercentColor(21))
-        assertEquals(WIDGET_WARN, quotaPercentColor(50))
-        assertEquals(WIDGET_ACCENT, quotaPercentColor(51))
-    }
-
     // ===== 广告 =====
 
     @Test

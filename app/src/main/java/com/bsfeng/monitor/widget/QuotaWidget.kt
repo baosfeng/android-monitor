@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
@@ -20,68 +19,36 @@ import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
+import androidx.glance.layout.width
 import androidx.glance.text.Text
-import androidx.glance.unit.ColorProvider
 import com.bsfeng.monitor.MainActivity
-import com.bsfeng.monitor.R
 
-// 额度见底：三档内容 = 一行（Tiny 兜底）/ 最紧急一家 + 百分比（Compact）/ 前三家 + 进度条（Wide）。
-// 视觉走 C 版「柔和品牌色」：紫 tint 卡底 + 紫色图标块（见 WidgetStyle.kt）。
+// 额度组件：原型 s18 的「桌面组件 · 4×2 样张」语言 ——
+// 顶栏「▣ 额度 · 更新于 4 分钟前」+ 2 列网格，每格 = 等宽数值 / 「账号 窗口 · 重置时刻」/ 4dp 细横条。
+//
+// 三件不变的事：数据只读落盘快照（组件内不联网，拉取仍由 App 内 QuotaScheduler 负责）；
+// 整块点击直达额度 Tab；格数按占格降档，绝不裁字。
 
-private const val LABEL_TITLE = "额度剩余"
 private const val EMPTY_TITLE = "未配置额度"
 private const val EMPTY_HINT = "点开设置添加 provider"
 private const val NO_ROWS = "暂无额度数据"
-private const val NEVER_FETCHED = "—"
+
+/** 尺寸读不到（首次绑定 / 读 options 异常）时的兜底占格：4×2 的声明最小值，宁可少一格也不白板。 */
+private const val FALLBACK_WIDTH_DP = 250f
+private const val FALLBACK_HEIGHT_DP = 110f
 
 /**
- * Wide 最多放前三家（4×2 的 ~170dp 高度正好铺满），Compact / Tiny 只留最紧急的一家。
+ * 额度组件。
  *
- * 行数还要按高度收：宽度定档后，4×1 这类被压扁的形态也算 Wide，但净高只够一行 ——
- * 三行的内容塞进 78dp 会被裁掉最后一行，所以按 [wideRowCount] 递减。
- */
-private const val WIDE_ROW_COUNT = 3
-
-/** 3 行需 ~132dp 内容高（含行距与轨道），净高 = 组件高 - 32dp 内边距。 */
-private const val THREE_ROWS_MIN_HEIGHT_DP = 164f
-
-/** 2 行需 ~98dp 内容高。 */
-private const val TWO_ROWS_MIN_HEIGHT_DP = 130f
-
-/** 按可用高度决定 Wide 显示几行：能放三家就三家，放不下就减少行数而不是裁字。 */
-internal fun wideRowCount(heightDp: Float): Int = when {
-    heightDp >= THREE_ROWS_MIN_HEIGHT_DP -> WIDE_ROW_COUNT
-    heightDp >= TWO_ROWS_MIN_HEIGHT_DP -> 2
-    else -> 1
-}
-
-/** 剩余百分比文案：18%。 */
-internal fun quotaPercentText(row: QuotaRow): String = row.remainingPercent.toString() + "%"
-
-/**
- * 剩余百分比 → 语义色：≤20% 红（该充值了）、≤50% 橙（本月别乱花）、其余蓝（正常）。
- *
- * 只按数值分级、不读用户设置：额度组件是「看一眼就知道谁见底」的工具，
- * 颜色必须跨组件一致，跟着主题走反而会让同一个 18% 在不同手机上读成不同紧急度。
- */
-internal fun quotaPercentColor(remainingPercent: Int): ColorProvider = when {
-    remainingPercent <= 20 -> WIDGET_EXPENSE
-    remainingPercent <= 50 -> WIDGET_WARN
-    else -> WIDGET_ACCENT
-}
-
-/**
- * 额度见底（谁最先见底）。
- *
- * 数据在 [provideGlance] 里先读、再进 composition。组件内不联网，只读 [WidgetDataProvider.quota]
- * 的落盘快照，拉取仍由 App 内的 QuotaScheduler 负责。
+ * 数据在 [provideGlance] 里先读、再进 composition：Glance 的 composition 跑在 RemoteViews 里，
+ * 读库失败只会在桌面上留一张白板，所以读盘必须发生在 provideContent 之前。
  */
 class QuotaWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val data = WidgetDataProvider.quota(context)
+        val feed = WidgetDataProvider.quota(context)
         val box = widgetBox(context, id)
-        provideContent { QuotaCard(data, box) }
+        provideContent { QuotaCard(feed, box) }
     }
 }
 
@@ -90,31 +57,43 @@ class QuotaWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 /**
- * 按 [tierOf] 分三档渲染（判档看宽度，为什么这么判见 WidgetLayoutPolicy）。
+ * 内容编排：空态优先于档位判断（没配置 / 没有快照时只说「去配置」，不显示 0%）。
  *
- * - rows 已按剩余百分比升序，取前 N 行就是把最紧的几家排在最上面，composable 里不再排序；
- * - Wide（≥280dp）才给进度条：轨道要占一整行，2 格宽下名称与百分比会被挤到换行；
- * - Compact（140–280dp）只放最紧急的一家 + 百分比；
- * - Tiny（<140dp）不是设计承诺的形态（info 限定 2×1 / 4×2），用户拖到 1×1 时退化成一行；
- * - 空态优先于档位判断：没配置 / 没有快照时只该说「去配置」，不该显示 0%。
+ * - [quotaWidgetGrid] 定列数 / 格数 / 要不要顶栏，[QuotaWidgetMetrics.of] 定字阶与间距，都是纯函数；
+ * - [quotaWidgetCells] 定「哪几个账号、每格什么文案」，同样纯函数；
+ * - 金额是否隐藏读 [WidgetSettings.isAmountHidden]，与记账组件同一开关。
  */
 @Composable
-private fun QuotaCard(data: QuotaWidgetData, box: WidgetBox) {
+private fun QuotaCard(feed: QuotaWidgetFeed, box: WidgetBox) {
     val context = LocalContext.current
-    val tier = if (box.isUsable) tierOf(box.widthDp, box.heightDp) else WidgetTier.COMPACT
-    val empty = !data.configured || data.rows.isEmpty()
+    val widthDp = if (box.isUsable) box.widthDp else FALLBACK_WIDTH_DP
+    val heightDp = if (box.isUsable) box.heightDp else FALLBACK_HEIGHT_DP
+    val grid = quotaWidgetGrid(widthDp, heightDp)
+    val scale = QuotaWidgetMetrics.of(heightDp)
+    val cells = quotaWidgetCells(
+        accounts = feed.accounts,
+        limit = grid.cells,
+        nowEpochSecond = System.currentTimeMillis() / 1000L,
+        hiddenAmounts = WidgetSettings.isAmountHidden(context),
+        compactCaptions = scale.shortReset,
+    )
+    val empty = !feed.configured || cells.isEmpty()
     WidgetCard(
         face = FACE_QUOTA,
         action = startQuota(context),
-        verticalAlignment = if (empty) Alignment.Vertical.CenterVertically else tierAlignment(tier),
-        padding = if (tier == WidgetTier.TINY) 12.dp else 16.dp,
+        verticalAlignment = if (empty) Alignment.Vertical.CenterVertically else Alignment.Vertical.Top,
+        padding = scale.padding.dp,
     ) {
         when {
-            !data.configured -> QuotaEmpty(title = EMPTY_TITLE, hint = EMPTY_HINT)
-            data.rows.isEmpty() -> QuotaEmpty(title = NO_ROWS, hint = data.fetchedAtText.orEmpty())
-            tier == WidgetTier.WIDE -> QuotaWide(data, wideRowCount(box.heightDp))
-            tier == WidgetTier.COMPACT -> QuotaCompact(data)
-            else -> QuotaTiny(data)
+            !feed.configured -> QuotaEmpty(title = EMPTY_TITLE, hint = EMPTY_HINT)
+            cells.isEmpty() -> QuotaEmpty(title = NO_ROWS, hint = feed.fetchedAtText.orEmpty())
+            else -> {
+                if (grid.showHeader) {
+                    QuotaHeader(feed = feed, stale = feed.accounts.any { it.stale }, scale = scale)
+                    Spacer(GlanceModifier.height(scale.headerGap.dp))
+                }
+                QuotaCells(cells = cells, grid = grid, scale = scale)
+            }
         }
     }
 }
@@ -127,72 +106,89 @@ private fun startQuota(context: Context): Action = actionStartActivity(
     },
 )
 
+/**
+ * 顶栏：实色图标块 + 「额度 · 更新于 …」。
+ *
+ * 图标块复用 [IconBadge]：矢量图标在 Glance 里会被渲染成空白（实测结论见 WidgetStyle 的 IconBadge 注释），
+ * 字符「%」零资源依赖且跟着字号缩放。
+ */
 @Composable
-private fun ColumnScope.QuotaWide(data: QuotaWidgetData, rowCount: Int) {
-    CardHead(
-        face = FACE_QUOTA,
-        symbol = "%",
-        label = LABEL_TITLE,
-        trailing = data.fetchedAtText,
-    )
-    Spacer(GlanceModifier.height(8.dp))
-    data.rows.take(rowCount).forEach { row ->
-        val color = quotaPercentColor(row.remainingPercent)
-        // 每行包成一个内层 Column：Glance 的 Column 最多 10 个直接子元素，
-        // 超出部分会被静默截断（LayoutSelectionKt: "Column container cannot have more than 10 elements"）。
-        // 三行直铺是「顶行 + 间距 + 3×(行 + 轨道 + 2 个间距)」= 14 个，第三家的轨道会被丢掉；
-        // 包一层后外层只剩 5 个，内层每行 3 个，都在限内。
-        Column(modifier = GlanceModifier.fillMaxWidth()) {
-            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Text(text = row.label, style = valueStyle(WIDGET_TEXT, 14.sp), maxLines = 1)
-                Spacer(GlanceModifier.defaultWeight())
-                Text(text = quotaPercentText(row), style = valueStyle(color, 16.sp), maxLines = 1)
-            }
-            Spacer(GlanceModifier.height(4.dp))
-            Bar(
-                progress = row.remainingPercent / 100f,
-                face = FACE_QUOTA,
-                color = color,
-                thickness = 6.dp,
-            )
-        }
-        Spacer(GlanceModifier.height(7.dp))
-    }
-}
-
-@Composable
-private fun QuotaCompact(data: QuotaWidgetData) {
-    CardHead(
-        face = FACE_QUOTA,
-        symbol = "%",
-        label = LABEL_TITLE,
-        trailing = data.fetchedAtText,
-        badge = 22.dp,
-    )
-    Spacer(GlanceModifier.height(8.dp))
-    val row = data.rows.first()
-    val color = quotaPercentColor(row.remainingPercent)
-    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-        Text(text = row.label, style = valueStyle(WIDGET_TEXT, 14.sp), maxLines = 1)
-        Spacer(GlanceModifier.defaultWeight())
-        Text(text = quotaPercentText(row), style = valueStyle(color, 22.sp), maxLines = 1)
-    }
-    Spacer(GlanceModifier.height(6.dp))
-    Bar(progress = row.remainingPercent / 100f, face = FACE_QUOTA, color = color, thickness = 6.dp)
-}
-
-/** 1×1 兜底：连「额度剩余」标题都省掉，只留最紧急一家的名称与百分比。 */
-@Composable
-private fun QuotaTiny(data: QuotaWidgetData) {
-    val row = data.rows.first()
-    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-        Text(text = row.label, style = labelStyle(WIDGET_TEXT), maxLines = 1)
-        Spacer(GlanceModifier.defaultWeight())
+private fun QuotaHeader(feed: QuotaWidgetFeed, stale: Boolean, scale: QuotaWidgetScale) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+    ) {
+        IconBadge(face = FACE_QUOTA, symbol = "%", size = scale.headerBadge.dp)
+        Spacer(GlanceModifier.width(scale.headerBadgeGap.dp))
         Text(
-            text = quotaPercentText(row),
-            style = valueStyle(quotaPercentColor(row.remainingPercent), 17.sp),
+            text = quotaHeaderText(feed.fetchedAtText, stale),
+            style = quotaHeaderStyle(FACE_QUOTA.icon, scale.headerSizeSp),
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * 2 列（或 1 列）网格。
+ *
+ * 为什么每行包一层 Row：Glance 的 Column 超过 10 个直接子元素会被静默丢弃
+ * （WidgetStyle 的 WidgetCard 注释里有完整结论），4 格直铺是「格 + 间距」×4 + 顶栏 = 9 个，
+ * 分组后外层只剩 3 个。
+ */
+@Composable
+private fun ColumnScope.QuotaCells(cells: List<QuotaWidgetCell>, grid: QuotaWidgetGrid, scale: QuotaWidgetScale) {
+    val rows = cells.chunked(grid.columns)
+    rows.forEachIndexed { index, rowCells ->
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Vertical.Top,
+        ) {
+            rowCells.forEachIndexed { columnIndex, cell ->
+                if (columnIndex > 0) Spacer(GlanceModifier.width(scale.columnGap.dp))
+                QuotaCell(cell = cell, scale = scale, modifier = GlanceModifier.defaultWeight())
+            }
+            // 最后一行不满时补空位：3 个账号 / 4 格时最后一格不该被拉成整宽
+            repeat(grid.columns - rowCells.size) {
+                Spacer(GlanceModifier.defaultWeight())
+            }
+        }
+        if (index != rows.lastIndex) {
+            Spacer(GlanceModifier.height(scale.rowGap.dp))
+        }
+    }
+}
+
+/**
+ * 一格：数值 / 说明 / 4dp 横条。
+ *
+ * 横条只在有分母时画（纯余额型没有「还剩百分之多少」这回事）；此时该格比同排的矮一节，
+ * 顶对齐后数值仍在同一基线上，视觉上不会错位。
+ */
+@Composable
+private fun QuotaCell(cell: QuotaWidgetCell, scale: QuotaWidgetScale, modifier: GlanceModifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = cell.valueText,
+            style = quotaValueStyle(FACE_QUOTA.icon, scale.valueSizeSp),
+            maxLines = 1,
+        )
+        Spacer(GlanceModifier.height(scale.captionGap.dp))
+        Text(
+            text = cell.captionText,
+            style = quotaCaptionStyle(scale.captionSizeSp),
+            maxLines = 1,
+        )
+        val fraction = cell.fraction
+        if (fraction != null) {
+            Spacer(GlanceModifier.height(scale.barGap.dp))
+            Bar(
+                progress = fraction,
+                face = FACE_QUOTA,
+                // 原型 .wr .track>i 用的是 --w-ink（与数值同色）；这里取卡面墨色 icon，而不是更浅的 bar
+                color = FACE_QUOTA.icon,
+                thickness = scale.barHeight.dp,
+            )
+        }
     }
 }
 

@@ -36,8 +36,8 @@ import com.bsfeng.monitor.ui.theme.WidgetPalette
 // 6 个组件共用的一层皮（C 版「柔和品牌色」）：每卡一个色相、浅 tint 卡底、内嵌分区面、
 // 实色圆角图标块、同色系进度条。改圆角/字号/结构只能在这里改，组件内不写字面量。
 
-/** 卡片圆角 24dp（设计.md 通用规格）。 */
-private val CARD_RADIUS = 24.dp
+/** 卡片圆角 24dp（设计.md 通用规格）；internal 出去给组件截图的同构镜像复用。 */
+internal val CARD_RADIUS = 24.dp
 
 /** 卡描边粗细：Glance 没有 border modifier，用「外层画描边色 + 内缩 1dp」模拟。 */
 private val CARD_EDGE = 1.dp
@@ -273,7 +273,7 @@ internal fun StatusDot(color: ColorProvider, size: Dp = 7.dp) {
  * 为什么不再用 Monospace（旧版）：等宽字字距大、笔画细，桌面小尺寸下显单薄；
  * C 版定稿全部 SansSerif + Bold，数字的「厚度」靠字重与字号给。
  */
-private fun widgetTextStyle(
+internal fun widgetTextStyle(
     color: ColorProvider,
     size: TextUnit,
     weight: FontWeight,
