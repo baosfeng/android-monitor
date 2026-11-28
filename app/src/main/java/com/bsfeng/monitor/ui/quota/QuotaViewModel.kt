@@ -3,11 +3,9 @@ package com.bsfeng.monitor.ui.quota
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
 import com.bsfeng.monitor.domain.quota.QuotaInstance
 import com.bsfeng.monitor.domain.quota.QuotaInstances
-import com.bsfeng.monitor.domain.quota.QuotaProvider
 import com.bsfeng.monitor.domain.quota.QuotaRange
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaRepository
@@ -19,7 +17,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -30,8 +27,8 @@ import java.math.BigDecimal
  * 唯一真值源是 [QuotaRepository]（节流 / 退避 / 快照缓存都在数据层），本 VM 只做三件事：
  * 把 Flow 转成界面需要的形态、把点击转成数据层调用、把用户偏好落盘。
  *
- * 口径：界面上的「一家」现在是**账号实例**（[QuotaProviderInfo.instanceId]），
- * provider 类型只决定卡片排版与分组标题。选中态、刷新间隔、凭据操作全部按实例键走。
+ * 口径：界面上的「一家」是**账号实例**（[QuotaProviderInfo.instanceId]），provider 类型只决定
+ * 展示名 / 能力（有没有用量接口）。r4 起主屏只有一份账号卡列表，没有「聚合 / 单家」切换。
  */
 class QuotaViewModel(
     application: Application,
@@ -50,13 +47,10 @@ class QuotaViewModel(
         }
     }
 
-    private val _selectedProviderId = MutableStateFlow(defaultInstanceId())
-    val selectedProviderId: StateFlow<String> = _selectedProviderId.asStateFlow()
-
-    /** 全部账号的原始状态（设置页要显示每个账号的凭据配置情况）。 */
+    /** 全部账号的原始状态（主屏账号卡 + 设置页凭据状态都读它）。 */
     val providerStates: StateFlow<Map<String, QuotaRepository.ProviderState>> = repository.states
 
-    /** chip / 设置列表用；实例清单或凭据变化时自动重算。 */
+    /** 账号清单 + 展示名（顺序 = 注册顺序 + 组内序号，主屏照此渲染，不按紧急度重排）。 */
     val providers: StateFlow<List<QuotaProviderInfo>> = repository.states
         .combine(repository.instances) { states, instances -> buildProviders(instances, states) }
         .stateIn(
@@ -64,19 +58,6 @@ class QuotaViewModel(
             SharingStarted.Eagerly,
             buildProviders(repository.instances.value, repository.states.value),
         )
-
-    /** 当前选中账号的状态（额度页主体）。 */
-    val state: StateFlow<QuotaRepository.ProviderState> =
-        combine(repository.states, _selectedProviderId) { states, id ->
-            states[id] ?: QuotaRepository.ProviderState(id)
-        }.stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            repository.state(_selectedProviderId.value),
-        )
-
-    private val _ollamaPlan = MutableStateFlow(settings.ollamaPlan)
-    val ollamaPlan: StateFlow<OllamaPlanMode> = _ollamaPlan.asStateFlow()
 
     private val _alertEnabled = MutableStateFlow(settings.alertsEnabled)
     val alertEnabled: StateFlow<Boolean> = _alertEnabled.asStateFlow()
@@ -113,24 +94,16 @@ class QuotaViewModel(
     )
 
     private val _refreshHours = MutableStateFlow(settings.refreshIntervalHours)
-
-    /** 聚合视图（true = 榜单，一实例一行）还是单家视图；偏好落盘，见 [QuotaSettings.aggregateMode]。 */
-    private val _aggregateMode = MutableStateFlow(settings.aggregateMode)
-    val aggregateMode: StateFlow<Boolean> = _aggregateMode.asStateFlow()
-
-    /** 聚合榜单 / 灰行 / 更新时间，逻辑全在 [QuotaAggregateDelegate] 与 [buildAggregateSnapshot]。 */
-    private val aggregateDelegate = QuotaAggregateDelegate(repository, viewModelScope)
-    val aggregateSnapshot: StateFlow<QuotaAggregateSnapshot> = aggregateDelegate.snapshot
-
-    /** 当前选中账号的前台刷新间隔（分钟），改动后立即生效。 */
-    private val _refreshMinutes = MutableStateFlow(
-        settings.refreshIntervalMinutes(
-            repository.instances.value.firstOrNull()?.instanceId.orEmpty(),
-            repository.instances.value.firstOrNull()?.providerTypeId.orEmpty(),
-        ),
-    )
-    val refreshMinutes: StateFlow<Int> = _refreshMinutes.asStateFlow()
     val refreshHours: StateFlow<Int> = _refreshHours.asStateFlow()
+
+    /**
+     * 主屏前台定时器的间隔（分钟）：取所有账号里**最短**的那个。
+     *
+     * 主屏一次刷全部账号（不再有「当前选中家」），按最短间隔走才不会让某个设了 1 分钟的账号
+     * 被别人的 60 分钟拖着不刷新；数据层还有按账号的节流兜底。
+     */
+    private val _refreshMinutes = MutableStateFlow(shortestRefreshMinutes())
+    val refreshMinutes: StateFlow<Int> = _refreshMinutes.asStateFlow()
 
     /**
      * 凭据的保存 / 清除：在途锁、失败原因、完成信号都在 [QuotaCredentialActions] 里。
@@ -146,46 +119,32 @@ class QuotaViewModel(
     /** 上次操作后就地提示的失败原因（按实例）；重新保存或成功时清掉。 */
     val saveErrors: StateFlow<Map<String, String>> = credentialActions.errors
 
-    /** 进页面时拉一次（repository 内部按实例节流，切 Tab 不会打满限流）。 */
-    fun onProviderVisible() {
-        val id = _selectedProviderId.value
-        viewModelScope.launch(Dispatchers.IO) { repository.refresh(id) }
-    }
+    // MARK: - 刷新
 
-    fun onRefresh() {
-        val id = _selectedProviderId.value
-        // 聚合视图没有「当前选中账号」的概念：刷全部（非 force，节流在数据层）
-        if (_aggregateMode.value) {
-            aggregateDelegate.refreshAll()
-            return
-        }
-        viewModelScope.launch(Dispatchers.IO) { repository.refresh(id, force = true) }
-    }
-
-    /** 聚合 / 单家切换：只影响展示口径，不触发重拉（两份视图读的是同一份 states）。 */
-    fun onAggregateModeChange(enabled: Boolean) {
-        if (_aggregateMode.value == enabled) return
-        settings.aggregateMode = enabled
-        _aggregateMode.value = enabled
-    }
-
-    /** 从聚合榜单点进某个账号：切到单家视图并选中它，让下钻落在同一个账号的详情上。 */
-    fun onOpenProviderFromAggregate(instanceId: String) {
-        onAggregateModeChange(false)
-        onSelectProvider(instanceId)
-    }
-
-    /** 进入聚合视图时拉一次：榜单要的是全部账号，只拉当前选中账号会让其他行停在旧值。 */
-    fun onAggregateVisible() = aggregateDelegate.refreshAll()
+    /** 进页面拉一次全部账号（repository 内部按实例节流，切 Tab 不会打满限流）。 */
+    fun onVisible() = refreshAll(force = false)
 
     /** 前台定时刷新：受节流约束，间隔没到就直接返回（不 force）。 */
-    fun onTick() {
-        if (_aggregateMode.value) {
-            aggregateDelegate.refreshAll()
-            return
+    fun onTick() = refreshAll(force = false)
+
+    /** 点页头刷新：跳过节流，全部账号重拉。 */
+    fun onRefresh() = refreshAll(force = true)
+
+    private fun refreshAll(force: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.instances.value.forEach { instance ->
+                runCatching { repository.refresh(instance.instanceId, force = force) }
+            }
         }
-        val id = _selectedProviderId.value
-        viewModelScope.launch(Dispatchers.IO) { repository.refresh(id, force = false) }
+    }
+
+    /**
+     * 切某个账号的用量范围（展开区的分段）：只重拉这一家的用量，其它账号不动。
+     *
+     * 范围本来就按实例存在 [QuotaRepository.ProviderState.range] 里，失败时数据层会回滚。
+     */
+    fun onRangeChangeFor(instanceId: String, range: QuotaRange) {
+        viewModelScope.launch(Dispatchers.IO) { repository.setRange(instanceId, range) }
     }
 
     /** 某个账号的前台刷新间隔（分钟）。 */
@@ -193,6 +152,12 @@ class QuotaViewModel(
         val typeId = repository.instance(instanceId)?.providerTypeId ?: instanceId
         return settings.refreshIntervalMinutes(instanceId, typeId)
     }
+
+    /** 最短的账号间隔：主屏定时器按它走（见 [refreshMinutes]）。 */
+    private fun shortestRefreshMinutes(): Int =
+        repository.instances.value.minOfOrNull { instance ->
+            settings.refreshIntervalMinutes(instance.instanceId, instance.providerTypeId)
+        } ?: 1
 
     /** 修改某个账号的刷新间隔（分钟）；同时刷新 repository 的节流基准。 */
     fun onRefreshIntervalChange(instanceId: String, minutes: Int) {
@@ -203,46 +168,12 @@ class QuotaViewModel(
             val typeId = repository.instance(id)?.providerTypeId ?: id
             settings.refreshIntervalMinutes(id, typeId) * 60L
         }
-        // 只同步「当前选中账号」的前台定时器：改了别的账号的间隔不该重置当前的节奏
-        // （节奏由 QuotaScreen 的 LaunchedEffect 按 refreshMinutes 重启，见 shouldSyncRefreshMinutes）
-        if (shouldSyncRefreshMinutes(instanceId, _selectedProviderId.value)) {
-            _refreshMinutes.value = refreshMinutesFor(instanceId)
-        }
+        _refreshMinutes.value = shortestRefreshMinutes()
     }
 
-    fun onSelectProvider(instanceId: String) {
-        if (_selectedProviderId.value == instanceId) return
-        _refreshMinutes.value = refreshMinutesFor(instanceId)
-        _selectedProviderId.value = instanceId
-        viewModelScope.launch(Dispatchers.IO) { repository.refresh(instanceId) }
-    }
+    // MARK: - 凭据
 
-    fun onRangeChange(range: QuotaRange) {
-        val id = _selectedProviderId.value
-        viewModelScope.launch(Dispatchers.IO) { repository.setRange(id, range) }
-    }
-
-    /** 单条凭据保存（Ollama 一个输入 / DeepSeek 的两行各自调用）。 */
-    fun onSaveCredential(kind: QuotaCredentialKind, value: String?) {
-        val id = _selectedProviderId.value
-        viewModelScope.launch(Dispatchers.IO) { repository.saveCredential(id, kind, value) }
-    }
-
-    /** DeepSeek 的两个输入一起保存；空串由 repository 视作清除。 */
-    fun onSaveCredentials(balanceValue: String?, usageValue: String?) {
-        val id = _selectedProviderId.value
-        viewModelScope.launch(Dispatchers.IO) {
-            val provider = repository.providerOf(id) ?: return@launch
-            saveProviderCredentials(repository, id, provider, balanceValue, usageValue)
-        }
-    }
-
-    /**
-     * 设置页保存某个账号的两个凭据（不改当前选中项）。
-     *
-     * 三件事都要给设置页一个可观察的结果：在途锁（连点只存一次）、失败原因（就地提示）、
-     * 完成信号（成功后收起展开行，失败则留展开并保留输入，见 [saveRowState]）。
-     */
+    /** 设置页保存某个账号的两个凭据（不改当前选中项）。 */
     fun onSaveCredentialsFor(instanceId: String, balanceValue: String?, usageValue: String?) {
         credentialActions.save(instanceId, balanceValue, usageValue)
     }
@@ -250,7 +181,7 @@ class QuotaViewModel(
     /**
      * 设置页断开某个账号：清凭据 + 清快照 + 状态回落到「未配置」。
      *
-     * 与保存共用同一把在途锁与同一份失败原因；成功后由设置页收起该行并给一次 toast（见 [saveRowState]）。
+     * 与保存共用同一把在途锁与同一份失败原因；成功后由设置页收起该行并给一次 toast。
      */
     fun onClearCredentialsFor(instanceId: String) {
         credentialActions.clear(instanceId)
@@ -270,17 +201,8 @@ class QuotaViewModel(
     fun onDeleteAccount(instanceId: String, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             val removed = repository.deleteInstance(instanceId)
-            if (removed && _selectedProviderId.value == instanceId) {
-                _selectedProviderId.value = defaultInstanceId()
-            }
             onDone(removed)
         }
-    }
-
-    /** 计费模式只影响展示口径，不触发重拉：同一份数据两种排版，没必要多打一次接口。 */
-    fun onOllamaPlanChange(mode: OllamaPlanMode) {
-        settings.ollamaPlan = mode
-        _ollamaPlan.value = mode
     }
 
     fun onAlertEnabledChange(enabled: Boolean) {
@@ -306,13 +228,9 @@ class QuotaViewModel(
         QuotaScheduler.reschedule(getApplication())
     }
 
-    private fun defaultInstanceId(): String =
-        repository.instances.value.firstOrNull()?.instanceId
-            ?: repository.providers().firstOrNull()?.id.orEmpty()
-
     /**
      * 实例清单 → 界面模型：同类型的多个账号只在这里汇总一次「是否多账号」，
-     * chip / 榜单 / 设置页分组都用同一个判据，不会各说各的。
+     * 主屏徽标 / 设置页分组都用同一个判据，不会各说各的。
      */
     private fun buildProviders(
         instances: List<QuotaInstance>,
@@ -345,13 +263,3 @@ class QuotaViewModel(
         }
     }
 }
-
-/**
- * 改了某个账号的刷新间隔后，是否同步「当前选中账号」的前台定时器。
- *
- * 额度页只有一个前台定时器（QuotaScreen 的 LaunchedEffect 读 [QuotaViewModel.refreshMinutes]），
- * 它代表的是**当前选中账号**的节奏：在设置页调了别的账号的间隔却去改写它，会让当前账号按别人的频率刷
- * （回归：串改选中账号）。
- */
-internal fun shouldSyncRefreshMinutes(changedInstanceId: String, selectedInstanceId: String): Boolean =
-    changedInstanceId == selectedInstanceId

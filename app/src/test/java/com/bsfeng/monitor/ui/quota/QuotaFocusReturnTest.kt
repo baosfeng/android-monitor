@@ -46,43 +46,4 @@ class QuotaFocusReturnTest {
         assertFalse(quotaReturnFocusPending(baseline, seenGeneration = baseline))
     }
 
-    @Test
-    fun `没点过重试时不抢焦点`() {
-        assertEquals(
-            QuotaFocusAction.IDLE,
-            retryFocusAction(armed = false, loading = false, sawLoading = true, hasError = false),
-        )
-    }
-
-    @Test
-    fun `重试请求在途时等错误条有结果`() {
-        assertEquals(
-            QuotaFocusAction.WAIT,
-            retryFocusAction(armed = true, loading = true, sawLoading = true, hasError = false),
-        )
-    }
-
-    @Test
-    fun `重试请求还没起来时继续等`() {
-        assertEquals(
-            QuotaFocusAction.WAIT,
-            retryFocusAction(armed = true, loading = false, sawLoading = false, hasError = true),
-        )
-    }
-
-    @Test
-    fun `重试成功错误条收起后焦点回刷新额度`() {
-        assertEquals(
-            QuotaFocusAction.REQUEST,
-            retryFocusAction(armed = true, loading = false, sawLoading = true, hasError = false),
-        )
-    }
-
-    @Test
-    fun `重试仍失败时作废回焦`() {
-        assertEquals(
-            QuotaFocusAction.DROP,
-            retryFocusAction(armed = true, loading = false, sawLoading = true, hasError = true),
-        )
-    }
 }

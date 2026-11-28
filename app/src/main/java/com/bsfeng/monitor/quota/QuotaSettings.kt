@@ -2,10 +2,9 @@ package com.bsfeng.monitor.quota
 
 import android.content.Context
 import androidx.core.content.edit
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 
 /**
- * 额度监控的偏好设置 —— 后台刷新频率、预警开关、Ollama 计费模式。
+ * 额度监控的偏好设置 —— 后台刷新频率、预警开关、各账号的前台刷新间隔。
  *
  * 单独一个类是为了让 ViewModel / 调度器 / 设置页读到同一份口径，
  * 不在界面里写字面量默认值。
@@ -43,27 +42,10 @@ class QuotaSettings(context: Context) {
         get() = prefs.getBoolean(KEY_ALERTS, true)
         set(value) = prefs.edit { putBoolean(KEY_ALERTS, value) }
 
-    /** Ollama 计费模式：用户手动选，默认按百分比。 */
-    var ollamaPlan: OllamaPlanMode
-        get() = OllamaPlanMode.of(prefs.getString(KEY_OLLAMA_PLAN, null))
-        set(value) = prefs.edit { putString(KEY_OLLAMA_PLAN, value.storageValue) }
-
-    /**
-     * 额度页顶部视图：`true` = 聚合榜单（一家一行），`false` = 单家卡片。
-     *
-     * 默认聚合：榜单是这一页最常被问的问题（「哪家先见底」），单家卡片只是下钻后的细节；
-     * 偏好落盘是为了让用户切到单家后下次进来仍是单家，不在每次进页面被强行扳回聚合。
-     */
-    var aggregateMode: Boolean
-        get() = prefs.getBoolean(KEY_AGGREGATE_MODE, true)
-        set(value) = prefs.edit { putBoolean(KEY_AGGREGATE_MODE, value) }
-
     companion object {
         private const val PREFS_NAME = "quota_settings"
         private const val KEY_REFRESH_HOURS = "refresh_interval_hours"
         private const val KEY_ALERTS = "alerts_enabled"
-        private const val KEY_OLLAMA_PLAN = "ollama_plan"
-        private const val KEY_AGGREGATE_MODE = "aggregate_mode"
         private const val KEY_REFRESH_MINUTES = "refresh_minutes:"
 
         /** 默认 1 分钟：Ollama 官方建议的轮询频率，也在 10 次/分钟的限流内。 */

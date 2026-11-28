@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.ui.quota
 
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaBucket
 import com.bsfeng.monitor.domain.quota.QuotaGranularity
 import com.bsfeng.monitor.domain.quota.QuotaGroup
@@ -204,39 +203,8 @@ object QuotaFormat {
         }
     }
 
-    /**
-     * 所选计费模式与返回结构不一致时的提示。
-     *
-     * 计费模式是用户手选的（Ollama 新旧两种计划返回的 JSON 结构不同，凭据相同无法自动判别），
-     * 所以不能悄悄按返回结构切换展示——那会让「我选过金额」这件事失效；提示一句、
-     * 仍按实际结构展示，是唯一不撒谎的做法。
-     *
-     * 这个偏好在设置里只属于 Ollama：其它 provider 的返回结构由各自接口固定
-     * （opencode-go 恒为百分比、DeepSeek 恒为用量），拿 Ollama 的选择去比对它们
-     * 会凭空冒出一句「与所选不一致」，所以非 Ollama 一律不提示。
-     */
-    fun planMismatchNote(
-        plan: OllamaPlanMode,
-        items: List<QuotaItem>,
-        providerId: String = OLLAMA_PROVIDER_ID,
-    ): String? {
-        if (items.isEmpty() || providerId != OLLAMA_PROVIDER_ID) return null
-        val hasMoney = items.any { it.kind == QuotaKind.MONEY }
-        val hasPercent = items.any { it.kind == QuotaKind.PERCENT }
-        return when {
-            plan == OllamaPlanMode.USD && !hasMoney ->
-                "接口返回的是按百分比限额结构，与所选「按金额」不一致；卡片按实际结构展示"
-            plan == OllamaPlanMode.PERCENT && !hasPercent ->
-                "接口返回的是金额结构，与所选「按百分比限额」不一致；卡片按实际结构展示"
-            else -> null
-        }
-    }
-
     private fun sumLongs(values: List<Long?>): Long? =
         if (values.all { it == null }) null else values.sumOf { it ?: 0L }
-
-    /** 计费模式归属的 provider（见 [planMismatchNote]）。 */
-    const val OLLAMA_PROVIDER_ID: String = "ollama"
 
     private fun sumMoney(values: List<BigDecimal?>): BigDecimal? =
         if (values.all { it == null }) null else values.fold(BigDecimal.ZERO) { acc, v ->

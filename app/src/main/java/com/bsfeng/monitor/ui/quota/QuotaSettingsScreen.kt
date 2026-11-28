@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaUnit
 import com.bsfeng.monitor.quota.QuotaSettings
 import com.bsfeng.monitor.quota.postQuotaTestNotification
@@ -76,7 +75,6 @@ fun QuotaSettingsScreen(
     val lowCny by viewModel.lowBalanceCny.collectAsStateWithLifecycle()
     val lowUsd by viewModel.lowBalanceUsd.collectAsStateWithLifecycle()
     val refreshHours by viewModel.refreshHours.collectAsStateWithLifecycle()
-    val plan by viewModel.ollamaPlan.collectAsStateWithLifecycle()
     var expandedId by remember { mutableStateOf<String?>(null) }
     // 每个账号的刷新间隔（分钟）：进入页面读一次，改动就地更新并落盘。
     // 键是实例键（第一实例 == 类型 id），所以老用户的 refresh_minutes 偏好天然命中。
@@ -300,15 +298,6 @@ fun QuotaSettingsScreen(
                         modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
                     )
                 }
-                TitledSettingsGroup(title = "Ollama 计费模式") {
-                    PlanModeRow(selected = plan, onSelect = viewModel::onOllamaPlanChange)
-                }
-                Text(
-                    "按你账户实际的计费方式选；与 Ollama 返回的结构不一致时，额度卡里会用「?」提示。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = t.muted,
-                    modifier = Modifier.padding(horizontal = t.space4, vertical = t.space2),
-                )
                 Text(
                     "额度数据只用于本机展示与预警通知，不上传。",
                     style = MaterialTheme.typography.bodySmall,
@@ -394,17 +383,3 @@ private fun RefreshRow(selectedHours: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-
-/** Ollama 计费模式：用户手选、持久化；页面只负责把选择交给 ViewModel。 */
-@Composable
-private fun PlanModeRow(selected: OllamaPlanMode, onSelect: (OllamaPlanMode) -> Unit) {
-    val t = LocalDesignTokens.current
-    val modes = OllamaPlanMode.entries
-    Column(Modifier.padding(horizontal = t.space4, vertical = t.space3)) {
-        SegmentedControl(
-            options = modes.map { it.title },
-            selectedIndex = modes.indexOf(selected),
-            onSelect = { index -> onSelect(modes[index]) },
-        )
-    }
-}

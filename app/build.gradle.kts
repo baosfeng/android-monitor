@@ -409,18 +409,15 @@ val pureComposableSources = listOf(
     "com/bsfeng/monitor/ui/components/WindowOverlay",
     "com/bsfeng/monitor/ui/foundation/Backdrop",
     "com/bsfeng/monitor/ui/foundation/ImmersiveScrim",
-    "com/bsfeng/monitor/ui/quota/QuotaAggregateList",
-    "com/bsfeng/monitor/ui/quota/QuotaAggregateRow",
-    "com/bsfeng/monitor/ui/quota/QuotaAtoms",
-    // 下面三个文件原先把业务逻辑与 @Composable 混在一起（整文件排除 = 逻辑不进分母也无人测，
-    // 基建审计 I4）。逻辑已抽到 QuotaUsageTags.kt / QuotaSegment.kt / quota/QuotaTestNotification.kt
-    // 并补了纯 JVM 用例，文件本身现在只剩 @Composable，才允许退回排除清单。
-    // 入选资格由 checkCoverageExclusions 每次 preBuild 复核，不是拍脑袋写进来的。
+    // 额度主屏 r4 重写后只剩 @Composable 的新文件（逻辑在 QuotaAccountRows / QuotaUsageChart /
+    // QuotaScreenPrefs，那几个文件不在本清单、照常计入分母并补纯 JVM 用例）。
+    "com/bsfeng/monitor/ui/quota/QuotaAccountDetail",
+    "com/bsfeng/monitor/ui/quota/QuotaAccountItem",
+    "com/bsfeng/monitor/ui/quota/QuotaEmptyAccounts",
+    "com/bsfeng/monitor/ui/quota/QuotaBrandMark",
+    "com/bsfeng/monitor/ui/quota/QuotaHelpDialog",
     "com/bsfeng/monitor/ui/quota/QuotaSettingsAlerts",
-    "com/bsfeng/monitor/ui/quota/QuotaUsageCard",
-    "com/bsfeng/monitor/ui/quota/QuotaViewModeSwitch",
     "com/bsfeng/monitor/ui/quota/QuotaSettingsScreen",
-    "com/bsfeng/monitor/ui/quota/QuotaStateViews",
     "com/bsfeng/monitor/ui/theme/Components",
     "com/bsfeng/monitor/finance/ui/FinanceDialogs",
 )
@@ -452,9 +449,7 @@ val coverageExcludes: List<String> = pureComposableSources.map { "$it" + "Kt*.cl
 //    对应领域包（如 com.bsfeng.monitor.quota）。
 //    - AdScreen.monthDayLabel：纯日期格式化
 //    - WindowOverlay.View.findDialogWindow：Android 窗口查找胶水
-//    - QuotaAggregateList.rankedRowTagOf / excludedRowTagOf：锚点映射
 //    - QuotaSettingsScreen.providerRowTagOf / refreshChipTagOf：锚点映射
-//    - QuotaStateViews.QuotaUsageSlot / quotaUsageSlot：空态决策
 val nonComposableDebt = emptyMap<String, List<String>>()
 
 // 清单口径的 preBuild 硬校验：清单里每个文件只能有 @Composable 顶层声明（val / const val 例外，

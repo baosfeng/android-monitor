@@ -1,6 +1,5 @@
 package com.bsfeng.monitor.ui.quota
 
-import com.bsfeng.monitor.domain.quota.OllamaPlanMode
 import com.bsfeng.monitor.domain.quota.QuotaGroup
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaKind
@@ -127,51 +126,6 @@ class QuotaFormatTest {
         assertEquals("00", sampled.first())
         assertEquals("23", sampled.last())
         assertEquals(labels, QuotaFormat.sampleLabels(labels, 30))
-    }
-
-    @Test
-    fun `计费模式与返回结构不一致时提示`() {
-        val percentItem = QuotaItem(
-            id = "session",
-            title = "会话",
-            kind = QuotaKind.PERCENT,
-            remaining = BigDecimal("75"),
-            unit = QuotaUnit.PERCENT,
-        )
-        val moneyItem = QuotaItem(
-            id = "balance",
-            title = "余额",
-            kind = QuotaKind.MONEY,
-            remaining = BigDecimal("72.5"),
-            unit = QuotaUnit.USD,
-        )
-        val usdMismatch = QuotaFormat.planMismatchNote(OllamaPlanMode.USD, listOf(percentItem))
-        assertTrue(usdMismatch!!.contains("百分比"))
-        val percentMismatch = QuotaFormat.planMismatchNote(OllamaPlanMode.PERCENT, listOf(moneyItem))
-        assertTrue(percentMismatch!!.contains("金额"))
-        assertNull(QuotaFormat.planMismatchNote(OllamaPlanMode.USD, listOf(moneyItem)))
-        assertNull(QuotaFormat.planMismatchNote(OllamaPlanMode.USD, emptyList()))
-    }
-
-    /**
-     * 计费模式偏好只属于 Ollama：别的 provider 的返回结构由各自接口固定，
-     * 拿 Ollama 的选择去比对它们会凭空冒出一句「与所选不一致」。
-     */
-    @Test
-    fun `计费模式提示只对 Ollama 生效`() {
-        val percentItem = QuotaItem(
-            id = "window:rolling",
-            title = "5 小时额度",
-            kind = QuotaKind.PERCENT,
-            remaining = BigDecimal("87.7"),
-            unit = QuotaUnit.PERCENT,
-        )
-        // 同样的「选了金额、返回百分比」，在 opencode-go / DeepSeek 下不提示
-        assertNull(QuotaFormat.planMismatchNote(OllamaPlanMode.USD, listOf(percentItem), "opencode-go"))
-        assertNull(QuotaFormat.planMismatchNote(OllamaPlanMode.PERCENT, listOf(percentItem), "deepseek"))
-        // 显式传 ollama 才提示，与不传参的默认行为一致
-        assertNotNull(QuotaFormat.planMismatchNote(OllamaPlanMode.USD, listOf(percentItem), "ollama"))
-        assertNotNull(QuotaFormat.planMismatchNote(OllamaPlanMode.USD, listOf(percentItem)))
     }
 
     private fun group(name: String, requests: Int, cost: String) = QuotaGroup(

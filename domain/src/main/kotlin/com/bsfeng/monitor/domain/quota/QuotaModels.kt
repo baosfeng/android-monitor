@@ -165,15 +165,3 @@ enum class QuotaCredentialKind {
     PLATFORM_TOKEN,
     SESSION_COOKIE,
 }
-
-/** Ollama 的计费模式 —— 由用户在额度页手动选择，选择持久化。 */
-enum class OllamaPlanMode(val storageValue: String, val title: String) {
-    PERCENT("percent", "按百分比限额"),
-    USD("usd", "按金额（USD）"),
-    ;
-
-    companion object {
-        fun of(storageValue: String?): OllamaPlanMode =
-            entries.firstOrNull { it.storageValue == storageValue } ?: PERCENT
-    }
-}
