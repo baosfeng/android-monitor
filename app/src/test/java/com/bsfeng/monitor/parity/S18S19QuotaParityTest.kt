@@ -1,9 +1,14 @@
 package com.bsfeng.monitor.parity
 
+import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import com.bsfeng.monitor.domain.quota.QuotaCredentialKind
+import com.bsfeng.monitor.domain.quota.QuotaError
+import com.bsfeng.monitor.domain.quota.QuotaErrorKind
 import com.bsfeng.monitor.domain.quota.QuotaItem
 import com.bsfeng.monitor.domain.quota.QuotaKind
 import com.bsfeng.monitor.domain.quota.QuotaProvider
@@ -31,6 +36,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.io.FileOutputStream
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -43,9 +49,10 @@ import java.time.ZoneId
  * 用假 provider + 软件密码器装配一份真 repository，喂原型 s18/s19 的同一批数据，再导出锚点几何。
  *
  * 口径：
- * - 时钟固定 9:41（repository 的 nowSeconds），否则「更新于 HH:mm」文案判据跟着机器时间飘；
- * - 数据照原型铺满：聚合态 3 家进榜（opencode-go 12% / open-design 34% / ollama 40%）+ 1 家灰行（DeepSeek 余额型）；
- * - s19 只有 Ollama 已配置，其余三家按原型是「未配置」。
+ * - 时钟固定：s18 的「更新于 9:41」用 [at]；s19 的拉取发生在 9:36（页面时钟 9:41 → 「5 分钟前更新」）；
+ * - s18 数据：3 家进榜（opencode-go 12% / open-design 34% / ollama 40%）+ 1 家灰行（DeepSeek 余额型）；
+ * - s19 数据按原型示例账号铺：Ollama 主号 + 备用号（未配置）、DeepSeek（鉴权失败 → 令牌过期）、
+ *   open-design（已连接）；只为这三家建 registry，多出来的 opencode-go 会把原型没有的行插进来。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w393dp-h6000dp-xxhdpi")
@@ -104,6 +111,8 @@ class S18S19QuotaParityTest {
         items: List<QuotaItem>,
         balanceKind: QuotaCredentialKind = QuotaCredentialKind.API_KEY,
         usageKind: QuotaCredentialKind? = null,
+        /** 鉴权失败：s19 的 DeepSeek 行要能展示「令牌过期」这一态。 */
+        unauthorized: Boolean = false,
     ): QuotaProvider = object : QuotaProvider {
         override val id: String = id
         override val displayName: String = name
@@ -112,12 +121,15 @@ class S18S19QuotaParityTest {
         override val supportsModelBreakdown: Boolean = false
         override val credentialHint: String = "API Key"
         override val credentialHelp: String = ""
-        override suspend fun fetchItems(credential: String): List<QuotaItem> = items
+        override suspend fun fetchItems(credential: String): List<QuotaItem> {
+            if (unauthorized) throw QuotaError(QuotaErrorKind.UNAUTHORIZED)
+            return items
+        }
         override suspend fun fetchUsage(credential: String, range: QuotaRange): QuotaUsage? = null
     }
 
     /**
-     * 原型四家：ollama 会话 75 / 每周 40；opencode-go 5 小时 12 / 每周 46 / 每月 71；
+     * 原型 s18 四家：ollama 会话 75 / 每周 40；opencode-go 5 小时 12 / 每周 46 / 每月 71；
      * open-design 月度 34；deepseek 只有余额（灰行）。
      */
     private fun protoProviders(): List<QuotaProvider> = listOf(
@@ -147,12 +159,41 @@ class S18S19QuotaParityTest {
     )
 
     /**
-     * 真仓库 + 真 ViewModel：凭据先落盘（软件密码器），再 force 刷一次把状态灌成「有数据」，
-     * 这样 [QuotaScreen] 组合时读到的是与原型同一份展开态，不是空态骨架。
+     * 原型 s19 的三家（不含 opencode-go）：Ollama 每周 96%（原型副行）、DeepSeek 鉴权失败、
+     * open-design 月度 34%。多账号 = 测试里再 addInstance("ollama")。
      */
-    private fun quotaViewModel(configured: List<String>): QuotaViewModel {
+    private fun s19Providers(): List<QuotaProvider> = listOf(
+        provider(
+            "ollama", "Ollama",
+            listOf(
+                percent("ollama.session", "会话", "75"),
+                percent("ollama.weekly", "每周", "96", primary = true),
+            ),
+        ),
+        provider(
+            "deepseek", "DeepSeek",
+            listOf(balance("deepseek.balance", "余额", "110")),
+            balanceKind = QuotaCredentialKind.PLATFORM_TOKEN,
+            usageKind = QuotaCredentialKind.PLATFORM_TOKEN,
+            unauthorized = true,
+        ),
+        provider("opendesign", "Open Design", listOf(percent("od.monthly", "月度", "34", primary = true))),
+    )
+
+    /**
+     * 真仓库 + 真 ViewModel：凭据先落盘（软件密码器），再 force 刷一次把状态灌成「有数据」，
+     * 这样组合时读到的是与原型同一份展开态，不是空态骨架。
+     *
+     * @param now 数据层时钟；s19 传 9:36，让页面侧（9:41）显示「5 分钟前更新」
+     * @param secondOllama 追加 Ollama 第二个账号（原型「备用号」）
+     */
+    private fun quotaViewModel(
+        providers: List<QuotaProvider>,
+        configured: List<String>,
+        now: Long = at(9, 41),
+        secondOllama: Boolean = false,
+    ): QuotaViewModel {
         val app = RuntimeEnvironment.getApplication()
-        val providers = protoProviders()
         val credentials = QuotaCredentialStore(app, PlainCipher())
         // 凭据类型按 provider 真实口径存（DeepSeek 是平台登录令牌、Open Design 是 Cookie）：
         // 一律写 API_KEY 会让那两家「已存但读不到」，灰行与连接角标都跟着错
@@ -163,10 +204,11 @@ class S18S19QuotaParityTest {
         val repository = QuotaRepository(
             registry = QuotaProviderRegistry(providers),
             credentials = credentials,
-            nowSeconds = { at(9, 41) },
+            nowSeconds = { now },
             cache = NoQuotaSnapshotCache,
             catalog = InMemoryQuotaInstanceCatalog(providers.map { it.id }),
         )
+        if (secondOllama) repository.addInstance("ollama")
         // 非 JVM 调度：refresh 是 suspend 且内部只读注入的假数据，runBlocking 直接落状态
         runBlocking { configured.forEach { repository.refresh(it, force = true) } }
         return QuotaViewModel(app, repository)
@@ -175,7 +217,7 @@ class S18S19QuotaParityTest {
     @Test
     fun exportQuotaS18() {
         // 聚合态默认开（QuotaSettings.aggregateMode 默认 true），四家都配齐 → 3 行进榜 + 1 行灰行
-        val viewModel = quotaViewModel(listOf("ollama", "deepseek", "opencode-go", "opendesign"))
+        val viewModel = quotaViewModel(protoProviders(), listOf("ollama", "deepseek", "opencode-go", "opendesign"))
         compose.setContent {
             MonitorTheme(themeId = "apple") {
                 QuotaScreen(onOpenSettings = {}, viewModel = viewModel)
@@ -192,11 +234,16 @@ class S18S19QuotaParityTest {
 
     @Test
     fun exportQuotaSettingsS19() {
-        // 原型 s19：Ollama 已连接，其余三家未配置
-        val viewModel = quotaViewModel(listOf("ollama"))
+        // 原型 s19：Ollama 主号（5 分钟前拉过）+ 备用号（未配置）、DeepSeek 令牌过期、open-design 已连接
+        val viewModel = quotaViewModel(
+            providers = s19Providers(),
+            configured = listOf("ollama", "deepseek", "opendesign"),
+            now = at(9, 36),
+            secondOllama = true,
+        )
         compose.setContent {
             MonitorTheme(themeId = "apple") {
-                QuotaSettingsScreen(onBack = {}, viewModel = viewModel)
+                QuotaSettingsScreen(onBack = {}, viewModel = viewModel, nowSeconds = { at(9, 41) })
             }
         }
         compose.waitForIdle()
@@ -205,6 +252,18 @@ class S18S19QuotaParityTest {
             collectMergedTexts(compose),
         )
         writeScreens(mapOf("s19" to items), File("build/parity/impl-s19.json"))
+        // 交付截图：393 宽整页（视口高 6000dp，按最后一个锚点的底 + 24 裁掉空白）
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val contentBottomDp = items
+            .filter { it.id != "s19-content" && it.id != "screen-s19" }
+            .maxOf { it.y + it.h } + 24f
+        val cropHeight = (contentBottomDp * compose.density.density).toInt().coerceIn(1, image.height)
+        val cropped = Bitmap.createBitmap(image, 0, 0, image.width, cropHeight)
+        val scaled = Bitmap.createScaledBitmap(cropped, 393, cropHeight * 393 / image.width, true)
+        val png = File("../.open-design/impl-notes/quota-redesign/shots/impl-s19.png")
+        png.parentFile?.mkdirs()
+        FileOutputStream(png).use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
         println("PARITY(s19) tags=" + items.size + " " + items.joinToString { it.id })
+        println("SHOT(s19) " + png.absolutePath + " " + scaled.width + "x" + scaled.height)
     }
 }
