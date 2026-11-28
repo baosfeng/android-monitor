@@ -177,16 +177,12 @@ fun QuotaScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f).testTag("s18-content"),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = t.space8),
             ) {
-                stickyHeader(key = "concl") {
-                    Box(Modifier.onSizeChanged { stickyHeightPx = it.height }) {
-                        QuotaConclBar(leader)
+                if (anyConfigured) {
+                    stickyHeader(key = "concl") {
+                        Box(Modifier.onSizeChanged { stickyHeightPx = it.height }) {
+                            QuotaConclBar(leader)
+                        }
                     }
-                }
-                if (!anyConfigured) {
-                    item(key = "empty") {
-                        QuotaEmptyAccounts(onOpenSettings = onOpenSettings)
-                    }
-                } else {
                     item(key = "mode") {
                         Column(
                             Modifier
@@ -194,61 +190,66 @@ fun QuotaScreen(
                                 .padding(horizontal = t.space4)
                                 .padding(bottom = 6.dp),
                         ) {
-                        SegmentedControl(
-                            options = listOf("每行都显示重置", "只显示需处理的行"),
-                            selectedIndex = if (resetMode == QuotaResetMode.ALL) 0 else 1,
-                            onSelect = { index ->
-                                val next = if (index == 0) QuotaResetMode.ALL else QuotaResetMode.URGENT
-                                if (next != resetMode) {
-                                    resetMode = next
-                                    prefs.resetMode = next
-                                    toast.show(
-                                        if (next == QuotaResetMode.ALL) {
-                                            "每行都显示重置时刻"
-                                        } else {
-                                            "只给即将重置或快见底的行显示重置"
-                                        },
-                                    )
+                            SegmentedControl(
+                                options = listOf("每行都显示重置", "只显示需处理的行"),
+                                selectedIndex = if (resetMode == QuotaResetMode.ALL) 0 else 1,
+                                onSelect = { index ->
+                                    val next = if (index == 0) QuotaResetMode.ALL else QuotaResetMode.URGENT
+                                    if (next != resetMode) {
+                                        resetMode = next
+                                        prefs.resetMode = next
+                                        toast.show(
+                                            if (next == QuotaResetMode.ALL) {
+                                                "每行都显示重置时刻"
+                                            } else {
+                                                "只给即将重置或快见底的行显示重置"
+                                            },
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.testTag("s18-reset-mode"),
+                                optionTags = listOf("s18-mode-all", "s18-mode-urgent"),
+                            )
+                        }
+                    }
+                    itemsIndexed(accounts, key = { _, account -> account.instanceId }) { index, account ->
+                        val key = quotaAccountKey(account.providerTypeId, instanceSeq(account.instanceId, account.providerTypeId))
+                        val state = states[account.instanceId]
+                        QuotaAccountItem(
+                            account = account,
+                            key = key,
+                            index = index,
+                            total = accounts.size,
+                            state = state,
+                            expanded = expandedId == account.instanceId,
+                            resetMode = resetMode,
+                            nowEpochSecond = now,
+                            onToggle = {
+                                val opening = expandedId != account.instanceId
+                                expandedId = if (opening) account.instanceId else null
+                                if (opening) {
+                                    // 第一次展开：没有用量就拉一次；数据层缺省 24 小时，按原型切到 7 天
+                                    if (account.supportsUsage && state?.usageConfigured == true &&
+                                        state.usage == null
+                                    ) {
+                                        viewModel.onRangeChangeFor(account.instanceId, state.range)
+                                    }
+                                    if (account.instanceId !in autoRangeDone.value &&
+                                        state?.range == QuotaRange.LAST_24_HOURS
+                                    ) {
+                                        autoRangeDone.value = autoRangeDone.value + account.instanceId
+                                        viewModel.onRangeChangeFor(account.instanceId, QuotaRange.LAST_7_DAYS)
+                                    }
                                 }
                             },
-                            modifier = Modifier.testTag("s18-reset-mode"),
-                            optionTags = listOf("s18-mode-all", "s18-mode-urgent"),
+                            onRangeChange = { range -> viewModel.onRangeChangeFor(account.instanceId, range) },
                         )
                     }
-                }
-                itemsIndexed(accounts, key = { _, account -> account.instanceId }) { index, account ->
-                    val key = quotaAccountKey(account.providerTypeId, instanceSeq(account.instanceId, account.providerTypeId))
-                    val state = states[account.instanceId]
-                    QuotaAccountItem(
-                        account = account,
-                        key = key,
-                        index = index,
-                        total = accounts.size,
-                        state = state,
-                        expanded = expandedId == account.instanceId,
-                        resetMode = resetMode,
-                        nowEpochSecond = now,
-                        onToggle = {
-                            val opening = expandedId != account.instanceId
-                            expandedId = if (opening) account.instanceId else null
-                            if (opening) {
-                                // 第一次展开：没有用量就拉一次；数据层缺省 24 小时，按原型切到 7 天
-                                if (account.supportsUsage && state?.usageConfigured == true &&
-                                    state.usage == null
-                                ) {
-                                    viewModel.onRangeChangeFor(account.instanceId, state.range)
-                                }
-                                if (account.instanceId !in autoRangeDone.value &&
-                                    state?.range == QuotaRange.LAST_24_HOURS
-                                ) {
-                                    autoRangeDone.value = autoRangeDone.value + account.instanceId
-                                    viewModel.onRangeChangeFor(account.instanceId, QuotaRange.LAST_7_DAYS)
-                                }
-                            }
-                        },
-                        onRangeChange = { range -> viewModel.onRangeChangeFor(account.instanceId, range) },
-                    )
-                }
+                } else {
+                    // 空态：没有账号就没有「最低剩余」与「重置策略」，一屏只留一条空信息（页头 + 引导 + foot）
+                    item(key = "empty") {
+                        QuotaEmptyAccounts(onOpenSettings = onOpenSettings)
+                    }
                 }
                 item(key = "alerts") {
                     // B 的组件自带「恢复提醒 · 三态」标题与左右 16dp；空态整块不渲染
@@ -265,7 +266,11 @@ fun QuotaScreen(
                 }
                 item(key = "foot") {
                     Text(
-                        "点账号行可展开全部窗口与用量图；额度数据来自各 provider 官方接口，只存在本机，不上传。",
+                        if (anyConfigured) {
+                            "点账号行可展开全部窗口与用量图；额度数据来自各 provider 官方接口，只存在本机，不上传。"
+                        } else {
+                            "额度数据来自各 provider 官方接口，只存在本机，不上传。"
+                        },
                         style = quotaTextSmall,
                         color = t.muted,
                         modifier = Modifier

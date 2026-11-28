@@ -519,6 +519,7 @@ class S18S19QuotaParityTest {
         lines += "小于44dp可点元素数=" + smallClickableCount(root(), density, limit = 44f)
         lines += "可点元素尺寸清单=" + clickableSizes(root(), density)
         // 横条宽度（判据：fill / track = fraction ±0.02，断言见 QuotaMeterTrackTest）
+        lines += "副行实测=" + subLineMetrics(root(), density)
         lines += "账号行横条 fill/track=" + trackPairs(root(), density).joinToString(",") { (track, fill) ->
             "%.1f/%.1f=%.3f".format(fill, track, if (track > 0f) fill / track else 0f)
         }
@@ -584,8 +585,28 @@ class S18S19QuotaParityTest {
         }
         compose.waitForIdle()
         compose.onNodeWithText("还没有配置额度账号").assertExists()
+        // 空态不渲染结论条与重置策略：一屏只留一条空信息（否则「最低剩余 / 暂无额度数据」与引导并列）
+        compose.onNodeWithTag("s18-concl").assertDoesNotExist()
+        compose.onNodeWithTag("s18-reset-mode").assertDoesNotExist()
+        compose.onNodeWithText("额度数据来自各 provider 官方接口，只存在本机，不上传。").assertExists()
         compose.onNodeWithText("去额度设置添加").performClick()
         assertTrue("空态入口要真的能进额度设置", opened)
+    }
+
+    /** 空态首屏截图（无结论条 / 无重置策略条），供真机验收对照。 */
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun captureS18EmptyShot() {
+        val viewModel = quotaViewModel(providers = s19Providers(), configured = emptyList())
+        compose.setContent {
+            MonitorTheme(themeId = "apple") {
+                QuotaScreen(onOpenSettings = {}, viewModel = viewModel)
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("s18-concl").assertDoesNotExist()
+        compose.onNodeWithTag("s18-reset-mode").assertDoesNotExist()
+        shot("impl-s18-empty.png")
     }
 
     private fun shot(name: String) {
@@ -594,6 +615,38 @@ class S18S19QuotaParityTest {
         png.parentFile?.mkdirs()
         FileOutputStream(png).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
         println("SHOT(s18) " + png.absolutePath + " " + image.width + "x" + image.height)
+    }
+
+    /**
+     * 页头副行实测：s18-updated 的父 Row（= 前缀 + 时间戳）宽度 / 可用宽度 201dp（393 − 左右 16 − 图标 148 − 间距 12），
+     * 以及时间戳文字有没有被 ellipsis（GetTextLayoutResult.hasVisualOverflow）。
+     */
+    private fun subLineMetrics(
+        root: androidx.compose.ui.semantics.SemanticsNode,
+        density: Float,
+    ): String {
+        var prefixWidth = 0f
+        var updatedWidth = 0f
+        fun walk(node: androidx.compose.ui.semantics.SemanticsNode) {
+            val tag = node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
+            val text = node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
+                ?.joinToString("") { it.text }
+                .orEmpty()
+            if (tag == "s18-updated") {
+                updatedWidth = node.size.width / density
+            } else if (tag == null && text.contains("个账号")) {
+                prefixWidth = node.size.width / density
+            }
+            node.children.forEach { walk(it) }
+        }
+        walk(root)
+        val available = 393f - 16f * 2 - 148f - 12f
+        val line = prefixWidth + updatedWidth
+        // 是否截断只看「行宽 vs 可用宽」：Text 用 unbounded 行盒绘制，didOverflowWidth 会被
+        // 小数取整误报（实测同一帧文字完整、却被判 true），人眼复核见 shots/impl-s18-first.png
+        return "前缀=%.1fdp + 更新文案=%.1fdp = 行宽=%.1fdp / 可用=%.1fdp / 余量=%.1fdp / 截断=%s".format(
+            prefixWidth, updatedWidth, line, available, available - line, if (line > available) "是" else "否",
+        )
     }
 
     /** 可点元素清单（tag + 宽高 dp）：用来核对「44dp 判定线」是不是浮点噪声。 */

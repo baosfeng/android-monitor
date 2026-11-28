@@ -269,9 +269,9 @@ internal fun quotaUpdatedText(
             ((nowEpochSecond - fetchedAtEpochSecond).coerceAtLeast(0L) / 60).toString() + " 分钟前"
         else -> QuotaFormat.clockShortOf(fetchedAtEpochSecond)
     }
-    if (failed) {
-        return if (ago == null) "更新失败" else "更新失败 · 上次成功 " + ago
-    }
+    // 失败态只报「更新失败」不报时间：393dp 下副行可用宽 201dp，带前缀 + 时间会 ellipsis
+    // （实测「更新失败 · 上次成功 刚刚」超出可用宽）；上次成功时刻在结论条与三态区里有。
+    if (failed) return "更新失败"
     return if (ago == null) "尚未更新" else "更新于" + if (ago == "刚刚") "刚刚" else " " + ago
 }
 
