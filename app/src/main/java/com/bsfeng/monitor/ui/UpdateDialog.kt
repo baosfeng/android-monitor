@@ -4,7 +4,7 @@ package com.bsfeng.monitor.ui
 //
 // 从 ui/SettingsSupport.kt 拆出并重做：旧实现用 M3 AlertDialog + 一个 260dp 滚动区，
 // 把发布清单里 20 条「- feat(scope): 标题」原样铺开 —— 更新一多就成了一堵墙（用户反馈）。
-// 现在按类型分组、去掉提交前缀、只留正文，标题行给「版本 → 版本 · 发布日 · 项数」。
+// 现在按类型分组、去掉提交前缀，跨多个版本更新时再按版本分段（用户可能 1.2.0 直接升 1.5.0）。
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,24 +47,33 @@ import java.util.Locale
 /** 更新记录滚动区高度上限：标题 / 副行 / 按钮之外再留 360dp，一屏能扫 10 条左右。 */
 private val UPDATE_LIST_MAX_HEIGHT = 360.dp
 
+/** 发布日 `MM-dd`；解析不出来返回 null（清单是发布流程生成的，缺字段不该出现「无效日期」）。 */
+internal fun updateDateText(publishedAt: String, zone: ZoneId = ZoneId.systemDefault()): String? =
+    runCatching { Instant.parse(publishedAt).atZone(zone) }
+        .getOrNull()
+        ?.let { String.format(Locale.US, "%02d-%02d", it.monthValue, it.dayOfMonth) }
+
 /**
- * 发布副行：`当前 1.3.0 → 1.4.0 · 11-28 发布 · 12 项更新`。
- *
- * 发布日解析不出来就整段省掉（清单是发布流程生成的，缺字段不该让弹窗出现「无效日期」）。
+ * 发布副行：单版本 `当前 1.3.0 → 1.4.0 · 11-28 发布 · 20 项更新`；
+ * 跨版本 `当前 1.2.0 → 1.5.0 · 含 3 个版本 · 55 项更新`（日期交给每段的版本标题）。
  */
 internal fun updateReleaseLine(
     currentVersion: String,
     manifest: UpdateManifest,
-    itemCount: Int,
+    sections: List<UpdateReleaseSection>,
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
-    val published = runCatching {
-        Instant.parse(manifest.publishedAt).atZone(zone)
-    }.getOrNull()
-    val date = published?.let { String.format(Locale.US, "%02d-%02d 发布", it.monthValue, it.dayOfMonth) }
+    val itemCount = sections.sumOf { it.size }
+    val published = if (sections.size == 1) {
+        updateDateText(sections.single().publishedAt, zone)?.let { it + " 发布" }
+    } else {
+        null
+    }
+    val versionCount = if (sections.size > 1) "含 " + sections.size + " 个版本" else null
     return listOfNotNull(
         "当前 " + currentVersion + " → " + manifest.versionName,
-        date,
+        versionCount,
+        published,
         if (itemCount > 0) itemCount.toString() + " 项更新" else null,
     ).joinToString(" · ")
 }
@@ -112,12 +121,12 @@ private fun UpdateAvailableDialog(
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
 ) {
-    val changes = remember(manifest.changelog) { parseUpdateChangelog(manifest.changelog) }
-    val groups = remember(changes) { groupUpdateChanges(changes) }
+    val sections = remember(manifest) { updateReleaseSections(manifest, BuildConfig.VERSION_CODE) }
+    val truncated = remember(manifest) { updateHistoryTruncated(manifest, BuildConfig.VERSION_CODE) }
     ConfirmDialog(
         visible = true,
         title = "发现新版本 " + manifest.versionName,
-        message = updateReleaseLine(BuildConfig.VERSION_NAME, manifest, changes.size),
+        message = updateReleaseLine(BuildConfig.VERSION_NAME, manifest, sections),
         confirmLabel = "下载更新",
         dismissLabel = "稍后",
         onConfirm = onDownload,
@@ -126,28 +135,20 @@ private fun UpdateAvailableDialog(
         panelTag = "s09-update",
         dismissTag = "s09-update-later",
         confirmTag = "s09-update-download",
-        extraContent = {
-            if (groups.size > 1) {
-                // 只有一组时不画分组标题：标题重复一次没有信息量
-                UpdateChangelogBody(groups)
-            } else {
-                UpdateChangelogBody(groups, showGroupLabels = false)
-            }
-        },
+        extraContent = { UpdateChangelogBody(sections, truncated) },
     )
 }
 
 /**
- * 更新记录正文：按类型分组，组内一行一条。
+ * 更新记录正文：一个版本一段（跨多版本时才有版本标题），段内按类型分组。
  *
- * 滚动区高度封顶（[UPDATE_LIST_MAX_HEIGHT]），超过就在框内滚动 —— 更新再多也不撑破弹窗。
+ * 滚动区高度封顶（[UPDATE_LIST_MAX_HEIGHT]），超过就在框内滚动 —— 更新再多也不撑破弹窗；
+ * 列表底部盖一层渐隐，提示「下面还有」。
  */
 @Composable
-private fun UpdateChangelogBody(
-    groups: List<UpdateChangeGroup>,
-    showGroupLabels: Boolean = true,
-) {
+private fun UpdateChangelogBody(sections: List<UpdateReleaseSection>, truncated: Boolean = false) {
     val t = LocalDesignTokens.current
+    val showVersionHeaders = sections.size > 1
     Box(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -157,9 +158,11 @@ private fun UpdateChangelogBody(
                 .testTag("s09-update-list"),
             verticalArrangement = Arrangement.spacedBy(t.space2),
         ) {
-            groups.forEach { group ->
-                Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
-                    if (showGroupLabels) {
+            sections.forEachIndexed { index, section ->
+                if (index > 0) UpdateVersionDivider()
+                if (showVersionHeaders) UpdateVersionHeader(section)
+                groupUpdateChanges(section.changes).forEach { group ->
+                    Column(verticalArrangement = Arrangement.spacedBy(t.space1)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 group.kind.label,
@@ -174,9 +177,16 @@ private fun UpdateChangelogBody(
                                 color = t.muted,
                             )
                         }
+                        group.changes.forEach { change -> UpdateChangeRow(change.text) }
                     }
-                    group.changes.forEach { change -> UpdateChangeRow(change.text) }
                 }
+            }
+            if (truncated) {
+                Text(
+                    "更早版本的更新记录见 GitHub Releases",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = t.muted,
+                )
             }
         }
         // 底部渐隐：列表被截断时给「下面还有」的信号（与原型 .s09-upd-scrollwrap::after 同款）
@@ -188,6 +198,37 @@ private fun UpdateChangelogBody(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, t.opaquePanel))),
         )
     }
+}
+
+/** 版本标题：`1.4.0  11-28`（跨多版本时每段一行）。 */
+@Composable
+private fun UpdateVersionHeader(section: UpdateReleaseSection) {
+    val t = LocalDesignTokens.current
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            section.versionName,
+            style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+            color = t.fg,
+            fontWeight = FontWeight.Bold,
+        )
+        updateDateText(section.publishedAt)?.let { date ->
+            Spacer(Modifier.width(t.space2))
+            Text(
+                date,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = t.muted,
+            )
+        }
+    }
+}
+
+/** 版本之间的细线（原型 .s09-upd-ver + .s09-upd-ver{border-top}）。 */
+@Composable
+private fun UpdateVersionDivider() {
+    val t = LocalDesignTokens.current
+    Spacer(Modifier.height(t.space2))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(t.borderSoft))
+    Spacer(Modifier.height(t.space1))
 }
 
 /** 一条改动的正文（换行时与正文左沿对齐，不跟圆点跑）。 */

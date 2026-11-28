@@ -131,6 +131,7 @@ jobs:
           import json
           import os
           import re
+          import subprocess
 
           version_file = "version.properties"
           props = dict(
@@ -140,6 +141,47 @@ jobs:
           )
           tag = os.environ["GITHUB_REF_NAME"]
           repo = os.environ["GITHUB_REPOSITORY"]
+
+          def sh(*args):
+              return subprocess.run(args, capture_output=True, text=True).stdout
+
+          def props_of(ref):
+              text = sh("git", "show", f"{ref}:version.properties")
+              return dict(
+                  line.split("=", 1)
+                  for line in text.splitlines()
+                  if "=" in line
+              )
+
+          # 最近 5 个 tag 的发布记录：每段 = 上一 tag → 该 tag 的提交。
+          # 客户端拿 releases[] 里「比当前版本新」的段落，跨版本更新时按版本分段展示；
+          # 顶层 changelog 仍保留最新一版，未升级的旧客户端只读它也不会坏。
+          recent_tags = [t for t in sh("git", "tag", "--sort=-v:refname").split() if t][:5]
+          releases = []
+          for i, tag_name in enumerate(recent_tags):
+              tag_props = props_of(tag_name)
+              code_text = (tag_props.get("versionCode") or "").strip()
+              name = (tag_props.get("versionName") or "").strip()
+              if not code_text.isdigit() or not name:
+                  continue
+              prev = recent_tags[i + 1] if i + 1 < len(recent_tags) else None
+              if prev:
+                  log = sh("git", "log", "--no-merges", "--pretty=format:- %s", f"{prev}..{tag_name}")
+              else:
+                  log = sh("git", "log", "--no-merges", "--pretty=format:- %s", tag_name, "-20")
+              lines = [l for l in log.splitlines() if not l.startswith("- chore:")][:20]
+              released = sh("git", "log", "-1", "--format=%cI", tag_name).strip()
+              if released:
+                  released = datetime.datetime.fromisoformat(released).astimezone(
+                      datetime.timezone.utc
+                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
+              releases.append({
+                  "versionCode": int(code_text),
+                  "versionName": name,
+                  "changelog": "\n".join(lines),
+                  "publishedAt": released,
+              })
+
           manifest = {
               "versionCode": int(props["versionCode"]),
               "versionName": props["versionName"],
@@ -147,6 +189,7 @@ jobs:
               "apkSha256": os.environ["APK_SHA256"],
               "changelog": os.environ.get("CHANGELOG", "").strip(),
               "publishedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "releases": releases,
           }
           with open("updates/version.json", "w", encoding="utf-8") as f:
               json.dump(manifest, f, ensure_ascii=False, indent=2)

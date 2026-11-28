@@ -1,5 +1,8 @@
 package com.bsfeng.monitor.ui
 
+import com.bsfeng.monitor.update.UpdateManifest
+import com.bsfeng.monitor.update.UpdateRelease
+
 // 更新记录的结构化：发布清单里的 changelog 是一串「- feat(scope): 标题」，
 // 20 条原文直接铺在对话框里既不能扫也抓不到重点（用户反馈「更新太多时显示效果很差」）。
 // 这里按 Conventional Commits 的类型归成「新增 / 修复 / 优化 / 重构 / 文档 / 测试 / 其他」七组。
@@ -40,6 +43,68 @@ private fun kindOf(type: String): UpdateChangeKind = when (type) {
     "docs", "doc" -> UpdateChangeKind.DOCS
     "test", "tests" -> UpdateChangeKind.TEST
     else -> UpdateChangeKind.OTHER
+}
+
+/** 清单最多覆盖的版本数：与 .github/workflows/release.yml 里 releases 的上限一致。 */
+internal const val UPDATE_RELEASE_LIMIT = 5
+
+/** 一个版本分段的更新记录（跨多版本更新时一段一版）。 */
+internal data class UpdateReleaseSection(
+    val versionCode: Int,
+    val versionName: String,
+    val publishedAt: String,
+    val changes: List<UpdateChange>,
+) {
+    val size: Int get() = changes.size
+}
+
+/**
+ * 清单是否没覆盖到当前安装版本（用户跨了 5 个以上版本）。
+ *
+ * 判据：releases 已满上限，且清单里最旧一版仍比当前新 —— 说明中间还有版本没列出来，
+ * 弹窗底部补一句「更早版本见 GitHub Releases」，不假装这就是全部改动。
+ */
+internal fun updateHistoryTruncated(
+    manifest: UpdateManifest,
+    currentVersionCode: Int,
+): Boolean {
+    if (manifest.releases.isEmpty()) return false
+    val codes = manifest.releases.map { it.versionCode } + manifest.versionCode
+    return codes.size >= UPDATE_RELEASE_LIMIT && codes.min() > currentVersionCode
+}
+
+/**
+ * 跨版本聚合：只保留「比当前版本新」的版本，按版本号从新到旧。
+ *
+ * 数据来源两处：清单顶层（最新一版）+ releases[]（历史若干版）。同一 versionCode 只留一条，
+ * 避免发布流程把最新版同时写进两处时重复展示。旧清单没有 releases 时只有顶层一段。
+ */
+internal fun updateReleaseSections(
+    manifest: UpdateManifest,
+    currentVersionCode: Int,
+): List<UpdateReleaseSection> {
+    val all = buildList {
+        add(
+            UpdateRelease(
+                versionCode = manifest.versionCode,
+                versionName = manifest.versionName,
+                changelog = manifest.changelog,
+                publishedAt = manifest.publishedAt,
+            ),
+        )
+        addAll(manifest.releases)
+    }
+        .distinctBy { it.versionCode }
+        .filter { it.versionCode > currentVersionCode }
+        .sortedByDescending { it.versionCode }
+    return all.map { release ->
+        UpdateReleaseSection(
+            versionCode = release.versionCode,
+            versionName = release.versionName,
+            publishedAt = release.publishedAt,
+            changes = parseUpdateChangelog(release.changelog),
+        )
+    }
 }
 
 /**
