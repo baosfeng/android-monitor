@@ -266,13 +266,15 @@ internal fun quotaUpdatedText(
     fetchedAtEpochSecond: Long,
     nowEpochSecond: Long,
     failed: Boolean = false,
+    /** 时区：生产用系统默认；测试钉住时区，否则 CI（UTC）与本地（+08）断言不一致。 */
+    zone: ZoneId = ZoneId.systemDefault(),
 ): String {
     val ago = when {
         fetchedAtEpochSecond <= 0L -> null
         (nowEpochSecond - fetchedAtEpochSecond) < 60L -> "刚刚"
         (nowEpochSecond - fetchedAtEpochSecond) < 3_600L ->
             ((nowEpochSecond - fetchedAtEpochSecond).coerceAtLeast(0L) / 60).toString() + " 分钟前"
-        else -> QuotaFormat.clockShortOf(fetchedAtEpochSecond)
+        else -> QuotaFormat.clockShortOf(fetchedAtEpochSecond, zone)
     }
     // 失败态只报「更新失败」不报时间：393dp 下副行可用宽 201dp，带前缀 + 时间会 ellipsis
     // （实测「更新失败 · 上次成功 刚刚」超出可用宽）；上次成功时刻在结论条与三态区里有。

@@ -313,7 +313,7 @@ class QuotaAccountRowsTest {
         assertEquals("尚未更新", quotaUpdatedText(0L, now))
         assertEquals("更新于刚刚", quotaUpdatedText(now - 30, now))
         assertEquals("更新于 4 分钟前", quotaUpdatedText(now - 4 * 60, now))
-        assertEquals("更新于 9:41", quotaUpdatedText(at(9, 41) - 86_400, now))
+        assertEquals("更新于 9:41", quotaUpdatedText(at(9, 41) - 86_400, now, zone = zone))
         assertEquals("更新失败", quotaUpdatedText(0L, now, failed = true))
         // 393dp 下带前缀 + 时间会截断，失败态只报结论（时间在结论条 / 三态区）
         assertEquals("更新失败", quotaUpdatedText(now - 4 * 60, now, failed = true))
