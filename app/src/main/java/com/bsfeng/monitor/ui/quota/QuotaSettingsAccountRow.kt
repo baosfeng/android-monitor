@@ -95,7 +95,7 @@ internal fun AccountRow(
                 .accountRowTagOf(suffix)
                 .semantics {
                     role = Role.Button
-                    contentDescription = info.displayName + "，" + status.badge
+                    contentDescription = accountRowTitle(info) + "，" + status.badge
                     stateDescription = stateWord
                 }
                 .clickable(
@@ -115,7 +115,7 @@ internal fun AccountRow(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        info.displayName,
+                        accountRowTitle(info),
                         style = MaterialTheme.typography.labelSmall
                             .copy(fontSize = 12.sp, lineHeight = (12 * 1.2f).sp)
                             .quotaTight(),

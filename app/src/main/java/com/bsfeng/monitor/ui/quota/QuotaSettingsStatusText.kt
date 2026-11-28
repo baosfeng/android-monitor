@@ -6,6 +6,7 @@ import com.bsfeng.monitor.quota.QuotaRepository
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import com.bsfeng.monitor.ui.components.BadgeTone
+import java.math.BigDecimal
 
 /**
  * s19 账号行的展示态：状态角标 + 副行文案（纯函数，可 JVM 单测）。
@@ -98,16 +99,46 @@ internal fun looksLikeExpiredToken(message: String): Boolean {
         .any { text.contains(it) }
 }
 
-/** 账号分组标题右侧摘要：「4 个 · 2 个需处理」。 */
+/** 账号分组标题右侧摘要：「4 个 · 2 个需处理」（0 也写出来，用户才知道这个数在算）。 */
 internal fun accountsGroupSummary(total: Int, needsAttention: Int): String =
-    if (needsAttention > 0) {
-        total.toString() + " 个 · " + needsAttention.toString() + " 个需处理"
-    } else {
-        total.toString() + " 个"
-    }
+    total.toString() + " 个 · " + needsAttention.toString() + " 个需处理"
 
-/** 该账号是否「需处理」（未配置或最近一次拉取失败）。 */
-internal fun accountNeedsAttention(status: AccountStatusText): Boolean = status.badge != "已连接"
+/**
+ * 账号行标题：`<provider 显示名> · <实例名>`。
+ *
+ * 实例名来自 domain（多账号是「账号 N」、单账号是类型名、改过名是用户填的名字）：
+ * - 单账号时两者相同 → 不重复拼；
+ * - 用户改名已带 provider（如「Ollama · 主号」）→ 原样用；
+ * 只在显示层拼，不改 domain 命名（s18 榜单 / 通知标题仍用它）。
+ */
+internal fun accountRowTitle(info: QuotaProviderInfo): String {
+    val type = info.typeDisplayName.trim()
+    val name = info.displayName.trim()
+    if (type.isEmpty()) return name
+    if (name.isEmpty()) return type
+    if (name == type || name.startsWith(type)) return name
+    return type + " · " + name
+}
+
+/** 低于该剩余百分比视为「快见底」（原型 s19「快见底阈值 20% · 10% · 5%」的最低档）。 */
+internal val LOW_REMAINING_PERCENT: BigDecimal = BigDecimal("20")
+
+/**
+ * 该账号是否「需处理」。
+ *
+ * 口径（leader 2026-11-28）：未配置的不算——它只是还没填 Key；
+ * 「有数据且（任一窗口剩余 ≤20% / 0% 或凭据失效、拉取失败）」才算。
+ * 纯余额型没有百分比，无法按该口径判定 → 不计入（余额阈值由通知负责）。
+ */
+internal fun accountNeedsAttention(
+    info: QuotaProviderInfo,
+    state: QuotaRepository.ProviderState?,
+): Boolean {
+    val configured = state?.let { it.balanceConfigured || it.usageConfigured } ?: info.connected
+    if (!configured || state == null) return false
+    if (state.errorMessage != null) return true
+    return state.items.any { it.kind == QuotaKind.PERCENT && it.remaining <= LOW_REMAINING_PERCENT }
+}
 
 /** 刷新节奏说明（原型 .rhythm）。前台是每账号设置，这里展示展开中账号的实际值。 */
 internal fun rhythmText(frontMinutes: Int, backgroundMinutes: Int): String = buildString {

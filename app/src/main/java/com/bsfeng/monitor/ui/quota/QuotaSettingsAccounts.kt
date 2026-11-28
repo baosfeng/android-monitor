@@ -113,7 +113,7 @@ internal fun AccountsGroup(
             title = "账号",
             trailing = accountsGroupSummary(
                 providers.size,
-                statuses.values.count(::accountNeedsAttention),
+                providers.count { accountNeedsAttention(it, states[it.instanceId]) },
             ),
         )
         SettingsBox {
