@@ -61,6 +61,8 @@ fun AppDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     maxWidth: Dp = DIALOG_MAX_W,
+    /** 面板锚点：默认 dialog.panel；个别弹窗（如更新）有自己的锚点名。 */
+    panelTag: String = "dialog.panel",
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val t = LocalDesignTokens.current
@@ -86,7 +88,10 @@ fun AppDialog(
                     // 弹窗里是要读的字，不能透出下层内容（有意偏离该主题语言）
                     .background(t.opaquePanel)
                     // 卡片自身吞掉点击，避免点内容触发遮罩关闭
+                    // 锚点：默认锚点保留字面量（组件级登记 dialog.panel 的证据落在这里），
+                    // 需要独立锚点的弹窗（如更新弹窗 s09-update）用 panelTag 覆盖同一节点。
                     .testTag("dialog.panel")
+                    .testTag(panelTag)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -121,9 +126,13 @@ fun ConfirmDialog(
      */
     destructive: Boolean = false,
     extraContent: (@Composable ColumnScope.() -> Unit)? = null,
+    /** 面板 / 两枚按钮的锚点：默认 dialog.panel 与 dialog.action，个别弹窗需要独立锚点名。 */
+    panelTag: String = "dialog.panel",
+    dismissTag: String = "dialog.action",
+    confirmTag: String = "dialog.action",
 ) {
     val t = LocalDesignTokens.current
-    AppDialog(visible = visible, onDismiss = onDismiss, modifier = modifier) {
+    AppDialog(visible = visible, onDismiss = onDismiss, modifier = modifier, panelTag = panelTag) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = t.fg)
         if (message != null) {
             Spacer(Modifier.height(t.space2))
@@ -135,13 +144,20 @@ fun ConfirmDialog(
         }
         Spacer(Modifier.height(t.space4))
         Row(horizontalArrangement = Arrangement.spacedBy(t.space2)) {
-            DialogAction(dismissLabel, primary = false, onClick = onDismiss, modifier = Modifier.weight(1f))
+            DialogAction(
+                dismissLabel,
+                primary = false,
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                tag = dismissTag,
+            )
             DialogAction(
                 confirmLabel,
                 primary = true,
                 onClick = onConfirm,
                 modifier = Modifier.weight(1f),
                 destructive = destructive,
+                tag = confirmTag,
             )
         }
     }
@@ -149,13 +165,15 @@ fun ConfirmDialog(
 
 /** 弹窗动作按钮（原型 .btn / .btn-ghost）：min-height 48、radius-md、17sp/600。 */
 @Composable
-private fun DialogAction(
+internal fun DialogAction(
     label: String,
     primary: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** 破坏性语义：danger 底 + danger 字 + REJECT 触觉；尺寸与取消键一致（不加重权重）。 */
     destructive: Boolean = false,
+    /** 按钮锚点：默认 dialog.action；同一弹窗里两枚按钮各自需要锚点时分别传。 */
+    tag: String = "dialog.action",
 ) {
     val t = LocalDesignTokens.current
     val shape = RoundedCornerShape(t.radiusMd)
@@ -184,7 +202,7 @@ private fun DialogAction(
                 shape,
             )
             .pressFeedback(interaction)
-            .testTag("dialog.action")
+            .testTag(tag)
             .clickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
