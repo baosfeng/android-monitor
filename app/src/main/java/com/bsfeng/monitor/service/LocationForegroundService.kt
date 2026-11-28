@@ -72,7 +72,7 @@ import kotlinx.coroutines.launch
  * - SLEEPING / PROBING 一律 `stopSubscription()`：没有确认远行就绝不建订阅，
  *   否则定位芯片会跟着「拿起手机」一直不休眠 —— 用户抱怨的耗电来源；
  * - 传感器按能力降级：显著运动（一次性、硬件 hub）常驻；没有它才退化为加速度计常开 + 30s batching；
- *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册（显著运动 / 抖动提示后 3 分钟），
+ *   加速度计只在观察窗内以 SENSOR_DELAY_UI 注册（显著运动 / 抖动提示后 90 秒），
  *   SLEEPING 平时不注册 —— 提示只买一个「判出 GAIT 的机会」，不是活动证据。
  * - **网络环境静止证据**（见 [NetworkStillnessTracker]）：默认网络的 transport + SSID 未变、且没有
  *   步数增量时，SLEEPING 兜底从 30 分钟放宽到 60 分钟；换网络 / 断网 / 有步数立刻回 30 分钟。
@@ -1249,11 +1249,12 @@ class LocationForegroundService : Service() {
         /**
          * 显著运动 / 抖动提示后的观察窗：这段时间里用 16Hz 加速度计 + 步数计取证。
          *
-         * 取 3 分钟而不是 90 秒：步态判据要 5 秒稳定步频才成立，而「拿起手机→放下→出门走路」
-         * 往往隔着一两分钟；90 秒窗会在人刚开始走时刚好关掉，步行 3 分钟内必判出 GAIT。
-         * 16Hz 加速度计约 1–3mW，比 GPS 小两个数量级，放宽窗口的代价可以忽略。
+         * 取 90 秒（原 3 分钟）：真机 MIUI 把「常驻前台服务 + 传感器」加权成 5.1% 应用耗电后，
+         * 用户选择用及时性换电 —— 90 秒仍覆盖「拿起手机就出门」的主路径（步态判据只需 5 秒稳定步频），
+         * 代价是「拿起手机后先收拾一两分钟再走」这一次提示不作数，要等下一次显著运动 / 抖动再开窗。
+         * 16Hz 加速度计约 1–3mW，窗口缩短的收益主要在 MIUI 的估算口径上（传感器活动时长）。
          */
-        private const val OBSERVE_WINDOW_MS = 180_000L
+        private const val OBSERVE_WINDOW_MS = 90_000L
 
         /** 无显著运动传感器时加速度计的 batching 延迟（微秒）：30 秒。 */
         private const val BATCH_LATENCY_US = 30_000_000
